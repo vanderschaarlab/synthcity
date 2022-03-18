@@ -73,12 +73,12 @@ class Plugin(metaclass=ABCMeta):
         ...
 
     @validate_arguments
-    def generate(self, *args: Any, **kwargs: Any) -> pd.DataFrame:
-        return pd.DataFrame(self._generate(*args, **kwargs))
+    def generate(self, count: Optional[int] = None, **kwargs: Any) -> pd.DataFrame:
+        return pd.DataFrame(self._generate(count=count, **kwargs))
 
     @abstractmethod
     @validate_arguments
-    def _generate(self, *args: Any, **kwargs: Any) -> pd.DataFrame:
+    def _generate(self, count: Optional[int] = None, **kwargs: Any) -> pd.DataFrame:
         ...
 
 

@@ -1,5 +1,5 @@
 # stdlib
-from typing import Any, List
+from typing import Any, List, Optional
 
 # third party
 import pandas as pd
@@ -36,7 +36,7 @@ class DummySamplerPlugin(plugin.RegressionPlugin):
         self.X = X
         return self
 
-    def _generate(self, *args: Any, **kwargs: Any) -> pd.DataFrame:
+    def _generate(self, count: Optional[int] = None, **kwargs: Any) -> pd.DataFrame:
         return self.X.sample(10)
 
 

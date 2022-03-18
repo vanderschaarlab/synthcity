@@ -13,7 +13,7 @@ def test_integer() -> None:
     param = Integer("test", 0, 100)
 
     assert param.get() == ["test", 0, 100, 1]
-    assert param.sample() in list(range(0, 100))
+    assert param.sample() in list(range(0, 101))
 
 
 def test_float() -> None:
