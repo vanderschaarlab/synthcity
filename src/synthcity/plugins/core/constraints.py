@@ -1,39 +1,32 @@
 # stdlib
-from typing import Any, Dict
+from typing import Any, Generator, List, Tuple
 
 # third party
 import pandas as pd
 from pydantic import validate_arguments
-
-OP_KEY = 0
-THRESHOLD_KEY = 1
 
 
 class Constraints:
     @validate_arguments
     def __init__(
         self,
-        name: str,
-        rules: Dict[str, tuple] = {},
+        rules: List[Tuple[str, str, Any]] = [],
     ) -> None:
-        self.name = name
-        self.rules = rules
-        self.supported_ops = ["lt", "le", "gt", "ge", "eq"]
+        self.supported_ops = ["lt", "le", "gt", "ge", "eq", "in"]
 
-        for feature in self.rules:
-            if (
-                not isinstance(self.rules[feature], tuple)
-                or len(self.rules[feature]) < 2
-            ):
-                raise ValueError(
-                    f"Invalid constraint. Expecting tuple, but got {self.rules[feature]}"
-                )
+        for rule in rules:
+            if len(rule) < 3:
+                raise ValueError(f"Invalid constraint. Expecting tuple, but got {rule}")
 
-            op = self.rules[feature][OP_KEY]
+            feature, op, thresh = rule
+
             if op not in self.supported_ops:
                 raise ValueError(
                     f"Invalid operation {op}. Supported ops: {self.supported_ops}"
                 )
+            if op in ["in"]:
+                assert isinstance(thresh, list)
+        self.rules = rules
 
     def _eval(self, X: pd.DataFrame, feature: str, op: str, threshold: Any) -> bool:
         if op == "lt":
@@ -46,17 +39,34 @@ class Constraints:
             return X[feature] >= threshold
         elif op == "eq":
             return X[feature] == threshold
+        elif op == "in":
+            return X[feature].isin(threshold)
         else:
             raise RuntimeError("unsupported operation", op)
 
-    def match(self, X: pd.DataFrame) -> pd.DataFrame:
+    def filter(self, X: pd.DataFrame) -> pd.DataFrame:
         X = pd.DataFrame(X)
         res = pd.Series([True] * len(X), index=X.index)
-        for feature in self.rules:
+        for feature, op, thresh in self.rules:
             res &= self._eval(
                 X,
                 feature,
-                self.rules[feature][OP_KEY],
-                self.rules[feature][THRESHOLD_KEY],
+                op,
+                thresh,
             )
-        return X[res]
+        return res
+
+    def match(self, X: pd.DataFrame) -> pd.DataFrame:
+        return X[self.filter(X)]
+
+    def extend(self, other: "Constraints") -> "Constraints":
+        self.rules.extend(other.rules)
+
+        return self
+
+    def __len__(self) -> int:
+        return len(self.rules)
+
+    def __iter__(self) -> Generator:
+        for x in self.rules:
+            yield x

@@ -13,6 +13,7 @@ from pydantic import validate_arguments
 # synthcity absolute
 import synthcity.logger as log
 import synthcity.plugins.core.cast as cast
+from synthcity.plugins.core.constraints import Constraints
 from synthcity.plugins.core.params import Params
 from synthcity.plugins.core.schema import Schema
 
@@ -64,6 +65,7 @@ class Plugin(metaclass=ABCMeta):
 
     def fit(self, X: pd.DataFrame, *args: Any, **kwargs: Any) -> "Plugin":
         X = cast.to_dataframe(X)
+        X.columns = X.columns.astype(str)
         self.schema = Schema(X)
 
         return self._fit(X, *args, **kwargs)
@@ -72,14 +74,28 @@ class Plugin(metaclass=ABCMeta):
     def _fit(self, X: pd.DataFrame, *args: Any, **kwargs: Any) -> "Plugin":
         ...
 
-    @validate_arguments
-    def generate(self, count: Optional[int] = None, **kwargs: Any) -> pd.DataFrame:
-        return pd.DataFrame(self._generate(count=count, **kwargs))
+    def generate(
+        self,
+        count: Optional[int] = None,
+        constraints: Optional[Constraints] = None,
+        **kwargs: Any,
+    ) -> pd.DataFrame:
+        return pd.DataFrame(
+            self._generate(count=count, constraints=constraints, **kwargs)
+        )
 
     @abstractmethod
-    @validate_arguments
-    def _generate(self, count: Optional[int] = None, **kwargs: Any) -> pd.DataFrame:
+    def _generate(
+        self,
+        count: Optional[int] = None,
+        constraints: Optional[Constraints] = None,
+        **kwargs: Any,
+    ) -> pd.DataFrame:
         ...
+
+    def schema_includes(self, other: pd.DataFrame) -> bool:
+        other_schema = Schema(other)
+        return self.schema.includes(other_schema)
 
 
 class PluginLoader:
