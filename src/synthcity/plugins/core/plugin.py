@@ -4,7 +4,7 @@ from importlib.abc import Loader
 import importlib.util
 from os.path import basename
 from pathlib import Path
-from typing import Any, Dict, Generator, List, Type
+from typing import Any, Dict, Generator, List, Optional, Type
 
 # third party
 import pandas as pd
@@ -14,6 +14,7 @@ from pydantic import validate_arguments
 import synthcity.logger as log
 import synthcity.plugins.core.cast as cast
 from synthcity.plugins.core.params import Params
+from synthcity.plugins.core.schema import Schema
 
 
 class Plugin(metaclass=ABCMeta):
@@ -29,7 +30,7 @@ class Plugin(metaclass=ABCMeta):
     """
 
     def __init__(self) -> None:
-        pass
+        self.schema: Optional[Schema] = None
 
     @staticmethod
     @abstractmethod
@@ -63,6 +64,8 @@ class Plugin(metaclass=ABCMeta):
 
     def fit(self, X: pd.DataFrame, *args: Any, **kwargs: Any) -> "Plugin":
         X = cast.to_dataframe(X)
+        self.schema = Schema(X)
+
         return self._fit(X, *args, **kwargs)
 
     @abstractmethod
