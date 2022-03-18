@@ -50,5 +50,7 @@ repos:
   rev: 4.0.1
   hooks:
   - id: flake8
-  ## You can add flake8 plugins via `additional_dependencies`:
-  #  additional_dependencies: [flake8-bugbear]
+    args: [
+        "--max-line-length=140",
+        "--extend-ignore=E203,W503"
+    ]
