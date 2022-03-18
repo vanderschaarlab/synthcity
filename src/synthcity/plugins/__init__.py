@@ -3,8 +3,7 @@ import glob
 from os.path import basename, dirname, isfile, join
 
 # synthcity absolute
-from synthcity.plugins.core.base import Plugin  # noqa: F401,E402
-from synthcity.plugins.core.base_plugin import PluginLoader
+from synthcity.plugins.core.plugin import Plugin, PluginLoader  # noqa: F401,E402
 
 plugins = glob.glob(join(dirname(__file__), "plugin*.py"))
 

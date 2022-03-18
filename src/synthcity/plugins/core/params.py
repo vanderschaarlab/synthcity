@@ -4,9 +4,11 @@ from typing import Any, List, Tuple
 
 # third party
 import numpy as np
+from pydantic import validate_arguments
 
 
 class Params(metaclass=ABCMeta):
+    @validate_arguments
     def __init__(self, name: str, bounds: Tuple[Any, Any]) -> None:
         self.name = name
         self.bounds = bounds

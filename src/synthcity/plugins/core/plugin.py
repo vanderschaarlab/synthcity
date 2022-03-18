@@ -8,13 +8,12 @@ from typing import Any, Dict, Generator, List, Type
 
 # third party
 import pandas as pd
+from pydantic import validate_arguments
 
 # synthcity absolute
 import synthcity.logger as log
 import synthcity.plugins.core.cast as cast
-
-# synthcity relative
-from .params import Params
+from synthcity.plugins.core.params import Params
 
 
 class Plugin(metaclass=ABCMeta):
@@ -70,15 +69,18 @@ class Plugin(metaclass=ABCMeta):
     def _fit(self, X: pd.DataFrame, *args: Any, **kwargs: Any) -> "Plugin":
         ...
 
+    @validate_arguments
     def generate(self, *args: Any, **kwargs: Any) -> pd.DataFrame:
         return pd.DataFrame(self._generate(*args, **kwargs))
 
     @abstractmethod
+    @validate_arguments
     def _generate(self, *args: Any, **kwargs: Any) -> pd.DataFrame:
         ...
 
 
 class PluginLoader:
+    @validate_arguments
     def __init__(self, plugins: list, expected_type: Type) -> None:
         self._plugins: Dict[str, Type] = {}
         self._available_plugins = {}
@@ -88,6 +90,7 @@ class PluginLoader:
 
         self._expected_type = expected_type
 
+    @validate_arguments
     def _load_single_plugin(self, plugin: str) -> None:
         name = basename(plugin)
         failed = False
@@ -135,6 +138,7 @@ class PluginLoader:
 
         return self
 
+    @validate_arguments
     def get(self, name: str, *args: Any, **kwargs: Any) -> Any:
         if name not in self._plugins and name not in self._available_plugins:
             raise ValueError(f"Plugin {name} doesn't exist.")
@@ -147,6 +151,7 @@ class PluginLoader:
 
         return self._plugins[name](*args, **kwargs)
 
+    @validate_arguments
     def get_type(self, name: str) -> Type:
         if name not in self._plugins and name not in self._available_plugins:
             raise ValueError(f"Plugin {name} doesn't exist.")
@@ -166,6 +171,7 @@ class PluginLoader:
     def __len__(self) -> int:
         return len(self.list())
 
+    @validate_arguments
     def __getitem__(self, key: str) -> Any:
         return self.get(key)
 

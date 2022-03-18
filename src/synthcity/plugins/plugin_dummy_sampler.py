@@ -5,11 +5,11 @@ from typing import Any, List
 import pandas as pd
 
 # synthcity absolute
-import synthcity.plugins.core.base as base
 import synthcity.plugins.core.params as params
+import synthcity.plugins.core.plugin as plugin
 
 
-class DummySamplerPlugin(base.RegressionPlugin):
+class DummySamplerPlugin(plugin.RegressionPlugin):
     """Dummy plugin for debugging.
 
     Example:
