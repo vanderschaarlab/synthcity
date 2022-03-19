@@ -44,5 +44,5 @@ def test_mock_plugin_ok() -> None:
 
     assert plugin.name() == "mock"
     assert plugin.type() == "debug"
-    assert plugin.fit([]) == plugin
+    assert plugin.fit(pd.DataFrame([])) == plugin
     assert plugin.generate().values == [1]

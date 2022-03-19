@@ -1,18 +1,17 @@
 # stdlib
-from typing import Any, Generator, List, Tuple
+from typing import Any, Generator, List
 
 # third party
 import pandas as pd
-from pydantic import validate_arguments
+from pydantic import BaseModel, validator
 
 
-class Constraints:
-    @validate_arguments
-    def __init__(
-        self,
-        rules: List[Tuple[str, str, Any]] = [],
-    ) -> None:
-        self.supported_ops = ["lt", "le", "gt", "ge", "eq", "in"]
+class Constraints(BaseModel):
+    rules: list = []
+
+    @validator("rules")
+    def _validate_rules(cls: Any, rules: List, values: dict, **kwargs: Any) -> List:
+        supported_ops: list = ["lt", "le", "gt", "ge", "eq", "in"]
 
         for rule in rules:
             if len(rule) < 3:
@@ -20,13 +19,13 @@ class Constraints:
 
             feature, op, thresh = rule
 
-            if op not in self.supported_ops:
+            if op not in supported_ops:
                 raise ValueError(
-                    f"Invalid operation {op}. Supported ops: {self.supported_ops}"
+                    f"Invalid operation {op}. Supported ops: {supported_ops}"
                 )
             if op in ["in"]:
                 assert isinstance(thresh, list)
-        self.rules = rules
+        return rules
 
     def _eval(self, X: pd.DataFrame, feature: str, op: str, threshold: Any) -> bool:
         if op == "lt":

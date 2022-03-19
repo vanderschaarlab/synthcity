@@ -1,37 +1,57 @@
 # stdlib
-from typing import Generator
+from typing import Any, Dict, Generator
 
 # third party
 import pandas as pd
-from pydantic import validate_arguments
+from pydantic import BaseModel, validate_arguments, validator
 
 # synthcity absolute
 from synthcity.plugins.core.constraints import Constraints
 from synthcity.plugins.core.params import Categorical, Float, Integer, Params
 
 
-class Schema:
-    @validate_arguments(config=dict(arbitrary_types_allowed=True))
-    def __init__(self, X: pd.DataFrame) -> None:
+class Schema(BaseModel):
+    data: Any
+    domain: Dict = {}
+
+    @validator("domain", always=True)
+    def _validate_domain(cls: Any, v: Any, values: Dict) -> Dict:
         feature_domain = {}
+        if "data" not in values:
+            raise ValueError("You need to provide the data argument")
+
+        X = values["data"]
+        if not isinstance(X, pd.DataFrame):
+            raise ValueError("You need to provide a DataFrame in the data argument")
+
         for col in X.columns:
             if X[col].dtype == "object" or len(X[col].unique()) < 10:
-                feature_domain[col] = Categorical(col, X[col].unique())
+                feature_domain[col] = Categorical(
+                    name=col, choices=list(X[col].unique())
+                )
             elif X[col].dtype == "int":
-                feature_domain[col] = Integer(col, X[col].min(), X[col].max())
+                feature_domain[col] = Integer(
+                    name=col, low=X[col].min(), high=X[col].max()
+                )
             elif X[col].dtype == "float":
-                feature_domain[col] = Float(col, X[col].min(), X[col].max())
+                feature_domain[col] = Float(
+                    name=col, low=X[col].min(), high=X[col].max()
+                )
             else:
-                raise RuntimeError("unsupported format ", col)
+                raise ValueError("unsupported format ", col)
 
-        self.domain = feature_domain
+        del values["data"]
 
+        return feature_domain
+
+    @validate_arguments
     def get(self, key: str) -> Params:
         if key not in self.domain:
             raise ValueError(f"invalid feature {key}")
 
         return self.domain[key]
 
+    @validate_arguments
     def __getitem__(self, key: str) -> Params:
         return self.get(key)
 
@@ -53,7 +73,7 @@ class Schema:
         return True
 
     def as_constraint(self) -> Constraints:
-        constraints = Constraints([])
+        constraints = Constraints(rules=[])
         for feature in self:
             constraints.extend(self[feature].as_constraint())
 

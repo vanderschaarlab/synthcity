@@ -6,11 +6,11 @@ import pandas as pd
 
 # synthcity absolute
 from synthcity.plugins.core.constraints import Constraints
-import synthcity.plugins.core.params as params
-import synthcity.plugins.core.plugin as plugin
+from synthcity.plugins.core.params import Params
+from synthcity.plugins.core.plugin import Plugin
 
 
-class DummySamplerPlugin(plugin.Plugin):
+class DummySamplerPlugin(Plugin):
     """Dummy plugin for debugging.
 
     Example:
@@ -34,7 +34,7 @@ class DummySamplerPlugin(plugin.Plugin):
         return "resampling"
 
     @staticmethod
-    def hyperparameter_space(*args: Any, **kwargs: Any) -> List[params.Params]:
+    def hyperparameter_space(*args: Any, **kwargs: Any) -> List[Params]:
         return []
 
     def _fit(self, X: pd.DataFrame, *args: Any, **kwargs: Any) -> "DummySamplerPlugin":

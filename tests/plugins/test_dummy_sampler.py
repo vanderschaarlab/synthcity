@@ -1,6 +1,7 @@
 # third party
-from helpers import generate_fixtures
+import pandas as pd
 import pytest
+from helpers import generate_fixtures
 from sklearn.datasets import load_iris
 
 # synthcity absolute
@@ -31,13 +32,13 @@ def test_plugin_hyperparams(test_plugin: Plugin) -> None:
 
 @pytest.mark.parametrize("test_plugin", generate_fixtures("dummy_sampler", plugin))
 def test_plugin_fit(test_plugin: Plugin) -> None:
-    X = load_iris()["data"]
+    X = pd.DataFrame(load_iris()["data"])
     test_plugin.fit(X)
 
 
 @pytest.mark.parametrize("test_plugin", generate_fixtures("dummy_sampler", plugin))
 def test_plugin_generate(test_plugin: Plugin) -> None:
-    X = load_iris()["data"]
+    X = pd.DataFrame(load_iris()["data"])
     test_plugin.fit(X)
 
     X_gen = test_plugin.generate()
@@ -51,11 +52,11 @@ def test_plugin_generate(test_plugin: Plugin) -> None:
 
 @pytest.mark.parametrize("test_plugin", generate_fixtures("dummy_sampler", plugin))
 def test_plugin_generate_constraints(test_plugin: Plugin) -> None:
-    X = load_iris()["data"]
+    X = pd.DataFrame(load_iris()["data"])
     test_plugin.fit(X)
 
     constraints = Constraints(
-        [
+        rules=[
             ("0", "le", 6),
             ("0", "ge", 4.3),
             ("1", "le", 4.4),

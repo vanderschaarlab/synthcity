@@ -1,7 +1,7 @@
 # stdlib
+import importlib.util
 from abc import ABCMeta, abstractmethod
 from importlib.abc import Loader
-import importlib.util
 from os.path import basename
 from pathlib import Path
 from typing import Any, Dict, Generator, List, Optional, Type
@@ -12,7 +12,6 @@ from pydantic import validate_arguments
 
 # synthcity absolute
 import synthcity.logger as log
-import synthcity.plugins.core.cast as cast
 from synthcity.plugins.core.constraints import Constraints
 from synthcity.plugins.core.params import Params
 from synthcity.plugins.core.schema import Schema
@@ -30,8 +29,12 @@ class Plugin(metaclass=ABCMeta):
     If any method implementation is missing, the class constructor will fail.
     """
 
+    class Config:
+        arbitrary_types_allowed = True
+        validate_assignment = True
+
     def __init__(self) -> None:
-        self.schema: Optional[Schema] = None
+        self._schema: Optional[Schema] = None
 
     @staticmethod
     @abstractmethod
@@ -63,10 +66,10 @@ class Plugin(metaclass=ABCMeta):
     def fqdn(cls) -> str:
         return cls.type() + "." + cls.name()
 
-    def fit(self, X: pd.DataFrame, *args: Any, **kwargs: Any) -> "Plugin":
-        X = cast.to_dataframe(X)
+    @validate_arguments(config=dict(arbitrary_types_allowed=True))
+    def fit(self, X: pd.DataFrame, *args: Any, **kwargs: Any) -> Any:
         X.columns = X.columns.astype(str)
-        self.schema = Schema(X)
+        self._schema = Schema(data=X)
 
         return self._fit(X, *args, **kwargs)
 
@@ -74,6 +77,7 @@ class Plugin(metaclass=ABCMeta):
     def _fit(self, X: pd.DataFrame, *args: Any, **kwargs: Any) -> "Plugin":
         ...
 
+    @validate_arguments
     def generate(
         self,
         count: Optional[int] = None,
@@ -93,9 +97,10 @@ class Plugin(metaclass=ABCMeta):
     ) -> pd.DataFrame:
         ...
 
+    @validate_arguments(config=dict(arbitrary_types_allowed=True))
     def schema_includes(self, other: pd.DataFrame) -> bool:
-        other_schema = Schema(other)
-        return self.schema.includes(other_schema)
+        other_schema = Schema(data=other)
+        return self._schema.includes(other_schema)
 
 
 class PluginLoader:
