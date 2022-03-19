@@ -84,6 +84,9 @@ class Plugin(metaclass=ABCMeta):
         constraints: Optional[Constraints] = None,
         **kwargs: Any,
     ) -> pd.DataFrame:
+        if self._schema is None:
+            raise RuntimeError("Fit the model first")
+
         return pd.DataFrame(
             self._generate(count=count, constraints=constraints, **kwargs)
         )
@@ -100,7 +103,13 @@ class Plugin(metaclass=ABCMeta):
     @validate_arguments(config=dict(arbitrary_types_allowed=True))
     def schema_includes(self, other: pd.DataFrame) -> bool:
         other_schema = Schema(data=other)
-        return self._schema.includes(other_schema)
+        return self.schema().includes(other_schema)
+
+    def schema(self) -> Schema:
+        if self._schema is None:
+            raise RuntimeError("Fit the model first")
+
+        return self._schema
 
 
 class PluginLoader:

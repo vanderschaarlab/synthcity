@@ -6,7 +6,8 @@ from sklearn.neighbors import NearestNeighbors
 from sklearn.preprocessing import LabelEncoder, MinMaxScaler
 
 
-def _encode_scale(X: pd.DataFrame):
+@validate_arguments(config=dict(arbitrary_types_allowed=True))
+def _encode_scale(X: pd.DataFrame) -> pd.DataFrame:
     X = X.copy().fillna(0)
 
     for col in X.columns:
@@ -21,7 +22,7 @@ def _encode_scale(X: pd.DataFrame):
 @validate_arguments(config=dict(arbitrary_types_allowed=True))
 def integrity_score(
     X_gt: pd.DataFrame, y_gt: pd.Series, X_synth: pd.DataFrame, y_synth: pd.Series
-) -> int:
+) -> float:
     """Basic sanity score. Compares the data types between the column of the ground truth and the synthetic data.
 
     Lower is better.
@@ -29,7 +30,7 @@ def integrity_score(
     if len(X_gt.columns) != len(X_synth.columns):
         raise ValueError(f"Incompatible dataframe {X_gt.shape} and {X_synth.shape}")
 
-    def _eval_score(lhs: pd.Series, rhs: pd.Series):
+    def _eval_score(lhs: pd.Series, rhs: pd.Series) -> int:
         return int(lhs.dtype != rhs.dtype)
 
     diffs = _eval_score(y_gt, y_synth)
@@ -40,10 +41,10 @@ def integrity_score(
 
 
 @validate_arguments(config=dict(arbitrary_types_allowed=True))
-def common_rows(
+def avg_common_rows(
     X_gt: pd.DataFrame, y_gt: pd.Series, X_synth: pd.DataFrame, y_synth: pd.Series
-) -> int:
-    """Returns the number of common rows in the ground truth and the synthetic data.
+) -> float:
+    """Returns the proportion of common rows in the ground truth and the synthetic data.
 
     Lower is better.
     """
@@ -59,8 +60,11 @@ def common_rows(
 @validate_arguments(config=dict(arbitrary_types_allowed=True))
 def avg_distance_nearest_synth_neighbor(
     X_gt: pd.DataFrame, y_gt: pd.Series, X_synth: pd.DataFrame, y_synth: pd.Series
-) -> int:
-    """ """
+) -> float:
+    """Returns the mean distance from the real data to the closest neighbor in the synthetic data
+
+    Lower is better.
+    """
 
     if len(X_gt.columns) != len(X_synth.columns):
         raise ValueError(f"Incompatible dataframe {X_gt.shape} and {X_synth.shape}")

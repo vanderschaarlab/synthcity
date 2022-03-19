@@ -10,7 +10,9 @@ from pydantic import BaseModel
 from synthcity.plugins.core.constraints import Constraints
 
 
-class Params(metaclass=ABCMeta):
+class Params(BaseModel, metaclass=ABCMeta):
+    name: str
+
     @abstractmethod
     def get(self) -> List[Any]:
         ...
@@ -40,8 +42,7 @@ class Params(metaclass=ABCMeta):
         ...
 
 
-class Categorical(BaseModel, Params):
-    name: str
+class Categorical(Params):
     choices: list
 
     def get(self) -> List[Any]:
@@ -53,7 +54,7 @@ class Categorical(BaseModel, Params):
     def has(self, val: Any) -> bool:
         return val in self.choices
 
-    def includes(self, other: "Categorical") -> bool:
+    def includes(self, other: "Params") -> bool:
         if not isinstance(other, Categorical):
             return False
         return set(other.choices).issubset(set(self.choices))
@@ -68,8 +69,7 @@ class Categorical(BaseModel, Params):
         return max(self.choices)
 
 
-class Float(BaseModel, Params):
-    name: str
+class Float(Params):
     low: float
     high: float
 
@@ -100,8 +100,7 @@ class Float(BaseModel, Params):
         return self.high
 
 
-class Integer(BaseModel, Params):
-    name: str
+class Integer(Params):
     low: int
     high: int
     step: int = 1

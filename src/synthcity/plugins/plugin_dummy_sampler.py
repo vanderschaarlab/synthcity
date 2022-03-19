@@ -23,7 +23,7 @@ class DummySamplerPlugin(Plugin):
     """
 
     def __init__(self, **kwargs: Any) -> None:
-        super().__init__(**kwargs)
+        super().__init__()
 
     @staticmethod
     def name() -> str:

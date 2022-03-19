@@ -6,8 +6,8 @@ from sklearn.datasets import load_iris
 
 # synthcity absolute
 from synthcity.metrics.basic import (
+    avg_common_rows,
     avg_distance_nearest_synth_neighbor,
-    common_rows,
     integrity_score,
 )
 from synthcity.plugins import Plugin, Plugins
@@ -51,7 +51,7 @@ def test_common_rows(test_plugin: Plugin) -> None:
     test_plugin.fit(X)
     X_gen = test_plugin.generate(100)
 
-    score = common_rows(
+    score = avg_common_rows(
         X.drop(columns=["target"]),
         X["target"],
         X_gen.drop(columns=["target"]),
@@ -62,7 +62,7 @@ def test_common_rows(test_plugin: Plugin) -> None:
 
     sz = 100
     X_rnd = pd.DataFrame(np.random.randn(sz, len(X.columns)), columns=X.columns)
-    score = common_rows(
+    score = avg_common_rows(
         X.drop(columns=["target"]),
         X["target"],
         X_rnd.drop(columns=["target"]),
