@@ -3,12 +3,13 @@ import numpy as np
 import pandas as pd
 from pydantic import validate_arguments
 from sklearn.metrics import roc_auc_score
+from sklearn.mixture import GaussianMixture
 from sklearn.model_selection import StratifiedKFold
 from xgboost import XGBClassifier
 
 
 @validate_arguments(config=dict(arbitrary_types_allowed=True))
-def evaluate_detection_synthetic(
+def evaluate_xgb_detection_synthetic(
     X_gt: pd.DataFrame, y_gt: pd.Series, X_synth: pd.DataFrame, y_synth: pd.Series
 ) -> float:
     """Train a classifier to detect synthetic data.
@@ -55,3 +56,35 @@ def evaluate_detection_synthetic(
         res.append(score)
 
     return np.mean(res)
+
+
+@validate_arguments(config=dict(arbitrary_types_allowed=True))
+def evaluate_gmm_detection_synthetic(
+    X_gt: pd.DataFrame, y_gt: pd.Series, X_synth: pd.DataFrame, y_synth: pd.Series
+) -> float:
+    """Train a GaussianMixture model to detect synthetic data.
+
+    Returns:
+        The average score for detecting synthetic data.
+        1 means the synthetic and real data are totally distinguishable.
+        Lower is better.
+    """
+
+    scores = []
+
+    X_gt["target"] = y_gt
+    X_synth["target"] = y_synth
+
+    for component in [1, 5, 10]:
+        gmm = GaussianMixture(n_components=component, covariance_type="diag")
+        gmm.fit(X_gt)
+
+        scores.append(gmm.score(X_synth))  # Higher is better
+
+    scores_np = np.asarray(scores)
+    scores_np = (scores_np - np.min(scores_np)) / (
+        np.max(scores_np) - np.min(scores_np)
+    )  # transform scores to [0, 1]
+    scores_np = 1 - scores_np  # invert scores - lower is better
+
+    return np.mean(scores_np)
