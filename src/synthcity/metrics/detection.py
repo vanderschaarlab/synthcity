@@ -8,15 +8,23 @@ from xgboost import XGBClassifier
 
 
 @validate_arguments(config=dict(arbitrary_types_allowed=True))
-def detect_synthetic(
+def evaluate_detection_synthetic(
     X_gt: pd.DataFrame, y_gt: pd.Series, X_synth: pd.DataFrame, y_synth: pd.Series
 ) -> float:
     """Train a classifier to detect synthetic data.
 
     Returns:
-        The average AUCROC score for detecting synthtic data. 1 means the synthetic and real data are totally distinguishable.
+        The average AUCROC score for detecting synthetic data.
+        1 means the synthetic and real data are totally distinguishable.
         Lower is better.
     """
+
+    model_template = XGBClassifier
+    model_args = {
+        "verbosity": 0,
+        "use_label_encoder": False,
+        "depth": 3,
+    }
 
     X_gt["target"] = y_gt
     X_synth["target"] = y_synth
@@ -39,9 +47,7 @@ def detect_synthetic(
         test_data = data.loc[test_idx]
         test_labels = labels.loc[test_idx]
 
-        model = XGBClassifier(verbosity=0, use_label_encoder=False).fit(
-            train_data, train_labels
-        )
+        model = model_template(**model_args).fit(train_data, train_labels)
 
         test_pred = model.predict(test_data)
 

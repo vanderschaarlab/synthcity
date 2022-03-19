@@ -10,7 +10,7 @@ from synthcity.metrics._utils import get_freq
 
 
 @validate_arguments(config=dict(arbitrary_types_allowed=True))
-def inv_kl_divergence(
+def evaluate_inv_kl_divergence(
     X_gt: pd.DataFrame, y_gt: pd.Series, X_synth: pd.DataFrame, y_synth: pd.Series
 ) -> float:
     """Returns the average normalized Kullback–Leibler Divergence based metric."""
@@ -24,7 +24,7 @@ def inv_kl_divergence(
 
 
 @validate_arguments(config=dict(arbitrary_types_allowed=True))
-def kolmogorov_smirnov_test(
+def evaluate_kolmogorov_smirnov_test(
     X_gt: pd.DataFrame, y_gt: pd.Series, X_synth: pd.DataFrame, y_synth: pd.Series
 ) -> float:
     """Performs the Kolmogorov-Smirnov test for goodness of fit.
@@ -42,7 +42,7 @@ def kolmogorov_smirnov_test(
 
 
 @validate_arguments(config=dict(arbitrary_types_allowed=True))
-def chi_squared_test(
+def evaluate_chi_squared_test(
     X_gt: pd.DataFrame, y_gt: pd.Series, X_synth: pd.DataFrame, y_synth: pd.Series
 ) -> float:
     """Performs the one-way chi-square test.

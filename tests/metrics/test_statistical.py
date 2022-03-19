@@ -6,9 +6,9 @@ from sklearn.datasets import load_iris
 
 # synthcity absolute
 from synthcity.metrics.statistical import (
-    chi_squared_test,
-    inv_kl_divergence,
-    kolmogorov_smirnov_test,
+    evaluate_chi_squared_test,
+    evaluate_inv_kl_divergence,
+    evaluate_kolmogorov_smirnov_test,
 )
 from synthcity.plugins import Plugin, Plugins
 
@@ -21,7 +21,7 @@ def test_kl_div(test_plugin: Plugin) -> None:
     test_plugin.fit(X)
     X_gen = test_plugin.generate(100)
 
-    bad_score = inv_kl_divergence(
+    bad_score = evaluate_inv_kl_divergence(
         X.drop(columns=["target"]),
         X["target"],
         X_gen.drop(columns=["target"]),
@@ -32,7 +32,7 @@ def test_kl_div(test_plugin: Plugin) -> None:
 
     sz = 100
     X_rnd = pd.DataFrame(np.random.randn(sz, len(X.columns)), columns=X.columns)
-    score = inv_kl_divergence(
+    score = evaluate_inv_kl_divergence(
         X.drop(columns=["target"]),
         X["target"],
         X_rnd.drop(columns=["target"]),
@@ -44,14 +44,14 @@ def test_kl_div(test_plugin: Plugin) -> None:
 
 
 @pytest.mark.parametrize("test_plugin", [Plugins().get("dummy_sampler")])
-def test_kolmogorov_smirnov_test(test_plugin: Plugin) -> None:
+def test_evaluate_kolmogorov_smirnov_test(test_plugin: Plugin) -> None:
     X, y = load_iris(return_X_y=True, as_frame=True)
     X["target"] = y
 
     test_plugin.fit(X)
     X_gen = test_plugin.generate(100)
 
-    bad_score = kolmogorov_smirnov_test(
+    bad_score = evaluate_kolmogorov_smirnov_test(
         X.drop(columns=["target"]),
         X["target"],
         X_gen.drop(columns=["target"]),
@@ -62,7 +62,7 @@ def test_kolmogorov_smirnov_test(test_plugin: Plugin) -> None:
 
     sz = 100
     X_rnd = pd.DataFrame(np.random.randn(sz, len(X.columns)), columns=X.columns)
-    score = kolmogorov_smirnov_test(
+    score = evaluate_kolmogorov_smirnov_test(
         X.drop(columns=["target"]),
         X["target"],
         X_rnd.drop(columns=["target"]),
@@ -74,14 +74,14 @@ def test_kolmogorov_smirnov_test(test_plugin: Plugin) -> None:
 
 
 @pytest.mark.parametrize("test_plugin", [Plugins().get("dummy_sampler")])
-def test_chi_squared_test(test_plugin: Plugin) -> None:
+def test_evaluate_chi_squared_test(test_plugin: Plugin) -> None:
     X, y = load_iris(return_X_y=True, as_frame=True)
     X["target"] = y
 
     test_plugin.fit(X)
     X_gen = test_plugin.generate(100)
 
-    bad_score = chi_squared_test(
+    bad_score = evaluate_chi_squared_test(
         X.drop(columns=["target"]),
         X["target"],
         X_gen.drop(columns=["target"]),
@@ -92,7 +92,7 @@ def test_chi_squared_test(test_plugin: Plugin) -> None:
 
     sz = 1000
     X_rnd = pd.DataFrame(np.random.randn(sz, len(X.columns)), columns=X.columns)
-    score = chi_squared_test(
+    score = evaluate_chi_squared_test(
         X.drop(columns=["target"]),
         X["target"],
         X_rnd.drop(columns=["target"]),

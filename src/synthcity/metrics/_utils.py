@@ -1,5 +1,5 @@
 # stdlib
-from typing import Tuple, Union
+from typing import Optional, Tuple, Union
 
 # third party
 import numpy as np
@@ -16,16 +16,24 @@ from sklearn.preprocessing import LabelEncoder, MinMaxScaler, label_binarize
 
 
 @validate_arguments(config=dict(arbitrary_types_allowed=True))
-def encode_scale(X: pd.DataFrame) -> pd.DataFrame:
+def encode_scale(X: pd.DataFrame, y: Optional[pd.Series] = None) -> Tuple:
+    if y is not None:
+        X["target"] = y
+
     X = X.copy().fillna(0)
 
     for col in X.columns:
         if X[col].dtype == "object":
             X[col] = LabelEncoder().fit_transform(X[col])
 
-    X = MinMaxScaler().fit_transform(X)
+    out = MinMaxScaler().fit_transform(X)
+    X = pd.DataFrame(out, columns=X.columns, index=X.index)
 
-    return X
+    if "target" in X:
+        y = X["target"]
+        X = X.drop(columns=["target"])
+
+    return X, y
 
 
 @validate_arguments(config=dict(arbitrary_types_allowed=True))

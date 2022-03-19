@@ -9,7 +9,7 @@ from synthcity.metrics._utils import encode_scale
 
 
 @validate_arguments(config=dict(arbitrary_types_allowed=True))
-def integrity_score(
+def evaluate_integrity_score(
     X_gt: pd.DataFrame, y_gt: pd.Series, X_synth: pd.DataFrame, y_synth: pd.Series
 ) -> float:
     """Basic sanity score. Compares the data types between the column of the ground truth and the synthetic data.
@@ -30,7 +30,7 @@ def integrity_score(
 
 
 @validate_arguments(config=dict(arbitrary_types_allowed=True))
-def avg_common_rows(
+def evaluate_avg_common_rows(
     X_gt: pd.DataFrame, y_gt: pd.Series, X_synth: pd.DataFrame, y_synth: pd.Series
 ) -> float:
     """Returns the proportion of common rows in the ground truth and the synthetic data.
@@ -47,12 +47,13 @@ def avg_common_rows(
 
 
 @validate_arguments(config=dict(arbitrary_types_allowed=True))
-def avg_distance_nearest_synth_neighbor(
+def evaluate_avg_distance_nearest_synth_neighbor(
     X_gt: pd.DataFrame, y_gt: pd.Series, X_synth: pd.DataFrame, y_synth: pd.Series
 ) -> float:
-    """Returns the mean distance from the real data to the closest neighbor in the synthetic data
+    """Computes the mean distance from the real data to the closest neighbor in the synthetic data
 
-    Lower is better.
+    Returns:
+        0 if the datasets are identical. 1 if the datasets are totally different.
     """
 
     if len(X_gt.columns) != len(X_synth.columns):
@@ -61,11 +62,13 @@ def avg_distance_nearest_synth_neighbor(
     X_synth["target"] = y_synth
     X_gt["target"] = y_gt
 
-    X_synth = encode_scale(X_synth)
-    X_gt = encode_scale(X_gt)
+    X_synth, _ = encode_scale(X_synth)
+    X_gt, _ = encode_scale(X_gt)
 
-    estimator = NearestNeighbors(n_neighbors=5).fit(X_synth)
+    try:
+        estimator = NearestNeighbors(n_neighbors=5).fit(X_synth)
+        dist, _ = estimator.kneighbors(X_gt, 1, return_distance=True)
 
-    dist, _ = estimator.kneighbors(X_gt, 1, return_distance=True)
-
-    return np.mean(dist)
+        return np.mean(dist)
+    except BaseException:
+        return 1
