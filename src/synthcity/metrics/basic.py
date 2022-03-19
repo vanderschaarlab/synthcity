@@ -3,6 +3,19 @@ import numpy as np
 import pandas as pd
 from pydantic import validate_arguments
 from sklearn.neighbors import NearestNeighbors
+from sklearn.preprocessing import LabelEncoder, MinMaxScaler
+
+
+def _encode_scale(X: pd.DataFrame):
+    X = X.copy().fillna(0)
+
+    for col in X.columns:
+        if X[col].dtype == "object":
+            X[col] = LabelEncoder().fit_transform(X[col])
+
+    X = MinMaxScaler().fit_transform(X)
+
+    return X
 
 
 @validate_arguments(config=dict(arbitrary_types_allowed=True))
@@ -44,7 +57,7 @@ def common_rows(
 
 
 @validate_arguments(config=dict(arbitrary_types_allowed=True))
-def nearest_synth_neighbor(
+def avg_distance_nearest_synth_neighbor(
     X_gt: pd.DataFrame, y_gt: pd.Series, X_synth: pd.DataFrame, y_synth: pd.Series
 ) -> int:
     """ """
@@ -54,6 +67,9 @@ def nearest_synth_neighbor(
 
     X_synth["target"] = y_synth
     X_gt["target"] = y_gt
+
+    X_synth = _encode_scale(X_synth)
+    X_gt = _encode_scale(X_gt)
 
     estimator = NearestNeighbors(n_neighbors=5).fit(X_synth)
 
