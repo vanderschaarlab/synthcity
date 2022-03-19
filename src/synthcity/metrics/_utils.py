@@ -1,8 +1,18 @@
+# stdlib
+from typing import Tuple, Union
+
 # third party
 import numpy as np
 import pandas as pd
 from pydantic import validate_arguments
-from sklearn.preprocessing import LabelEncoder, MinMaxScaler
+from sklearn.metrics import (
+    auc,
+    average_precision_score,
+    precision_recall_curve,
+    roc_auc_score,
+    roc_curve,
+)
+from sklearn.preprocessing import LabelEncoder, MinMaxScaler, label_binarize
 
 
 @validate_arguments(config=dict(arbitrary_types_allowed=True))
@@ -47,3 +57,69 @@ def get_freq(X_gt: pd.DataFrame, X_synth: pd.DataFrame) -> dict:
         res[col] = (list(gt.values()), list(synth.values()))
 
     return res
+
+
+def get_y_pred_proba_hlpr(y_pred_proba: np.ndarray, nclasses: int) -> np.ndarray:
+    if nclasses == 2:
+        if len(y_pred_proba.shape) < 2:
+            return y_pred_proba
+
+        if y_pred_proba.shape[1] == 2:
+            return y_pred_proba[:, 1]
+
+    return y_pred_proba
+
+
+def evaluate_auc(
+    y_test: np.ndarray,
+    y_pred_proba: np.ndarray,
+    classes: Union[np.ndarray, None] = None,
+) -> Tuple[float, float]:
+
+    y_test = np.asarray(y_test)
+    y_pred_proba = np.asarray(y_pred_proba)
+
+    nnan = sum(np.ravel(np.isnan(y_pred_proba)))
+
+    if nnan:
+        raise ValueError("nan in predictions. aborting")
+
+    n_classes = len(set(np.ravel(y_test)))
+
+    y_pred_proba_tmp = get_y_pred_proba_hlpr(y_pred_proba, n_classes)
+
+    if n_classes > 2:
+
+        fpr = dict()
+        tpr = dict()
+        precision = dict()
+        recall = dict()
+        average_precision = dict()
+        roc_auc: dict = dict()
+
+        if classes is None:
+            classes = sorted(set(np.ravel(y_test)))
+
+        y_test = label_binarize(y_test, classes=classes)
+
+        fpr["micro"], tpr["micro"], _ = roc_curve(
+            y_test.ravel(), y_pred_proba_tmp.ravel()
+        )
+        roc_auc["micro"] = auc(fpr["micro"], tpr["micro"])
+
+        precision["micro"], recall["micro"], _ = precision_recall_curve(
+            y_test.ravel(), y_pred_proba_tmp.ravel()
+        )
+
+        average_precision["micro"] = average_precision_score(
+            y_test, y_pred_proba_tmp, average="micro"
+        )
+
+        aucroc = roc_auc["micro"]
+        aucprc = average_precision["micro"]
+    else:
+
+        aucroc = roc_auc_score(np.ravel(y_test), y_pred_proba_tmp, multi_class="ovr")
+        aucprc = average_precision_score(np.ravel(y_test), y_pred_proba_tmp)
+
+    return aucroc, aucprc

@@ -8,7 +8,7 @@ from xgboost import XGBClassifier
 
 
 @validate_arguments(config=dict(arbitrary_types_allowed=True))
-def detect_synth(
+def detect_synthetic(
     X_gt: pd.DataFrame, y_gt: pd.Series, X_synth: pd.DataFrame, y_synth: pd.Series
 ) -> float:
     """Train a classifier to detect synthetic data.
@@ -45,7 +45,7 @@ def detect_synth(
 
         test_pred = model.predict(test_data)
 
-        score = roc_auc_score(test_labels, test_pred)
+        score = roc_auc_score(np.asarray(test_labels), np.asarray(test_pred))
         res.append(score)
 
     return np.mean(res)
