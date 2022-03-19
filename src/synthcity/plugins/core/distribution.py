@@ -10,39 +10,46 @@ from pydantic import BaseModel
 from synthcity.plugins.core.constraints import Constraints
 
 
-class Params(BaseModel, metaclass=ABCMeta):
+class Distribution(BaseModel, metaclass=ABCMeta):
     name: str
 
     @abstractmethod
     def get(self) -> List[Any]:
+        """Return the metadata of the Distribution."""
         ...
 
     @abstractmethod
     def sample(self) -> Any:
+        """Sample a value from the Distribution."""
         ...
 
     @abstractmethod
-    def includes(self, other: "Params") -> bool:
+    def includes(self, other: "Distribution") -> bool:
+        """Test if another Distribution is included in the local one."""
         ...
 
     @abstractmethod
     def has(self, val: Any) -> bool:
+        """Test if a value is included in the Distribution."""
         ...
 
     @abstractmethod
     def as_constraint(self) -> Constraints:
+        """Convert the Distribution to a set of Constraints."""
         ...
 
     @abstractmethod
     def min(self) -> Any:
+        "Get the min value of the distribution"
         ...
 
     @abstractmethod
     def max(self) -> Any:
+        "Get the max value of the distribution"
         ...
 
 
-class Categorical(Params):
+class CategoricalDistribution(Distribution):
     choices: list
 
     def get(self) -> List[Any]:
@@ -54,8 +61,8 @@ class Categorical(Params):
     def has(self, val: Any) -> bool:
         return val in self.choices
 
-    def includes(self, other: "Params") -> bool:
-        if not isinstance(other, Categorical):
+    def includes(self, other: "Distribution") -> bool:
+        if not isinstance(other, CategoricalDistribution):
             return False
         return set(other.choices).issubset(set(self.choices))
 
@@ -69,7 +76,7 @@ class Categorical(Params):
         return max(self.choices)
 
 
-class Float(Params):
+class FloatDistribution(Distribution):
     low: float
     high: float
 
@@ -82,7 +89,7 @@ class Float(Params):
     def has(self, val: Any) -> bool:
         return self.low <= val and val <= self.high
 
-    def includes(self, other: "Params") -> bool:
+    def includes(self, other: "Distribution") -> bool:
         return self.min() <= other.min() and other.max() <= self.max()
 
     def as_constraint(self) -> Constraints:
@@ -100,7 +107,7 @@ class Float(Params):
         return self.high
 
 
-class Integer(Params):
+class IntegerDistribution(Distribution):
     low: int
     high: int
     step: int = 1
@@ -115,7 +122,7 @@ class Integer(Params):
     def has(self, val: Any) -> bool:
         return self.low <= val and val <= self.high
 
-    def includes(self, other: "Params") -> bool:
+    def includes(self, other: "Distribution") -> bool:
         return self.min() <= other.min() and other.max() <= self.max()
 
     def as_constraint(self) -> Constraints:

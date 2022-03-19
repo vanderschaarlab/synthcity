@@ -3,7 +3,7 @@ from typing import Any, Generator, List
 
 # third party
 import pandas as pd
-from pydantic import BaseModel, validator
+from pydantic import BaseModel, validate_arguments, validator
 
 
 class Constraints(BaseModel):
@@ -27,23 +27,44 @@ class Constraints(BaseModel):
                 assert isinstance(thresh, list)
         return rules
 
-    def _eval(self, X: pd.DataFrame, feature: str, op: str, threshold: Any) -> bool:
+    @validate_arguments(config=dict(arbitrary_types_allowed=True))
+    def _eval(self, X: pd.DataFrame, feature: str, op: str, operand: Any) -> pd.Index:
+        """Evaluation primitive.
+
+        Args:
+            X: DataFrame. The dataset to apply the constraint on.
+            feature: str. The column in the dataset to apply the constraint on.
+            op: str. The operation to execute for the constraint.
+            operand: Any. The operand for the binary operation.
+
+        Returns:
+            The pandas.Index which matches the constraint.
+        """
         if op == "lt":
-            return X[feature] < threshold
+            return X[feature] < operand
         elif op == "le":
-            return X[feature] <= threshold
+            return X[feature] <= operand
         elif op == "gt":
-            return X[feature] > threshold
+            return X[feature] > operand
         elif op == "ge":
-            return X[feature] >= threshold
+            return X[feature] >= operand
         elif op == "eq":
-            return X[feature] == threshold
+            return X[feature] == operand
         elif op == "in":
-            return X[feature].isin(threshold)
+            return X[feature].isin(operand)
         else:
             raise RuntimeError("unsupported operation", op)
 
+    @validate_arguments(config=dict(arbitrary_types_allowed=True))
     def filter(self, X: pd.DataFrame) -> pd.DataFrame:
+        """Apply the constraints to a DataFrame X.
+
+        Args:
+            X: DataFrame. The dataset to apply the constraints on.
+
+        Returns:
+            pandas.Index which matches all the constraints
+        """
         X = pd.DataFrame(X)
         res = pd.Series([True] * len(X), index=X.index)
         for feature, op, thresh in self.rules:
@@ -55,17 +76,37 @@ class Constraints(BaseModel):
             )
         return res
 
+    @validate_arguments(config=dict(arbitrary_types_allowed=True))
     def match(self, X: pd.DataFrame) -> pd.DataFrame:
+        """Apply the constraints to a DataFrame X and return the filtered dataset.
+
+        Args:
+            X: DataFrame. The dataset to apply the constraints on.
+
+        Returns:
+            The filtered Dataframe
+        """
+
         return X[self.filter(X)]
 
     def extend(self, other: "Constraints") -> "Constraints":
+        """Extend the local constraints with more constraints.
+
+        Args:
+            other: THe new constraints to add.
+
+        Returns:
+            self with the updated constraints.
+        """
         self.rules.extend(other.rules)
 
         return self
 
     def __len__(self) -> int:
+        """The number of constraint rules."""
         return len(self.rules)
 
     def __iter__(self) -> Generator:
+        """Iterate the constraint rules."""
         for x in self.rules:
             yield x

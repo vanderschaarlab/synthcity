@@ -3,20 +3,9 @@ import numpy as np
 import pandas as pd
 from pydantic import validate_arguments
 from sklearn.neighbors import NearestNeighbors
-from sklearn.preprocessing import LabelEncoder, MinMaxScaler
 
-
-@validate_arguments(config=dict(arbitrary_types_allowed=True))
-def _encode_scale(X: pd.DataFrame) -> pd.DataFrame:
-    X = X.copy().fillna(0)
-
-    for col in X.columns:
-        if X[col].dtype == "object":
-            X[col] = LabelEncoder().fit_transform(X[col])
-
-    X = MinMaxScaler().fit_transform(X)
-
-    return X
+# synthcity absolute
+from synthcity.metrics._utils import encode_scale
 
 
 @validate_arguments(config=dict(arbitrary_types_allowed=True))
@@ -72,8 +61,8 @@ def avg_distance_nearest_synth_neighbor(
     X_synth["target"] = y_synth
     X_gt["target"] = y_gt
 
-    X_synth = _encode_scale(X_synth)
-    X_gt = _encode_scale(X_gt)
+    X_synth = encode_scale(X_synth)
+    X_gt = encode_scale(X_gt)
 
     estimator = NearestNeighbors(n_neighbors=5).fit(X_synth)
 

@@ -13,7 +13,7 @@ from pydantic import validate_arguments
 # synthcity absolute
 import synthcity.logger as log
 from synthcity.plugins.core.constraints import Constraints
-from synthcity.plugins.core.params import Params
+from synthcity.plugins.core.distribution import Distribution
 from synthcity.plugins.core.schema import Schema
 
 
@@ -38,11 +38,13 @@ class Plugin(metaclass=ABCMeta):
 
     @staticmethod
     @abstractmethod
-    def hyperparameter_space(*args: Any, **kwargs: Any) -> List[Params]:
+    def hyperparameter_space(*args: Any, **kwargs: Any) -> List[Distribution]:
+        """Returns the hyperparameter space for the current plugin."""
         ...
 
     @classmethod
     def sample_hyperparameters(cls, *args: Any, **kwargs: Any) -> Dict[str, Any]:
+        """Sample value from the hyperparameter space for the current plugin."""
         param_space = cls.hyperparameter_space(*args, **kwargs)
 
         results = {}
@@ -55,19 +57,31 @@ class Plugin(metaclass=ABCMeta):
     @staticmethod
     @abstractmethod
     def name() -> str:
+        """The name of the plugin."""
         ...
 
     @staticmethod
     @abstractmethod
     def type() -> str:
+        """The type of the plugin."""
         ...
 
     @classmethod
     def fqdn(cls) -> str:
+        """The Fully-Qualified name of the plugin."""
         return cls.type() + "." + cls.name()
 
     @validate_arguments(config=dict(arbitrary_types_allowed=True))
     def fit(self, X: pd.DataFrame, *args: Any, **kwargs: Any) -> Any:
+        """Training method the synthetic data plugin.
+
+        Args:
+            X: DataFrame.
+                The reference dataset.
+
+        Returns:
+            self
+        """
         X.columns = X.columns.astype(str)
         self._schema = Schema(data=X)
 
@@ -75,6 +89,15 @@ class Plugin(metaclass=ABCMeta):
 
     @abstractmethod
     def _fit(self, X: pd.DataFrame, *args: Any, **kwargs: Any) -> "Plugin":
+        """Internal training method the synthetic data plugin.
+
+        Args:
+            X: DataFrame.
+                The reference dataset.
+
+        Returns:
+            self
+        """
         ...
 
     @validate_arguments
@@ -84,6 +107,17 @@ class Plugin(metaclass=ABCMeta):
         constraints: Optional[Constraints] = None,
         **kwargs: Any,
     ) -> pd.DataFrame:
+        """Synthetic data generation method.
+
+        Args:
+            count: optional int.
+                The number of samples to generate. If None, it generated len(reference_dataset) samples.
+            constraints: optional Constraints
+                Optional constraints to apply on the generated data. If none, the reference schema constraints are applied.
+
+        Returns:
+            <count> synthetic samples
+        """
         if self._schema is None:
             raise RuntimeError("Fit the model first")
 
@@ -98,14 +132,36 @@ class Plugin(metaclass=ABCMeta):
         constraints: Optional[Constraints] = None,
         **kwargs: Any,
     ) -> pd.DataFrame:
+        """Internal synthetic data generation method.
+
+        Args:
+            count: optional int.
+                The number of samples to generate. If None, it generated len(reference_dataset) samples.
+            constraints: optional Constraints
+                Optional constraints to apply on the generated data. If none, the reference schema constraints are applied.
+
+        Returns:
+            <count> synthetic samples
+        """
         ...
 
     @validate_arguments(config=dict(arbitrary_types_allowed=True))
     def schema_includes(self, other: pd.DataFrame) -> bool:
+        """Helper method to test if the reference schema includes a Dataset
+
+        Args:
+            other: DataFrame.
+                The dataset to test
+
+        Returns:
+            bool, if the schema includes the dataset or not.
+
+        """
         other_schema = Schema(data=other)
         return self.schema().includes(other_schema)
 
     def schema(self) -> Schema:
+        """The reference schema"""
         if self._schema is None:
             raise RuntimeError("Fit the model first")
 
@@ -113,6 +169,10 @@ class Plugin(metaclass=ABCMeta):
 
 
 class PluginLoader:
+    """Plugin loading utility class.
+    Used to load the plugins from the current folder.
+    """
+
     @validate_arguments
     def __init__(self, plugins: list, expected_type: Type) -> None:
         self._plugins: Dict[str, Type] = {}
@@ -125,6 +185,7 @@ class PluginLoader:
 
     @validate_arguments
     def _load_single_plugin(self, plugin: str) -> None:
+        """Helper for loading a single plugin"""
         name = basename(plugin)
         failed = False
         for retry in range(2):
@@ -152,13 +213,16 @@ class PluginLoader:
         self.add(cls.name(), cls)
 
     def list(self) -> List[str]:
+        """Get all the available plugins."""
         all_plugins = list(self._plugins.keys()) + list(self._available_plugins.keys())
         return list(set(all_plugins))
 
     def types(self) -> List[Type]:
+        """Get the loaded plugins types"""
         return list(self._plugins.values())
 
     def add(self, name: str, cls: Type) -> "PluginLoader":
+        """Add a new plugin"""
         if name in self._plugins:
             raise ValueError(f"Plugin {name} already exists.")
 
@@ -173,6 +237,14 @@ class PluginLoader:
 
     @validate_arguments
     def get(self, name: str, *args: Any, **kwargs: Any) -> Any:
+        """Create a new object from a plugin.
+        Args:
+            name: str. The name of the plugin
+            &args, **kwargs. Plugin specific arguments
+
+        Returns:
+            The new object
+        """
         if name not in self._plugins and name not in self._available_plugins:
             raise ValueError(f"Plugin {name} doesn't exist.")
 
@@ -186,6 +258,13 @@ class PluginLoader:
 
     @validate_arguments
     def get_type(self, name: str) -> Type:
+        """Get the class type of a plugin.
+        Args:
+            name: str. The name of the plugin
+
+        Returns:
+            The class of the plugin
+        """
         if name not in self._plugins and name not in self._available_plugins:
             raise ValueError(f"Plugin {name} doesn't exist.")
 
@@ -198,10 +277,12 @@ class PluginLoader:
         return self._plugins[name]
 
     def __iter__(self) -> Generator:
+        """Iterate the loaded plugins."""
         for x in self._plugins:
             yield x
 
     def __len__(self) -> int:
+        """The number of available plugins."""
         return len(self.list())
 
     @validate_arguments

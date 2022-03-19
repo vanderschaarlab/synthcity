@@ -7,10 +7,17 @@ from pydantic import BaseModel, validate_arguments, validator
 
 # synthcity absolute
 from synthcity.plugins.core.constraints import Constraints
-from synthcity.plugins.core.params import Categorical, Float, Integer, Params
+from synthcity.plugins.core.distribution import (
+    CategoricalDistribution,
+    Distribution,
+    FloatDistribution,
+    IntegerDistribution,
+)
 
 
 class Schema(BaseModel):
+    """Utility class for defining the schema of a Dataset."""
+
     data: Any
     domain: Dict = {}
 
@@ -26,15 +33,15 @@ class Schema(BaseModel):
 
         for col in X.columns:
             if X[col].dtype == "object" or len(X[col].unique()) < 10:
-                feature_domain[col] = Categorical(
+                feature_domain[col] = CategoricalDistribution(
                     name=col, choices=list(X[col].unique())
                 )
             elif X[col].dtype == "int":
-                feature_domain[col] = Integer(
+                feature_domain[col] = IntegerDistribution(
                     name=col, low=X[col].min(), high=X[col].max()
                 )
             elif X[col].dtype == "float":
-                feature_domain[col] = Float(
+                feature_domain[col] = FloatDistribution(
                     name=col, low=X[col].min(), high=X[col].max()
                 )
             else:
@@ -45,24 +52,43 @@ class Schema(BaseModel):
         return feature_domain
 
     @validate_arguments
-    def get(self, key: str) -> Params:
-        if key not in self.domain:
-            raise ValueError(f"invalid feature {key}")
+    def get(self, feature: str) -> Distribution:
+        """Get the Distribution of a feature.
 
-        return self.domain[key]
+        Args:
+            feature: str. the feature name
+
+        Returns:
+            The feature distribution
+        """
+        if feature not in self.domain:
+            raise ValueError(f"invalid feature {feature}")
+
+        return self.domain[feature]
 
     @validate_arguments
-    def __getitem__(self, key: str) -> Params:
+    def __getitem__(self, key: str) -> Distribution:
+        """Get the Distribution of a feature.
+
+        Args:
+            feature: str. the feature name
+
+        Returns:
+            The feature distribution
+        """
         return self.get(key)
 
     def __iter__(self) -> Generator:
+        """Iterate the features distribution"""
         for x in self.domain:
             yield x
 
     def __len__(self) -> int:
+        """Get the number of features"""
         return len(self.domain)
 
     def includes(self, other: "Schema") -> bool:
+        """Test if another schema is included in the local one."""
         for feature in other:
             if feature not in self.domain:
                 return False
@@ -73,6 +99,7 @@ class Schema(BaseModel):
         return True
 
     def as_constraint(self) -> Constraints:
+        """Convert the schema to a list of Constraints."""
         constraints = Constraints(rules=[])
         for feature in self:
             constraints.extend(self[feature].as_constraint())

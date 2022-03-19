@@ -6,7 +6,7 @@ import pandas as pd
 import pytest
 
 # synthcity absolute
-from synthcity.plugins.core.params import Params
+from synthcity.plugins.core.distribution import Distribution
 from synthcity.plugins.core.plugin import Plugin
 
 
@@ -16,7 +16,7 @@ class AbstractMockPlugin(Plugin):
 
 class MockPlugin(Plugin):
     @staticmethod
-    def hyperparameter_space(*args: Any, **kwargs: Any) -> List[Params]:
+    def hyperparameter_space(*args: Any, **kwargs: Any) -> List[Distribution]:
         return []
 
     @staticmethod
