@@ -8,6 +8,15 @@ from sklearn.neighbors import NearestNeighbors
 from synthcity.metrics._utils import encode_scale
 
 
+def _helper_nearest_neighbor(X_gt: pd.DataFrame, X_synth: pd.DataFrame) -> pd.Series:
+    try:
+        estimator = NearestNeighbors(n_neighbors=5).fit(X_synth)
+        dist, _ = estimator.kneighbors(X_gt, 1, return_distance=True)
+        return pd.Series(dist.squeeze(), index=X_gt.index)
+    except BaseException:
+        return pd.Series([999])
+
+
 @validate_arguments(config=dict(arbitrary_types_allowed=True))
 def evaluate_integrity_score(
     X_gt: pd.DataFrame, y_gt: pd.Series, X_synth: pd.DataFrame, y_synth: pd.Series
@@ -65,10 +74,40 @@ def evaluate_avg_distance_nearest_synth_neighbor(
     X_synth, _ = encode_scale(X_synth)
     X_gt, _ = encode_scale(X_gt)
 
-    try:
-        estimator = NearestNeighbors(n_neighbors=5).fit(X_synth)
-        dist, _ = estimator.kneighbors(X_gt, 1, return_distance=True)
+    dist = _helper_nearest_neighbor(X_gt, X_synth)
+    return np.mean(dist)
 
-        return np.mean(dist)
-    except BaseException:
-        return 1
+
+@validate_arguments(config=dict(arbitrary_types_allowed=True))
+def evaluate_inlier_probability(
+    X_gt: pd.DataFrame, y_gt: pd.Series, X_synth: pd.DataFrame, y_synth: pd.Series
+) -> float:
+    """Compute the probability of close values between the real and synthetic data."""
+
+    if len(X_gt.columns) != len(X_synth.columns):
+        raise ValueError(f"Incompatible dataframe {X_gt.shape} and {X_synth.shape}")
+
+    X_synth["target"] = y_synth
+    X_gt["target"] = y_gt
+
+    dist = _helper_nearest_neighbor(X_gt, X_synth)
+    threshold = np.quantile(np.unique(dist.values), 0.2)
+
+    return (dist <= threshold).sum() / len(dist)
+
+
+@validate_arguments(config=dict(arbitrary_types_allowed=True))
+def evaluate_outlier_probability(
+    X_gt: pd.DataFrame, y_gt: pd.Series, X_synth: pd.DataFrame, y_synth: pd.Series
+) -> float:
+    """Compute the probability of distant values between the real and synthetic data."""
+
+    if len(X_gt.columns) != len(X_synth.columns):
+        raise ValueError(f"Incompatible dataframe {X_gt.shape} and {X_synth.shape}")
+
+    X_synth["target"] = y_synth
+    X_gt["target"] = y_gt
+
+    dist = _helper_nearest_neighbor(X_gt, X_synth)
+    threshold = np.quantile(np.unique(dist.values), 0.8)
+    return (dist >= threshold).sum() / len(dist)

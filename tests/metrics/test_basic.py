@@ -1,3 +1,6 @@
+# stdlib
+from typing import Callable, Tuple
+
 # third party
 import numpy as np
 import pandas as pd
@@ -8,9 +11,31 @@ from sklearn.datasets import load_iris
 from synthcity.metrics.basic import (
     evaluate_avg_common_rows,
     evaluate_avg_distance_nearest_synth_neighbor,
+    evaluate_inlier_probability,
     evaluate_integrity_score,
+    evaluate_outlier_probability,
 )
 from synthcity.plugins import Plugin, Plugins
+
+
+def _eval_plugin(cbk: Callable, X: pd.DataFrame, X_syn: pd.DataFrame) -> Tuple:
+    syn_score = cbk(
+        X.drop(columns=["target"]),
+        X["target"],
+        X_syn.drop(columns=["target"]),
+        X_syn["target"],
+    )
+
+    sz = len(X_syn)
+    X_rnd = pd.DataFrame(np.random.randn(sz, len(X.columns)), columns=X.columns)
+    rnd_score = cbk(
+        X.drop(columns=["target"]),
+        X["target"],
+        X_rnd.drop(columns=["target"]),
+        X_rnd["target"],
+    )
+
+    return syn_score, rnd_score
 
 
 @pytest.mark.parametrize("test_plugin", [Plugins().get("dummy_sampler")])
@@ -52,26 +77,11 @@ def test_common_rows(test_plugin: Plugin) -> None:
     test_plugin.fit(X)
     X_gen = test_plugin.generate(100)
 
-    score = evaluate_avg_common_rows(
-        X.drop(columns=["target"]),
-        X["target"],
-        X_gen.drop(columns=["target"]),
-        X_gen["target"],
-    )
+    syn_score, rnd_score = _eval_plugin(evaluate_avg_common_rows, X, X_gen)
 
-    assert score > 0
-    assert score < 1
-
-    sz = 100
-    X_rnd = pd.DataFrame(np.random.randn(sz, len(X.columns)), columns=X.columns)
-    score = evaluate_avg_common_rows(
-        X.drop(columns=["target"]),
-        X["target"],
-        X_rnd.drop(columns=["target"]),
-        X_rnd["target"],
-    )
-
-    assert score == 0
+    assert syn_score > 0
+    assert syn_score < 1
+    assert rnd_score == 0
 
 
 @pytest.mark.parametrize("test_plugin", [Plugins().get("dummy_sampler")])
@@ -82,25 +92,43 @@ def test_evaluate_avg_distance_nearest_synth_neighbor(test_plugin: Plugin) -> No
     test_plugin.fit(X)
     X_gen = test_plugin.generate(100)
 
-    close_score = evaluate_avg_distance_nearest_synth_neighbor(
-        X.drop(columns=["target"]),
-        X["target"],
-        X_gen.drop(columns=["target"]),
-        X_gen["target"],
+    syn_score, rnd_score = _eval_plugin(
+        evaluate_avg_distance_nearest_synth_neighbor, X, X_gen
     )
 
-    assert close_score > 0
-    assert close_score < 1
+    assert syn_score > 0
+    assert syn_score < 1
 
-    sz = 10
-    X_rnd = pd.DataFrame(np.random.randn(sz, len(X.columns)), columns=X.columns)
-    score = evaluate_avg_distance_nearest_synth_neighbor(
-        X.drop(columns=["target"]),
-        X["target"],
-        X_rnd.drop(columns=["target"]),
-        X_rnd["target"],
-    )
+    assert rnd_score > 0
+    assert rnd_score < 1
+    assert syn_score < rnd_score
 
-    assert score > 0
-    assert score < 1
-    assert close_score < score
+
+@pytest.mark.parametrize("test_plugin", [Plugins().get("dummy_sampler")])
+def test_evaluate_inlier_probability(test_plugin: Plugin) -> None:
+    X, y = load_iris(return_X_y=True, as_frame=True)
+    X["target"] = y
+
+    test_plugin.fit(X)
+    X_gen = test_plugin.generate(100)
+
+    syn_score, rnd_score = _eval_plugin(evaluate_inlier_probability, X, X_gen)
+
+    assert 0 < syn_score < 1
+    assert 0 < rnd_score < 1
+    assert syn_score > rnd_score
+
+
+@pytest.mark.parametrize("test_plugin", [Plugins().get("dummy_sampler")])
+def test_evaluate_outlier_probability(test_plugin: Plugin) -> None:
+    X, y = load_iris(return_X_y=True, as_frame=True)
+    X["target"] = y
+
+    test_plugin.fit(X)
+    X_gen = test_plugin.generate(100)
+
+    syn_score, rnd_score = _eval_plugin(evaluate_outlier_probability, X, X_gen)
+
+    assert 0 < syn_score < 1
+    assert 0 < rnd_score < 1
+    assert syn_score < rnd_score
