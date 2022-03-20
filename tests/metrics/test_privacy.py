@@ -169,7 +169,7 @@ def test_k_anonymity_anonymize_column() -> None:
 
     sensitive_features = ["target"]
 
-    k = evaluate_k_anonymization(X)
+    k = evaluate_k_anonymization(X, sensitive_features)
     evaluator = DatasetAnonymization(k_threshold=k + 1)
     assert evaluator.is_anonymous(X, sensitive_features) is False
 
@@ -179,14 +179,14 @@ def test_k_anonymity_anonymize_column() -> None:
     assert len(anon_df.drop_duplicates()) > 1
 
 
-@pytest.mark.parametrize("k", [10, 30])
-def test_k_anonymity_anonymize_columns(k: int) -> None:
+def test_k_anonymity_anonymize_columns() -> None:
     X, y = load_diabetes(return_X_y=True, as_frame=True)
     X["target"] = y
 
     sensitive_features = list(X.columns)[:2]
+    k = evaluate_k_anonymization(X, sensitive_features)
 
-    evaluator = DatasetAnonymization(k_threshold=k)
+    evaluator = DatasetAnonymization(k_threshold=k + 1)
     assert evaluator.is_anonymous(X, sensitive_features) is False
 
     anon_df = evaluator.anonymize_columns(X, sensitive_columns=sensitive_features)
@@ -195,12 +195,12 @@ def test_k_anonymity_anonymize_columns(k: int) -> None:
     assert len(anon_df.drop_duplicates()) > 1
 
 
-@pytest.mark.parametrize("k", [10, 30])
-def test_k_anonymity_anonymize_full(k: int) -> None:
+def test_k_anonymity_anonymize_full() -> None:
     X, y = load_diabetes(return_X_y=True, as_frame=True)
     X["target"] = y
 
-    evaluator = DatasetAnonymization(k_threshold=k)
+    k = evaluate_k_anonymization(X)
+    evaluator = DatasetAnonymization(k_threshold=k + 1)
     assert evaluator.is_anonymous(X) is False
 
     anon_df = evaluator.anonymize(X)
@@ -272,15 +272,17 @@ def test_l_diversity_validation() -> None:
     assert evaluator.is_anonymous(X, sensitive_columns=[X.columns[0]]) is False
 
 
-@pytest.mark.parametrize("k_threshold", [2])
-@pytest.mark.parametrize("l_diversity", [1, 2])
-def test_l_diversity_anonymize_column(k_threshold: int, l_diversity: int) -> None:
+def test_l_diversity_anonymize_column() -> None:
     X, y = load_diabetes(return_X_y=True, as_frame=True)
     X["target"] = y
 
     sensitive_features = ["target"]
+    k_threshold = evaluate_k_anonymization(X, sensitive_features)
+    l_diversity = evaluate_l_diversity(X, sensitive_features)
 
-    evaluator = DatasetAnonymization(k_threshold=k_threshold, l_diversity=l_diversity)
+    evaluator = DatasetAnonymization(
+        k_threshold=k_threshold + 1, l_diversity=l_diversity + 1
+    )
     assert evaluator.is_anonymous(X, sensitive_features) is False
 
     anon_df = evaluator.anonymize_column(X, sensitive_column=sensitive_features[0])
@@ -289,15 +291,17 @@ def test_l_diversity_anonymize_column(k_threshold: int, l_diversity: int) -> Non
     assert len(anon_df.drop_duplicates()) > 1
 
 
-@pytest.mark.parametrize("k_threshold", [2])
-@pytest.mark.parametrize("l_diversity", [1, 2, 5])
-def test_l_diversity_anonymize_columns(k_threshold: int, l_diversity: int) -> None:
+def test_l_diversity_anonymize_columns() -> None:
     X, y = load_diabetes(return_X_y=True, as_frame=True)
     X["target"] = y
 
     sensitive_features = list(X.columns)[:2]
+    k_threshold = evaluate_k_anonymization(X, sensitive_features)
+    l_diversity = evaluate_l_diversity(X, sensitive_features)
 
-    evaluator = DatasetAnonymization(k_threshold=k_threshold, l_diversity=l_diversity)
+    evaluator = DatasetAnonymization(
+        k_threshold=k_threshold + 1, l_diversity=l_diversity + 1
+    )
     assert evaluator.is_anonymous(X, sensitive_features) is False
 
     anon_df = evaluator.anonymize_columns(X, sensitive_columns=[sensitive_features[0]])
@@ -306,15 +310,17 @@ def test_l_diversity_anonymize_columns(k_threshold: int, l_diversity: int) -> No
     assert len(anon_df.drop_duplicates()) > 1
 
 
-@pytest.mark.parametrize("k_threshold", [2])
-@pytest.mark.parametrize("l_diversity", [1, 2, 5])
-def test_l_diversity_anonymize_full(k_threshold: int, l_diversity: int) -> None:
+def test_l_diversity_anonymize_full() -> None:
     X, y = load_diabetes(return_X_y=True, as_frame=True)
     X["target"] = y
 
     sensitive_features = list(X.columns)[:2]
+    k_threshold = evaluate_k_anonymization(X, sensitive_features)
+    l_diversity = evaluate_l_diversity(X, sensitive_features)
 
-    evaluator = DatasetAnonymization(k_threshold=k_threshold, l_diversity=l_diversity)
+    evaluator = DatasetAnonymization(
+        k_threshold=k_threshold + 1, l_diversity=l_diversity + 1
+    )
     assert evaluator.is_anonymous(X, sensitive_features) is False
 
     anon_df = evaluator.anonymize(X)
@@ -382,26 +388,28 @@ def test_t_closeness_partition() -> None:
 def test_t_closeness_validation() -> None:
     X, y = load_diabetes(return_X_y=True, as_frame=True)
 
+    k_threshold = evaluate_k_anonymization(X, ["sex"])
+
     evaluator = DatasetAnonymization(k_threshold=1, t_threshold=0.2)
     assert evaluator.is_anonymous(X, sensitive_columns=["sex"]) is True
 
-    evaluator = DatasetAnonymization(k_threshold=2, t_threshold=0.5)
+    evaluator = DatasetAnonymization(k_threshold=k_threshold + 1, t_threshold=0.5)
     assert evaluator.is_anonymous(X, sensitive_columns=["sex"]) is False
 
 
-@pytest.mark.parametrize("k_threshold", [2])
-@pytest.mark.parametrize("l_diversity", [1])
 @pytest.mark.parametrize("t_threshold", [0.2, 0.5])
-def test_t_closeness_anonymize_column(
-    k_threshold: int, l_diversity: int, t_threshold: float
-) -> None:
+def test_t_closeness_anonymize_column(t_threshold: float) -> None:
     X, y = load_diabetes(return_X_y=True, as_frame=True)
     X["target"] = y
 
     sensitive_features = ["target"]
+    k_threshold = evaluate_k_anonymization(X, sensitive_features)
+    l_diversity = evaluate_l_diversity(X, sensitive_features)
 
     evaluator = DatasetAnonymization(
-        k_threshold=k_threshold, l_diversity=l_diversity, t_threshold=t_threshold
+        k_threshold=k_threshold + 1,
+        l_diversity=l_diversity + 1,
+        t_threshold=t_threshold,
     )
     assert evaluator.is_anonymous(X, sensitive_features) is False
 
@@ -411,19 +419,19 @@ def test_t_closeness_anonymize_column(
     assert len(anon_df.drop_duplicates()) > 1
 
 
-@pytest.mark.parametrize("k_threshold", [2])
-@pytest.mark.parametrize("l_diversity", [1])
 @pytest.mark.parametrize("t_threshold", [0.2, 0.5])
-def test_t_closeness_anonymize_columns(
-    k_threshold: int, l_diversity: int, t_threshold: float
-) -> None:
+def test_t_closeness_anonymize_columns(t_threshold: float) -> None:
     X, y = load_diabetes(return_X_y=True, as_frame=True)
     X["target"] = y
 
     sensitive_features = list(X.columns)[:2]
+    k_threshold = evaluate_k_anonymization(X, sensitive_features)
+    l_diversity = evaluate_l_diversity(X, sensitive_features)
 
     evaluator = DatasetAnonymization(
-        k_threshold=k_threshold, l_diversity=l_diversity, t_threshold=t_threshold
+        k_threshold=k_threshold + 1,
+        l_diversity=l_diversity + 1,
+        t_threshold=t_threshold,
     )
     assert evaluator.is_anonymous(X, sensitive_features) is False
 
@@ -433,19 +441,19 @@ def test_t_closeness_anonymize_columns(
     assert len(anon_df.drop_duplicates()) > 1
 
 
-@pytest.mark.parametrize("k_threshold", [2])
-@pytest.mark.parametrize("l_diversity", [1])
 @pytest.mark.parametrize("t_threshold", [0.2, 0.5])
-def test_t_closeness_anonymize_full(
-    k_threshold: int, l_diversity: int, t_threshold: float
-) -> None:
+def test_t_closeness_anonymize_full(t_threshold: float) -> None:
     X, y = load_diabetes(return_X_y=True, as_frame=True)
     X["target"] = y
 
     sensitive_features = list(X.columns)[:2]
+    k_threshold = evaluate_k_anonymization(X, sensitive_features)
+    l_diversity = evaluate_l_diversity(X, sensitive_features)
 
     evaluator = DatasetAnonymization(
-        k_threshold=k_threshold, l_diversity=l_diversity, t_threshold=t_threshold
+        k_threshold=k_threshold + 1,
+        l_diversity=l_diversity + 1,
+        t_threshold=t_threshold,
     )
     assert evaluator.is_anonymous(X, sensitive_features) is False
 
