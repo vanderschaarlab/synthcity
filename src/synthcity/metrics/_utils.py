@@ -1,5 +1,5 @@
 # stdlib
-from typing import Optional, Tuple, Union
+from typing import List, Optional, Tuple, Union
 
 # third party
 import numpy as np
@@ -65,6 +65,16 @@ def get_freq(X_gt: pd.DataFrame, X_synth: pd.DataFrame) -> dict:
         res[col] = (list(gt.values()), list(synth.values()))
 
     return res
+
+
+def get_features(X: pd.DataFrame, sensitive_columns: List[str] = []) -> List:
+    """Return the non-sensitive features from dataset X"""
+    features = list(X.columns)
+    for col in sensitive_columns:
+        if col in features:
+            features.remove(col)
+
+    return features
 
 
 def get_y_pred_proba_hlpr(y_pred_proba: np.ndarray, nclasses: int) -> np.ndarray:

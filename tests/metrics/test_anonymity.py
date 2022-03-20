@@ -3,7 +3,46 @@ import pytest
 from sklearn.datasets import load_breast_cancer, load_diabetes
 
 # synthcity absolute
-from synthcity.metrics.anonymity import DatasetAnonymization
+from synthcity.metrics.anonymity import (
+    DatasetAnonymization,
+    evaluate_delta_presence,
+    evaluate_k_anonymization,
+    evaluate_kmap,
+    evaluate_l_diversity,
+)
+from synthcity.plugins import Plugin, Plugins
+
+
+def test_evaluate_k_anonymization() -> None:
+    X, y = load_diabetes(return_X_y=True, as_frame=True)
+
+    assert evaluate_k_anonymization(X) == 18
+
+
+def test_evaluate_l_diversity() -> None:
+    X, y = load_diabetes(return_X_y=True, as_frame=True)
+
+    assert evaluate_l_diversity(X, ["sex", "bmi"]) == 20
+
+
+@pytest.mark.parametrize("test_plugin", [Plugins().get("dummy_sampler")])
+def test_evaluate_kmap(test_plugin: Plugin) -> None:
+    X, y = load_diabetes(return_X_y=True, as_frame=True)
+
+    test_plugin.fit(X)
+    X_gen = test_plugin.generate(2 * len(X))
+
+    assert evaluate_kmap(X, X_gen, ["sex", "bmi"]) > 18
+
+
+@pytest.mark.parametrize("test_plugin", [Plugins().get("dummy_sampler")])
+def test_evaluate_delta_presence(test_plugin: Plugin) -> None:
+    X, y = load_diabetes(return_X_y=True, as_frame=True)
+
+    test_plugin.fit(X)
+    X_gen = test_plugin.generate(2 * len(X))
+
+    assert 0 < evaluate_delta_presence(X, X_gen, ["sex", "bmi"]) < 1
 
 
 def test_k_anonymity_sanity() -> None:
@@ -99,7 +138,7 @@ def test_k_anonymity_test_partition() -> None:
     assert evaluator._is_k_anonymous(X[X["sex"] == 1234]) is False
 
 
-@pytest.mark.parametrize("k", [2, 5, 15, 30])
+@pytest.mark.parametrize("k", [2, 5])
 def test_k_anonymity_anonymize_column(k: int) -> None:
     X, y = load_diabetes(return_X_y=True, as_frame=True)
     X["target"] = y
@@ -115,7 +154,7 @@ def test_k_anonymity_anonymize_column(k: int) -> None:
     assert len(anon_df.drop_duplicates()) > 1
 
 
-@pytest.mark.parametrize("k", [2, 5, 15, 30])
+@pytest.mark.parametrize("k", [2, 5])
 def test_k_anonymity_anonymize_columns(k: int) -> None:
     X, y = load_diabetes(return_X_y=True, as_frame=True)
     X["target"] = y
@@ -131,7 +170,7 @@ def test_k_anonymity_anonymize_columns(k: int) -> None:
     assert len(anon_df.drop_duplicates()) > 1
 
 
-@pytest.mark.parametrize("k", [2, 5, 15, 30])
+@pytest.mark.parametrize("k", [2, 5])
 def test_k_anonymity_anonymize_full(k: int) -> None:
     X, y = load_diabetes(return_X_y=True, as_frame=True)
     X["target"] = y
@@ -142,7 +181,6 @@ def test_k_anonymity_anonymize_full(k: int) -> None:
     anon_df = evaluator.anonymize(X)
 
     assert evaluator.is_anonymous(anon_df) is True
-    assert len(anon_df.drop_duplicates()) > 1
 
 
 def test_l_diversity_sanity() -> None:
@@ -209,7 +247,7 @@ def test_l_diversity_validation() -> None:
     assert evaluator.is_anonymous(X, sensitive_columns=[X.columns[0]]) is False
 
 
-@pytest.mark.parametrize("k_threshold", [2, 5, 15, 30])
+@pytest.mark.parametrize("k_threshold", [2])
 @pytest.mark.parametrize("l_diversity", [1, 2])
 def test_l_diversity_anonymize_column(k_threshold: int, l_diversity: int) -> None:
     X, y = load_diabetes(return_X_y=True, as_frame=True)
@@ -226,7 +264,7 @@ def test_l_diversity_anonymize_column(k_threshold: int, l_diversity: int) -> Non
     assert len(anon_df.drop_duplicates()) > 1
 
 
-@pytest.mark.parametrize("k_threshold", [2, 5, 15, 30])
+@pytest.mark.parametrize("k_threshold", [2])
 @pytest.mark.parametrize("l_diversity", [1, 2, 5])
 def test_l_diversity_anonymize_columns(k_threshold: int, l_diversity: int) -> None:
     X, y = load_diabetes(return_X_y=True, as_frame=True)
@@ -243,7 +281,7 @@ def test_l_diversity_anonymize_columns(k_threshold: int, l_diversity: int) -> No
     assert len(anon_df.drop_duplicates()) > 1
 
 
-@pytest.mark.parametrize("k_threshold", [2, 5, 15, 30])
+@pytest.mark.parametrize("k_threshold", [2])
 @pytest.mark.parametrize("l_diversity", [1, 2, 5])
 def test_l_diversity_anonymize_full(k_threshold: int, l_diversity: int) -> None:
     X, y = load_diabetes(return_X_y=True, as_frame=True)
@@ -257,7 +295,6 @@ def test_l_diversity_anonymize_full(k_threshold: int, l_diversity: int) -> None:
     anon_df = evaluator.anonymize(X)
 
     assert evaluator.is_anonymous(anon_df, sensitive_features) is True
-    assert len(anon_df.drop_duplicates()) > 1
 
 
 def test_t_closeness_sanity() -> None:
@@ -327,8 +364,8 @@ def test_t_closeness_validation() -> None:
     assert evaluator.is_anonymous(X, sensitive_columns=["sex"]) is False
 
 
-@pytest.mark.parametrize("k_threshold", [2, 5, 15, 30])
-@pytest.mark.parametrize("l_diversity", [1, 2])
+@pytest.mark.parametrize("k_threshold", [2])
+@pytest.mark.parametrize("l_diversity", [1])
 @pytest.mark.parametrize("t_threshold", [0.2, 0.5])
 def test_t_closeness_anonymize_column(
     k_threshold: int, l_diversity: int, t_threshold: float
@@ -349,8 +386,8 @@ def test_t_closeness_anonymize_column(
     assert len(anon_df.drop_duplicates()) > 1
 
 
-@pytest.mark.parametrize("k_threshold", [2, 5, 15, 30])
-@pytest.mark.parametrize("l_diversity", [1, 2, 5])
+@pytest.mark.parametrize("k_threshold", [2])
+@pytest.mark.parametrize("l_diversity", [1])
 @pytest.mark.parametrize("t_threshold", [0.2, 0.5])
 def test_t_closeness_anonymize_columns(
     k_threshold: int, l_diversity: int, t_threshold: float
@@ -371,8 +408,8 @@ def test_t_closeness_anonymize_columns(
     assert len(anon_df.drop_duplicates()) > 1
 
 
-@pytest.mark.parametrize("k_threshold", [2, 5, 15, 30])
-@pytest.mark.parametrize("l_diversity", [1, 2, 5])
+@pytest.mark.parametrize("k_threshold", [2])
+@pytest.mark.parametrize("l_diversity", [1])
 @pytest.mark.parametrize("t_threshold", [0.2, 0.5])
 def test_t_closeness_anonymize_full(
     k_threshold: int, l_diversity: int, t_threshold: float
@@ -390,4 +427,3 @@ def test_t_closeness_anonymize_full(
     anon_df = evaluator.anonymize(X)
 
     assert evaluator.is_anonymous(anon_df, sensitive_features) is True
-    assert len(anon_df.drop_duplicates()) > 1

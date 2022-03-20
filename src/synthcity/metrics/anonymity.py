@@ -9,6 +9,115 @@ from pydantic import validate_arguments
 from sklearn.cluster import KMeans
 from sklearn.preprocessing import LabelEncoder
 
+# synthcity absolute
+from synthcity.metrics._utils import get_features
+
+
+@validate_arguments(config=dict(arbitrary_types_allowed=True))
+def evaluate_k_anonymization(X: pd.DataFrame, sensitive_columns: List[str] = []) -> int:
+    """Returns the minimum value k that satisfies the k-anonymity rule.
+
+    We simulate a set of clusters over the dataset and return the minimum length of a cluster, from all trials.
+    """
+    features = get_features(X, sensitive_columns)
+
+    values = [999]
+    for n_clusters in [2, 5, 10, 15]:
+        if len(X) / n_clusters < 10:
+            continue
+        cluster = KMeans(n_clusters=n_clusters, init="k-means++", random_state=0).fit(
+            X[features]
+        )
+        counts: dict = Counter(cluster.labels_)
+        values.append(np.min(list(counts.values())))
+
+    return int(np.min(values))
+
+
+@validate_arguments(config=dict(arbitrary_types_allowed=True))
+def evaluate_l_diversity(X: pd.DataFrame, sensitive_columns: List[str]) -> int:
+    """Returns the minimum value l that satisfies the l-diversity rule.
+
+    We simulate a set of the cluster over the dataset, and we return the minimum length of unique sensitive values for any cluster.
+
+    """
+    features = get_features(X, sensitive_columns)
+
+    values = [999]
+    for n_clusters in [2, 5, 10, 15]:
+        if len(X) / n_clusters < 10:
+            continue
+        model = KMeans(n_clusters=n_clusters, init="k-means++", random_state=0).fit(
+            X[features]
+        )
+        clusters = model.predict(X[features])
+        clusters_df = pd.Series(clusters, index=X.index)
+        for cluster in range(n_clusters):
+            partition = X[clusters_df == cluster]
+            uniq_values = partition[sensitive_columns].drop_duplicates()
+            values.append(len(uniq_values))
+
+    return int(np.min(values))
+
+
+@validate_arguments(config=dict(arbitrary_types_allowed=True))
+def evaluate_kmap(
+    X: pd.DataFrame, X_synth: pd.DataFrame, sensitive_columns: List[str]
+) -> int:
+    """Returns the minimum value k that satisfies the k-map rule.
+
+    The data satisfies k-map if every combination of values for the quasi-identifiers appears at least k times in the reidentification(synthetic) dataset.
+    """
+    features = get_features(X, sensitive_columns)
+
+    values = [999]
+    for n_clusters in [2, 5, 10, 15]:
+        if len(X) / n_clusters < 10:
+            continue
+        model = KMeans(n_clusters=n_clusters, init="k-means++", random_state=0).fit(
+            X[features]
+        )
+        clusters = model.predict(X_synth[features])
+        counts: dict = Counter(clusters)
+        values.append(np.min(list(counts.values())))
+
+    return int(np.min(values))
+
+
+@validate_arguments(config=dict(arbitrary_types_allowed=True))
+def evaluate_delta_presence(
+    X: pd.DataFrame, X_synth: pd.DataFrame, sensitive_columns: List[str]
+) -> float:
+    """Returns the maximum ratio that satisfies the delta-presence rule.
+
+    For each dataset partition, we report the maximum ratio of unique sensitive information between the real dataset and in the synthetic dataset.
+
+    """
+    features = get_features(X, sensitive_columns)
+
+    values = []
+    for n_clusters in [2, 5, 10, 15]:
+        if len(X) / n_clusters < 10:
+            continue
+        model = KMeans(n_clusters=n_clusters, init="k-means++", random_state=0).fit(
+            X[features]
+        )
+        clusters = model.predict(X_synth[features])
+        synth_counts: dict = Counter(clusters)
+        gt_counts: dict = Counter(model.labels_)
+
+        for key in gt_counts:
+            if key not in synth_counts:
+                continue
+            gt_cnt = gt_counts[key]
+            synth_cnt = synth_counts[key]
+
+            delta = gt_cnt / (synth_cnt + 1e-8)
+
+            values.append(delta)
+
+    return float(np.max(values))
+
 
 class DatasetAnonymization:
     """Dataset Anonymization helper based on the k-Anonymization, l-Diversity and t-Closeness methods.
@@ -16,10 +125,7 @@ class DatasetAnonymization:
     k-Anonymity states that every individual in one dataset partition is indistinguishable from at least k - 1 other individuals.
     l-Diversity uses a stronger privacy definition and claims that every generalized block has to contain at least l different sensitive values.
     An equivalence class is said to have t-closeness if the distance between the distribution of a sensitive attribute in this class and the distribution of the attribute in the whole table is no more than a threshold t. A table is said to have t-closeness if all equivalence classes have t-closeness.
-    For that, we measure the Kolmogorov-Smirnov distance between the empirical probability distribution of the sensitive attribute over the entire dataset vs. the distribution over the partition.
-
-
-    """
+    For that, we measure the Kolmogorov-Smirnov distance between the empirical probability distribution of the sensitive attribute over the entire dataset vs. the distribution over the partition."""
 
     @validate_arguments
     def __init__(
@@ -52,21 +158,7 @@ class DatasetAnonymization:
     @validate_arguments(config=dict(arbitrary_types_allowed=True))
     def is_anonymous(self, X: pd.DataFrame, sensitive_columns: List[str] = []) -> bool:
         """True if the dataset is valid according to the k-anonymity criteria, False otherwise."""
-        if len(sensitive_columns) == 0:
-            sensitive_columns = X.columns
-
-        max_clusters = int(len(X) / (2 * self.k_threshold))
-        for n_clusters in [2, 5, 10, max_clusters]:
-            cluster = KMeans(
-                n_clusters=n_clusters, init="k-means++", random_state=0
-            ).fit(X[sensitive_columns])
-            counts: dict = Counter(cluster.labels_)
-            min_presence = np.min(list(counts.values()))
-
-            if min_presence < self.k_threshold:
-                return False
-
-        return True
+        return bool(evaluate_k_anonymization(X, sensitive_columns) >= self.k_threshold)
 
     def _setup(self, X: pd.DataFrame) -> Tuple[pd.DataFrame, Dict]:
         encoders = {}
@@ -275,12 +367,12 @@ class DatasetAnonymization:
 
     @validate_arguments(config=dict(arbitrary_types_allowed=True))
     def _is_k_anonymous(self, X: pd.DataFrame) -> bool:
-        """True if the dataset is valid according to the k-Anonymity criteria, False otherwise."""
+        """True if the partition is valid according to the k-Anonymity criteria, False otherwise."""
         return len(X) >= self.k_threshold
 
     @validate_arguments(config=dict(arbitrary_types_allowed=True))
     def _is_l_diverse(self, X: pd.DataFrame, sensitive_column: str) -> bool:
-        """True if the dataset is valid according to the l-Diversity criteria, False otherwise."""
+        """True if the partition is valid according to the l-Diversity criteria, False otherwise."""
         return len(X[sensitive_column].unique()) >= self.l_diversity
 
     @validate_arguments(config=dict(arbitrary_types_allowed=True))
