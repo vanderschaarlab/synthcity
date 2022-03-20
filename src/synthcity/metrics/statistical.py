@@ -4,6 +4,7 @@ import pandas as pd
 from pydantic import validate_arguments
 from scipy.special import kl_div
 from scipy.stats import chisquare, ks_2samp
+from sklearn import metrics
 
 # synthcity absolute
 from synthcity.metrics._utils import get_freq
@@ -11,10 +12,10 @@ from synthcity.metrics._utils import get_freq
 
 @validate_arguments(config=dict(arbitrary_types_allowed=True))
 def evaluate_inv_kl_divergence(
-    X_gt: pd.DataFrame, y_gt: pd.Series, X_synth: pd.DataFrame, y_synth: pd.Series
+    X_gt: pd.DataFrame, y_gt: pd.Series, X_syn: pd.DataFrame, y_synth: pd.Series
 ) -> float:
     """Returns the average normalized Kullback–Leibler Divergence based metric."""
-    freqs = get_freq(X_gt, X_synth)
+    freqs = get_freq(X_gt, X_syn)
     res = []
     for col in X_gt.columns:
         gt_freq, synth_freq = freqs[col]
@@ -25,7 +26,7 @@ def evaluate_inv_kl_divergence(
 
 @validate_arguments(config=dict(arbitrary_types_allowed=True))
 def evaluate_kolmogorov_smirnov_test(
-    X_gt: pd.DataFrame, y_gt: pd.Series, X_synth: pd.DataFrame, y_synth: pd.Series
+    X_gt: pd.DataFrame, y_gt: pd.Series, X_syn: pd.DataFrame, y_synth: pd.Series
 ) -> float:
     """Performs the Kolmogorov-Smirnov test for goodness of fit.
 
@@ -35,7 +36,7 @@ def evaluate_kolmogorov_smirnov_test(
 
     res = []
     for col in X_gt.columns:
-        statistic, _ = ks_2samp(X_gt[col], X_synth[col])
+        statistic, _ = ks_2samp(X_gt[col], X_syn[col])
         res.append(1 - statistic)
 
     return np.mean(res)
@@ -43,7 +44,7 @@ def evaluate_kolmogorov_smirnov_test(
 
 @validate_arguments(config=dict(arbitrary_types_allowed=True))
 def evaluate_chi_squared_test(
-    X_gt: pd.DataFrame, y_gt: pd.Series, X_synth: pd.DataFrame, y_synth: pd.Series
+    X_gt: pd.DataFrame, y_gt: pd.Series, X_syn: pd.DataFrame, y_synth: pd.Series
 ) -> float:
     """Performs the one-way chi-square test.
 
@@ -52,7 +53,7 @@ def evaluate_chi_squared_test(
     """
 
     res = []
-    freqs = get_freq(X_gt, X_synth)
+    freqs = get_freq(X_gt, X_syn)
 
     for col in X_gt.columns:
         gt_freq, synth_freq = freqs[col]
@@ -64,3 +65,54 @@ def evaluate_chi_squared_test(
         res.append(pvalue)
 
     return np.mean(res)
+
+
+@validate_arguments(config=dict(arbitrary_types_allowed=True))
+def evaluate_maximum_mean_discrepancy(
+    X_gt: pd.DataFrame,
+    y_gt: pd.Series,
+    X_syn: pd.DataFrame,
+    y_synth: pd.Series,
+    kernel: str = "rbf",
+) -> float:
+    """Emprical maximum mean discrepancy. The lower the result
+       the more evidence that distributions are the same.
+
+    Args:
+        x: first sample, distribution P
+        y: second sample, distribution Q
+        kernel: kernel type such as "multiscale" or "rbf"
+    """
+    X_gt["target"] = y_gt
+    X_syn["target"] = y_synth
+
+    if kernel == "linear":
+        """
+        MMD using linear kernel (i.e., k(x,y) = <x,y>)
+        """
+        delta_df = X_gt.mean(axis=0) - X_syn.mean(axis=0)
+        delta = delta_df.values
+
+        return delta.dot(delta.T)
+    elif kernel == "rbf":
+        """
+        MMD using rbf (gaussian) kernel (i.e., k(x,y) = exp(-gamma * ||x-y||^2 / 2))
+        """
+        gamma = 1.0
+        XX = metrics.pairwise.rbf_kernel(X_gt, X_gt, gamma)
+        YY = metrics.pairwise.rbf_kernel(X_syn, X_syn, gamma)
+        XY = metrics.pairwise.rbf_kernel(X_gt, X_syn, gamma)
+        return XX.mean() + YY.mean() - 2 * XY.mean()
+    elif kernel == "polynomial":
+        """
+        MMD using polynomial kernel (i.e., k(x,y) = (gamma <X, Y> + coef0)^degree)
+        """
+        degree = 2
+        gamma = 1
+        coef0 = 0
+        XX = metrics.pairwise.polynomial_kernel(X_gt, X_gt, degree, gamma, coef0)
+        YY = metrics.pairwise.polynomial_kernel(X_syn, X_syn, degree, gamma, coef0)
+        XY = metrics.pairwise.polynomial_kernel(X_gt, X_syn, degree, gamma, coef0)
+        return XX.mean() + YY.mean() - 2 * XY.mean()
+    else:
+        raise ValueError(f"Unsupported kernel {kernel}")

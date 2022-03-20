@@ -123,7 +123,7 @@ def evaluate_kmap(
 def evaluate_delta_presence(
     X: pd.DataFrame, X_synth: pd.DataFrame, sensitive_columns: List[str]
 ) -> float:
-    """Returns the maximum ratio that satisfies the delta-presence rule.
+    """Returns the maximum re-identification probability on the real dataset from the synthetic dataset.
 
     For each dataset partition, we report the maximum ratio of unique sensitive information between the real dataset and in the synthetic dataset.
 
