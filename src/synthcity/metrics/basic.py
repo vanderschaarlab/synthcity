@@ -18,7 +18,7 @@ def _helper_nearest_neighbor(X_gt: pd.DataFrame, X_synth: pd.DataFrame) -> pd.Se
 
 
 @validate_arguments(config=dict(arbitrary_types_allowed=True))
-def evaluate_integrity_score(
+def evaluate_data_mismatch_score(
     X_gt: pd.DataFrame, y_gt: pd.Series, X_synth: pd.DataFrame, y_synth: pd.Series
 ) -> float:
     """Basic sanity score. Compares the data types between the column of the ground truth and the synthetic data.
@@ -39,7 +39,7 @@ def evaluate_integrity_score(
 
 
 @validate_arguments(config=dict(arbitrary_types_allowed=True))
-def evaluate_avg_common_rows(
+def evaluate_common_rows_proportion(
     X_gt: pd.DataFrame, y_gt: pd.Series, X_synth: pd.DataFrame, y_synth: pd.Series
 ) -> float:
     """Returns the proportion of common rows in the ground truth and the synthetic data.

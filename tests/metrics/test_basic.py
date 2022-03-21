@@ -9,10 +9,10 @@ from sklearn.datasets import load_iris
 
 # synthcity absolute
 from synthcity.metrics.basic import (
-    evaluate_avg_common_rows,
     evaluate_avg_distance_nearest_synth_neighbor,
+    evaluate_common_rows_proportion,
+    evaluate_data_mismatch_score,
     evaluate_inlier_probability,
-    evaluate_integrity_score,
     evaluate_outlier_probability,
 )
 from synthcity.plugins import Plugin, Plugins
@@ -39,14 +39,14 @@ def _eval_plugin(cbk: Callable, X: pd.DataFrame, X_syn: pd.DataFrame) -> Tuple:
 
 
 @pytest.mark.parametrize("test_plugin", [Plugins().get("dummy_sampler")])
-def test_evaluate_integrity_score(test_plugin: Plugin) -> None:
+def test_evaluate_data_mismatch_score(test_plugin: Plugin) -> None:
     X, y = load_iris(return_X_y=True, as_frame=True)
     X["target"] = y
 
     test_plugin.fit(X)
     X_gen = test_plugin.generate(100)
 
-    score = evaluate_integrity_score(
+    score = evaluate_data_mismatch_score(
         X.drop(columns=["target"]),
         X["target"],
         X_gen.drop(columns=["target"]),
@@ -58,7 +58,7 @@ def test_evaluate_integrity_score(test_plugin: Plugin) -> None:
     X_fail = X.head(100)
     X["target"] = "a"
 
-    score = evaluate_integrity_score(
+    score = evaluate_data_mismatch_score(
         X.drop(columns=["target"]),
         X["target"],
         X_fail.drop(columns=["target"]),
@@ -77,7 +77,7 @@ def test_common_rows(test_plugin: Plugin) -> None:
     test_plugin.fit(X)
     X_gen = test_plugin.generate(100)
 
-    syn_score, rnd_score = _eval_plugin(evaluate_avg_common_rows, X, X_gen)
+    syn_score, rnd_score = _eval_plugin(evaluate_common_rows_proportion, X, X_gen)
 
     assert syn_score > 0
     assert syn_score < 1
