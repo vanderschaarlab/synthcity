@@ -16,8 +16,10 @@ def evaluate_xgb_detection_synthetic(
 
     Returns:
         The average AUCROC score for detecting synthetic data.
-        1 means the synthetic and real data are totally distinguishable.
-        Lower is better.
+
+    Score:
+        0: The datasets are indistinguishable.
+        1: The datasets are totally distinguishable.
     """
 
     model_template = XGBClassifier
@@ -66,8 +68,10 @@ def evaluate_gmm_detection_synthetic(
 
     Returns:
         The average score for detecting synthetic data.
-        1 means the synthetic and real data are totally distinguishable.
-        Lower is better.
+
+    Score:
+        0: The datasets are indistinguishable.
+        1: The datasets are totally distinguishable.
     """
 
     scores = []

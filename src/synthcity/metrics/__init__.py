@@ -1,4 +1,5 @@
 # stdlib
+import time
 from typing import Any, Callable, List, Tuple
 
 # third party
@@ -67,7 +68,7 @@ binary_privacy_metrics = {
 
 
 class MetricEvaluator:
-    def __init__(self, repeats: int = 10) -> None:
+    def __init__(self, repeats: int = 2) -> None:
         self.scores: dict = {}
         self.repeats = repeats
 
@@ -81,14 +82,18 @@ class MetricEvaluator:
 
     def score(self, key: str, cbk: Callable, *args: Any, **kwargs: Any) -> None:
         for repeat in range(self.repeats):
+            start = time.time()
             result, failed = self._safe_evaluate(cbk, *args, **kwargs)
+            duration = float(time.time() - start)
 
             if key not in self.scores:
                 self.scores[key] = {
                     "values": [],
                     "errors": 0,
+                    "durations": [],
                 }
             self.scores[key]["values"].append(result)
+            self.scores[key]["durations"].append(duration)
             self.scores[key]["errors"] += int(failed)
 
     def to_dataframe(self) -> pd.DataFrame:
@@ -101,11 +106,13 @@ class MetricEvaluator:
             "iqr",
             "rounds",
             "errors",
+            "durations",
         ]
         output = pd.DataFrame([], columns=output_metrics)
         for metric in self.scores:
             values = self.scores[metric]["values"]
             errors = self.scores[metric]["errors"]
+            durations = round(np.mean(self.scores[metric]["durations"]), 2)
 
             score_min = np.min(values)
             score_max = np.max(values)
@@ -126,6 +133,7 @@ class MetricEvaluator:
                             score_iqr,
                             score_rounds,
                             errors,
+                            durations,
                         ]
                     ],
                     columns=output_metrics,

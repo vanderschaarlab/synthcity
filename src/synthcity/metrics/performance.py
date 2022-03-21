@@ -8,7 +8,7 @@ from xgboost import XGBClassifier, XGBRegressor
 
 # synthcity absolute
 import synthcity.logger as log
-from synthcity.metrics._utils import encode_scale, evaluate_auc
+from synthcity.metrics._utils import evaluate_auc
 
 
 def evaluate_performance_classification(
@@ -61,34 +61,31 @@ def evaluate_performance_regression(
         score = mean_squared_error(y_test, y_pred)
     except BaseException as e:
         log.error(f"regression evaluation failed {e}")
-        score = -1
+        score = 100
 
-    return -score
+    return 1 / (1 + score)
 
 
 @validate_arguments(config=dict(arbitrary_types_allowed=True))
 def evaluate_test_performance(
     X_gt: pd.DataFrame, y_gt: pd.Series, X_synth: pd.DataFrame, y_synth: pd.Series
 ) -> float:
-    """Train a classifier or regressor on the synthetic data and evaluate the performance on real test data.
+    """Train a classifier or regressor on the synthetic data and evaluate the performance on real test data. Returns the average performance discrepancy between training on real data vs on synthetic data.
 
-    Returns:
-        The average AUCROC score for detecting synthtic data. 1 means the synthetic and real data are totally distinguishable.
-        Lower is better.
+    Score:
+        close to 0: similar performance
+        1: massive performance degradation
     """
 
     if len(y_gt.unique()) < 5:
         eval_cbk = evaluate_performance_classification
-        X_gt, _ = encode_scale(X_gt)
-        X_synth, _ = encode_scale(X_synth)
         skf = StratifiedKFold(n_splits=3)
     else:
         eval_cbk = evaluate_performance_regression
-        X_gt, y_gt = encode_scale(X_gt, y_gt)
-        X_synth, y_synth = encode_scale(X_synth, y_synth)
         skf = KFold(n_splits=3)
 
-    res = []
+    real_scores = []
+    syn_scores = []
     for train_idx, test_idx in skf.split(X_gt, y_gt):
         train_data = X_gt.loc[train_idx]
         test_data = X_gt.loc[test_idx]
@@ -98,6 +95,7 @@ def evaluate_test_performance(
         real_score = eval_cbk(train_data, train_labels, test_data, test_labels)
         synth_score = eval_cbk(X_synth, y_synth, test_data, test_labels)
 
-        res.append(real_score - synth_score)
+        real_scores.append(real_score)
+        syn_scores.append(synth_score)
 
-    return np.mean(res)
+    return np.mean(real_scores) - np.mean(syn_scores)
