@@ -14,7 +14,12 @@ from synthcity.metrics._utils import get_freq
 def evaluate_inv_kl_divergence(
     X_gt: pd.DataFrame, y_gt: pd.Series, X_syn: pd.DataFrame, y_synth: pd.Series
 ) -> float:
-    """Returns the average normalized Kullback–Leibler Divergence based metric."""
+    """Returns the average inverse of the Kullback–Leibler Divergence metric.
+
+    Score:
+        0: the datasets are from different distributions.
+        1: the datasets are from the same distribution.
+    """
     freqs = get_freq(X_gt, X_syn)
     res = []
     for col in X_gt.columns:
@@ -30,8 +35,9 @@ def evaluate_kolmogorov_smirnov_test(
 ) -> float:
     """Performs the Kolmogorov-Smirnov test for goodness of fit.
 
-    Returns 1 if the distributions are identical.
-    Returns 0 if the distributions are totally different.
+    Score:
+        0: the distributions are totally different.
+        1: the distributions are identical.
     """
 
     res = []
@@ -50,6 +56,10 @@ def evaluate_chi_squared_test(
 
     Returns:
         The p-value. A small value indicates that we can reject the null hypothesis and that the distributions are different.
+
+    Score:
+        0: the distributions are different
+        1: the distributions are identical.
     """
 
     res = []

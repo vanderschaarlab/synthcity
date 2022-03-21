@@ -1,5 +1,5 @@
 # stdlib
-from typing import Dict, List
+from typing import Any, Callable, List, Tuple
 
 # third party
 import numpy as np
@@ -66,6 +66,76 @@ binary_privacy_metrics = {
 }
 
 
+class MetricEvaluator:
+    def __init__(self, repeats: int = 10) -> None:
+        self.scores: dict = {}
+        self.repeats = repeats
+
+    def _safe_evaluate(
+        self, cbk: Callable, *args: Any, **kwargs: Any
+    ) -> Tuple[float, bool]:
+        try:
+            return cbk(*args, **kwargs), False
+        except BaseException:
+            return 0, True
+
+    def score(self, key: str, cbk: Callable, *args: Any, **kwargs: Any) -> None:
+        for repeat in range(self.repeats):
+            result, failed = self._safe_evaluate(cbk, *args, **kwargs)
+
+            if key not in self.scores:
+                self.scores[key] = {
+                    "values": [],
+                    "errors": 0,
+                }
+            self.scores[key]["values"].append(result)
+            self.scores[key]["errors"] += int(failed)
+
+    def to_dataframe(self) -> pd.DataFrame:
+        output_metrics = [
+            "min",
+            "max",
+            "mean",
+            "stddev",
+            "median",
+            "iqr",
+            "rounds",
+            "errors",
+        ]
+        output = pd.DataFrame([], columns=output_metrics)
+        for metric in self.scores:
+            values = self.scores[metric]["values"]
+            errors = self.scores[metric]["errors"]
+
+            score_min = np.min(values)
+            score_max = np.max(values)
+            score_mean = np.mean(values)
+            score_median = np.median(values)
+            score_stddev = np.std(values)
+            score_iqr = iqr(values)
+            score_rounds = self.repeats
+            output = output.append(
+                pd.DataFrame(
+                    [
+                        [
+                            score_min,
+                            score_max,
+                            score_mean,
+                            score_stddev,
+                            score_median,
+                            score_iqr,
+                            score_rounds,
+                            errors,
+                        ]
+                    ],
+                    columns=output_metrics,
+                    index=[metric],
+                )
+            )
+
+        return output
+
+
 @validate_arguments(config=dict(arbitrary_types_allowed=True))
 def evaluate(
     X_gt: pd.DataFrame,
@@ -74,58 +144,25 @@ def evaluate(
     y_syn: pd.Series,
     sensitive_columns: List[str] = [],
     repeats: int = 10,
-) -> Dict:
-    scores: dict = {}
-    for retry in range(repeats):
-        for category in standard_metrics:
-            for metric in standard_metrics[category]:
-                key = f"{category}.{metric}"
-                if key not in scores:
-                    scores[key] = []
-                scores[key].append(
-                    standard_metrics[category][metric](X_gt, y_gt, X_syn, y_syn)
-                )
-        for metric in unary_privacy_metrics:
-            for name, src in [("gt", X_gt), ("syn", X_syn)]:
-                score = unary_privacy_metrics[metric](src, sensitive_columns)
-                key = f"privacy.{metric}.{name}"
+) -> pd.DataFrame:
+    scores = MetricEvaluator(repeats=repeats)
 
-                if key not in scores:
-                    scores[key] = []
-                scores[key].append(score)
-        for metric in binary_privacy_metrics:
-            score = binary_privacy_metrics[metric](X_gt, X_syn, sensitive_columns)
-            key = f"privacy.{metric}"
-
-            if key not in scores:
-                scores[key] = []
-            scores[key].append(score)
-
-    output_metrics = ["min", "max", "mean", "stddev", "median", "iqr", "rounds"]
-    output = pd.DataFrame([], columns=output_metrics)
-    for metric in scores:
-        score_min = np.min(scores[metric])
-        score_max = np.max(scores[metric])
-        score_mean = np.mean(scores[metric])
-        score_median = np.median(scores[metric])
-        score_stddev = np.std(scores[metric])
-        score_iqr = iqr(scores[metric])
-        score_rounds = repeats
-        output = output.append(
-            pd.DataFrame(
-                [
-                    [
-                        score_min,
-                        score_max,
-                        score_mean,
-                        score_stddev,
-                        score_median,
-                        score_iqr,
-                        score_rounds,
-                    ]
-                ],
-                columns=output_metrics,
-                index=[metric],
+    for category in standard_metrics:
+        for metric in standard_metrics[category]:
+            key = f"{category}.{metric}"
+            scores.score(
+                key, standard_metrics[category][metric], X_gt, y_gt, X_syn, y_syn
             )
+
+    for metric in unary_privacy_metrics:
+        for name, src in [("gt", X_gt), ("syn", X_syn)]:
+            key = f"privacy.{metric}.{name}"
+            scores.score(key, unary_privacy_metrics[metric], src, sensitive_columns)
+
+    for metric in binary_privacy_metrics:
+        key = f"privacy.{metric}"
+        scores.score(
+            key, binary_privacy_metrics[metric], X_gt, X_syn, sensitive_columns
         )
-    return output
+
+    return scores.to_dataframe()

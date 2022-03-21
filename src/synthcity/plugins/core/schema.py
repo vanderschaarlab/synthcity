@@ -1,5 +1,5 @@
 # stdlib
-from typing import Any, Dict, Generator
+from typing import Any, Dict, Generator, List
 
 # third party
 import pandas as pd
@@ -97,6 +97,9 @@ class Schema(BaseModel):
                 return False
 
         return True
+
+    def features(self) -> List:
+        return list(self.domain.keys())
 
     def as_constraint(self) -> Constraints:
         """Convert the schema to a list of Constraints."""

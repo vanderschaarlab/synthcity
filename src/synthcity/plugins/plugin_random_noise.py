@@ -1,5 +1,5 @@
 # stdlib
-from typing import Any, List, Optional
+from typing import Any, List
 
 # third party
 import numpy as np
@@ -16,7 +16,7 @@ class RandomNoisePlugin(Plugin):
 
     Example:
         >>> from synthcity.plugins import Plugins
-        >>> plugin = Plugins().get("dummy_sampler")
+        >>> plugin = Plugins().get("random_noise")
         >>> from sklearn.datasets import load_iris
         >>> X = load_iris()
         >>> plugin.fit(X)
@@ -32,33 +32,21 @@ class RandomNoisePlugin(Plugin):
 
     @staticmethod
     def type() -> str:
-        return "random"
+        return "debug"
 
     @staticmethod
     def hyperparameter_space(*args: Any, **kwargs: Any) -> List[Distribution]:
         return []
 
     def _fit(self, X: pd.DataFrame, *args: Any, **kwargs: Any) -> "RandomNoisePlugin":
-        self.features = list(X.columns)
-        self.length = len(X)
         return self
 
     def _generate(
-        self,
-        count: Optional[int] = None,
-        constraints: Optional[Constraints] = None,
-        **kwargs: Any
+        self, count: int, constraints: Constraints, **kwargs: Any
     ) -> pd.DataFrame:
-        if self.features is None:
-            raise RuntimeError("Fit the model first")
-        if constraints is None:
-            constraints = self.schema().as_constraint()
-
-        if count is None:
-            count = self.length
-
         X_rnd = pd.DataFrame(
-            np.zeros((count, len(self.features))), columns=self.features
+            np.zeros((count, len(self.schema().features()))),
+            columns=self.schema().features(),
         )
         for feature in self.schema():
             sample = np.random.uniform(

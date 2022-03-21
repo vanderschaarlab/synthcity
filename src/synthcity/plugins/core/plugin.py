@@ -84,6 +84,7 @@ class Plugin(metaclass=ABCMeta):
         """
         X.columns = X.columns.astype(str)
         self._schema = Schema(data=X)
+        self._original_shape = X.shape
 
         return self._fit(X, *args, **kwargs)
 
@@ -121,6 +122,12 @@ class Plugin(metaclass=ABCMeta):
         if self._schema is None:
             raise RuntimeError("Fit the model first")
 
+        if count is None:
+            count = self._original_shape[0]
+
+        if constraints is None:
+            constraints = self.schema().as_constraint()
+
         return pd.DataFrame(
             self._generate(count=count, constraints=constraints, **kwargs)
         )
@@ -128,8 +135,8 @@ class Plugin(metaclass=ABCMeta):
     @abstractmethod
     def _generate(
         self,
-        count: Optional[int] = None,
-        constraints: Optional[Constraints] = None,
+        count: int,
+        constraints: Constraints,
         **kwargs: Any,
     ) -> pd.DataFrame:
         """Internal synthetic data generation method.

@@ -22,7 +22,7 @@ def test_plugin_name(test_plugin: Plugin) -> None:
 
 @pytest.mark.parametrize("test_plugin", generate_fixtures("dummy_sampler", plugin))
 def test_plugin_type(test_plugin: Plugin) -> None:
-    assert test_plugin.type() == "resampling"
+    assert test_plugin.type() == "debug"
 
 
 @pytest.mark.parametrize("test_plugin", generate_fixtures("dummy_sampler", plugin))

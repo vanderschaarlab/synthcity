@@ -4,9 +4,6 @@ import pandas as pd
 from pydantic import validate_arguments
 from sklearn.neighbors import NearestNeighbors
 
-# synthcity absolute
-from synthcity.metrics._utils import encode_scale
-
 
 def _helper_nearest_neighbor(X_gt: pd.DataFrame, X_synth: pd.DataFrame) -> pd.Series:
     try:
@@ -23,7 +20,9 @@ def evaluate_data_mismatch_score(
 ) -> float:
     """Basic sanity score. Compares the data types between the column of the ground truth and the synthetic data.
 
-    Lower is better.
+    Score:
+        0: no datatype mismatch.
+        1: complete data type mistach between the datasets.
     """
     if len(X_gt.columns) != len(X_synth.columns):
         raise ValueError(f"Incompatible dataframe {X_gt.shape} and {X_synth.shape}")
@@ -42,16 +41,17 @@ def evaluate_data_mismatch_score(
 def evaluate_common_rows_proportion(
     X_gt: pd.DataFrame, y_gt: pd.Series, X_synth: pd.DataFrame, y_synth: pd.Series
 ) -> float:
-    """Returns the proportion of common rows in the ground truth and the synthetic data.
+    """Returns the proportion of rows in the real dataset leaked in the synthetic dataset.
 
-    Lower is better.
+    Score:
+        0: there are no common rows between the real and synthetic datasets.
+        1: all the rows in the real dataset are leaked in the synthetic dataset.
     """
 
     if len(X_gt.columns) != len(X_synth.columns):
         raise ValueError(f"Incompatible dataframe {X_gt.shape} and {X_synth.shape}")
 
-    intersection = X_gt.merge(X_synth, how="inner", indicator=False)
-
+    intersection = X_gt.merge(X_synth, how="inner", indicator=False).drop_duplicates()
     return len(intersection) / (len(X_gt) + 1e-8)
 
 
@@ -61,8 +61,9 @@ def evaluate_avg_distance_nearest_synth_neighbor(
 ) -> float:
     """Computes the mean distance from the real data to the closest neighbor in the synthetic data
 
-    Returns:
-        0 if the datasets are identical. 1 if the datasets are totally different.
+    Score:
+        0: all the real rows are leaked in the synthetic dataset.
+        1: all the synthetic rows are far away from the real dataset.
     """
 
     if len(X_gt.columns) != len(X_synth.columns):
@@ -71,10 +72,9 @@ def evaluate_avg_distance_nearest_synth_neighbor(
     X_synth["target"] = y_synth
     X_gt["target"] = y_gt
 
-    X_synth, _ = encode_scale(X_synth)
-    X_gt, _ = encode_scale(X_gt)
-
     dist = _helper_nearest_neighbor(X_gt, X_synth)
+
+    dist = (dist - np.min(dist)) / (np.max(dist) - np.min(dist) + 1e-8)
     return np.mean(dist)
 
 
@@ -82,7 +82,12 @@ def evaluate_avg_distance_nearest_synth_neighbor(
 def evaluate_inlier_probability(
     X_gt: pd.DataFrame, y_gt: pd.Series, X_synth: pd.DataFrame, y_synth: pd.Series
 ) -> float:
-    """Compute the probability of close values between the real and synthetic data."""
+    """Compute the probability of close values between the real and synthetic data.
+
+    Score:
+        0 means there is no chance to have synthetic rows similar to the real.
+        1 means that all the synthetic rows are similar to some real rows.
+    """
 
     if len(X_gt.columns) != len(X_synth.columns):
         raise ValueError(f"Incompatible dataframe {X_gt.shape} and {X_synth.shape}")
@@ -91,7 +96,9 @@ def evaluate_inlier_probability(
     X_gt["target"] = y_gt
 
     dist = _helper_nearest_neighbor(X_gt, X_synth)
-    threshold = np.quantile(np.unique(dist.values), 0.2)
+    dist = (dist - np.min(dist)) / (np.max(dist) - np.min(dist) + 1e-8)
+
+    threshold = 0.2
 
     return (dist <= threshold).sum() / len(dist)
 
@@ -100,7 +107,12 @@ def evaluate_inlier_probability(
 def evaluate_outlier_probability(
     X_gt: pd.DataFrame, y_gt: pd.Series, X_synth: pd.DataFrame, y_synth: pd.Series
 ) -> float:
-    """Compute the probability of distant values between the real and synthetic data."""
+    """Compute the probability of distant values between the real and synthetic data.
+
+    Score:
+        0 means there is no chance to have rows in the synthetic far away from the real data.
+        1 means all the synthetic datapoints are far away from the real data.
+    """
 
     if len(X_gt.columns) != len(X_synth.columns):
         raise ValueError(f"Incompatible dataframe {X_gt.shape} and {X_synth.shape}")
@@ -109,5 +121,8 @@ def evaluate_outlier_probability(
     X_gt["target"] = y_gt
 
     dist = _helper_nearest_neighbor(X_gt, X_synth)
-    threshold = np.quantile(np.unique(dist.values), 0.8)
+    dist = (dist - np.min(dist)) / (np.max(dist) - np.min(dist) + 1e-8)
+
+    threshold = 0.8
+
     return (dist >= threshold).sum() / len(dist)
