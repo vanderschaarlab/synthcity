@@ -1,6 +1,7 @@
 # third party
 import numpy as np
 import pandas as pd
+from copulas.univariate.base import Univariate
 from pydantic import validate_arguments
 from scipy.special import kl_div
 from scipy.stats import chisquare, ks_2samp
@@ -127,3 +128,29 @@ def evaluate_maximum_mean_discrepancy(
         return XX.mean() + YY.mean() - 2 * XY.mean()
     else:
         raise ValueError(f"Unsupported kernel {kernel}")
+
+
+@validate_arguments(config=dict(arbitrary_types_allowed=True))
+def evaluate_inv_cdf_distance(
+    X_gt: pd.DataFrame,
+    y_gt: pd.Series,
+    X_syn: pd.DataFrame,
+    y_synth: pd.Series,
+    p: int = 2,
+) -> float:
+    """Evaluate the distance between continuous features."""
+    dist = 0
+    for col in X_syn.columns:
+        if len(X_syn[col].unique()) < 20:
+            continue
+        syn_col = X_syn[col]
+        gt_col = X_gt[col]
+
+        predictor = Univariate()
+        predictor.fit(syn_col)
+
+        syn_percentiles = predictor.cdf(np.array(syn_col))
+        gt_percentiles = predictor.cdf(np.array(gt_col))
+        dist += np.mean(abs(syn_percentiles - gt_percentiles[1]) ** p)
+
+    return dist

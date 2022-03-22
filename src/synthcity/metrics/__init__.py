@@ -30,6 +30,7 @@ from .privacy import (
 )
 from .statistical import (
     evaluate_chi_squared_test,
+    evaluate_inv_cdf_distance,
     evaluate_inv_kl_divergence,
     evaluate_kolmogorov_smirnov_test,
     evaluate_maximum_mean_discrepancy,
@@ -48,6 +49,7 @@ standard_metrics = {
         "kolmogorov_smirnov_test": evaluate_kolmogorov_smirnov_test,
         "chi_squared_test": evaluate_chi_squared_test,
         "maximum_mean_discrepancy": evaluate_maximum_mean_discrepancy,
+        "inverse_cdf_distance": evaluate_inv_cdf_distance,
     },
     "performance": {
         "train_synth_test_real_data": evaluate_test_performance,

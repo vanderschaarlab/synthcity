@@ -56,16 +56,6 @@ def evaluate_sensitive_data_leakage(
 
 
 @validate_arguments(config=dict(arbitrary_types_allowed=True))
-def evaluate_correct_attribution_probability(
-    X_gt: pd.DataFrame,
-    y_gt: pd.Series,
-    X_syn: pd.DataFrame,
-    y_syn: pd.Series,
-) -> float:
-    pass
-
-
-@validate_arguments(config=dict(arbitrary_types_allowed=True))
 def evaluate_generalized_cap(
     X_gt: pd.DataFrame,
     y_gt: pd.Series,
