@@ -27,5 +27,5 @@ def test_basic(test_plugin: str) -> None:
 
     assert isinstance(out, pd.DataFrame)
     assert set(out.columns) == set(
-        ["mean", "min", "max", "median", "iqr", "stddev", "rounds"]
+        ["mean", "min", "max", "median", "iqr", "stddev", "rounds", "durations"]
     )

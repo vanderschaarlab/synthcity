@@ -117,6 +117,11 @@ class MLP:
         preds = self.config.model_type(self.config).apply({"params": self.model}, X)
         return jax.device_get(jax.nn.softmax(preds))
 
+    def score(self, X: np.ndarray, y: np.ndarray) -> np.ndarray:
+        preds = self.predict(X)
+
+        return _accuracy(self.config, y, preds)
+
 
 class BasicNetwork(nn.Module):
     config: NetworkConfig
@@ -157,14 +162,11 @@ def _apply(config: NetworkConfig, params: Dict, X: jnp.ndarray) -> jnp.ndarray:
         return config.model_type(config).apply({"params": params}, X)
 
 
-def _accuracy(
-    config: NetworkConfig, params: Dict, y_true: jnp.ndarray, y_pred: jnp.ndarray
-) -> float:
+def _accuracy(config: NetworkConfig, y_true: jnp.ndarray, y_pred: jnp.ndarray) -> float:
     """Accuracy evaluator.
 
     Args:
         config: Network configuration.
-        params: Network weights and biases.
         y_true: Labels
         y_pred: Predictions.
 
@@ -265,7 +267,7 @@ def _train_step(
     (loss, logits), grads = grad_fn(config, state.params, (X_batch, y_batch), input_rng)
     state = state.apply_gradients(grads=grads)
 
-    accuracy_accumulator += _accuracy(config, state, y_batch, logits)
+    accuracy_accumulator += _accuracy(config, y_batch, logits)
     loss_accumulator += loss
 
     return state, accuracy_accumulator, loss_accumulator, rng
@@ -343,7 +345,7 @@ def _training_loop(config: NetworkConfig, dataset: tuple) -> TrainState:
         )
         if epoch % config.print_epochs == 1:
             test_preds = _apply(config, state.params, X_test)
-            test_accuracy = _accuracy(config, state, y_test, test_preds)
+            test_accuracy = _accuracy(config, y_test, test_preds)
             log.info(
                 f"[Epoch {epoch}] train/test loss: {train_loss}. train/test Acc: {train_accuracy} / {test_accuracy}. Duration: {time.time() - start}",
             )
