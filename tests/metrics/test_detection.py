@@ -10,6 +10,7 @@ from sklearn.datasets import load_iris
 # synthcity absolute
 from synthcity.metrics.detection import (
     evaluate_gmm_detection_synthetic,
+    evaluate_mlp_detection_synthetic,
     evaluate_xgb_detection_synthetic,
 )
 from synthcity.plugins import Plugin, Plugins
@@ -17,7 +18,12 @@ from synthcity.plugins import Plugin, Plugins
 
 @pytest.mark.parametrize("test_plugin", [Plugins().get("dummy_sampler")])
 @pytest.mark.parametrize(
-    "method", [evaluate_xgb_detection_synthetic, evaluate_gmm_detection_synthetic]
+    "method",
+    [
+        evaluate_xgb_detection_synthetic,
+        evaluate_mlp_detection_synthetic,
+        evaluate_gmm_detection_synthetic,
+    ],
 )
 def test_detect_synth(test_plugin: Plugin, method: Callable) -> None:
     X, y = load_iris(return_X_y=True, as_frame=True)

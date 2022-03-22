@@ -18,6 +18,7 @@ from .basic import (
 )
 from .detection import (
     evaluate_gmm_detection_synthetic,
+    evaluate_mlp_detection_synthetic,
     evaluate_xgb_detection_synthetic,
 )
 from .performance import evaluate_test_performance
@@ -54,6 +55,7 @@ standard_metrics = {
     "detection": {
         "gmm_detection": evaluate_gmm_detection_synthetic,
         "xgb_detection": evaluate_xgb_detection_synthetic,
+        "mlp_detection": evaluate_mlp_detection_synthetic,
     },
 }
 unary_privacy_metrics = {
