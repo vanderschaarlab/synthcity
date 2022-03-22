@@ -142,13 +142,10 @@ class BasicNetwork(nn.Module):
             x = nn.Dense(size)(x)
             x = self.nonlins[self.config.nonlin](x)
             if self.config.batchnorm:
-                x = nn.BatchNorm(use_running_average=True)(x)
+                x = nn.BatchNorm(use_running_average=not deterministic)(x)
         x = nn.Dense(self.config.output_shape)(x)
 
-        if self.config.task_type == "classification":
-            return jax.nn.softmax(x)
-        else:
-            return x
+        return x
 
 
 @partial(jax.jit, static_argnums=(0,))
@@ -200,7 +197,11 @@ def _loss_fn(
     """
     X, y = dataset
     preds = config.model_type(config).apply(
-        {"params": params}, X, deterministic=False, rngs={"dropout": rng}
+        {"params": params},
+        X,
+        deterministic=False,
+        rngs={"dropout": rng},
+        # mutable=["batch_stats"],
     )
     if config.task_type == "classification":
         loss = jnp.mean(optax.softmax_cross_entropy(logits=preds, labels=y))
