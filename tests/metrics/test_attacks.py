@@ -1,12 +1,28 @@
+# stdlib
+from typing import Callable
+
 # third party
+import pytest
 from sklearn.datasets import load_diabetes
 
 # synthcity absolute
-from synthcity.metrics.attacks import evaluate_sensitive_data_leakage
+from synthcity.metrics.attacks import (
+    evaluate_sensitive_data_leakage_linear,
+    evaluate_sensitive_data_leakage_mlp,
+    evaluate_sensitive_data_leakage_xgb,
+)
 from synthcity.plugins import Plugins
 
 
-def test_evaluate_sensitive_data_leakage() -> None:
+@pytest.mark.parametrize(
+    "evaluator",
+    [
+        evaluate_sensitive_data_leakage_linear,
+        evaluate_sensitive_data_leakage_xgb,
+        evaluate_sensitive_data_leakage_mlp,
+    ],
+)
+def test_evaluate_sensitive_data_leakage(evaluator: Callable) -> None:
     X, y = load_diabetes(return_X_y=True, as_frame=True)
     X["target"] = y
 
@@ -15,28 +31,22 @@ def test_evaluate_sensitive_data_leakage() -> None:
     test_plugin.fit(X)
     X_gen = test_plugin.generate(2 * len(X))
 
-    score = evaluate_sensitive_data_leakage(
+    score = evaluator(
         X.drop(columns=["target"]),
-        X["target"],
         X_gen.drop(columns=["target"]),
-        X_gen["target"],
     )
     assert score == 0
 
-    score = evaluate_sensitive_data_leakage(
+    score = evaluator(
         X.drop(columns=["target"]),
-        X["target"],
         X_gen.drop(columns=["target"]),
-        X_gen["target"],
         sensitive_columns=["sex"],
     )
     assert score > 0.5
 
-    score = evaluate_sensitive_data_leakage(
+    score = evaluator(
         X.drop(columns=["target"]),
-        X["target"],
         X_gen.drop(columns=["target"]),
-        X_gen["target"],
         sensitive_columns=["age"],
     )
     assert score < 1
@@ -47,11 +57,9 @@ def test_evaluate_sensitive_data_leakage() -> None:
     test_plugin.fit(X)
     X_gen = test_plugin.generate(2 * len(X))
 
-    score = evaluate_sensitive_data_leakage(
+    score = evaluator(
         X.drop(columns=["target"]),
-        X["target"],
         X_gen.drop(columns=["target"]),
-        X_gen["target"],
         sensitive_columns=["sex"],
     )
     assert score < 1

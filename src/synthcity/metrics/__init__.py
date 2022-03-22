@@ -9,6 +9,11 @@ from pydantic import validate_arguments
 from scipy.stats import iqr
 
 # synthcity relative
+from .attacks import (
+    evaluate_sensitive_data_leakage_linear,
+    evaluate_sensitive_data_leakage_mlp,
+    evaluate_sensitive_data_leakage_xgb,
+)
 from .basic import (
     evaluate_avg_distance_nearest_synth_neighbor,
     evaluate_common_rows_proportion,
@@ -66,8 +71,15 @@ unary_privacy_metrics = {
 }
 
 binary_privacy_metrics = {
-    "kmap": evaluate_kmap,
-    "delta_presence": evaluate_delta_presence,
+    "privacy": {
+        "kmap": evaluate_kmap,
+        "delta_presence": evaluate_delta_presence,
+    },
+    "attacks": {
+        "sensitive_data_reidentification_xgb": evaluate_sensitive_data_leakage_xgb,
+        "sensitive_data_reidentification_mlp": evaluate_sensitive_data_leakage_mlp,
+        "sensitive_data_reidentification_linear": evaluate_sensitive_data_leakage_linear,
+    },
 }
 
 
@@ -155,7 +167,7 @@ def evaluate(
     X_syn: pd.DataFrame,
     y_syn: pd.Series,
     sensitive_columns: List[str] = [],
-    repeats: int = 10,
+    repeats: int = 2,
 ) -> pd.DataFrame:
     scores = MetricEvaluator(repeats=repeats)
 
@@ -171,10 +183,15 @@ def evaluate(
             key = f"privacy.{metric}.{name}"
             scores.score(key, unary_privacy_metrics[metric], src, sensitive_columns)
 
-    for metric in binary_privacy_metrics:
-        key = f"privacy.{metric}"
-        scores.score(
-            key, binary_privacy_metrics[metric], X_gt, X_syn, sensitive_columns
-        )
+    for category in binary_privacy_metrics:
+        for metric in binary_privacy_metrics[category]:
+            key = f"{category}.{metric}"
+            scores.score(
+                key,
+                binary_privacy_metrics[category][metric],
+                X_gt,
+                X_syn,
+                sensitive_columns,
+            )
 
     return scores.to_dataframe()
