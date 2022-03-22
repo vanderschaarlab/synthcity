@@ -1,9 +1,10 @@
 # third party
 import jax
 import pytest
+from sklearn.datasets import load_diabetes, load_digits
 
 # synthcity absolute
-from synthcity.plugins.models.mlp import BasicNetwork, NetworkConfig, create_train_state
+from synthcity.plugins.models.mlp import MLP, BasicNetwork, NetworkConfig, _train_init
 
 
 def test_network_config() -> None:
@@ -67,7 +68,7 @@ def test_basic_network(
     )
 
     rng = jax.random.PRNGKey(config.seed)
-    state = create_train_state(config, rng)
+    state = _train_init(config, rng)
 
     assert state is not None
 
@@ -77,3 +78,24 @@ def test_basic_network(
     assert config.nonlin == nonlin
     assert config.optimizer == optimizer
     assert config.task_type == task_type
+
+
+def test_mlp_classification() -> None:
+    X, y = load_digits(return_X_y=True)
+    model = MLP(task_type="classification")
+
+    model.fit(X, y)
+
+    assert model.predict(X).shape == y.shape
+    assert model.predict_proba(X).shape == (len(y), 10)
+
+
+def test_mlp_regression() -> None:
+    X, y = load_diabetes(return_X_y=True)
+    model = MLP(task_type="regression")
+
+    model.fit(X, y)
+
+    assert model.predict(X).shape == y.shape
+    with pytest.raises(ValueError):
+        model.predict_proba(X)
