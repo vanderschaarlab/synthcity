@@ -2,6 +2,7 @@
 import numpy as np
 import pandas as pd
 from copulas.univariate.base import Univariate
+from dython.nominal import associations
 from pydantic import validate_arguments
 from scipy.spatial.distance import jensenshannon
 from scipy.special import kl_div
@@ -185,3 +186,31 @@ def evaluate_avg_jensenshannon_distance(
         stats_[col] = jensenshannon(stats_original_[col], stats_synthetic_[col])
 
     return sum(stats_.values()) / len(stats_.keys())
+
+
+@validate_arguments(config=dict(arbitrary_types_allowed=True))
+def evaluate_feature_correlation(
+    X_gt: pd.DataFrame,
+    y_gt: pd.Series,
+    X_syn: pd.DataFrame,
+    y_synth: pd.Series,
+    nom_nom_assoc: str = "theil",
+    nominal_columns: str = "auto",
+) -> float:
+    """Evaluate the correlation/strength-of-association of features in data-set with both categorical and continuous features using: * Pearson's R for continuous-continuous cases ** Cramer's V or Theil's U for categorical-categorical cases."""
+    stats_gt = associations(
+        X_gt,
+        nom_nom_assoc=nom_nom_assoc,
+        nominal_columns=nominal_columns,
+        nan_replace_value="nan",
+        compute_only=True,
+    )["corr"]
+    stats_syn = associations(
+        X_syn,
+        nom_nom_assoc=nom_nom_assoc,
+        nominal_columns=nominal_columns,
+        nan_replace_value="nan",
+        compute_only=True,
+    )["corr"]
+
+    return np.linalg.norm(stats_gt - stats_syn, "fro")

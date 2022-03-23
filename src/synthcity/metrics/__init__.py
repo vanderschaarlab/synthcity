@@ -36,6 +36,7 @@ from .privacy import (
 from .statistical import (
     evaluate_avg_jensenshannon_distance,
     evaluate_chi_squared_test,
+    evaluate_feature_correlation,
     evaluate_inv_cdf_distance,
     evaluate_inv_kl_divergence,
     evaluate_kolmogorov_smirnov_test,
@@ -98,6 +99,11 @@ standard_metrics = {
         },
         "avg_jensenshannon_distance": {
             "cbk": evaluate_avg_jensenshannon_distance,
+            "ok_score": 0,
+            "bad_score": 1,
+        },
+        "feature_correlation": {
+            "cbk": evaluate_feature_correlation,
             "ok_score": 0,
             "bad_score": 1,
         },
