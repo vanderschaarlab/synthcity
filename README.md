@@ -106,9 +106,9 @@ The following table contains the available evaluation metrics:
 | Metric | Description| Values |
 |--- | --- | --- |
 |**train_synth_test_real_data**|Train a classifier or regressor on the synthetic data and evaluate the performance on real test data.|close to 0: similar performance <br/>1: massive performance degradation|
-|**gmm_detection**|Train a GaussianMixture model to differentiate the synthetic data fom the real data.|0: The datasets are indistinguishable. <br/>1: The datasets are totally distinguishable.|
-|**xgb_detection**|Train an XGBoost model to differentiate the synthetic data fom the real data.|0: The datasets are indistinguishable. <br/>1: The datasets are totally distinguishable.|
-|**mlp_detection**|Train an Neural net to differentiate the synthetic data fom the real data.|0: The datasets are indistinguishable. <br/>1: The datasets are totally distinguishable.|
+|**gmm_detection**|Train a GaussianMixture model to differentiate the synthetic data from the real data.|0: The datasets are indistinguishable. <br/>1: The datasets are totally distinguishable.|
+|**xgb_detection**|Train an XGBoost model to differentiate the synthetic data from the real data.|0: The datasets are indistinguishable. <br/>1: The datasets are totally distinguishable.|
+|**mlp_detection**|Train an Neural net to differentiate the synthetic data from the real data.|0: The datasets are indistinguishable. <br/>1: The datasets are totally distinguishable.|
 
 
 #### Privacy metrics
