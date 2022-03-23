@@ -11,7 +11,7 @@ class Constraints(BaseModel):
 
     @validator("rules")
     def _validate_rules(cls: Any, rules: List, values: dict, **kwargs: Any) -> List:
-        supported_ops: list = ["lt", "le", "gt", "ge", "eq", "in"]
+        supported_ops: list = ["lt", "le", "gt", "ge", "eq", "in", "dtype"]
 
         for rule in rules:
             if len(rule) < 3:
@@ -25,6 +25,8 @@ class Constraints(BaseModel):
                 )
             if op in ["in"]:
                 assert isinstance(thresh, list)
+            elif op in ["dtype"]:
+                assert isinstance(thresh, str)
         return rules
 
     @validate_arguments(config=dict(arbitrary_types_allowed=True))
@@ -52,6 +54,8 @@ class Constraints(BaseModel):
             return X[feature] == operand
         elif op == "in":
             return X[feature].isin(operand)
+        elif op == "dtype":
+            return X[feature].dtype == operand
         else:
             raise RuntimeError("unsupported operation", op)
 
@@ -123,3 +127,19 @@ class Constraints(BaseModel):
         """Iterate the constraint rules."""
         for x in self.rules:
             yield x
+
+    def features(self) -> List:
+        results = []
+        for feature, _, _ in self.rules:
+            results.append(feature)
+
+        return list(set(results))
+
+    def feature_constraints(self, ref_feature: str) -> List:
+        results = []
+        for feature, op, threshold in self.rules:
+            if feature != ref_feature:
+                continue
+            results.append((op, threshold))
+
+        return results

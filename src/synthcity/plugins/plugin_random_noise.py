@@ -6,9 +6,9 @@ import numpy as np
 import pandas as pd
 
 # synthcity absolute
-from synthcity.plugins.core.constraints import Constraints
 from synthcity.plugins.core.distribution import Distribution
 from synthcity.plugins.core.plugin import Plugin
+from synthcity.plugins.core.schema import Schema
 
 
 class RandomNoisePlugin(Plugin):
@@ -41,14 +41,13 @@ class RandomNoisePlugin(Plugin):
     def _fit(self, X: pd.DataFrame, *args: Any, **kwargs: Any) -> "RandomNoisePlugin":
         return self
 
-    def _generate(
-        self, count: int, constraints: Constraints, **kwargs: Any
-    ) -> pd.DataFrame:
+    def _generate(self, count: int, syn_schema: Schema, **kwargs: Any) -> pd.DataFrame:
         X_rnd = pd.DataFrame(
             np.zeros((count, len(self.schema().features()))),
             columns=self.schema().features(),
         )
-        for feature in self.schema():
+
+        for feature in syn_schema:
             sample = np.random.uniform(
                 low=self.schema()[feature].min(),
                 high=self.schema()[feature].max(),

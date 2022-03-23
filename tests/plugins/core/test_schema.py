@@ -2,6 +2,7 @@
 import pandas as pd
 import pydantic
 import pytest
+from sklearn.datasets import load_breast_cancer
 
 # synthcity absolute
 from synthcity.plugins.core.schema import Schema
@@ -25,11 +26,21 @@ def test_schema_as_constraint() -> None:
     data = pd.DataFrame([[1, 2, 3]], columns=["a", "b", "c"])
     schema = Schema(data=data)
 
-    cons = schema.as_constraint()
+    cons = schema.as_constraints()
 
     assert len(cons) == 3
     for rule in cons:
         assert rule[1] == "in"
+
+
+def test_schema_from_constraint() -> None:
+    data = load_breast_cancer(as_frame=True)["data"]
+    schema = Schema(data=data)
+    cons = schema.as_constraints()
+
+    reloaded = Schema.from_constraints(cons)
+
+    assert schema.domain == reloaded.domain
 
 
 def test_schema_inclusion() -> None:

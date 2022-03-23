@@ -5,9 +5,9 @@ from typing import Any, List
 import pandas as pd
 
 # synthcity absolute
-from synthcity.plugins.core.constraints import Constraints
 from synthcity.plugins.core.distribution import Distribution
 from synthcity.plugins.core.plugin import Plugin
+from synthcity.plugins.core.schema import Schema
 
 
 class DummySamplerPlugin(Plugin):
@@ -41,13 +41,12 @@ class DummySamplerPlugin(Plugin):
         self.X = X
         return self
 
-    def _generate(
-        self, count: int, constraints: Constraints, **kwargs: Any
-    ) -> pd.DataFrame:
+    def _generate(self, count: int, syn_schema: Schema, **kwargs: Any) -> pd.DataFrame:
         if self.X is None:
             raise RuntimeError("Fit the model first")
 
         baseline = self.X
+        constraints = syn_schema.as_constraints()
 
         baseline = constraints.match(baseline)
 

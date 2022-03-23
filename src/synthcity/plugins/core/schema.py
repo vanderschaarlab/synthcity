@@ -12,6 +12,7 @@ from synthcity.plugins.core.distribution import (
     Distribution,
     FloatDistribution,
     IntegerDistribution,
+    constraint_to_distribution,
 )
 
 
@@ -101,7 +102,7 @@ class Schema(BaseModel):
     def features(self) -> List:
         return list(self.domain.keys())
 
-    def as_constraint(self) -> Constraints:
+    def as_constraints(self) -> Constraints:
         """Convert the schema to a list of Constraints."""
         constraints = Constraints(rules=[])
         for feature in self:
@@ -110,9 +111,14 @@ class Schema(BaseModel):
         return constraints
 
     @classmethod
-    def from_constraint(cls, constraints: Constraints) -> "Schema":
-        """Convert the schema from a list of Constraints."""
+    def from_constraints(cls, constraints: Constraints) -> "Schema":
+        """Create a schema from a list of Constraints."""
 
+        features = constraints.features()
         feature_domain: dict = {}
 
-        return cls(feature_domain)
+        for feature in features:
+            dist = constraint_to_distribution(constraints, feature)
+            feature_domain[feature] = dist
+
+        return cls(domain=feature_domain)

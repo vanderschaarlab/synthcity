@@ -19,7 +19,7 @@ class Distribution(BaseModel, metaclass=ABCMeta):
         ...
 
     @abstractmethod
-    def sample(self) -> Any:
+    def sample(self, count: int = 1) -> Any:
         """Sample a value from the Distribution."""
         ...
 
@@ -55,8 +55,8 @@ class CategoricalDistribution(Distribution):
     def get(self) -> List[Any]:
         return [self.name, self.choices]
 
-    def sample(self) -> Any:
-        return np.random.choice(self.choices, 1)[0]
+    def sample(self, count: int = 1) -> Any:
+        return np.random.choice(self.choices, count)
 
     def has(self, val: Any) -> bool:
         return val in self.choices
@@ -77,14 +77,14 @@ class CategoricalDistribution(Distribution):
 
 
 class FloatDistribution(Distribution):
-    low: float
-    high: float
+    low: float = -np.inf
+    high: float = np.inf
 
     def get(self) -> List[Any]:
         return [self.name, self.low, self.high]
 
-    def sample(self) -> Any:
-        return np.random.uniform(self.low, self.high)
+    def sample(self, count: int = 1) -> Any:
+        return np.random.uniform(self.low, self.high, count)
 
     def has(self, val: Any) -> bool:
         return self.low <= val and val <= self.high
@@ -97,6 +97,7 @@ class FloatDistribution(Distribution):
             rules=[
                 (self.name, "le", self.high),
                 (self.name, "ge", self.low),
+                (self.name, "dtype", "float"),
             ]
         )
 
@@ -108,16 +109,16 @@ class FloatDistribution(Distribution):
 
 
 class IntegerDistribution(Distribution):
-    low: int
-    high: int
+    low: int = -np.inf
+    high: int = np.inf
     step: int = 1
 
     def get(self) -> List[Any]:
         return [self.name, self.low, self.high, self.step]
 
-    def sample(self) -> Any:
+    def sample(self, count: int = 1) -> Any:
         choices = [val for val in range(self.low, self.high + 1, self.step)]
-        return np.random.choice(choices, 1)[0]
+        return np.random.choice(choices, count)
 
     def has(self, val: Any) -> bool:
         return self.low <= val and val <= self.high
@@ -130,6 +131,7 @@ class IntegerDistribution(Distribution):
             rules=[
                 (self.name, "le", self.high),
                 (self.name, "ge", self.low),
+                (self.name, "dtype", "int"),
             ]
         )
 
@@ -138,3 +140,31 @@ class IntegerDistribution(Distribution):
 
     def max(self) -> Any:
         return self.high
+
+
+def constraint_to_distribution(constraints: Constraints, feature: str) -> Distribution:
+    rules = constraints.feature_constraints(feature)
+
+    dist_template = FloatDistribution
+    dist_args = {"low": -np.inf, "high": np.inf}
+
+    for op, value in rules:
+        if op == "in":
+            dist_template = CategoricalDistribution
+            dist_args = {"choices": value}
+            break
+        elif op == "dtype" and value == "int":
+            dist_template = IntegerDistribution
+        elif op == "le" and value < dist_args["high"]:
+            dist_args["high"] = value
+        elif op == "lt" and value < dist_args["high"]:
+            dist_args["high"] = value - 1
+        elif op == "ge" and dist_args["low"] < value:
+            dist_args["low"] = value
+        elif op == "gt" and dist_args["low"] < value:
+            dist_args["low"] = value + 1
+        elif op == "eq":
+            dist_args["low"] = value
+            dist_args["high"] = value
+
+    return dist_template(name=feature, **dist_args)

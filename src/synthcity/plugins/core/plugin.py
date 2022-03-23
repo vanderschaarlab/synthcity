@@ -127,10 +127,12 @@ class Plugin(metaclass=ABCMeta):
             count = self._original_shape[0]
 
         if constraints is None:
-            constraints = self.schema().as_constraint()
+            constraints = self.schema().as_constraints()
+
+        syn_schema = Schema.from_constraints(constraints)
 
         X_syn = pd.DataFrame(
-            self._generate(count=count, constraints=constraints, **kwargs)
+            self._generate(count=count, syn_schema=syn_schema, **kwargs)
         )
 
         if not constraints.is_valid(X_syn) and self.strict:
@@ -144,7 +146,7 @@ class Plugin(metaclass=ABCMeta):
     def _generate(
         self,
         count: int,
-        constraints: Constraints,
+        syn_schema: Schema,
         **kwargs: Any,
     ) -> pd.DataFrame:
         """Internal synthetic data generation method.
@@ -152,8 +154,8 @@ class Plugin(metaclass=ABCMeta):
         Args:
             count: optional int.
                 The number of samples to generate. If None, it generated len(reference_dataset) samples.
-            constraints: optional Constraints
-                Optional constraints to apply on the generated data. If none, the reference schema constraints are applied.
+            syn_schema:
+                The schema/constraints that need to be satisfied by the synthetic data.
 
         Returns:
             <count> synthetic samples

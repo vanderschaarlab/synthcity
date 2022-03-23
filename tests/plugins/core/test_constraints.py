@@ -138,3 +138,38 @@ def test_constraint_op_in() -> None:
     data = pd.DataFrame([[1, 2], [1, 2]], columns=["feat1", "feat2"])
     assert len(cons.match(data)) == 2
     assert cons.filter(data).sum() == 2
+
+
+def test_constraint_op_dtype() -> None:
+    cons = Constraints(rules=[("feat1", "dtype", "float")])
+
+    data = pd.DataFrame([[-3, 1], [-2, 2]], columns=["feat1", "feat2"])
+    assert len(cons.match(data)) == 0
+    assert cons.filter(data).sum() == 0
+
+    data = pd.DataFrame([[-3.0, 1], [-2, 2]], columns=["feat1", "feat2"])
+    assert len(cons.match(data)) == 2
+    assert cons.filter(data).sum() == 2
+
+    cons = Constraints(rules=[("feat1", "dtype", "int")])
+    data = pd.DataFrame([[-3, 1], [-2, 2]], columns=["feat1", "feat2"])
+    assert len(cons.match(data)) == 2
+    assert cons.filter(data).sum() == 2
+
+
+def test_constraint_features() -> None:
+    cons = Constraints(rules=[("feat1", "lt", 1), ("feat2", "eq", 2)])
+
+    assert set(cons.features()) == set(["feat1", "feat2"])
+
+
+def test_constraint_feature_constraints() -> None:
+    cons = Constraints(
+        rules=[("feat1", "lt", 1), ("feat3", "eq", 2), ("feat1", "gt", -2)]
+    )
+
+    assert cons.feature_constraints("feat1") == [("lt", 1), ("gt", -2)]
+    assert cons.feature_constraints("feat2") == []
+    assert cons.feature_constraints("feat3") == [
+        ("eq", 2),
+    ]
