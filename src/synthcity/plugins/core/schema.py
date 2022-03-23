@@ -18,15 +18,15 @@ from synthcity.plugins.core.distribution import (
 class Schema(BaseModel):
     """Utility class for defining the schema of a Dataset."""
 
-    data: Any
+    data: Any = None
     domain: Dict = {}
 
     @validator("domain", always=True)
     def _validate_domain(cls: Any, v: Any, values: Dict) -> Dict:
-        feature_domain = {}
-        if "data" not in values:
-            raise ValueError("You need to provide the data argument")
+        if "data" not in values or values["data"] is None:
+            return v
 
+        feature_domain = {}
         X = values["data"]
         if not isinstance(X, pd.DataFrame):
             raise ValueError("You need to provide a DataFrame in the data argument")
@@ -108,3 +108,11 @@ class Schema(BaseModel):
             constraints.extend(self[feature].as_constraint())
 
         return constraints
+
+    @classmethod
+    def from_constraint(cls, constraints: Constraints) -> "Schema":
+        """Convert the schema from a list of Constraints."""
+
+        feature_domain: dict = {}
+
+        return cls(feature_domain)

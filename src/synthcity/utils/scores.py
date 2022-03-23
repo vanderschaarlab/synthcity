@@ -28,14 +28,23 @@ def _safe_evaluate(
 
 
 class ScoreEvaluator:
-    def __init__(self, repeats: int) -> None:
+    def __init__(self) -> None:
         self.scores: dict = {}
-        self.repeats = repeats
         self.pending_tasks: list = []
 
+    def add(self, key: str, result: float, failed: int, duration: float) -> None:
+        if key not in self.scores:
+            self.scores[key] = {
+                "values": [],
+                "errors": 0,
+                "durations": [],
+            }
+        self.scores[key]["values"].append(result)
+        self.scores[key]["durations"].append(duration)
+        self.scores[key]["errors"] += int(failed)
+
     def queue(self, key: str, cbk: Callable, *args: Any, **kwargs: Any) -> None:
-        for repeat in range(self.repeats):
-            self.pending_tasks.append((key, cbk, args, kwargs))
+        self.pending_tasks.append((key, cbk, args, kwargs))
 
     def compute(self) -> None:
         results = dispatcher(
@@ -45,15 +54,7 @@ class ScoreEvaluator:
         self.pending_tasks = []
 
         for key, result, failed, duration in results:
-            if key not in self.scores:
-                self.scores[key] = {
-                    "values": [],
-                    "errors": 0,
-                    "durations": [],
-                }
-            self.scores[key]["values"].append(result)
-            self.scores[key]["durations"].append(duration)
-            self.scores[key]["errors"] += int(failed)
+            self.add(key, result, failed, duration)
 
     def to_dataframe(self) -> pd.DataFrame:
         output_metrics = [
@@ -79,7 +80,7 @@ class ScoreEvaluator:
             score_median = np.median(values)
             score_stddev = np.std(values)
             score_iqr = iqr(values)
-            score_rounds = self.repeats
+            score_rounds = len(values)
             output = output.append(
                 pd.DataFrame(
                     [

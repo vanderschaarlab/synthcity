@@ -24,7 +24,7 @@ class RandomNoisePlugin(Plugin):
     """
 
     def __init__(self, **kwargs: Any) -> None:
-        super().__init__()
+        super().__init__(**kwargs)
 
     @staticmethod
     def name() -> str:

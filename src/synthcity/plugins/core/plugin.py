@@ -33,8 +33,9 @@ class Plugin(metaclass=ABCMeta):
         arbitrary_types_allowed = True
         validate_assignment = True
 
-    def __init__(self) -> None:
+    def __init__(self, strict: bool = True) -> None:
         self._schema: Optional[Schema] = None
+        self.strict = strict
 
     @staticmethod
     @abstractmethod
@@ -128,9 +129,16 @@ class Plugin(metaclass=ABCMeta):
         if constraints is None:
             constraints = self.schema().as_constraint()
 
-        return pd.DataFrame(
+        X_syn = pd.DataFrame(
             self._generate(count=count, constraints=constraints, **kwargs)
         )
+
+        if not constraints.is_valid(X_syn) and self.strict:
+            raise RuntimeError(
+                f"Plugin {self.name()} failed to meet the synthetic constraints."
+            )
+
+        return constraints.match(X_syn)
 
     @abstractmethod
     def _generate(

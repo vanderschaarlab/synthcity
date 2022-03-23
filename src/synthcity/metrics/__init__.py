@@ -95,53 +95,59 @@ class Metrics:
         y_syn: pd.Series,
         sensitive_columns: List[str] = [],
         metrics: Optional[Dict] = None,
-        repeats: int = 2,
+        repeats: int = 3,
     ) -> pd.DataFrame:
         if metrics is None:
             metrics = Metrics.list()
 
-        scores = ScoreEvaluator(repeats=repeats)
+        scores = ScoreEvaluator()
 
-        for category in standard_metrics:
-            if category not in metrics:
-                continue
-            for metric in standard_metrics[category]:
-                if metric not in metrics[category]:
+        for repeat in range(repeats):
+            for category in standard_metrics:
+                if category not in metrics:
                     continue
-                key = f"{category}.{metric}"
-                scores.queue(
-                    key, standard_metrics[category][metric], X_gt, y_gt, X_syn, y_syn
-                )
-
-        for category in unary_privacy_metrics:
-            if category not in metrics:
-                continue
-            for metric in unary_privacy_metrics[category]:
-                if metric not in metrics[category]:
-                    continue
-                for name, src in [("gt", X_gt), ("syn", X_syn)]:
-                    key = f"{category}.{metric}.{name}"
+                for metric in standard_metrics[category]:
+                    if metric not in metrics[category]:
+                        continue
+                    key = f"{category}.{metric}"
                     scores.queue(
                         key,
-                        unary_privacy_metrics[category][metric],
-                        src,
-                        sensitive_columns,
+                        standard_metrics[category][metric],
+                        X_gt,
+                        y_gt,
+                        X_syn,
+                        y_syn,
                     )
 
-        for category in binary_privacy_metrics:
-            if category not in metrics:
-                continue
-            for metric in binary_privacy_metrics[category]:
-                if metric not in metrics[category]:
+            for category in unary_privacy_metrics:
+                if category not in metrics:
                     continue
-                key = f"{category}.{metric}"
-                scores.queue(
-                    key,
-                    binary_privacy_metrics[category][metric],
-                    X_gt,
-                    X_syn,
-                    sensitive_columns,
-                )
+                for metric in unary_privacy_metrics[category]:
+                    if metric not in metrics[category]:
+                        continue
+                    for name, src in [("gt", X_gt), ("syn", X_syn)]:
+                        key = f"{category}.{metric}.{name}"
+                        scores.queue(
+                            key,
+                            unary_privacy_metrics[category][metric],
+                            src,
+                            sensitive_columns,
+                        )
+
+            for category in binary_privacy_metrics:
+                if category not in metrics:
+                    continue
+                for metric in binary_privacy_metrics[category]:
+                    if metric not in metrics[category]:
+                        continue
+                    key = f"{category}.{metric}"
+                    scores.queue(
+                        key,
+                        binary_privacy_metrics[category][metric],
+                        X_gt,
+                        X_syn,
+                        sensitive_columns,
+                    )
 
         scores.compute()
 

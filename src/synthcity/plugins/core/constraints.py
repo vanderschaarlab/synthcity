@@ -89,6 +89,19 @@ class Constraints(BaseModel):
 
         return X[self.filter(X)]
 
+    @validate_arguments(config=dict(arbitrary_types_allowed=True))
+    def is_valid(self, X: pd.DataFrame) -> bool:
+        """Checks if all the rows in X meet the constraints.
+
+        Args:
+            X: DataFrame. The dataset to apply the constraints on.
+
+        Returns:
+            True if all rows match the constraints, False otherwise
+        """
+
+        return self.filter(X).sum() == len(X)
+
     def extend(self, other: "Constraints") -> "Constraints":
         """Extend the local constraints with more constraints.
 
