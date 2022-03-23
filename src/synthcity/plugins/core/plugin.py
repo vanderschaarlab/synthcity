@@ -21,8 +21,8 @@ class Plugin(metaclass=ABCMeta):
     """Base class for all plugins.
     Each derived class must implement the following methods:
         hyperparameter_space() - a static method that returns the hyperparameters that can be tuned during AutoML.
-        type() - a static method that returns the type of the plugin. e.g., imputation, preprocessing, prediction, etc.
-        name() - a static method that returns the name of the plugin. e.g., EM, mice, etc.
+        type() - a static method that returns the type of the plugin. e.g., debug, generative, bayesian, etc.
+        name() - a static method that returns the name of the plugin. e.g., ctgan, random_noise, etc.
         _fit() - internal method, called by `fit` on each training set.
         _generate() - internal method, called by `generate`.
 

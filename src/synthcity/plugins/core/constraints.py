@@ -1,7 +1,8 @@
 # stdlib
-from typing import Any, Generator, List
+from typing import Any, Generator, List, Tuple
 
 # third party
+import numpy as np
 import pandas as pd
 from pydantic import BaseModel, validate_arguments, validator
 
@@ -11,7 +12,20 @@ class Constraints(BaseModel):
 
     @validator("rules")
     def _validate_rules(cls: Any, rules: List, values: dict, **kwargs: Any) -> List:
-        supported_ops: list = ["lt", "le", "gt", "ge", "eq", "in", "dtype"]
+        supported_ops: list = [
+            "<",
+            ">=",
+            "<=",
+            ">",
+            "==",
+            "lt",
+            "le",
+            "gt",
+            "ge",
+            "eq",
+            "in",
+            "dtype",
+        ]
 
         for rule in rules:
             if len(rule) < 3:
@@ -42,15 +56,15 @@ class Constraints(BaseModel):
         Returns:
             The pandas.Index which matches the constraint.
         """
-        if op == "lt":
+        if op == "lt" or op == "<":
             return X[feature] < operand
-        elif op == "le":
+        elif op == "le" or op == "<=":
             return X[feature] <= operand
-        elif op == "gt":
+        elif op == "gt" or op == ">":
             return X[feature] > operand
-        elif op == "ge":
+        elif op == "ge" or op == ">=":
             return X[feature] >= operand
-        elif op == "eq":
+        elif op == "eq" or op == "==":
             return X[feature] == operand
         elif op == "in":
             return X[feature].isin(operand)
@@ -72,6 +86,10 @@ class Constraints(BaseModel):
         X = pd.DataFrame(X)
         res = pd.Series([True] * len(X), index=X.index)
         for feature, op, thresh in self.rules:
+            if feature not in X:
+                res &= False
+                continue
+
             res &= self._eval(
                 X,
                 feature,
@@ -110,7 +128,7 @@ class Constraints(BaseModel):
         """Extend the local constraints with more constraints.
 
         Args:
-            other: THe new constraints to add.
+            other: The new constraints to add.
 
         Returns:
             self with the updated constraints.
@@ -143,3 +161,30 @@ class Constraints(BaseModel):
             results.append((op, threshold))
 
         return results
+
+    def feature_params(self, feature: str) -> Tuple:
+        rules = self.feature_constraints(feature)
+
+        dist_template = "float"
+        dist_args = {"low": np.iinfo(np.int32).min, "high": np.iinfo(np.int32).max}
+
+        for op, value in rules:
+            if op == "in":
+                dist_template = "categorical"
+                dist_args = {"choices": value}
+                break
+            elif op == "dtype" and value == "int":
+                dist_template = "integer"
+            elif (op == "le" or op == "<=") and value < dist_args["high"]:
+                dist_args["high"] = value
+            elif (op == "lt" or op == "<") and value < dist_args["high"]:
+                dist_args["high"] = value - 1
+            elif (op == "ge" or op == ">=") and dist_args["low"] < value:
+                dist_args["low"] = value
+            elif (op == "gt" or op == ">") and dist_args["low"] < value:
+                dist_args["low"] = value + 1
+            elif op == "eq" or op == "==":
+                dist_args["low"] = value
+                dist_args["high"] = value
+
+        return dist_template, dist_args

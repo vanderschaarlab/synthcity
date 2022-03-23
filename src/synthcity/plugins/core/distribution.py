@@ -77,8 +77,8 @@ class CategoricalDistribution(Distribution):
 
 
 class FloatDistribution(Distribution):
-    low: float = -np.inf
-    high: float = np.inf
+    low: float = np.iinfo(np.int32).min
+    high: float = np.iinfo(np.int32).max
 
     def get(self) -> List[Any]:
         return [self.name, self.low, self.high]
@@ -109,8 +109,8 @@ class FloatDistribution(Distribution):
 
 
 class IntegerDistribution(Distribution):
-    low: int = -np.inf
-    high: int = np.inf
+    low: int = np.iinfo(np.int32).min
+    high: int = np.iinfo(np.int32).max
     step: int = 1
 
     def get(self) -> List[Any]:
@@ -143,28 +143,13 @@ class IntegerDistribution(Distribution):
 
 
 def constraint_to_distribution(constraints: Constraints, feature: str) -> Distribution:
-    rules = constraints.feature_constraints(feature)
+    dist_name, dist_args = constraints.feature_params(feature)
 
-    dist_template = FloatDistribution
-    dist_args = {"low": -np.inf, "high": np.inf}
-
-    for op, value in rules:
-        if op == "in":
-            dist_template = CategoricalDistribution
-            dist_args = {"choices": value}
-            break
-        elif op == "dtype" and value == "int":
-            dist_template = IntegerDistribution
-        elif op == "le" and value < dist_args["high"]:
-            dist_args["high"] = value
-        elif op == "lt" and value < dist_args["high"]:
-            dist_args["high"] = value - 1
-        elif op == "ge" and dist_args["low"] < value:
-            dist_args["low"] = value
-        elif op == "gt" and dist_args["low"] < value:
-            dist_args["low"] = value + 1
-        elif op == "eq":
-            dist_args["low"] = value
-            dist_args["high"] = value
+    if dist_name == "categorical":
+        dist_template = CategoricalDistribution
+    elif dist_name == "integer":
+        dist_template = IntegerDistribution
+    else:
+        dist_template = FloatDistribution
 
     return dist_template(name=feature, **dist_args)

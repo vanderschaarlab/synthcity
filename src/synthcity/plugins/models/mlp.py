@@ -18,6 +18,8 @@ from sklearn.model_selection import train_test_split
 # synthcity absolute
 import synthcity.logger as log
 
+# TODO: fix batchnorm
+
 
 class NetworkConfig(BaseModel):
     task_type: str

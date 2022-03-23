@@ -43,6 +43,13 @@ def test_schema_from_constraint() -> None:
     assert schema.domain == reloaded.domain
 
 
+def test_schema_sample() -> None:
+    data = load_breast_cancer(as_frame=True)["data"]
+    schema = Schema(data=data)
+
+    assert schema.sample(10).shape == (10, data.shape[1])
+
+
 def test_schema_inclusion() -> None:
     data = pd.DataFrame([[1, 2, 3]], columns=["a", "b", "c"])
     other = pd.DataFrame([[1, 2]], columns=["a", "b"])

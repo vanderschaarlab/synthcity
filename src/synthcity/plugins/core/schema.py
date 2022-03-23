@@ -2,6 +2,7 @@
 from typing import Any, Dict, Generator, List
 
 # third party
+import numpy as np
 import pandas as pd
 from pydantic import BaseModel, validate_arguments, validator
 
@@ -101,6 +102,16 @@ class Schema(BaseModel):
 
     def features(self) -> List:
         return list(self.domain.keys())
+
+    def sample(self, count: int) -> pd.DataFrame:
+        samples = pd.DataFrame(
+            np.zeros((count, len(self.features()))), columns=self.features()
+        )
+
+        for feature in self.features():
+            samples[feature] = self.domain[feature].sample(count)
+
+        return samples
 
     def as_constraints(self) -> Constraints:
         """Convert the schema to a list of Constraints."""

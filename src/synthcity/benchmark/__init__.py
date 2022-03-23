@@ -38,11 +38,14 @@ class Benchmarks:
                 target_key = f"target_{plugin}_{repeat}"
                 X[target_key] = y
 
-                generator.fit(X)
-
-                X_syn = generator.generate(
-                    count=synthetic_size, constraints=synthetic_constraints
-                )
+                try:
+                    generator.fit(X)
+                    X_syn = generator.generate(
+                        count=synthetic_size, constraints=synthetic_constraints
+                    )
+                except BaseException as e:
+                    log.critical(f" Experiment {repeat} failed: {e}")
+                    continue
 
                 evaluation = Metrics.evaluate(
                     X.drop(columns=[target_key]),
