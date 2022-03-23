@@ -34,6 +34,7 @@ from .privacy import (
     evaluate_l_diversity,
 )
 from .statistical import (
+    evaluate_avg_jensenshannon_distance,
     evaluate_chi_squared_test,
     evaluate_inv_cdf_distance,
     evaluate_inv_kl_divergence,
@@ -92,6 +93,11 @@ standard_metrics = {
         },
         "inverse_cdf_distance": {
             "cbk": evaluate_inv_cdf_distance,
+            "ok_score": 0,
+            "bad_score": 1,
+        },
+        "avg_jensenshannon_distance": {
+            "cbk": evaluate_avg_jensenshannon_distance,
             "ok_score": 0,
             "bad_score": 1,
         },

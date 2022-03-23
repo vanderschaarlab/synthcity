@@ -3,6 +3,7 @@ import numpy as np
 import pandas as pd
 from copulas.univariate.base import Univariate
 from pydantic import validate_arguments
+from scipy.spatial.distance import jensenshannon
 from scipy.special import kl_div
 from scipy.stats import chisquare, ks_2samp
 from sklearn import metrics
@@ -154,3 +155,33 @@ def evaluate_inv_cdf_distance(
         dist += np.mean(abs(syn_percentiles - gt_percentiles[1]) ** p)
 
     return dist
+
+
+@validate_arguments(config=dict(arbitrary_types_allowed=True))
+def evaluate_avg_jensenshannon_distance(
+    X_gt: pd.DataFrame,
+    y_gt: pd.Series,
+    X_syn: pd.DataFrame,
+    y_synth: pd.Series,
+    normalize: bool = True,
+) -> float:
+    """Evaluate the average Jensen-Shannon distance (metric) between two probability arrays."""
+
+    stats_original_ = {}
+    stats_synthetic_ = {}
+    stats_ = {}
+
+    for col in X_gt.columns:
+        stats_original_[col], stats_synthetic_[col] = (
+            X_gt[col]
+            .value_counts(dropna=False, normalize=normalize)
+            .align(
+                X_syn[col].value_counts(dropna=False, normalize=normalize),
+                join="outer",
+                axis=0,
+                fill_value=0,
+            )
+        )
+        stats_[col] = jensenshannon(stats_original_[col], stats_synthetic_[col])
+
+    return sum(stats_.values()) / len(stats_.keys())
