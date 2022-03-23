@@ -81,8 +81,8 @@ def evaluate_sensitive_data_leakage_xgb(
     sensitive_columns: List[str] = [],
 ) -> float:
     return evaluate_sensitive_data_leakage(
-        XGBClassifier(),
-        XGBRegressor(),
+        XGBClassifier(n_jobs=1),
+        XGBRegressor(j_jobs=1),
         X_gt,
         X_syn,
         sensitive_columns,

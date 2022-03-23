@@ -80,6 +80,7 @@ def evaluate_xgb_detection_synthetic(
 
     model_template = XGBClassifier
     model_args = {
+        "n_jobs": 1,
         "verbosity": 0,
         "use_label_encoder": False,
         "depth": 3,

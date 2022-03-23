@@ -1,10 +1,12 @@
 # stdlib
+import multiprocessing
 import time
-from typing import Any, Callable, List, Tuple
+from typing import Any, Callable, Dict, List, Optional, Tuple
 
 # third party
 import numpy as np
 import pandas as pd
+from joblib import Parallel, delayed
 from pydantic import validate_arguments
 from scipy.stats import iqr
 
@@ -41,6 +43,8 @@ from .statistical import (
     evaluate_maximum_mean_discrepancy,
 )
 
+dispatcher = Parallel(n_jobs=multiprocessing.cpu_count())
+
 standard_metrics = {
     "sanity": {
         "data_mismatch_score": evaluate_data_mismatch_score,
@@ -66,8 +70,10 @@ standard_metrics = {
     },
 }
 unary_privacy_metrics = {
-    "k_anonymizatio": evaluate_k_anonymization,
-    "l_diversity": evaluate_l_diversity,
+    "privacy": {
+        "k_anonymizatio": evaluate_k_anonymization,
+        "l_diversity": evaluate_l_diversity,
+    }
 }
 
 binary_privacy_metrics = {
@@ -83,25 +89,39 @@ binary_privacy_metrics = {
 }
 
 
-class MetricEvaluator:
-    def __init__(self, repeats: int = 2) -> None:
+def _safe_evaluate(
+    name: str, cbk: Callable, *args: Any, **kwargs: Any
+) -> Tuple[str, float, bool, float]:
+    start = time.time()
+    failed = False
+    try:
+        result = cbk(*args, **kwargs)
+    except BaseException:
+        result = 0
+        failed = True
+
+    duration = float(time.time() - start)
+    return name, result, failed, duration
+
+
+class ScoreEvaluator:
+    def __init__(self, repeats: int) -> None:
         self.scores: dict = {}
         self.repeats = repeats
+        self.pending_tasks: list = []
 
-    def _safe_evaluate(
-        self, cbk: Callable, *args: Any, **kwargs: Any
-    ) -> Tuple[float, bool]:
-        try:
-            return cbk(*args, **kwargs), False
-        except BaseException:
-            return 0, True
-
-    def score(self, key: str, cbk: Callable, *args: Any, **kwargs: Any) -> None:
+    def queue(self, key: str, cbk: Callable, *args: Any, **kwargs: Any) -> None:
         for repeat in range(self.repeats):
-            start = time.time()
-            result, failed = self._safe_evaluate(cbk, *args, **kwargs)
-            duration = float(time.time() - start)
+            self.pending_tasks.append((key, cbk, args, kwargs))
 
+    def compute(self) -> None:
+        results = dispatcher(
+            delayed(_safe_evaluate)(key, cbk, *args, **kwargs)
+            for (key, cbk, args, kwargs) in self.pending_tasks
+        )
+        self.pending_tasks = []
+
+        for key, result, failed, duration in results:
             if key not in self.scores:
                 self.scores[key] = {
                     "values": [],
@@ -160,38 +180,86 @@ class MetricEvaluator:
         return output
 
 
-@validate_arguments(config=dict(arbitrary_types_allowed=True))
-def evaluate(
-    X_gt: pd.DataFrame,
-    y_gt: pd.Series,
-    X_syn: pd.DataFrame,
-    y_syn: pd.Series,
-    sensitive_columns: List[str] = [],
-    repeats: int = 2,
-) -> pd.DataFrame:
-    scores = MetricEvaluator(repeats=repeats)
+class Metrics:
+    @staticmethod
+    @validate_arguments(config=dict(arbitrary_types_allowed=True))
+    def evaluate(
+        X_gt: pd.DataFrame,
+        y_gt: pd.Series,
+        X_syn: pd.DataFrame,
+        y_syn: pd.Series,
+        sensitive_columns: List[str] = [],
+        metrics: Optional[Dict] = None,
+        repeats: int = 2,
+    ) -> pd.DataFrame:
+        if metrics is None:
+            metrics = Metrics.list()
 
-    for category in standard_metrics:
-        for metric in standard_metrics[category]:
-            key = f"{category}.{metric}"
-            scores.score(
-                key, standard_metrics[category][metric], X_gt, y_gt, X_syn, y_syn
+        scores = ScoreEvaluator(repeats=repeats)
+
+        for category in standard_metrics:
+            if category not in metrics:
+                continue
+            for metric in standard_metrics[category]:
+                if metric not in metrics[category]:
+                    continue
+                key = f"{category}.{metric}"
+                scores.queue(
+                    key, standard_metrics[category][metric], X_gt, y_gt, X_syn, y_syn
+                )
+
+        for category in unary_privacy_metrics:
+            if category not in metrics:
+                continue
+            for metric in unary_privacy_metrics[category]:
+                if metric not in metrics[category]:
+                    continue
+                for name, src in [("gt", X_gt), ("syn", X_syn)]:
+                    key = f"{category}.{metric}.{name}"
+                    scores.queue(
+                        key,
+                        unary_privacy_metrics[category][metric],
+                        src,
+                        sensitive_columns,
+                    )
+
+        for category in binary_privacy_metrics:
+            if category not in metrics:
+                continue
+            for metric in binary_privacy_metrics[category]:
+                if metric not in metrics[category]:
+                    continue
+                key = f"{category}.{metric}"
+                scores.queue(
+                    key,
+                    binary_privacy_metrics[category][metric],
+                    X_gt,
+                    X_syn,
+                    sensitive_columns,
+                )
+
+        scores.compute()
+
+        return scores.to_dataframe()
+
+    @staticmethod
+    def list() -> dict:
+        available_metrics = {}
+        for category in standard_metrics:
+            available_metrics[category] = list(standard_metrics[category].keys())
+
+        for category in unary_privacy_metrics:
+            if category not in available_metrics:
+                available_metrics[category] = []
+            available_metrics[category].extend(
+                list(unary_privacy_metrics[category].keys())
             )
 
-    for metric in unary_privacy_metrics:
-        for name, src in [("gt", X_gt), ("syn", X_syn)]:
-            key = f"privacy.{metric}.{name}"
-            scores.score(key, unary_privacy_metrics[metric], src, sensitive_columns)
-
-    for category in binary_privacy_metrics:
-        for metric in binary_privacy_metrics[category]:
-            key = f"{category}.{metric}"
-            scores.score(
-                key,
-                binary_privacy_metrics[category][metric],
-                X_gt,
-                X_syn,
-                sensitive_columns,
+        for category in binary_privacy_metrics:
+            if category not in available_metrics:
+                available_metrics[category] = []
+            available_metrics[category].extend(
+                list(binary_privacy_metrics[category].keys())
             )
 
-    return scores.to_dataframe()
+        return available_metrics

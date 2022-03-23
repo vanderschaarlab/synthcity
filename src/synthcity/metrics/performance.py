@@ -23,6 +23,7 @@ def evaluate_performance_classification(
     """
     model = XGBClassifier
     model_args = {
+        "n_jobs": 1,
         "verbosity": 0,
         "use_label_encoder": False,
         "depth": 3,
@@ -50,6 +51,7 @@ def evaluate_performance_regression(
     """
     model = XGBRegressor
     model_args = {
+        "n_jobs": 1,
         "verbosity": 0,
         "use_label_encoder": False,
         "depth": 3,
