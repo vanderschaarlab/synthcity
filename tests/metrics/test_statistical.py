@@ -21,20 +21,13 @@ from synthcity.plugins import Plugin, Plugins
 
 
 def _eval_plugin(cbk: Callable, X: pd.DataFrame, X_syn: pd.DataFrame) -> Tuple:
-    syn_score = cbk(
-        X.drop(columns=["target"]),
-        X["target"],
-        X_syn.drop(columns=["target"]),
-        X_syn["target"],
-    )
+    syn_score = cbk(X, X_syn)
 
     sz = len(X_syn)
     X_rnd = pd.DataFrame(np.random.randn(sz, len(X.columns)), columns=X.columns)
     rnd_score = cbk(
-        X.drop(columns=["target"]),
-        X["target"],
-        X_rnd.drop(columns=["target"]),
-        X_rnd["target"],
+        X,
+        X_rnd,
     )
 
     return syn_score, rnd_score

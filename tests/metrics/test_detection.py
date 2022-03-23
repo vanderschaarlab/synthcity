@@ -33,10 +33,8 @@ def test_detect_synth(test_plugin: Plugin, method: Callable) -> None:
     X_gen = test_plugin.generate(100)
 
     good_score = method(
-        X.drop(columns=["target"]),
-        X["target"],
-        X_gen.drop(columns=["target"]),
-        X_gen["target"],
+        X,
+        X_gen,
     )
 
     assert good_score > 0
@@ -45,10 +43,8 @@ def test_detect_synth(test_plugin: Plugin, method: Callable) -> None:
     sz = 100
     X_rnd = pd.DataFrame(np.random.randn(sz, len(X.columns)), columns=X.columns)
     score = method(
-        X.drop(columns=["target"]),
-        X["target"],
-        X_rnd.drop(columns=["target"]),
-        X_rnd["target"],
+        X,
+        X_rnd,
     )
 
     assert score > 0

@@ -20,19 +20,15 @@ from synthcity.plugins import Plugin, Plugins
 
 def _eval_plugin(cbk: Callable, X: pd.DataFrame, X_syn: pd.DataFrame) -> Tuple:
     syn_score = cbk(
-        X.drop(columns=["target"]),
-        X["target"],
-        X_syn.drop(columns=["target"]),
-        X_syn["target"],
+        X,
+        X_syn,
     )
 
     sz = len(X_syn)
     X_rnd = pd.DataFrame(np.random.randn(sz, len(X.columns)), columns=X.columns)
     rnd_score = cbk(
-        X.drop(columns=["target"]),
-        X["target"],
-        X_rnd.drop(columns=["target"]),
-        X_rnd["target"],
+        X,
+        X_rnd,
     )
 
     return syn_score, rnd_score
@@ -47,10 +43,8 @@ def test_evaluate_data_mismatch_score(test_plugin: Plugin) -> None:
     X_gen = test_plugin.generate(100)
 
     score = evaluate_data_mismatch_score(
-        X.drop(columns=["target"]),
-        X["target"],
-        X_gen.drop(columns=["target"]),
-        X_gen["target"],
+        X,
+        X_gen,
     )
 
     assert score == 0
@@ -59,10 +53,8 @@ def test_evaluate_data_mismatch_score(test_plugin: Plugin) -> None:
     X["target"] = "a"
 
     score = evaluate_data_mismatch_score(
-        X.drop(columns=["target"]),
-        X["target"],
-        X_fail.drop(columns=["target"]),
-        X_fail["target"],
+        X,
+        X_fail,
     )
 
     assert score > 0

@@ -21,7 +21,9 @@ from synthcity.plugins import Plugin, Plugins
 )
 def test_select_outliers(test_plugin: Plugin, method: str) -> None:
     X, y = load_iris(return_X_y=True, as_frame=True)
-    outlier_index = select_outliers(X, y, method=method)
+    X["target"] = y
+
+    outlier_index = select_outliers(X, method=method)
 
     assert len(outlier_index.unique()) == 2
     assert outlier_index.sum() > 0

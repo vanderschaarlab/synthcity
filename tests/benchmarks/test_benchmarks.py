@@ -8,6 +8,7 @@ from synthcity.benchmark import Benchmarks
 
 def test_benchmark_sanity() -> None:
     X, y = load_diabetes(return_X_y=True, as_frame=True)
+    X["target"] = y
 
     scores = Benchmarks.evaluate(
         [
@@ -15,7 +16,6 @@ def test_benchmark_sanity() -> None:
             "random_noise",
         ],
         X,
-        y,
         sensitive_columns=["sex"],
         metrics={"sanity": ["common_rows_proportion", "data_mismatch_score"]},
     )
@@ -25,6 +25,7 @@ def test_benchmark_sanity() -> None:
 
 def test_benchmark_invalid_plugin() -> None:
     X, y = load_diabetes(return_X_y=True, as_frame=True)
+    X["target"] = y
 
     with pytest.raises(ValueError):
         Benchmarks.evaluate(
@@ -33,7 +34,6 @@ def test_benchmark_invalid_plugin() -> None:
                 "random_noise",
             ],
             X,
-            y,
             sensitive_columns=["sex"],
             metrics={"sanity": ["common_rows_proportion", "data_mismatch_score"]},
         )
@@ -41,13 +41,13 @@ def test_benchmark_invalid_plugin() -> None:
 
 def test_benchmark_invalid_metric() -> None:
     X, y = load_diabetes(return_X_y=True, as_frame=True)
+    X["target"] = y
 
     score = Benchmarks.evaluate(
         [
             "random_noise",
         ],
         X,
-        y,
         sensitive_columns=["sex"],
         metrics={"sanity": ["invalid"]},
     )

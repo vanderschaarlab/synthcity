@@ -19,10 +19,8 @@ def test_basic(test_plugin: str) -> None:
     X_gen = model.generate(100)
 
     out = Metrics.evaluate(
-        X.drop(columns=["target"]),
-        X["target"],
-        X_gen.drop(columns=["target"]),
-        X_gen["target"],
+        X,
+        X_gen,
     )
 
     assert isinstance(out, pd.DataFrame)
@@ -66,10 +64,8 @@ def test_metric_filter(metric_filter: dict) -> None:
     X_gen = model.generate(100)
 
     out = Metrics.evaluate(
-        X.drop(columns=["target"]),
-        X["target"],
-        X_gen.drop(columns=["target"]),
-        X_gen["target"],
+        X,
+        X_gen,
         metrics=metric_filter,
     )
 

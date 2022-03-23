@@ -20,7 +20,6 @@ class Benchmarks:
     def evaluate(
         plugins: List,
         X: pd.DataFrame,
-        y: pd.Series,
         sensitive_columns: List[str] = [],
         metrics: Optional[Dict] = None,
         repeats: int = 3,
@@ -35,9 +34,6 @@ class Benchmarks:
                 log.info(f" Experiment repeat: {repeat}")
                 generator = Plugins().get(plugin)
 
-                target_key = f"target_{plugin}_{repeat}"
-                X[target_key] = y
-
                 try:
                     generator.fit(X)
                     X_syn = generator.generate(
@@ -48,10 +44,8 @@ class Benchmarks:
                     continue
 
                 evaluation = Metrics.evaluate(
-                    X.drop(columns=[target_key]),
-                    y,
-                    X_syn.drop(columns=[target_key]),
-                    X_syn[target_key],
+                    X,
+                    X_syn,
                     sensitive_columns=sensitive_columns,
                     metrics=metrics,
                 )

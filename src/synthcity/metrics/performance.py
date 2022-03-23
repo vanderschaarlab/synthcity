@@ -69,9 +69,7 @@ def evaluate_performance_regression(
 
 
 @validate_arguments(config=dict(arbitrary_types_allowed=True))
-def evaluate_test_performance(
-    X_gt: pd.DataFrame, y_gt: pd.Series, X_synth: pd.DataFrame, y_synth: pd.Series
-) -> float:
+def evaluate_test_performance(X_gt: pd.DataFrame, X_syn: pd.DataFrame) -> float:
     """Train a classifier or regressor on the synthetic data and evaluate the performance on real test data. Returns the average performance discrepancy between training on real data vs on synthetic data.
 
     Score:
@@ -79,7 +77,15 @@ def evaluate_test_performance(
         1: massive performance degradation
     """
 
-    if len(y_gt.unique()) < 5:
+    target_col = X_gt.columns[-1]
+
+    iter_X_gt = X_gt.drop(columns=[target_col])
+    iter_y_gt = X_gt[target_col]
+
+    iter_X_syn = X_syn.drop(columns=[target_col])
+    iter_y_syn = X_syn[target_col]
+
+    if len(iter_y_gt.unique()) < 5:
         eval_cbk = evaluate_performance_classification
         skf = StratifiedKFold(n_splits=3)
     else:
@@ -88,14 +94,14 @@ def evaluate_test_performance(
 
     real_scores = []
     syn_scores = []
-    for train_idx, test_idx in skf.split(X_gt, y_gt):
-        train_data = X_gt.loc[train_idx]
-        test_data = X_gt.loc[test_idx]
-        train_labels = y_gt.loc[train_idx]
-        test_labels = y_gt.loc[test_idx]
+    for train_idx, test_idx in skf.split(iter_X_gt, iter_y_gt):
+        train_data = iter_X_gt.loc[train_idx]
+        test_data = iter_X_gt.loc[test_idx]
+        train_labels = iter_y_gt.loc[train_idx]
+        test_labels = iter_y_gt.loc[test_idx]
 
         real_score = eval_cbk(train_data, train_labels, test_data, test_labels)
-        synth_score = eval_cbk(X_synth, y_synth, test_data, test_labels)
+        synth_score = eval_cbk(iter_X_syn, iter_y_syn, test_data, test_labels)
 
         real_scores.append(real_score)
         syn_scores.append(synth_score)

@@ -186,9 +186,7 @@ class Metrics:
     @validate_arguments(config=dict(arbitrary_types_allowed=True))
     def evaluate(
         X_gt: pd.DataFrame,
-        y_gt: pd.Series,
         X_syn: pd.DataFrame,
-        y_syn: pd.Series,
         sensitive_columns: List[str] = [],
         metrics: Optional[Dict] = None,
     ) -> pd.DataFrame:
@@ -210,9 +208,7 @@ class Metrics:
                     standard_metrics[category][metric]["ok_score"],
                     standard_metrics[category][metric]["bad_score"],
                     X_gt,
-                    y_gt,
                     X_syn,
-                    y_syn,
                 )
 
         for category in unary_privacy_metrics:
