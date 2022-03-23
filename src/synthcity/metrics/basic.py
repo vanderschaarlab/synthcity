@@ -22,7 +22,7 @@ def evaluate_data_mismatch_score(
 
     Score:
         0: no datatype mismatch.
-        1: complete data type mistach between the datasets.
+        1: complete data type mismatch between the datasets.
     """
     if len(X_gt.columns) != len(X_synth.columns):
         raise ValueError(f"Incompatible dataframe {X_gt.shape} and {X_synth.shape}")

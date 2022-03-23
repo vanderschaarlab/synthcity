@@ -50,7 +50,7 @@ def select_quantiles(
 
 @validate_arguments(config=dict(arbitrary_types_allowed=True))
 def evaluate_k_anonymization(X: pd.DataFrame, sensitive_columns: List[str] = []) -> int:
-    """Returns the minimum value k that satisfies the k-anonymity rule.
+    """Returns the minimum value k which satisfies the k-anonymity rule: each record is similar to at least another k-1 other records on the potentially identifying variables.
 
     We simulate a set of clusters over the dataset and return the minimum length of a cluster, from all trials.
     """
@@ -71,7 +71,7 @@ def evaluate_k_anonymization(X: pd.DataFrame, sensitive_columns: List[str] = [])
 
 @validate_arguments(config=dict(arbitrary_types_allowed=True))
 def evaluate_l_diversity(X: pd.DataFrame, sensitive_columns: List[str]) -> int:
-    """Returns the minimum value l that satisfies the l-diversity rule.
+    """Returns the minimum value l which satisfies the l-diversity rule: every generalized block has to contain at least l different sensitive values.
 
     We simulate a set of the cluster over the dataset, and we return the minimum length of unique sensitive values for any cluster.
 

@@ -86,7 +86,7 @@ def evaluate_maximum_mean_discrepancy(
     y_synth: pd.Series,
     kernel: str = "rbf",
 ) -> float:
-    """Emprical maximum mean discrepancy. The lower the result the more evidence that distributions are the same.
+    """Empirical maximum mean discrepancy. The lower the result the more evidence that distributions are the same.
 
     Args:
         kernel: "rbf", "linear" or "polynomial"
