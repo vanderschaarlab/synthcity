@@ -7,6 +7,7 @@ from IPython.display import display
 from pydantic import validate_arguments
 
 # synthcity absolute
+import synthcity.logger as log
 from synthcity.metrics import Metrics
 from synthcity.plugins import Plugins
 from synthcity.plugins.core.constraints import Constraints
@@ -22,14 +23,16 @@ class Benchmarks:
         y: pd.Series,
         sensitive_columns: List[str] = [],
         metrics: Optional[Dict] = None,
-        repeats: int = 10,
+        repeats: int = 3,
         synthetic_size: Optional[int] = None,
         synthetic_constraints: Optional[Constraints] = None,
     ) -> pd.DataFrame:
         out = {}
         for plugin in plugins:
+            log.info(f"Benchmarking plugin : {plugin}")
             scores = ScoreEvaluator()
             for repeat in range(repeats):
+                log.info(f" Experiment repeat: {repeat}")
                 generator = Plugins().get(plugin)
 
                 target_key = f"target_{plugin}_{repeat}"
@@ -53,8 +56,18 @@ class Benchmarks:
                 mean_score = evaluation["mean"].to_dict()
                 errors = evaluation["errors"].to_dict()
                 duration = evaluation["durations"].to_dict()
+                ok_score = evaluation["ok_score"].to_dict()
+                bad_score = evaluation["bad_score"].to_dict()
+
                 for key in mean_score:
-                    scores.add(key, mean_score[key], errors[key], duration[key])
+                    scores.add(
+                        key,
+                        mean_score[key],
+                        errors[key],
+                        duration[key],
+                        ok_score[key],
+                        bad_score[key],
+                    )
             out[plugin] = scores.to_dataframe()
 
         return out
@@ -69,5 +82,6 @@ class Benchmarks:
         for plugin in results:
             print()
             print("\033[4m" + "\033[1m" + f"Plugin : {plugin}" + "\033[0m" + "\033[0m")
-            display(results[plugin])
+
+            display(results[plugin].drop(columns=["ok_score", "bad_score"]))
             print()

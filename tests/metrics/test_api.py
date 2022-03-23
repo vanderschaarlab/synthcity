@@ -37,6 +37,8 @@ def test_basic(test_plugin: str) -> None:
             "rounds",
             "durations",
             "errors",
+            "bad_score",
+            "ok_score",
         ]
     )
 
@@ -89,5 +91,7 @@ def test_metric_filter(metric_filter: dict) -> None:
             "rounds",
             "durations",
             "errors",
+            "bad_score",
+            "ok_score",
         ]
     )
