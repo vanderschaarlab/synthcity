@@ -48,11 +48,7 @@ class RandomNoisePlugin(Plugin):
         )
 
         for feature in syn_schema:
-            sample = np.random.uniform(
-                low=self.schema()[feature].min(),
-                high=self.schema()[feature].max(),
-                size=(count),
-            )
+            sample = syn_schema[feature].sample(count=count)
             X_rnd[feature] = sample
         return X_rnd
 
