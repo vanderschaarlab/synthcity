@@ -9,7 +9,7 @@ from synthcity.metrics.performance import evaluate_test_performance
 from synthcity.plugins import Plugin, Plugins
 
 
-@pytest.mark.parametrize("test_plugin", [Plugins().get("dummy_sampler")])
+@pytest.mark.parametrize("test_plugin", [Plugins().get("marginal_distributions")])
 def test_evaluate_performance_classifier(test_plugin: Plugin) -> None:
     X, y = load_iris(return_X_y=True, as_frame=True)
     X["target"] = y
@@ -35,7 +35,7 @@ def test_evaluate_performance_classifier(test_plugin: Plugin) -> None:
     assert score > good_score
 
 
-@pytest.mark.parametrize("test_plugin", [Plugins().get("dummy_sampler")])
+@pytest.mark.parametrize("test_plugin", [Plugins().get("marginal_distributions")])
 def test_evaluate_performance_regression(test_plugin: Plugin) -> None:
     X, y = load_diabetes(return_X_y=True, as_frame=True)
     X["target"] = y

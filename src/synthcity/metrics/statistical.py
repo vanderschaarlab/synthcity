@@ -153,6 +153,7 @@ def evaluate_avg_jensenshannon_stats(
     X_gt: pd.DataFrame,
     X_syn: pd.DataFrame,
     normalize: bool = True,
+    bins: int = 10,
 ) -> Tuple[Dict, Dict, Dict]:
     """Evaluate the average Jensen-Shannon distance (metric) between two probability arrays."""
 
@@ -161,15 +162,16 @@ def evaluate_avg_jensenshannon_stats(
     stats_ = {}
 
     for col in X_gt.columns:
-        stats_gt[col], stats_syn[col] = (
-            X_gt[col]
-            .value_counts(dropna=False, normalize=normalize)
-            .align(
-                X_syn[col].value_counts(dropna=False, normalize=normalize),
-                join="outer",
-                axis=0,
-                fill_value=0,
-            )
+        local_bins = min(bins, len(X_gt[col].unique()))
+        X_gt_bin, gt_bins = pd.cut(X_gt[col], bins=local_bins, retbins=True)
+        X_syn_bin = pd.cut(X_syn[col], bins=gt_bins)
+        stats_gt[col], stats_syn[col] = X_gt_bin.value_counts(
+            dropna=False, normalize=normalize
+        ).align(
+            X_syn_bin.value_counts(dropna=False, normalize=normalize),
+            join="outer",
+            axis=0,
+            fill_value=0,
         )
         stats_[col] = jensenshannon(stats_gt[col], stats_syn[col])
 

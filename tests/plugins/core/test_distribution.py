@@ -1,3 +1,7 @@
+# third party
+import pandas as pd
+import pytest
+
 # synthcity absolute
 from synthcity.plugins.core.distribution import (
     CategoricalDistribution,
@@ -8,9 +12,50 @@ from synthcity.plugins.core.distribution import (
 
 
 def test_categorical() -> None:
-    param = CategoricalDistribution(name="test", choices=[1, 2, 3, 22])
+    param = CategoricalDistribution(name="test", choices=["1", "2", "55", "sdfsf"])
 
-    assert param.get() == ["test", [1, 2, 3, 22]]
+    assert param.get() == ["test", ["1", "2", "55", "sdfsf"]]
+    assert len(param.sample(count=5)) == 5
+    for sample in param.sample(count=5):
+        assert sample in ["1", "2", "55", "sdfsf"]
+
+    assert param.has("1")
+    assert not param.has(5)
+    assert len(param.as_constraint().rules) == 1
+
+    param_other = CategoricalDistribution(name="test", choices=["1", "2"])
+    assert param.includes(param_other)
+    assert not param_other.includes(param)
+
+    param_other = CategoricalDistribution(name="test", choices=["1", "2", "555"])
+    assert not param.includes(param_other)
+    assert not param_other.includes(param)
+
+    param_other = CategoricalDistribution(
+        name="test", choices=["1", "2", "3", "4", "22", "55", "sdfsf"]
+    )
+    assert not param.includes(param_other)
+    assert param_other.includes(param)
+
+    param_other = CategoricalDistribution(
+        name="test", choices=["1", "2", "55", "sdfsf"]
+    )
+    assert param.includes(param_other)
+    assert param_other.includes(param)
+
+    assert param.marginal_distribution is None
+    assert param.dtype() == "object"
+
+
+@pytest.mark.parametrize("dp_enabled", [True, False])
+def test_categorical_from_data(dp_enabled: bool) -> None:
+    param = CategoricalDistribution(
+        dp_enabled=dp_enabled,
+        name="test",
+        data=pd.Series([1, 1, 1, 1, 2, 2, 2, 22, 3, 3, 3, 3]),
+    )
+
+    assert set(param.get()[1]) == set([1, 2, 3, 22])
     assert len(param.sample(count=5)) == 5
     for sample in param.sample(count=5):
         assert sample in [1, 2, 3, 22]
@@ -23,17 +68,18 @@ def test_categorical() -> None:
     assert param.includes(param_other)
     assert not param_other.includes(param)
 
-    param_other = CategoricalDistribution(name="test", choices=[1, 2, 555])
-    assert not param.includes(param_other)
-    assert not param_other.includes(param)
+    assert param.marginal_distribution is not None
+    assert set(param.marginal_distribution.keys()) == set([1, 2, 3, 22])
 
-    param_other = CategoricalDistribution(name="test", choices=[1, 2, 3, 4, 22])
-    assert not param.includes(param_other)
-    assert param_other.includes(param)
 
-    param_other = CategoricalDistribution(name="test", choices=[1, 2, 3, 22])
-    assert param.includes(param_other)
-    assert param_other.includes(param)
+def test_categorical_invalid_eps_dp() -> None:
+    with pytest.raises(ValueError):
+        CategoricalDistribution(
+            dp_enabled=True,
+            dp_epsilon=0,
+            name="test",
+            data=pd.Series([1, 1, 1, 1, 2, 2, 2, 22, 3, 3, 3, 3]),
+        )
 
 
 def test_integer() -> None:
@@ -68,6 +114,34 @@ def test_integer() -> None:
     assert param.includes(param_other)
     assert param_other.includes(param)
 
+    assert param.marginal_distribution is None
+    assert param.dtype() == "int"
+
+
+@pytest.mark.parametrize("dp_enabled", [True, False])
+def test_integer_from_data(dp_enabled: bool) -> None:
+    param = IntegerDistribution(
+        dp_enabled=dp_enabled,
+        name="test",
+        data=pd.Series([1, 1, 1, 12, 2, 2, 2, 4, 4, 88, 4]),
+    )
+
+    assert param.get() == ["test", 1, 88, 1]
+    assert len(param.sample(count=5)) == 5
+    for sample in param.sample(count=5):
+        assert sample in list(range(0, 101))
+    assert param.has(1)
+    assert not param.has(101)
+    assert not param.has(-1)
+    assert len(param.as_constraint().rules) == 3
+
+    param_other = IntegerDistribution(name="test", low=1, high=77)
+    assert param.includes(param_other)
+    assert not param_other.includes(param)
+
+    assert param.marginal_distribution is not None
+    assert set(param.marginal_distribution.keys()) == set([1, 2, 4, 12, 88])
+
 
 def test_float() -> None:
     param = FloatDistribution(name="test", low=0, high=1)
@@ -101,6 +175,32 @@ def test_float() -> None:
     assert param.has(1)
     assert not param.has(2)
     assert not param.has(-1)
+
+    assert param.marginal_distribution is None
+    assert param.dtype() == "float"
+
+
+@pytest.mark.parametrize("dp_enabled", [True, False])
+def test_float_from_data(dp_enabled: bool) -> None:
+    param = FloatDistribution(
+        dp_enabled=dp_enabled,
+        name="test",
+        data=pd.Series([0, 1.1, 2.3, 1, 0.5, 1, 1, 1, 1, 1, 1]),
+    )
+
+    assert param.get() == ["test", 0, 2.3]
+    assert len(param.sample(count=5)) == 5
+    for sample in param.sample(count=5):
+        assert sample <= 2.3
+        assert sample >= 0
+    assert len(param.as_constraint().rules) == 3
+
+    param_other = FloatDistribution(name="test", low=0, high=0.5)
+    assert param.includes(param_other)
+    assert not param_other.includes(param)
+
+    assert param.marginal_distribution is not None
+    assert set(param.marginal_distribution.keys()) == set([0, 1.1, 2.3, 1.0, 0.5])
 
 
 def test_categorical_constraint_to_distribution() -> None:

@@ -7,9 +7,9 @@ from sklearn.datasets import load_iris
 # synthcity absolute
 from synthcity.plugins import Plugin
 from synthcity.plugins.core.constraints import Constraints
-from synthcity.plugins.plugin_dummy_sampler import plugin
+from synthcity.plugins.plugin_uniform_sampler import plugin
 
-plugin_name = "dummy_sampler"
+plugin_name = "uniform_sampler"
 
 
 @pytest.mark.parametrize("test_plugin", generate_fixtures(plugin_name, plugin))

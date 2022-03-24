@@ -23,39 +23,40 @@ LABELS = ["real", "syn"]
 def plot_marginal_comparison(
     plt: Any, X_gt: pd.DataFrame, X_syn: pd.DataFrame, normalize: bool = True
 ) -> None:
-    stats_, stats_gt, stats_syn = evaluate_avg_jensenshannon_stats(X_gt, X_syn)
+    stats_, stats_gt, stats_syn = evaluate_avg_jensenshannon_stats(X_gt, X_syn, bins=10)
 
     column_names = stats_gt.keys()
-    fig, ax = plt.subplots(len(column_names), 1, figsize=(8, len(column_names) * 4))
+    plots_cnt = len(column_names)
+    row_len = 2
+    fig, ax = plt.subplots(
+        int(np.ceil(plots_cnt / row_len)), row_len, figsize=(14, plots_cnt * 3)
+    )
+    fig.subplots_adjust(hspace=1)
+    if plots_cnt % row_len != 0:
+        fig.delaxes(ax[-1][-1])
 
     for idx, col in enumerate(column_names):
+        row_idx = int(idx / row_len)
+        col_idx = idx % row_len
 
+        local_ax = ax[row_idx][col_idx]
         column_value_counts_original = stats_gt[col]
         column_value_counts_synthetic = stats_syn[col]
 
         bar_position = np.arange(len(column_value_counts_original.values))
-        bar_width = 0.35
+        bar_width = 0.4
 
-        # with small column cardinality plot original distribution as bars, else plot as line
-        if len(column_value_counts_original.values) <= 25:
-            ax[idx].bar(
-                x=bar_position,
-                height=column_value_counts_original.values,
-                color=COLOR_PALETTE[0],
-                label=LABELS[0],
-                width=bar_width,
-            )
-        else:
-            ax[idx].plot(
-                bar_position + bar_width,
-                column_value_counts_original.values,
-                color=COLOR_PALETTE[0],
-                linewidth=2,
-                label=LABELS[0],
-            )
+        # real distribution
+        local_ax.bar(
+            x=bar_position,
+            height=column_value_counts_original.values,
+            color=COLOR_PALETTE[0],
+            label=LABELS[0],
+            width=bar_width,
+        )
 
         # synthetic distribution
-        ax[idx].bar(
+        local_ax.bar(
             x=bar_position + bar_width,
             height=column_value_counts_synthetic.values,
             color=COLOR_PALETTE[1],
@@ -63,24 +64,22 @@ def plot_marginal_comparison(
             width=bar_width,
         )
 
-        ax[idx].set_xticks(bar_position + bar_width / 2)
-        if len(column_value_counts_original.values) <= 25:
-            ax[idx].set_xticklabels(column_value_counts_original.keys(), rotation=25)
-        else:
-            ax[idx].set_xticklabels("")
+        local_ax.set_xticks(bar_position + bar_width / 2)
+        local_ax.set_xticklabels(column_value_counts_original.keys(), rotation=90)
+
         title = (
             r"$\bf{"
             + col.replace("_", "\\_")
             + "}$"
             + "\n jensen-shannon distance: {:.2f}".format(stats_[col])
         )
-        ax[idx].set_title(title)
+        local_ax.set_title(title)
         if normalize:
-            ax[idx].set_ylabel("Probability")
+            local_ax.set_ylabel("Probability")
         else:
-            ax[idx].set_ylabel("Count")
+            local_ax.set_ylabel("Count")
 
-        ax[idx].legend()
+        local_ax.legend()
 
 
 @validate_arguments(config=dict(arbitrary_types_allowed=True))
@@ -140,3 +139,5 @@ def plot_associations_comparison(
 
     cbar = heatmap_original.collections[0].colorbar
     cbar.ax.tick_params(labelsize=10)
+
+    ax[0].set_ylabel("Correlation")

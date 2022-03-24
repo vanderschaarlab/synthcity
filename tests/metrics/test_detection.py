@@ -16,7 +16,7 @@ from synthcity.metrics.detection import (
 from synthcity.plugins import Plugin, Plugins
 
 
-@pytest.mark.parametrize("test_plugin", [Plugins().get("dummy_sampler")])
+@pytest.mark.parametrize("test_plugin", [Plugins().get("marginal_distributions")])
 @pytest.mark.parametrize(
     "method",
     [

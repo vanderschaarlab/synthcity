@@ -43,11 +43,24 @@ def test_schema_from_constraint() -> None:
     assert schema.domain == reloaded.domain
 
 
-def test_schema_sample() -> None:
+@pytest.mark.parametrize("dp_enabled", [False, True])
+@pytest.mark.parametrize("dp_epsilon", [1, 10])
+@pytest.mark.parametrize("sampling_strategy", ["marginal", "uniform"])
+def test_schema_sample(
+    dp_enabled: float, dp_epsilon: float, sampling_strategy: str
+) -> None:
     data = load_breast_cancer(as_frame=True)["data"]
-    schema = Schema(data=data)
+    schema = Schema(
+        data=data,
+        dp_enabled=dp_enabled,
+        dp_epsilon=dp_epsilon,
+        sampling_strategy=sampling_strategy,
+    )
 
     assert schema.sample(10).shape == (10, data.shape[1])
+    assert schema.sampling_strategy == sampling_strategy
+    assert schema.dp_epsilon == dp_epsilon
+    assert schema.dp_enabled == dp_enabled
 
 
 def test_schema_inclusion() -> None:
@@ -86,3 +99,22 @@ def test_schema_inclusion() -> None:
 
     assert schema.includes(other_schema)
     assert other_schema.includes(schema)
+
+
+def test_schema_dtype() -> None:
+    data = pd.DataFrame([[1.0, 2.0, 3.0]], columns=["a", "b", "c"])
+    schema = Schema(data=data)
+
+    for feature in schema:
+        assert schema[feature].dtype() == "float"
+
+    data_int = pd.DataFrame([[1, 2, 3]], columns=["a", "b", "c"])
+    schema_int = Schema(data=data_int)
+    for feature in schema_int:
+        assert schema_int[feature].dtype() == "int"
+
+    data2 = schema_int.adapt_dtypes(data)
+    schema2 = Schema(data=data2)
+
+    for feature in schema2:
+        assert schema2[feature].dtype() == "int"

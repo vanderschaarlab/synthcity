@@ -7,9 +7,9 @@ from sklearn.datasets import load_iris
 # synthcity absolute
 from synthcity.plugins import Plugin
 from synthcity.plugins.core.constraints import Constraints
-from synthcity.plugins.plugin_dummy_sampler import plugin
+from synthcity.plugins.plugin_privbayes import plugin
 
-plugin_name = "dummy_sampler"
+plugin_name = "privbayes"
 
 
 @pytest.mark.parametrize("test_plugin", generate_fixtures(plugin_name, plugin))
@@ -24,7 +24,7 @@ def test_plugin_name(test_plugin: Plugin) -> None:
 
 @pytest.mark.parametrize("test_plugin", generate_fixtures(plugin_name, plugin))
 def test_plugin_type(test_plugin: Plugin) -> None:
-    assert test_plugin.type() == "sampling"
+    assert test_plugin.type() == "bayesian"
 
 
 @pytest.mark.parametrize("test_plugin", generate_fixtures(plugin_name, plugin))

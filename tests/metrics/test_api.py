@@ -55,7 +55,7 @@ def test_list() -> None:
     ],
 )
 def test_metric_filter(metric_filter: dict) -> None:
-    model = Plugins().get("dummy_sampler")
+    model = Plugins().get("marginal_distributions")
 
     X, y = load_iris(return_X_y=True, as_frame=True)
     X["target"] = y

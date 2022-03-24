@@ -34,7 +34,7 @@ def _eval_plugin(cbk: Callable, X: pd.DataFrame, X_syn: pd.DataFrame) -> Tuple:
     return syn_score, rnd_score
 
 
-@pytest.mark.parametrize("test_plugin", [Plugins().get("dummy_sampler")])
+@pytest.mark.parametrize("test_plugin", [Plugins().get("marginal_distributions")])
 def test_evaluate_data_mismatch_score(test_plugin: Plugin) -> None:
     X, y = load_iris(return_X_y=True, as_frame=True)
     X["target"] = y
@@ -61,7 +61,7 @@ def test_evaluate_data_mismatch_score(test_plugin: Plugin) -> None:
     assert score < 1
 
 
-@pytest.mark.parametrize("test_plugin", [Plugins().get("dummy_sampler")])
+@pytest.mark.parametrize("test_plugin", [Plugins().get("marginal_distributions")])
 def test_common_rows(test_plugin: Plugin) -> None:
     X, y = load_iris(return_X_y=True, as_frame=True)
     X["target"] = y
@@ -76,7 +76,7 @@ def test_common_rows(test_plugin: Plugin) -> None:
     assert rnd_score == 0
 
 
-@pytest.mark.parametrize("test_plugin", [Plugins().get("dummy_sampler")])
+@pytest.mark.parametrize("test_plugin", [Plugins().get("marginal_distributions")])
 def test_evaluate_avg_distance_nearest_synth_neighbor(test_plugin: Plugin) -> None:
     X, y = load_iris(return_X_y=True, as_frame=True)
     X["target"] = y
@@ -96,7 +96,7 @@ def test_evaluate_avg_distance_nearest_synth_neighbor(test_plugin: Plugin) -> No
     assert syn_score < rnd_score
 
 
-@pytest.mark.parametrize("test_plugin", [Plugins().get("dummy_sampler")])
+@pytest.mark.parametrize("test_plugin", [Plugins().get("marginal_distributions")])
 def test_evaluate_inlier_probability(test_plugin: Plugin) -> None:
     X, y = load_iris(return_X_y=True, as_frame=True)
     X["target"] = y
@@ -111,7 +111,7 @@ def test_evaluate_inlier_probability(test_plugin: Plugin) -> None:
     assert syn_score > rnd_score
 
 
-@pytest.mark.parametrize("test_plugin", [Plugins().get("dummy_sampler")])
+@pytest.mark.parametrize("test_plugin", [Plugins().get("marginal_distributions")])
 def test_evaluate_outlier_probability(test_plugin: Plugin) -> None:
     X, y = load_iris(return_X_y=True, as_frame=True)
     X["target"] = y
