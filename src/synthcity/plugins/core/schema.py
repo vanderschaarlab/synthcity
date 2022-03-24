@@ -20,6 +20,10 @@ from synthcity.plugins.core.distribution import (
 class Schema(BaseModel):
     """Utility class for defining the schema of a Dataset."""
 
+    dp_enabled: bool = False
+    dp_epsilon: float = 1.0
+    dp_delta: float = 0.0
+    sampling_strategy: str = "marginal"  # uniform or marginal
     data: Any = None
     domain: Dict = {}
 
@@ -33,15 +37,48 @@ class Schema(BaseModel):
         if not isinstance(X, pd.DataFrame):
             raise ValueError("You need to provide a DataFrame in the data argument")
 
-        for col in X.columns:
-            if X[col].dtype == "object" or len(X[col].unique()) < 10:
-                feature_domain[col] = CategoricalDistribution(name=col, data=X[col])
-            elif X[col].dtype == "int":
-                feature_domain[col] = IntegerDistribution(name=col, data=X[col])
-            elif X[col].dtype == "float":
-                feature_domain[col] = FloatDistribution(name=col, data=X[col])
-            else:
-                raise ValueError("unsupported format ", col)
+        dp_args = {
+            "dp_enabled": values["dp_enabled"],
+            "dp_epsilon": values["dp_epsilon"],
+            "dp_delta": values["dp_delta"],
+        }
+
+        sampling_strategy = values["sampling_strategy"]
+
+        if sampling_strategy == "marginal":
+            for col in X.columns:
+                if X[col].dtype == "object" or len(X[col].unique()) < 10:
+                    feature_domain[col] = CategoricalDistribution(
+                        name=col, data=X[col], **dp_args
+                    )
+                elif X[col].dtype == "int":
+                    feature_domain[col] = IntegerDistribution(
+                        name=col, data=X[col], **dp_args
+                    )
+                elif X[col].dtype == "float":
+                    feature_domain[col] = FloatDistribution(
+                        name=col, data=X[col], **dp_args
+                    )
+                else:
+                    raise ValueError("unsupported format ", col)
+        elif sampling_strategy == "uniform":
+            for col in X.columns:
+                if X[col].dtype == "object" or len(X[col].unique()) < 10:
+                    feature_domain[col] = CategoricalDistribution(
+                        name=col, choices=list(X[col].unique())
+                    )
+                elif X[col].dtype == "int":
+                    feature_domain[col] = IntegerDistribution(
+                        name=col, low=X[col].min(), high=X[col].max()
+                    )
+                elif X[col].dtype == "float":
+                    feature_domain[col] = FloatDistribution(
+                        name=col, low=X[col].min(), high=X[col].max()
+                    )
+                else:
+                    raise ValueError("unsupported format ", col)
+        else:
+            raise ValueError(f"invalid sampling strategy {sampling_strategy}")
 
         del values["data"]
 

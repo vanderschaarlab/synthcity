@@ -42,10 +42,10 @@ def test_categorical() -> None:
     assert param.marginal_distribution is None
 
 
-@pytest.mark.parametrize("use_dp", [True, False])
-def test_categorical_from_data(use_dp: bool) -> None:
+@pytest.mark.parametrize("dp_enabled", [True, False])
+def test_categorical_from_data(dp_enabled: bool) -> None:
     param = CategoricalDistribution(
-        use_dp=use_dp,
+        dp_enabled=dp_enabled,
         name="test",
         data=pd.Series([1, 1, 1, 1, 2, 2, 2, 22, 3, 3, 3, 3]),
     )
@@ -67,11 +67,11 @@ def test_categorical_from_data(use_dp: bool) -> None:
     assert set(param.marginal_distribution.keys()) == set([1, 2, 3, 22])
 
 
-def test_categorical_invalid_epsi_dp() -> None:
+def test_categorical_invalid_eps_dp() -> None:
     with pytest.raises(ValueError):
         CategoricalDistribution(
-            use_dp=True,
-            epsilon=0,
+            dp_enabled=True,
+            dp_epsilon=0,
             name="test",
             data=pd.Series([1, 1, 1, 1, 2, 2, 2, 22, 3, 3, 3, 3]),
         )
@@ -112,10 +112,12 @@ def test_integer() -> None:
     assert param.marginal_distribution is None
 
 
-@pytest.mark.parametrize("use_dp", [True, False])
-def test_integer_from_data(use_dp: bool) -> None:
+@pytest.mark.parametrize("dp_enabled", [True, False])
+def test_integer_from_data(dp_enabled: bool) -> None:
     param = IntegerDistribution(
-        use_dp=use_dp, name="test", data=pd.Series([1, 1, 1, 12, 2, 2, 2, 4, 4, 88, 4])
+        dp_enabled=dp_enabled,
+        name="test",
+        data=pd.Series([1, 1, 1, 12, 2, 2, 2, 4, 4, 88, 4]),
     )
 
     assert param.get() == ["test", 1, 88, 1]
@@ -171,10 +173,10 @@ def test_float() -> None:
     assert param.marginal_distribution is None
 
 
-@pytest.mark.parametrize("use_dp", [True, False])
-def test_float_from_data(use_dp: bool) -> None:
+@pytest.mark.parametrize("dp_enabled", [True, False])
+def test_float_from_data(dp_enabled: bool) -> None:
     param = FloatDistribution(
-        use_dp=use_dp,
+        dp_enabled=dp_enabled,
         name="test",
         data=pd.Series([0, 1.1, 2.3, 1, 0.5, 1, 1, 1, 1, 1, 1]),
     )

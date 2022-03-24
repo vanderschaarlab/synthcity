@@ -13,12 +13,13 @@ from synthcity.utils.dp import compute_dp_marginal_distribution
 
 
 class Distribution(BaseModel, metaclass=ABCMeta):
-    data: Optional[pd.Series] = None
-    epsilon: float = 1.0
-    use_dp: bool = False
-    marginal_distribution: Optional[pd.Series] = None
-    dp_marginal_distribution: Optional[pd.Series] = None
     name: str
+    data: Optional[pd.Series] = None
+    # DP parameters
+    dp_epsilon: float = 1.0
+    dp_delta: float = 0.0
+    dp_enabled: bool = False
+    marginal_distribution: Optional[pd.Series] = None
 
     class Config:
         arbitrary_types_allowed = True
@@ -35,9 +36,9 @@ class Distribution(BaseModel, metaclass=ABCMeta):
         marginal = data.value_counts(dropna=False)
         del values["data"]
 
-        if values["use_dp"]:
+        if values["dp_enabled"]:
             marginal = compute_dp_marginal_distribution(
-                marginal, len(data), values["epsilon"]
+                marginal, len(data), values["dp_epsilon"]
             )
 
         return marginal
