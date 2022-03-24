@@ -24,7 +24,7 @@ class UniformSamplerPlugin(Plugin):
     """
 
     def __init__(self, **kwargs: Any) -> None:
-        super().__init__(**kwargs)
+        super().__init__(dp_enabled=False, sampling_strategy="uniform")
 
     @staticmethod
     def name() -> str:
@@ -32,7 +32,7 @@ class UniformSamplerPlugin(Plugin):
 
     @staticmethod
     def type() -> str:
-        return "debug"
+        return "sampling"
 
     @staticmethod
     def hyperparameter_space(*args: Any, **kwargs: Any) -> List[Distribution]:

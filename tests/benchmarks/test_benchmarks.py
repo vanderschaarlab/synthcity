@@ -13,7 +13,7 @@ def test_benchmark_sanity() -> None:
     scores = Benchmarks.evaluate(
         [
             "marginal_distributions",
-            "random_noise",
+            "uniform_sampler",
         ],
         X,
         sensitive_columns=["sex"],
@@ -31,7 +31,7 @@ def test_benchmark_invalid_plugin() -> None:
         Benchmarks.evaluate(
             [
                 "invalid",
-                "random_noise",
+                "uniform_sampler",
             ],
             X,
             sensitive_columns=["sex"],
@@ -45,10 +45,10 @@ def test_benchmark_invalid_metric() -> None:
 
     score = Benchmarks.evaluate(
         [
-            "random_noise",
+            "uniform_sampler",
         ],
         X,
         sensitive_columns=["sex"],
         metrics={"sanity": ["invalid"]},
     )
-    assert len(score["random_noise"]) == 0
+    assert len(score["uniform_sampler"]) == 0

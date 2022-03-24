@@ -53,7 +53,7 @@ def test_evaluate_sensitive_data_leakage(evaluator: Callable) -> None:
 
     # Random noise
 
-    test_plugin = Plugins().get("random_noise")
+    test_plugin = Plugins().get("uniform_sampler")
     test_plugin.fit(X)
     X_gen = test_plugin.generate(2 * len(X))
 

@@ -28,7 +28,7 @@ def test_plugin_name(test_plugin: Plugin) -> None:
     "test_plugin", generate_fixtures("marginal_distributions", plugin)
 )
 def test_plugin_type(test_plugin: Plugin) -> None:
-    assert test_plugin.type() == "debug"
+    assert test_plugin.type() == "sampling"
 
 
 @pytest.mark.parametrize(

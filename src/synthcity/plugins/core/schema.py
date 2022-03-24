@@ -37,9 +37,14 @@ class Schema(BaseModel):
         if not isinstance(X, pd.DataFrame):
             raise ValueError("You need to provide a DataFrame in the data argument")
 
+        if X.shape[1] == 0 or X.shape[0] == 0:
+            return v
+
+        local_epsilon = values["dp_epsilon"] / X.shape[1]
+
         dp_args = {
             "dp_enabled": values["dp_enabled"],
-            "dp_epsilon": values["dp_epsilon"],
+            "dp_epsilon": local_epsilon,  # divide epsilon budget for each column
             "dp_delta": values["dp_delta"],
         }
 

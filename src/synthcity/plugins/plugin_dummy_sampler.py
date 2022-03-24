@@ -31,7 +31,7 @@ class DummySamplerPlugin(Plugin):
 
     @staticmethod
     def type() -> str:
-        return "debug"
+        return "sampling"
 
     @staticmethod
     def hyperparameter_space(*args: Any, **kwargs: Any) -> List[Distribution]:

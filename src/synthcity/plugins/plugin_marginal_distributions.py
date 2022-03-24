@@ -23,14 +23,20 @@ class MarginalDistributionPlugin(Plugin):
         >>> plugin.generate()
     """
 
-    def __init__(self, epsilon: float = 1.0, **kwargs: Any) -> None:
+    def __init__(
+        self, dp_epsilon: float = 1.0, dp_delta: float = 0, **kwargs: Any
+    ) -> None:
         """
         Args:
             epsilon: float
                 Privacy parameter epsilon in differential privacy. >= 0.
         """
-        super().__init__(**kwargs)
-        self.epsilon = epsilon
+        super().__init__(
+            dp_enabled=True,
+            sampling_strategy="marginal",
+            dp_epsilon=dp_epsilon,
+            dp_delta=dp_delta,
+        )
 
     @staticmethod
     def name() -> str:
@@ -38,7 +44,7 @@ class MarginalDistributionPlugin(Plugin):
 
     @staticmethod
     def type() -> str:
-        return "debug"
+        return "sampling"
 
     @staticmethod
     def hyperparameter_space(**kwargs: Any) -> List[Distribution]:
@@ -47,8 +53,6 @@ class MarginalDistributionPlugin(Plugin):
     def _fit(
         self, X: pd.DataFrame, *args: Any, **kwargs: Any
     ) -> "MarginalDistributionPlugin":
-        self.local_epsilon = self.epsilon / X.shape[1]
-
         return self
 
     def _generate(self, count: int, syn_schema: Schema, **kwargs: Any) -> pd.DataFrame:
