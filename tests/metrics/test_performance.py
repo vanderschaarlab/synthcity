@@ -18,10 +18,8 @@ def test_evaluate_performance_classifier(test_plugin: Plugin) -> None:
     X_gen = test_plugin.generate(100)
 
     good_score = evaluate_test_performance(
-        X.drop(columns=["target"]),
-        X["target"],
-        X_gen.drop(columns=["target"]),
-        X_gen["target"],
+        X,
+        X_gen,
     )
 
     assert np.abs(good_score) < 1
@@ -29,10 +27,8 @@ def test_evaluate_performance_classifier(test_plugin: Plugin) -> None:
     sz = 100
     X_rnd = pd.DataFrame(np.random.randn(sz, len(X.columns)), columns=X.columns)
     score = evaluate_test_performance(
-        X.drop(columns=["target"]),
-        X["target"],
-        X_rnd.drop(columns=["target"]),
-        X_rnd["target"],
+        X,
+        X_rnd,
     )
 
     assert np.abs(good_score) < 1
@@ -48,10 +44,8 @@ def test_evaluate_performance_regression(test_plugin: Plugin) -> None:
     X_gen = test_plugin.generate(100)
 
     good_score = evaluate_test_performance(
-        X.drop(columns=["target"]),
-        X["target"],
-        X_gen.drop(columns=["target"]),
-        X_gen["target"],
+        X,
+        X_gen,
     )
 
     assert np.abs(good_score) < 1
@@ -59,10 +53,8 @@ def test_evaluate_performance_regression(test_plugin: Plugin) -> None:
     sz = 100
     X_rnd = pd.DataFrame(np.random.randn(sz, len(X.columns)), columns=X.columns)
     score = evaluate_test_performance(
-        X.drop(columns=["target"]),
-        X["target"],
-        X_rnd.drop(columns=["target"]),
-        X_rnd["target"],
+        X,
+        X_rnd,
     )
 
     assert np.abs(good_score) < 1

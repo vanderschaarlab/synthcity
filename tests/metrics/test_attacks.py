@@ -32,21 +32,21 @@ def test_evaluate_sensitive_data_leakage(evaluator: Callable) -> None:
     X_gen = test_plugin.generate(2 * len(X))
 
     score = evaluator(
-        X.drop(columns=["target"]),
-        X_gen.drop(columns=["target"]),
+        X,
+        X_gen,
     )
     assert score == 0
 
     score = evaluator(
-        X.drop(columns=["target"]),
-        X_gen.drop(columns=["target"]),
+        X,
+        X_gen,
         sensitive_columns=["sex"],
     )
     assert score > 0.5
 
     score = evaluator(
-        X.drop(columns=["target"]),
-        X_gen.drop(columns=["target"]),
+        X,
+        X_gen,
         sensitive_columns=["age"],
     )
     assert score < 1
@@ -58,8 +58,8 @@ def test_evaluate_sensitive_data_leakage(evaluator: Callable) -> None:
     X_gen = test_plugin.generate(2 * len(X))
 
     score = evaluator(
-        X.drop(columns=["target"]),
-        X_gen.drop(columns=["target"]),
+        X,
+        X_gen,
         sensitive_columns=["sex"],
     )
     assert score < 1

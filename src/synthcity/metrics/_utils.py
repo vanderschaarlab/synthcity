@@ -1,5 +1,5 @@
 # stdlib
-from typing import List, Optional, Tuple, Union
+from typing import List, Tuple, Union
 
 # third party
 import numpy as np
@@ -12,28 +12,7 @@ from sklearn.metrics import (
     roc_auc_score,
     roc_curve,
 )
-from sklearn.preprocessing import LabelEncoder, MinMaxScaler, label_binarize
-
-
-@validate_arguments(config=dict(arbitrary_types_allowed=True))
-def encode_scale(X: pd.DataFrame, y: Optional[pd.Series] = None) -> Tuple:
-    if y is not None:
-        X["target"] = y
-
-    X = X.copy().fillna(0)
-
-    for col in X.columns:
-        if X[col].dtype == "object":
-            X[col] = LabelEncoder().fit_transform(X[col])
-
-    out = MinMaxScaler().fit_transform(X)
-    X = pd.DataFrame(out, columns=X.columns, index=X.index)
-
-    if "target" in X:
-        y = X["target"]
-        X = X.drop(columns=["target"])
-
-    return X, y
+from sklearn.preprocessing import label_binarize
 
 
 @validate_arguments(config=dict(arbitrary_types_allowed=True))

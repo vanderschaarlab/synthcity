@@ -18,10 +18,8 @@ from synthcity.metrics._utils import get_features
 
 @validate_arguments(config=dict(arbitrary_types_allowed=True))
 def select_outliers(
-    X_gt: pd.DataFrame, y_gt: pd.Series, method: str = "local_outlier_factor"
+    X_gt: pd.DataFrame, method: str = "local_outlier_factor"
 ) -> pd.Index:
-    X_gt["target"] = y_gt
-
     if method == "isolation_forests":
         predictions = IsolationForest().fit_predict(X_gt)
     elif method == "local_outlier_factor":
@@ -97,7 +95,7 @@ def evaluate_l_diversity(X: pd.DataFrame, sensitive_columns: List[str]) -> int:
 
 @validate_arguments(config=dict(arbitrary_types_allowed=True))
 def evaluate_kmap(
-    X: pd.DataFrame, X_synth: pd.DataFrame, sensitive_columns: List[str]
+    X: pd.DataFrame, X_syn: pd.DataFrame, sensitive_columns: List[str]
 ) -> int:
     """Returns the minimum value k that satisfies the k-map rule.
 
@@ -112,7 +110,7 @@ def evaluate_kmap(
         model = KMeans(n_clusters=n_clusters, init="k-means++", random_state=0).fit(
             X[features]
         )
-        clusters = model.predict(X_synth[features])
+        clusters = model.predict(X_syn[features])
         counts: dict = Counter(clusters)
         values.append(np.min(list(counts.values())))
 
@@ -121,7 +119,7 @@ def evaluate_kmap(
 
 @validate_arguments(config=dict(arbitrary_types_allowed=True))
 def evaluate_delta_presence(
-    X: pd.DataFrame, X_synth: pd.DataFrame, sensitive_columns: List[str]
+    X: pd.DataFrame, X_syn: pd.DataFrame, sensitive_columns: List[str]
 ) -> float:
     """Returns the maximum re-identification probability on the real dataset from the synthetic dataset.
 
@@ -137,7 +135,7 @@ def evaluate_delta_presence(
         model = KMeans(n_clusters=n_clusters, init="k-means++", random_state=0).fit(
             X[features]
         )
-        clusters = model.predict(X_synth[features])
+        clusters = model.predict(X_syn[features])
         synth_counts: dict = Counter(clusters)
         gt_counts: dict = Counter(model.labels_)
 

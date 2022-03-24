@@ -18,9 +18,7 @@ from synthcity.plugins.models.mlp import MLP
 def evaluate_sklearn_detection_synthetic(
     model_template: Any,
     X_gt: pd.DataFrame,
-    y_gt: pd.Series,
     X_syn: pd.DataFrame,
-    y_syn: pd.Series,
     **model_args: Any,
 ) -> float:
     """Train a SKLearn classifier to detect the synthetic data.
@@ -32,9 +30,6 @@ def evaluate_sklearn_detection_synthetic(
         0: The datasets are indistinguishable.
         1: The datasets are totally distinguishable.
     """
-
-    X_gt["target"] = y_gt
-    X_syn["target"] = y_syn
 
     X_gt = X_gt.reset_index(drop=True)
     labels_gt = pd.Series([0] * len(X_gt))
@@ -65,9 +60,7 @@ def evaluate_sklearn_detection_synthetic(
 
 
 @validate_arguments(config=dict(arbitrary_types_allowed=True))
-def evaluate_xgb_detection_synthetic(
-    X_gt: pd.DataFrame, y_gt: pd.Series, X_syn: pd.DataFrame, y_syn: pd.Series
-) -> float:
+def evaluate_xgb_detection_synthetic(X_gt: pd.DataFrame, X_syn: pd.DataFrame) -> float:
     """Train a XGBoostclassifier to detect the synthetic data.
 
     Returns:
@@ -87,14 +80,12 @@ def evaluate_xgb_detection_synthetic(
     }
 
     return evaluate_sklearn_detection_synthetic(
-        model_template, X_gt, y_gt, X_syn, y_syn, **model_args
+        model_template, X_gt, X_syn, **model_args
     )
 
 
 @validate_arguments(config=dict(arbitrary_types_allowed=True))
-def evaluate_mlp_detection_synthetic(
-    X_gt: pd.DataFrame, y_gt: pd.Series, X_syn: pd.DataFrame, y_syn: pd.Series
-) -> float:
+def evaluate_mlp_detection_synthetic(X_gt: pd.DataFrame, X_syn: pd.DataFrame) -> float:
     """Train a MLP classifier to detect the synthetic data.
 
     Returns:
@@ -111,16 +102,15 @@ def evaluate_mlp_detection_synthetic(
     return evaluate_sklearn_detection_synthetic(
         MLP,
         X_gt,
-        y_gt,
         X_syn,
-        y_syn,
         **model_args,
     )
 
 
 @validate_arguments(config=dict(arbitrary_types_allowed=True))
 def evaluate_gmm_detection_synthetic(
-    X_gt: pd.DataFrame, y_gt: pd.Series, X_syn: pd.DataFrame, y_syn: pd.Series
+    X_gt: pd.DataFrame,
+    X_syn: pd.DataFrame,
 ) -> float:
     """Train a GaussianMixture model to detect synthetic data.
 
@@ -133,9 +123,6 @@ def evaluate_gmm_detection_synthetic(
     """
 
     scores = []
-
-    X_gt["target"] = y_gt
-    X_syn["target"] = y_syn
 
     for component in [1, 5, 10]:
         gmm = GaussianMixture(n_components=component, covariance_type="diag")

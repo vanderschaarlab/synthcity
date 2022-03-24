@@ -15,9 +15,7 @@ def _helper_nearest_neighbor(X_gt: pd.DataFrame, X_synth: pd.DataFrame) -> pd.Se
 
 
 @validate_arguments(config=dict(arbitrary_types_allowed=True))
-def evaluate_data_mismatch_score(
-    X_gt: pd.DataFrame, y_gt: pd.Series, X_synth: pd.DataFrame, y_synth: pd.Series
-) -> float:
+def evaluate_data_mismatch_score(X_gt: pd.DataFrame, X_synth: pd.DataFrame) -> float:
     """Basic sanity score. Compares the data types between the column of the ground truth and the synthetic data.
 
     Score:
@@ -30,7 +28,7 @@ def evaluate_data_mismatch_score(
     def _eval_score(lhs: pd.Series, rhs: pd.Series) -> int:
         return int(lhs.dtype != rhs.dtype)
 
-    diffs = _eval_score(y_gt, y_synth)
+    diffs = 0
     for col in X_gt.columns:
         diffs += _eval_score(X_gt[col], X_synth[col])
 
@@ -38,9 +36,7 @@ def evaluate_data_mismatch_score(
 
 
 @validate_arguments(config=dict(arbitrary_types_allowed=True))
-def evaluate_common_rows_proportion(
-    X_gt: pd.DataFrame, y_gt: pd.Series, X_synth: pd.DataFrame, y_synth: pd.Series
-) -> float:
+def evaluate_common_rows_proportion(X_gt: pd.DataFrame, X_synth: pd.DataFrame) -> float:
     """Returns the proportion of rows in the real dataset leaked in the synthetic dataset.
 
     Score:
@@ -57,7 +53,7 @@ def evaluate_common_rows_proportion(
 
 @validate_arguments(config=dict(arbitrary_types_allowed=True))
 def evaluate_avg_distance_nearest_synth_neighbor(
-    X_gt: pd.DataFrame, y_gt: pd.Series, X_synth: pd.DataFrame, y_synth: pd.Series
+    X_gt: pd.DataFrame, X_synth: pd.DataFrame
 ) -> float:
     """Computes the mean distance from the real data to the closest neighbor in the synthetic data
 
@@ -69,9 +65,6 @@ def evaluate_avg_distance_nearest_synth_neighbor(
     if len(X_gt.columns) != len(X_synth.columns):
         raise ValueError(f"Incompatible dataframe {X_gt.shape} and {X_synth.shape}")
 
-    X_synth["target"] = y_synth
-    X_gt["target"] = y_gt
-
     dist = _helper_nearest_neighbor(X_gt, X_synth)
 
     dist = (dist - np.min(dist)) / (np.max(dist) - np.min(dist) + 1e-8)
@@ -79,9 +72,7 @@ def evaluate_avg_distance_nearest_synth_neighbor(
 
 
 @validate_arguments(config=dict(arbitrary_types_allowed=True))
-def evaluate_inlier_probability(
-    X_gt: pd.DataFrame, y_gt: pd.Series, X_synth: pd.DataFrame, y_synth: pd.Series
-) -> float:
+def evaluate_inlier_probability(X_gt: pd.DataFrame, X_synth: pd.DataFrame) -> float:
     """Compute the probability of close values between the real and synthetic data.
 
     Score:
@@ -92,9 +83,6 @@ def evaluate_inlier_probability(
     if len(X_gt.columns) != len(X_synth.columns):
         raise ValueError(f"Incompatible dataframe {X_gt.shape} and {X_synth.shape}")
 
-    X_synth["target"] = y_synth
-    X_gt["target"] = y_gt
-
     dist = _helper_nearest_neighbor(X_gt, X_synth)
     dist = (dist - np.min(dist)) / (np.max(dist) - np.min(dist) + 1e-8)
 
@@ -104,9 +92,7 @@ def evaluate_inlier_probability(
 
 
 @validate_arguments(config=dict(arbitrary_types_allowed=True))
-def evaluate_outlier_probability(
-    X_gt: pd.DataFrame, y_gt: pd.Series, X_synth: pd.DataFrame, y_synth: pd.Series
-) -> float:
+def evaluate_outlier_probability(X_gt: pd.DataFrame, X_synth: pd.DataFrame) -> float:
     """Compute the probability of distant values between the real and synthetic data.
 
     Score:
@@ -116,9 +102,6 @@ def evaluate_outlier_probability(
 
     if len(X_gt.columns) != len(X_synth.columns):
         raise ValueError(f"Incompatible dataframe {X_gt.shape} and {X_synth.shape}")
-
-    X_synth["target"] = y_synth
-    X_gt["target"] = y_gt
 
     dist = _helper_nearest_neighbor(X_gt, X_synth)
     dist = (dist - np.min(dist)) / (np.max(dist) - np.min(dist) + 1e-8)

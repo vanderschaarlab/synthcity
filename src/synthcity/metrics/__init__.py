@@ -34,7 +34,9 @@ from .privacy import (
     evaluate_l_diversity,
 )
 from .statistical import (
+    evaluate_avg_jensenshannon_distance,
     evaluate_chi_squared_test,
+    evaluate_feature_correlation,
     evaluate_inv_cdf_distance,
     evaluate_inv_kl_divergence,
     evaluate_kolmogorov_smirnov_test,
@@ -92,6 +94,16 @@ standard_metrics = {
         },
         "inverse_cdf_distance": {
             "cbk": evaluate_inv_cdf_distance,
+            "ok_score": 0,
+            "bad_score": 1,
+        },
+        "avg_jensenshannon_distance": {
+            "cbk": evaluate_avg_jensenshannon_distance,
+            "ok_score": 0,
+            "bad_score": 1,
+        },
+        "feature_correlation": {
+            "cbk": evaluate_feature_correlation,
             "ok_score": 0,
             "bad_score": 1,
         },
@@ -174,9 +186,7 @@ class Metrics:
     @validate_arguments(config=dict(arbitrary_types_allowed=True))
     def evaluate(
         X_gt: pd.DataFrame,
-        y_gt: pd.Series,
         X_syn: pd.DataFrame,
-        y_syn: pd.Series,
         sensitive_columns: List[str] = [],
         metrics: Optional[Dict] = None,
     ) -> pd.DataFrame:
@@ -198,9 +208,7 @@ class Metrics:
                     standard_metrics[category][metric]["ok_score"],
                     standard_metrics[category][metric]["bad_score"],
                     X_gt,
-                    y_gt,
                     X_syn,
-                    y_syn,
                 )
 
         for category in unary_privacy_metrics:

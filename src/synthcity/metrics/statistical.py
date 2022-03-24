@@ -1,8 +1,13 @@
+# stdlib
+from typing import Dict, Tuple
+
 # third party
 import numpy as np
 import pandas as pd
 from copulas.univariate.base import Univariate
+from dython.nominal import associations
 from pydantic import validate_arguments
+from scipy.spatial.distance import jensenshannon
 from scipy.special import kl_div
 from scipy.stats import chisquare, ks_2samp
 from sklearn import metrics
@@ -12,9 +17,7 @@ from synthcity.metrics._utils import get_freq
 
 
 @validate_arguments(config=dict(arbitrary_types_allowed=True))
-def evaluate_inv_kl_divergence(
-    X_gt: pd.DataFrame, y_gt: pd.Series, X_syn: pd.DataFrame, y_synth: pd.Series
-) -> float:
+def evaluate_inv_kl_divergence(X_gt: pd.DataFrame, X_syn: pd.DataFrame) -> float:
     """Returns the average inverse of the Kullback–Leibler Divergence metric.
 
     Score:
@@ -31,9 +34,7 @@ def evaluate_inv_kl_divergence(
 
 
 @validate_arguments(config=dict(arbitrary_types_allowed=True))
-def evaluate_kolmogorov_smirnov_test(
-    X_gt: pd.DataFrame, y_gt: pd.Series, X_syn: pd.DataFrame, y_synth: pd.Series
-) -> float:
+def evaluate_kolmogorov_smirnov_test(X_gt: pd.DataFrame, X_syn: pd.DataFrame) -> float:
     """Performs the Kolmogorov-Smirnov test for goodness of fit.
 
     Score:
@@ -50,9 +51,7 @@ def evaluate_kolmogorov_smirnov_test(
 
 
 @validate_arguments(config=dict(arbitrary_types_allowed=True))
-def evaluate_chi_squared_test(
-    X_gt: pd.DataFrame, y_gt: pd.Series, X_syn: pd.DataFrame, y_synth: pd.Series
-) -> float:
+def evaluate_chi_squared_test(X_gt: pd.DataFrame, X_syn: pd.DataFrame) -> float:
     """Performs the one-way chi-square test.
 
     Returns:
@@ -81,9 +80,7 @@ def evaluate_chi_squared_test(
 @validate_arguments(config=dict(arbitrary_types_allowed=True))
 def evaluate_maximum_mean_discrepancy(
     X_gt: pd.DataFrame,
-    y_gt: pd.Series,
     X_syn: pd.DataFrame,
-    y_synth: pd.Series,
     kernel: str = "rbf",
 ) -> float:
     """Empirical maximum mean discrepancy. The lower the result the more evidence that distributions are the same.
@@ -95,9 +92,6 @@ def evaluate_maximum_mean_discrepancy(
         0: The distributions are the same.
         1: The distributions are totally different.
     """
-    X_gt["target"] = y_gt
-    X_syn["target"] = y_synth
-
     if kernel == "linear":
         """
         MMD using linear kernel (i.e., k(x,y) = <x,y>)
@@ -133,9 +127,7 @@ def evaluate_maximum_mean_discrepancy(
 @validate_arguments(config=dict(arbitrary_types_allowed=True))
 def evaluate_inv_cdf_distance(
     X_gt: pd.DataFrame,
-    y_gt: pd.Series,
     X_syn: pd.DataFrame,
-    y_synth: pd.Series,
     p: int = 2,
 ) -> float:
     """Evaluate the distance between continuous features."""
@@ -154,3 +146,82 @@ def evaluate_inv_cdf_distance(
         dist += np.mean(abs(syn_percentiles - gt_percentiles[1]) ** p)
 
     return dist
+
+
+@validate_arguments(config=dict(arbitrary_types_allowed=True))
+def evaluate_avg_jensenshannon_stats(
+    X_gt: pd.DataFrame,
+    X_syn: pd.DataFrame,
+    normalize: bool = True,
+) -> Tuple[Dict, Dict, Dict]:
+    """Evaluate the average Jensen-Shannon distance (metric) between two probability arrays."""
+
+    stats_gt = {}
+    stats_syn = {}
+    stats_ = {}
+
+    for col in X_gt.columns:
+        stats_gt[col], stats_syn[col] = (
+            X_gt[col]
+            .value_counts(dropna=False, normalize=normalize)
+            .align(
+                X_syn[col].value_counts(dropna=False, normalize=normalize),
+                join="outer",
+                axis=0,
+                fill_value=0,
+            )
+        )
+        stats_[col] = jensenshannon(stats_gt[col], stats_syn[col])
+
+    return stats_, stats_gt, stats_syn
+
+
+@validate_arguments(config=dict(arbitrary_types_allowed=True))
+def evaluate_avg_jensenshannon_distance(
+    X_gt: pd.DataFrame,
+    X_syn: pd.DataFrame,
+    normalize: bool = True,
+) -> float:
+    """Evaluate the average Jensen-Shannon distance (metric) between two probability arrays."""
+    stats_, _, _ = evaluate_avg_jensenshannon_stats(X_gt, X_syn)
+
+    return sum(stats_.values()) / len(stats_.keys())
+
+
+@validate_arguments(config=dict(arbitrary_types_allowed=True))
+def evaluate_feature_correlation_stats(
+    X_gt: pd.DataFrame,
+    X_syn: pd.DataFrame,
+    nom_nom_assoc: str = "theil",
+    nominal_columns: str = "auto",
+) -> Tuple[Dict, Dict]:
+    """Evaluate the correlation/strength-of-association of features in data-set with both categorical and continuous features using: * Pearson's R for continuous-continuous cases ** Cramer's V or Theil's U for categorical-categorical cases."""
+    stats_gt = associations(
+        X_gt,
+        nom_nom_assoc=nom_nom_assoc,
+        nominal_columns=nominal_columns,
+        nan_replace_value="nan",
+        compute_only=True,
+    )["corr"]
+    stats_syn = associations(
+        X_syn,
+        nom_nom_assoc=nom_nom_assoc,
+        nominal_columns=nominal_columns,
+        nan_replace_value="nan",
+        compute_only=True,
+    )["corr"]
+
+    return stats_gt, stats_syn
+
+
+@validate_arguments(config=dict(arbitrary_types_allowed=True))
+def evaluate_feature_correlation(
+    X_gt: pd.DataFrame,
+    X_syn: pd.DataFrame,
+    nom_nom_assoc: str = "theil",
+    nominal_columns: str = "auto",
+) -> float:
+    """Evaluate the correlation/strength-of-association of features in data-set with both categorical and continuous features using: * Pearson's R for continuous-continuous cases ** Cramer's V or Theil's U for categorical-categorical cases."""
+    stats_gt, stats_syn = evaluate_feature_correlation_stats(X_gt, X_syn)
+
+    return np.linalg.norm(stats_gt - stats_syn, "fro")
