@@ -13,7 +13,10 @@ from synthcity.plugins.core.constraints import Constraints
 
 class Distribution(BaseModel, metaclass=ABCMeta):
     data: Optional[pd.Series] = None
+    epsilon: float = 1.0
+    use_dp: bool = False
     marginal_distribution: Optional[pd.Series] = None
+    dp_marginal_distribution: Optional[pd.Series] = None
     name: str
 
     class Config:
@@ -28,9 +31,33 @@ class Distribution(BaseModel, metaclass=ABCMeta):
         if not isinstance(data, pd.Series):
             raise ValueError(f"Invalid data type {type(data)}")
 
-        marginal = data.value_counts(normalize=True, dropna=False)
+        marginal = data.value_counts(dropna=False)
         del values["data"]
         return marginal
+
+    def marginal_states(self) -> Optional[List]:
+        if self.marginal_distribution is None:
+            return None
+
+        return self.marginal_distribution.index.values
+
+    def marginal_probabilities(self) -> Optional[List]:
+        if self.marginal_distribution is None:
+            return None
+
+        return (
+            self.marginal_distribution.values / self.marginal_distribution.values.sum()
+        )
+
+    def sample_marginal(self, count: int = 1) -> Any:
+        if self.marginal_distribution is None:
+            return None
+
+        return np.random.choice(
+            self.marginal_states(),
+            count,
+            p=self.marginal_probabilities(),
+        )
 
     @abstractmethod
     def get(self) -> List[Any]:
@@ -77,11 +104,9 @@ class CategoricalDistribution(Distribution):
 
     @validator("choices", always=True)
     def _validate_choices(cls: Any, v: List, values: Dict) -> List:
-        if (
-            "marginal_distribution" in values
-            and values["marginal_distribution"] is not None
-        ):
-            return list(values["marginal_distribution"].index)
+        mkey = "marginal_distribution"
+        if mkey in values and values[mkey] is not None:
+            return list(values[mkey].index)
 
         if len(v) == 0:
             raise ValueError(
@@ -93,12 +118,9 @@ class CategoricalDistribution(Distribution):
         return [self.name, self.choices]
 
     def sample(self, count: int = 1) -> Any:
-        if self.marginal_distribution is not None:
-            return np.random.choice(
-                self.marginal_distribution.index.values,
-                count,
-                p=self.marginal_distribution.values,
-            )
+        msamples = self.sample_marginal(count)
+        if msamples is not None:
+            return msamples
 
         return np.random.choice(self.choices, count)
 
@@ -132,21 +154,17 @@ class FloatDistribution(Distribution):
 
     @validator("low", always=True)
     def _validate_low_thresh(cls: Any, v: float, values: Dict) -> float:
-        if (
-            "marginal_distribution" in values
-            and values["marginal_distribution"] is not None
-        ):
-            return values["marginal_distribution"].index.min()
+        mkey = "marginal_distribution"
+        if mkey in values and values[mkey] is not None:
+            return values[mkey].index.min()
 
         return v
 
     @validator("high", always=True)
     def _validate_high_thresh(cls: Any, v: float, values: Dict) -> float:
-        if (
-            "marginal_distribution" in values
-            and values["marginal_distribution"] is not None
-        ):
-            return values["marginal_distribution"].index.max()
+        mkey = "marginal_distribution"
+        if mkey in values and values[mkey] is not None:
+            return values[mkey].index.max()
 
         return v
 
@@ -154,12 +172,9 @@ class FloatDistribution(Distribution):
         return [self.name, self.low, self.high]
 
     def sample(self, count: int = 1) -> Any:
-        if self.marginal_distribution is not None:
-            return np.random.choice(
-                self.marginal_distribution.index.values,
-                count,
-                p=self.marginal_distribution.values,
-            )
+        msamples = self.sample_marginal(count)
+        if msamples is not None:
+            return msamples
         return np.random.uniform(self.low, self.high, count)
 
     def has(self, val: Any) -> bool:
@@ -201,33 +216,26 @@ class IntegerDistribution(Distribution):
 
     @validator("low", always=True)
     def _validate_low_thresh(cls: Any, v: int, values: Dict) -> int:
-        if (
-            "marginal_distribution" in values
-            and values["marginal_distribution"] is not None
-        ):
-            return int(values["marginal_distribution"].index.min())
+        mkey = "marginal_distribution"
+        if mkey in values and values[mkey] is not None:
+            return int(values[mkey].index.min())
 
         return v
 
     @validator("high", always=True)
     def _validate_high_thresh(cls: Any, v: int, values: Dict) -> int:
-        if (
-            "marginal_distribution" in values
-            and values["marginal_distribution"] is not None
-        ):
-            return int(values["marginal_distribution"].index.max())
+        mkey = "marginal_distribution"
+        if mkey in values and values[mkey] is not None:
+            return int(values[mkey].index.max())
         return v
 
     def get(self) -> List[Any]:
         return [self.name, self.low, self.high, self.step]
 
     def sample(self, count: int = 1) -> Any:
-        if self.marginal_distribution is not None:
-            return np.random.choice(
-                self.marginal_distribution.index.values,
-                count,
-                p=self.marginal_distribution.values,
-            )
+        msamples = self.sample_marginal(count)
+        if msamples is not None:
+            return msamples
 
         choices = [val for val in range(self.low, self.high + 1, self.step)]
         return np.random.choice(choices, count)
