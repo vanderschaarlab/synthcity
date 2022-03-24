@@ -29,7 +29,7 @@ def _eval_plugin(cbk: Callable, X: pd.DataFrame, X_syn: pd.DataFrame) -> None:
     )
 
 
-@pytest.mark.parametrize("test_plugin", [Plugins().get("dummy_sampler")])
+@pytest.mark.parametrize("test_plugin", [Plugins().get("marginal_distributions")])
 def test_plot_marginal_comparison(test_plugin: Plugin) -> None:
     X, y = load_iris(return_X_y=True, as_frame=True)
     X["target"] = y
@@ -40,7 +40,7 @@ def test_plot_marginal_comparison(test_plugin: Plugin) -> None:
     _eval_plugin(plot_marginal_comparison, X, X_gen)
 
 
-@pytest.mark.parametrize("test_plugin", [Plugins().get("dummy_sampler")])
+@pytest.mark.parametrize("test_plugin", [Plugins().get("marginal_distributions")])
 def test_plot_associations_comparison(test_plugin: Plugin) -> None:
     X, y = load_iris(return_X_y=True, as_frame=True)
     X["target"] = y

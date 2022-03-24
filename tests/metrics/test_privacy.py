@@ -15,7 +15,7 @@ from synthcity.metrics.privacy import (
 from synthcity.plugins import Plugin, Plugins
 
 
-@pytest.mark.parametrize("test_plugin", [Plugins().get("dummy_sampler")])
+@pytest.mark.parametrize("test_plugin", [Plugins().get("marginal_distributions")])
 @pytest.mark.parametrize(
     "method", ["isolation_forests", "local_outlier_factor", "elliptic_envelope"]
 )
@@ -29,7 +29,7 @@ def test_select_outliers(test_plugin: Plugin, method: str) -> None:
     assert outlier_index.sum() > 0
 
 
-@pytest.mark.parametrize("test_plugin", [Plugins().get("dummy_sampler")])
+@pytest.mark.parametrize("test_plugin", [Plugins().get("marginal_distributions")])
 def test_select_quantiles(test_plugin: Plugin) -> None:
     X, y = load_iris(return_X_y=True, as_frame=True)
 
@@ -52,7 +52,7 @@ def test_evaluate_l_diversity() -> None:
     assert evaluate_l_diversity(X, ["sex", "bmi"]) == 20
 
 
-@pytest.mark.parametrize("test_plugin", [Plugins().get("dummy_sampler")])
+@pytest.mark.parametrize("test_plugin", [Plugins().get("marginal_distributions")])
 def test_evaluate_kmap(test_plugin: Plugin) -> None:
     X, y = load_diabetes(return_X_y=True, as_frame=True)
 
@@ -62,7 +62,7 @@ def test_evaluate_kmap(test_plugin: Plugin) -> None:
     assert evaluate_kmap(X, X_gen, ["sex", "bmi"]) > 18
 
 
-@pytest.mark.parametrize("test_plugin", [Plugins().get("dummy_sampler")])
+@pytest.mark.parametrize("test_plugin", [Plugins().get("marginal_distributions")])
 def test_evaluate_delta_presence(test_plugin: Plugin) -> None:
     X, y = load_diabetes(return_X_y=True, as_frame=True)
 

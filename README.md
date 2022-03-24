@@ -40,7 +40,7 @@ from synthcity.plugins import Plugins
 X, y = load_diabetes(return_X_y=True, as_frame=True)
 X["target"] = y
 
-syn_model = Plugins().get("dummy_sampler")
+syn_model = Plugins().get("marginal_distributions")
 
 syn_model.fit(X)
 ```
@@ -68,7 +68,7 @@ from synthcity.benchmark import Benchmarks
 constraints = Constraints(rules = [("target", "ge", 150)])
 
 score = Benchmarks.evaluate(
-    ["dummy_sampler", "random_noise"],
+    ["marginal_distributions", "random_noise"],
     X, y,
     sensitive_columns = ["sex"],
     synthetic_size = 1000,

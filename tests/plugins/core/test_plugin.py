@@ -16,16 +16,16 @@ class AbstractMockPlugin(Plugin):
 
 class MockPlugin(Plugin):
     @staticmethod
-    def hyperparameter_space(*args: Any, **kwargs: Any) -> List[Distribution]:
-        return []
-
-    @staticmethod
     def name() -> str:
         return "mock"
 
     @staticmethod
     def type() -> str:
         return "debug"
+
+    @staticmethod
+    def hyperparameter_space(**kwargs: Any) -> List[Distribution]:
+        return []
 
     def _fit(self, X: pd.DataFrame, *args: Any, **kwargs: Any) -> "Plugin":
         return self

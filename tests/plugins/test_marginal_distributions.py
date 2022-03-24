@@ -7,36 +7,48 @@ from sklearn.datasets import load_iris
 # synthcity absolute
 from synthcity.plugins import Plugin
 from synthcity.plugins.core.constraints import Constraints
-from synthcity.plugins.plugin_dummy_sampler import plugin
+from synthcity.plugins.plugin_marginal_distributions import plugin
 
 
-@pytest.mark.parametrize("test_plugin", generate_fixtures("dummy_sampler", plugin))
+@pytest.mark.parametrize(
+    "test_plugin", generate_fixtures("marginal_distributions", plugin)
+)
 def test_plugin_sanity(test_plugin: Plugin) -> None:
     assert test_plugin is not None
 
 
-@pytest.mark.parametrize("test_plugin", generate_fixtures("dummy_sampler", plugin))
+@pytest.mark.parametrize(
+    "test_plugin", generate_fixtures("marginal_distributions", plugin)
+)
 def test_plugin_name(test_plugin: Plugin) -> None:
-    assert test_plugin.name() == "dummy_sampler"
+    assert test_plugin.name() == "marginal_distributions"
 
 
-@pytest.mark.parametrize("test_plugin", generate_fixtures("dummy_sampler", plugin))
+@pytest.mark.parametrize(
+    "test_plugin", generate_fixtures("marginal_distributions", plugin)
+)
 def test_plugin_type(test_plugin: Plugin) -> None:
     assert test_plugin.type() == "debug"
 
 
-@pytest.mark.parametrize("test_plugin", generate_fixtures("dummy_sampler", plugin))
+@pytest.mark.parametrize(
+    "test_plugin", generate_fixtures("marginal_distributions", plugin)
+)
 def test_plugin_hyperparams(test_plugin: Plugin) -> None:
     assert len(test_plugin.hyperparameter_space()) == 0
 
 
-@pytest.mark.parametrize("test_plugin", generate_fixtures("dummy_sampler", plugin))
+@pytest.mark.parametrize(
+    "test_plugin", generate_fixtures("marginal_distributions", plugin)
+)
 def test_plugin_fit(test_plugin: Plugin) -> None:
     X = pd.DataFrame(load_iris()["data"])
     test_plugin.fit(X)
 
 
-@pytest.mark.parametrize("test_plugin", generate_fixtures("dummy_sampler", plugin))
+@pytest.mark.parametrize(
+    "test_plugin", generate_fixtures("marginal_distributions", plugin)
+)
 def test_plugin_generate(test_plugin: Plugin) -> None:
     X = pd.DataFrame(load_iris()["data"])
     test_plugin.fit(X)
@@ -50,7 +62,9 @@ def test_plugin_generate(test_plugin: Plugin) -> None:
     assert test_plugin.schema_includes(X_gen)
 
 
-@pytest.mark.parametrize("test_plugin", generate_fixtures("dummy_sampler", plugin))
+@pytest.mark.parametrize(
+    "test_plugin", generate_fixtures("marginal_distributions", plugin)
+)
 def test_plugin_generate_constraints(test_plugin: Plugin) -> None:
     X = pd.DataFrame(load_iris()["data"])
     test_plugin.fit(X)

@@ -12,7 +12,7 @@ def test_benchmark_sanity() -> None:
 
     scores = Benchmarks.evaluate(
         [
-            "dummy_sampler",
+            "marginal_distributions",
             "random_noise",
         ],
         X,

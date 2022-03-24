@@ -10,12 +10,12 @@ from synthcity.plugins.core.plugin import Plugin
 from synthcity.plugins.core.schema import Schema
 
 
-class DummySamplerPlugin(Plugin):
-    """Dummy plugin for debugging.
+class MarginalDistributionPlugin(Plugin):
+    """Synthetic data generation via marginal distributions.
 
     Example:
         >>> from synthcity.plugins import Plugins
-        >>> plugin = Plugins().get("dummy_sampler")
+        >>> plugin = Plugins().get("marginal_distributions")
         >>> from sklearn.datasets import load_iris
         >>> X = load_iris()
         >>> plugin.fit(X)
@@ -27,17 +27,19 @@ class DummySamplerPlugin(Plugin):
 
     @staticmethod
     def name() -> str:
-        return "dummy_sampler"
+        return "marginal_distributions"
 
     @staticmethod
     def type() -> str:
         return "debug"
 
     @staticmethod
-    def hyperparameter_space(*args: Any, **kwargs: Any) -> List[Distribution]:
+    def hyperparameter_space(**kwargs: Any) -> List[Distribution]:
         return []
 
-    def _fit(self, X: pd.DataFrame, *args: Any, **kwargs: Any) -> "DummySamplerPlugin":
+    def _fit(
+        self, X: pd.DataFrame, *args: Any, **kwargs: Any
+    ) -> "MarginalDistributionPlugin":
         self.X = X
         return self
 
@@ -53,4 +55,4 @@ class DummySamplerPlugin(Plugin):
         return baseline.sample(count, replace=True).reset_index(drop=True)
 
 
-plugin = DummySamplerPlugin
+plugin = MarginalDistributionPlugin

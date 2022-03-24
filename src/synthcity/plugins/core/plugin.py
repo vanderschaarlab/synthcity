@@ -24,13 +24,19 @@ from synthcity.plugins.core.schema import Schema
 class Plugin(metaclass=ABCMeta):
     """Base class for all plugins.
     Each derived class must implement the following methods:
-        hyperparameter_space() - a static method that returns the hyperparameters that can be tuned during AutoML.
         type() - a static method that returns the type of the plugin. e.g., debug, generative, bayesian, etc.
         name() - a static method that returns the name of the plugin. e.g., ctgan, random_noise, etc.
+        hyperparameter_space() - a static method that returns the hyperparameters that can be tuned during AutoML.
         _fit() - internal method, called by `fit` on each training set.
         _generate() - internal method, called by `generate`.
 
     If any method implementation is missing, the class constructor will fail.
+
+    Constructor Args:
+        epsilon: float.
+            Privacy parameter epsilon in differential privacy. Must be in range [0, float(np.inf)].
+        strict: float.
+            If True, is raises an exception if the generated data is not following the requested constraints. If False, it returns only the rows that match the constraints.
     """
 
     class Config:
@@ -43,8 +49,8 @@ class Plugin(metaclass=ABCMeta):
 
     @staticmethod
     @abstractmethod
-    def hyperparameter_space(*args: Any, **kwargs: Any) -> List[Distribution]:
-        """Returns the hyperparameter space for the current plugin."""
+    def hyperparameter_space(**kwargs: Any) -> List[Distribution]:
+        """Returns the hyperparameter space for the derived plugin."""
         ...
 
     @classmethod
