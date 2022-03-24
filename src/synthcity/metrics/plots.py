@@ -49,8 +49,6 @@ def plot_marginal_comparison(
             ax[idx].plot(
                 bar_position + bar_width,
                 column_value_counts_original.values,
-                # marker="o",
-                # markersize=2,
                 color=COLOR_PALETTE[0],
                 linewidth=2,
                 label=LABELS[0],
