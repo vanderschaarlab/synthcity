@@ -35,17 +35,11 @@ class Schema(BaseModel):
 
         for col in X.columns:
             if X[col].dtype == "object" or len(X[col].unique()) < 10:
-                feature_domain[col] = CategoricalDistribution(
-                    name=col, choices=list(X[col].unique())
-                )
+                feature_domain[col] = CategoricalDistribution(name=col, data=X[col])
             elif X[col].dtype == "int":
-                feature_domain[col] = IntegerDistribution(
-                    name=col, low=X[col].min(), high=X[col].max()
-                )
+                feature_domain[col] = IntegerDistribution(name=col, data=X[col])
             elif X[col].dtype == "float":
-                feature_domain[col] = FloatDistribution(
-                    name=col, low=X[col].min(), high=X[col].max()
-                )
+                feature_domain[col] = FloatDistribution(name=col, data=X[col])
             else:
                 raise ValueError("unsupported format ", col)
 

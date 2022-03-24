@@ -1,17 +1,36 @@
 # stdlib
 from abc import ABCMeta, abstractmethod
-from typing import Any, List
+from typing import Any, Dict, List, Optional
 
 # third party
 import numpy as np
-from pydantic import BaseModel
+import pandas as pd
+from pydantic import BaseModel, validator
 
 # synthcity absolute
 from synthcity.plugins.core.constraints import Constraints
 
 
 class Distribution(BaseModel, metaclass=ABCMeta):
+    data: Optional[pd.Series] = None
+    marginal_distribution: Optional[pd.Series] = None
     name: str
+
+    class Config:
+        arbitrary_types_allowed = True
+
+    @validator("marginal_distribution", always=True)
+    def _validate_marginal_distribution(cls: Any, v: Any, values: Dict) -> Dict:
+        if "data" not in values or values["data"] is None:
+            return v
+
+        data = values["data"]
+        if not isinstance(data, pd.Series):
+            raise ValueError(f"Invalid data type {type(data)}")
+
+        marginal = data.value_counts(normalize=True, dropna=False)
+        del values["data"]
+        return marginal
 
     @abstractmethod
     def get(self) -> List[Any]:
@@ -48,14 +67,39 @@ class Distribution(BaseModel, metaclass=ABCMeta):
         "Get the max value of the distribution"
         ...
 
+    @abstractmethod
+    def __eq__(self, other: Any) -> bool:
+        ...
+
 
 class CategoricalDistribution(Distribution):
-    choices: list
+    choices: list = []
+
+    @validator("choices", always=True)
+    def _validate_choices(cls: Any, v: List, values: Dict) -> List:
+        if (
+            "marginal_distribution" in values
+            and values["marginal_distribution"] is not None
+        ):
+            return list(values["marginal_distribution"].index)
+
+        if len(v) == 0:
+            raise ValueError(
+                "Invalid choices for CategoricalDistribution. Provide data or choices params"
+            )
+        return v
 
     def get(self) -> List[Any]:
         return [self.name, self.choices]
 
     def sample(self, count: int = 1) -> Any:
+        if self.marginal_distribution is not None:
+            return np.random.choice(
+                self.marginal_distribution.index.values,
+                count,
+                p=self.marginal_distribution.values,
+            )
+
         return np.random.choice(self.choices, count)
 
     def has(self, val: Any) -> bool:
@@ -75,15 +119,47 @@ class CategoricalDistribution(Distribution):
     def max(self) -> Any:
         return max(self.choices)
 
+    def __eq__(self, other: Any) -> bool:
+        if not isinstance(other, CategoricalDistribution):
+            return False
+
+        return self.name == other.name and set(self.choices) == set(other.choices)
+
 
 class FloatDistribution(Distribution):
     low: float = np.iinfo(np.int32).min
     high: float = np.iinfo(np.int32).max
 
+    @validator("low", always=True)
+    def _validate_low_thresh(cls: Any, v: float, values: Dict) -> float:
+        if (
+            "marginal_distribution" in values
+            and values["marginal_distribution"] is not None
+        ):
+            return values["marginal_distribution"].index.min()
+
+        return v
+
+    @validator("high", always=True)
+    def _validate_high_thresh(cls: Any, v: float, values: Dict) -> float:
+        if (
+            "marginal_distribution" in values
+            and values["marginal_distribution"] is not None
+        ):
+            return values["marginal_distribution"].index.max()
+
+        return v
+
     def get(self) -> List[Any]:
         return [self.name, self.low, self.high]
 
     def sample(self, count: int = 1) -> Any:
+        if self.marginal_distribution is not None:
+            return np.random.choice(
+                self.marginal_distribution.index.values,
+                count,
+                p=self.marginal_distribution.values,
+            )
         return np.random.uniform(self.low, self.high, count)
 
     def has(self, val: Any) -> bool:
@@ -107,16 +183,52 @@ class FloatDistribution(Distribution):
     def max(self) -> Any:
         return self.high
 
+    def __eq__(self, other: Any) -> bool:
+        if not isinstance(other, FloatDistribution):
+            return False
+
+        return (
+            self.name == other.name
+            and self.low == other.low
+            and self.high == other.high
+        )
+
 
 class IntegerDistribution(Distribution):
     low: int = np.iinfo(np.int32).min
     high: int = np.iinfo(np.int32).max
     step: int = 1
 
+    @validator("low", always=True)
+    def _validate_low_thresh(cls: Any, v: int, values: Dict) -> int:
+        if (
+            "marginal_distribution" in values
+            and values["marginal_distribution"] is not None
+        ):
+            return int(values["marginal_distribution"].index.min())
+
+        return v
+
+    @validator("high", always=True)
+    def _validate_high_thresh(cls: Any, v: int, values: Dict) -> int:
+        if (
+            "marginal_distribution" in values
+            and values["marginal_distribution"] is not None
+        ):
+            return int(values["marginal_distribution"].index.max())
+        return v
+
     def get(self) -> List[Any]:
         return [self.name, self.low, self.high, self.step]
 
     def sample(self, count: int = 1) -> Any:
+        if self.marginal_distribution is not None:
+            return np.random.choice(
+                self.marginal_distribution.index.values,
+                count,
+                p=self.marginal_distribution.values,
+            )
+
         choices = [val for val in range(self.low, self.high + 1, self.step)]
         return np.random.choice(choices, count)
 
@@ -140,6 +252,16 @@ class IntegerDistribution(Distribution):
 
     def max(self) -> Any:
         return self.high
+
+    def __eq__(self, other: Any) -> bool:
+        if not isinstance(other, IntegerDistribution):
+            return False
+
+        return (
+            self.name == other.name
+            and self.low == other.low
+            and self.high == other.high
+        )
 
 
 def constraint_to_distribution(constraints: Constraints, feature: str) -> Distribution:
