@@ -106,6 +106,10 @@ class Distribution(BaseModel, metaclass=ABCMeta):
     def __eq__(self, other: Any) -> bool:
         ...
 
+    @abstractmethod
+    def dtype(self) -> str:
+        ...
+
 
 class CategoricalDistribution(Distribution):
     choices: list = []
@@ -154,6 +158,26 @@ class CategoricalDistribution(Distribution):
             return False
 
         return self.name == other.name and set(self.choices) == set(other.choices)
+
+    def dtype(self) -> str:
+        types = {
+            "object": 0,
+            "float": 0,
+            "int": 0,
+        }
+        for v in self.choices:
+            if isinstance(v, float):
+                types["float"] += 1
+            elif isinstance(v, int):
+                types["int"] += 1
+            else:
+                types["object"] += 1
+
+        for t in types:
+            if types[t] != 0:
+                return t
+
+        return "object"
 
 
 class FloatDistribution(Distribution):
@@ -215,6 +239,9 @@ class FloatDistribution(Distribution):
             and self.low == other.low
             and self.high == other.high
         )
+
+    def dtype(self) -> str:
+        return "float"
 
 
 class IntegerDistribution(Distribution):
@@ -278,6 +305,9 @@ class IntegerDistribution(Distribution):
             and self.low == other.low
             and self.high == other.high
         )
+
+    def dtype(self) -> str:
+        return "int"
 
 
 def constraint_to_distribution(constraints: Constraints, feature: str) -> Distribution:

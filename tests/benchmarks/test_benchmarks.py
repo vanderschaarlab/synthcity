@@ -13,7 +13,7 @@ def test_benchmark_sanity() -> None:
     scores = Benchmarks.evaluate(
         [
             "marginal_distributions",
-            "uniform_sampler",
+            "dummy_sampler",
         ],
         X,
         sensitive_columns=["sex"],

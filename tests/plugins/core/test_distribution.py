@@ -12,34 +12,39 @@ from synthcity.plugins.core.distribution import (
 
 
 def test_categorical() -> None:
-    param = CategoricalDistribution(name="test", choices=[1, 2, 3, 22])
+    param = CategoricalDistribution(name="test", choices=["1", "2", "55", "sdfsf"])
 
-    assert param.get() == ["test", [1, 2, 3, 22]]
+    assert param.get() == ["test", ["1", "2", "55", "sdfsf"]]
     assert len(param.sample(count=5)) == 5
     for sample in param.sample(count=5):
-        assert sample in [1, 2, 3, 22]
+        assert sample in ["1", "2", "55", "sdfsf"]
 
-    assert param.has(1)
+    assert param.has("1")
     assert not param.has(5)
     assert len(param.as_constraint().rules) == 1
 
-    param_other = CategoricalDistribution(name="test", choices=[1, 2])
+    param_other = CategoricalDistribution(name="test", choices=["1", "2"])
     assert param.includes(param_other)
     assert not param_other.includes(param)
 
-    param_other = CategoricalDistribution(name="test", choices=[1, 2, 555])
+    param_other = CategoricalDistribution(name="test", choices=["1", "2", "555"])
     assert not param.includes(param_other)
     assert not param_other.includes(param)
 
-    param_other = CategoricalDistribution(name="test", choices=[1, 2, 3, 4, 22])
+    param_other = CategoricalDistribution(
+        name="test", choices=["1", "2", "3", "4", "22", "55", "sdfsf"]
+    )
     assert not param.includes(param_other)
     assert param_other.includes(param)
 
-    param_other = CategoricalDistribution(name="test", choices=[1, 2, 3, 22])
+    param_other = CategoricalDistribution(
+        name="test", choices=["1", "2", "55", "sdfsf"]
+    )
     assert param.includes(param_other)
     assert param_other.includes(param)
 
     assert param.marginal_distribution is None
+    assert param.dtype() == "object"
 
 
 @pytest.mark.parametrize("dp_enabled", [True, False])
@@ -110,6 +115,7 @@ def test_integer() -> None:
     assert param_other.includes(param)
 
     assert param.marginal_distribution is None
+    assert param.dtype() == "int"
 
 
 @pytest.mark.parametrize("dp_enabled", [True, False])
@@ -171,6 +177,7 @@ def test_float() -> None:
     assert not param.has(-1)
 
     assert param.marginal_distribution is None
+    assert param.dtype() == "float"
 
 
 @pytest.mark.parametrize("dp_enabled", [True, False])

@@ -149,6 +149,16 @@ class Schema(BaseModel):
 
         return samples
 
+    def adapt_dtypes(self, X: pd.DataFrame) -> pd.DataFrame:
+        for feature in self.domain:
+            if feature not in X.columns:
+                continue
+            X[feature] = X[feature].astype(
+                self.domain[feature].dtype(), errors="ignore"
+            )
+
+        return X
+
     def as_constraints(self) -> Constraints:
         """Convert the schema to a list of Constraints."""
         constraints = Constraints(rules=[])

@@ -99,3 +99,22 @@ def test_schema_inclusion() -> None:
 
     assert schema.includes(other_schema)
     assert other_schema.includes(schema)
+
+
+def test_schema_dtype() -> None:
+    data = pd.DataFrame([[1.0, 2.0, 3.0]], columns=["a", "b", "c"])
+    schema = Schema(data=data)
+
+    for feature in schema:
+        assert schema[feature].dtype() == "float"
+
+    data_int = pd.DataFrame([[1, 2, 3]], columns=["a", "b", "c"])
+    schema_int = Schema(data=data_int)
+    for feature in schema_int:
+        assert schema_int[feature].dtype() == "int"
+
+    data2 = schema_int.adapt_dtypes(data)
+    schema2 = Schema(data=data2)
+
+    for feature in schema2:
+        assert schema2[feature].dtype() == "int"

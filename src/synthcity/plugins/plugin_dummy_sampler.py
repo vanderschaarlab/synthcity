@@ -34,7 +34,7 @@ class DummySamplerPlugin(Plugin):
         return "sampling"
 
     @staticmethod
-    def hyperparameter_space(*args: Any, **kwargs: Any) -> List[Distribution]:
+    def hyperparameter_space(**kwargs: Any) -> List[Distribution]:
         return []
 
     def _fit(self, X: pd.DataFrame, *args: Any, **kwargs: Any) -> "DummySamplerPlugin":
