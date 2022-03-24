@@ -12,6 +12,10 @@ from pydantic import validate_arguments
 
 # synthcity absolute
 import synthcity.logger as log
+from synthcity.metrics.plots import (
+    plot_associations_comparison,
+    plot_marginal_comparison,
+)
 from synthcity.plugins.core.constraints import Constraints
 from synthcity.plugins.core.distribution import Distribution
 from synthcity.plugins.core.schema import Schema
@@ -183,6 +187,23 @@ class Plugin(metaclass=ABCMeta):
             raise RuntimeError("Fit the model first")
 
         return self._schema
+
+    @validate_arguments(config=dict(arbitrary_types_allowed=True))
+    def plot(self, plt: Any, X: pd.DataFrame, *args: Any, **kwargs: Any) -> Any:
+        """Plot the real-synthetic distributions.
+
+        Args:
+            plt: output
+            X: DataFrame.
+                The reference dataset.
+
+        Returns:
+            self
+        """
+        X_syn = self.generate()
+
+        plot_marginal_comparison(plt, X, X_syn)
+        plot_associations_comparison(plt, X, X_syn)
 
 
 class PluginLoader:

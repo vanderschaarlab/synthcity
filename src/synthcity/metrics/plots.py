@@ -15,8 +15,8 @@ from synthcity.metrics.statistical import (
     evaluate_feature_correlation_stats,
 )
 
-COLOR_PALETTE = ["#393e46", "#ff5722", "#d72323"]
-LABELS = ["gt", "syn"]
+COLOR_PALETTE = ["#2b2d42", "#d90429"]
+LABELS = ["real", "syn"]
 
 
 @validate_arguments(config=dict(arbitrary_types_allowed=True))
@@ -49,8 +49,8 @@ def plot_marginal_comparison(
             ax[idx].plot(
                 bar_position + bar_width,
                 column_value_counts_original.values,
-                marker="o",
-                markersize=3,
+                # marker="o",
+                # markersize=2,
                 color=COLOR_PALETTE[0],
                 linewidth=2,
                 label=LABELS[0],
@@ -142,4 +142,3 @@ def plot_associations_comparison(
 
     cbar = heatmap_original.collections[0].colorbar
     cbar.ax.tick_params(labelsize=10)
-    fig.tight_layout()
