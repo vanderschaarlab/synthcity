@@ -2,6 +2,7 @@
 from typing import Any, List
 
 # third party
+import numpy as np
 import pandas as pd
 
 # synthcity absolute
@@ -22,8 +23,14 @@ class MarginalDistributionPlugin(Plugin):
         >>> plugin.generate()
     """
 
-    def __init__(self, **kwargs: Any) -> None:
+    def __init__(self, epsilon: float = 1.0, **kwargs: Any) -> None:
+        """
+        Args:
+            epsilon: float
+                Privacy parameter epsilon in differential privacy. >= 0.
+        """
         super().__init__(**kwargs)
+        self.epsilon = epsilon
 
     @staticmethod
     def name() -> str:
@@ -40,19 +47,20 @@ class MarginalDistributionPlugin(Plugin):
     def _fit(
         self, X: pd.DataFrame, *args: Any, **kwargs: Any
     ) -> "MarginalDistributionPlugin":
-        self.X = X
+        self.local_epsilon = self.epsilon / X.shape[1]
+
         return self
 
     def _generate(self, count: int, syn_schema: Schema, **kwargs: Any) -> pd.DataFrame:
-        if self.X is None:
-            raise RuntimeError("Fit the model first")
+        X_rnd = pd.DataFrame(
+            np.zeros((count, len(self.schema().features()))),
+            columns=self.schema().features(),
+        )
 
-        baseline = self.X
-        constraints = syn_schema.as_constraints()
-
-        baseline = constraints.match(baseline)
-
-        return baseline.sample(count, replace=True).reset_index(drop=True)
+        for feature in syn_schema:
+            sample = syn_schema[feature].sample(count=count)
+            X_rnd[feature] = sample
+        return X_rnd
 
 
 plugin = MarginalDistributionPlugin
