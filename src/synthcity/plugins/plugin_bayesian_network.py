@@ -18,12 +18,14 @@ class BayesianNetworkPlugin(Plugin):
         self,
         training_algorithm: str = "greedy",  # greedy, chow-liu or exact
         sampling_algorithm: str = "gibbs",  # gibbs or rejection
+        train_limit: int = 100,
         **kwargs: Any,
     ) -> None:
         super().__init__(**kwargs)
 
         self.sampling_algorithm = sampling_algorithm
         self.training_algorithm = training_algorithm
+        self.train_limit = train_limit
 
     @staticmethod
     def name() -> str:
@@ -48,7 +50,10 @@ class BayesianNetworkPlugin(Plugin):
         self, X: pd.DataFrame, *args: Any, **kwargs: Any
     ) -> "BayesianNetworkPlugin":
         self.model = BayesianNetwork.from_samples(
-            X.to_numpy(), algorithm=self.training_algorithm
+            X.head(self.train_limit).to_numpy(),
+            algorithm=self.training_algorithm,
+            low_memory=True,
+            n_jobs=4,
         )
         return self
 
