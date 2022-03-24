@@ -9,6 +9,7 @@ from pydantic import BaseModel, validator
 
 # synthcity absolute
 from synthcity.plugins.core.constraints import Constraints
+from synthcity.utils.dp import compute_dp_marginal_distribution
 
 
 class Distribution(BaseModel, metaclass=ABCMeta):
@@ -33,6 +34,12 @@ class Distribution(BaseModel, metaclass=ABCMeta):
 
         marginal = data.value_counts(dropna=False)
         del values["data"]
+
+        if values["use_dp"]:
+            marginal = compute_dp_marginal_distribution(
+                marginal, len(data), values["epsilon"]
+            )
+
         return marginal
 
     def marginal_states(self) -> Optional[List]:

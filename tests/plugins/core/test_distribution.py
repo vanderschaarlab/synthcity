@@ -1,5 +1,6 @@
 # third party
 import pandas as pd
+import pytest
 
 # synthcity absolute
 from synthcity.plugins.core.distribution import (
@@ -41,9 +42,12 @@ def test_categorical() -> None:
     assert param.marginal_distribution is None
 
 
-def test_categorical_from_data() -> None:
+@pytest.mark.parametrize("use_dp", [True, False])
+def test_categorical_from_data(use_dp: bool) -> None:
     param = CategoricalDistribution(
-        name="test", data=pd.Series([1, 1, 1, 1, 2, 2, 2, 22, 3, 3, 3, 3])
+        use_dp=use_dp,
+        name="test",
+        data=pd.Series([1, 1, 1, 1, 2, 2, 2, 22, 3, 3, 3, 3]),
     )
 
     assert set(param.get()[1]) == set([1, 2, 3, 22])
@@ -61,6 +65,16 @@ def test_categorical_from_data() -> None:
 
     assert param.marginal_distribution is not None
     assert set(param.marginal_distribution.keys()) == set([1, 2, 3, 22])
+
+
+def test_categorical_invalid_epsi_dp() -> None:
+    with pytest.raises(ValueError):
+        CategoricalDistribution(
+            use_dp=True,
+            epsilon=0,
+            name="test",
+            data=pd.Series([1, 1, 1, 1, 2, 2, 2, 22, 3, 3, 3, 3]),
+        )
 
 
 def test_integer() -> None:
@@ -98,9 +112,10 @@ def test_integer() -> None:
     assert param.marginal_distribution is None
 
 
-def test_integer_from_data() -> None:
+@pytest.mark.parametrize("use_dp", [True, False])
+def test_integer_from_data(use_dp: bool) -> None:
     param = IntegerDistribution(
-        name="test", data=pd.Series([1, 1, 1, 12, 2, 2, 2, 4, 4, 88, 4])
+        use_dp=use_dp, name="test", data=pd.Series([1, 1, 1, 12, 2, 2, 2, 4, 4, 88, 4])
     )
 
     assert param.get() == ["test", 1, 88, 1]
@@ -156,9 +171,12 @@ def test_float() -> None:
     assert param.marginal_distribution is None
 
 
-def test_float_from_data() -> None:
+@pytest.mark.parametrize("use_dp", [True, False])
+def test_float_from_data(use_dp: bool) -> None:
     param = FloatDistribution(
-        name="test", data=pd.Series([0, 1.1, 2.3, 1, 0.5, 1, 1, 1, 1, 1, 1])
+        use_dp=use_dp,
+        name="test",
+        data=pd.Series([0, 1.1, 2.3, 1, 0.5, 1, 1, 1, 1, 1, 1]),
     )
 
     assert param.get() == ["test", 0, 2.3]
