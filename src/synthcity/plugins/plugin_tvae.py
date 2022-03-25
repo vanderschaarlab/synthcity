@@ -101,25 +101,7 @@ class TVAEPlugin(Plugin):
         return self
 
     def _generate(self, count: int, syn_schema: Schema, **kwargs: Any) -> pd.DataFrame:
-        constraints = syn_schema.as_constraints()
-
-        data_synth = pd.DataFrame([], columns=self.schema().features())
-        for it in range(self.sampling_patience):
-            iter_samples = self.model.sample(count)
-            iter_samples_df = pd.DataFrame(
-                iter_samples, columns=self.schema().features()
-            )
-            iter_samples_df = syn_schema.adapt_dtypes(iter_samples_df)
-
-            iter_synth_valid = constraints.match(iter_samples_df)
-            data_synth = pd.concat([data_synth, iter_synth_valid], ignore_index=True)
-
-            if len(data_synth) >= count:
-                break
-
-        data_synth = syn_schema.adapt_dtypes(data_synth).head(count)
-
-        return data_synth
+        return self._safe_generate(self.model.sample, count, syn_schema)
 
 
 plugin = TVAEPlugin
