@@ -84,5 +84,4 @@ def test_plugin_generate_constraints(test_plugin: Plugin) -> None:
 def test_sample_hyperparams() -> None:
     for i in range(100):
         args = plugin.sample_hyperparameters()
-
         assert plugin(**args) is not None
