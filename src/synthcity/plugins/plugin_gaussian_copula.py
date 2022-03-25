@@ -16,7 +16,7 @@ class GaussianCopulaPlugin(Plugin):
 
     Example:
         >>> from synthcity.plugins import Plugins
-        >>> plugin = Plugins().get("ctgan")
+        >>> plugin = Plugins().get("gaussian_copula")
         >>> from sklearn.datasets import load_iris
         >>> X = load_iris()
         >>> plugin.fit(X)
