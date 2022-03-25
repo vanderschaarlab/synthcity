@@ -49,6 +49,7 @@ class Plugin(metaclass=ABCMeta):
         dp_epsilon: float = 1.0,
         dp_delta: float = 0,
         sampling_strategy: str = "marginal",  # uniform, marginal
+        sampling_patience: int = 100,
         strict: bool = True,
     ) -> None:
         """
@@ -69,6 +70,7 @@ class Plugin(metaclass=ABCMeta):
         self.dp_enabled = dp_enabled
         self.dp_delta = dp_delta
         self.sampling_strategy = sampling_strategy
+        self.sampling_patience = sampling_patience
         self.strict = strict
 
     @staticmethod

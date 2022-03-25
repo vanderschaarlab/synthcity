@@ -7,9 +7,9 @@ from sklearn.datasets import load_iris
 # synthcity absolute
 from synthcity.plugins import Plugin
 from synthcity.plugins.core.constraints import Constraints
-from synthcity.plugins.plugin_bayesian_network import plugin
+from synthcity.plugins.plugin_ctgan import plugin
 
-plugin_name = "bayesian_network"
+plugin_name = "ctgan"
 
 
 @pytest.mark.parametrize("test_plugin", generate_fixtures(plugin_name, plugin))
@@ -24,12 +24,12 @@ def test_plugin_name(test_plugin: Plugin) -> None:
 
 @pytest.mark.parametrize("test_plugin", generate_fixtures(plugin_name, plugin))
 def test_plugin_type(test_plugin: Plugin) -> None:
-    assert test_plugin.type() == "bayesian"
+    assert test_plugin.type() == "gan"
 
 
 @pytest.mark.parametrize("test_plugin", generate_fixtures(plugin_name, plugin))
 def test_plugin_hyperparams(test_plugin: Plugin) -> None:
-    assert len(test_plugin.hyperparameter_space()) == 2
+    assert len(test_plugin.hyperparameter_space()) == 0
 
 
 @pytest.mark.parametrize("test_plugin", generate_fixtures(plugin_name, plugin))
