@@ -50,6 +50,7 @@ class Plugin(metaclass=ABCMeta):
         dp_delta: float = 0,
         sampling_strategy: str = "marginal",  # uniform, marginal
         sampling_patience: int = 100,
+        sensitive_columns: list = [],
         strict: bool = True,
     ) -> None:
         """
@@ -71,6 +72,7 @@ class Plugin(metaclass=ABCMeta):
         self.dp_delta = dp_delta
         self.sampling_strategy = sampling_strategy
         self.sampling_patience = sampling_patience
+        self.sensitive_columns = sensitive_columns
         self.strict = strict
 
     @staticmethod
@@ -87,7 +89,7 @@ class Plugin(metaclass=ABCMeta):
         results = {}
 
         for hp in param_space:
-            results[hp.name] = hp.sample()
+            results[hp.name] = hp.sample()[0]
 
         return results
 
