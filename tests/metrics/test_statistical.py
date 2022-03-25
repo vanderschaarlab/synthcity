@@ -33,7 +33,7 @@ def _eval_plugin(cbk: Callable, X: pd.DataFrame, X_syn: pd.DataFrame) -> Tuple:
     return syn_score, rnd_score
 
 
-@pytest.mark.parametrize("test_plugin", [Plugins().get("marginal_distributions")])
+@pytest.mark.parametrize("test_plugin", [Plugins().get("dummy_sampler")])
 def test_kl_div(test_plugin: Plugin) -> None:
     X, y = load_iris(return_X_y=True, as_frame=True)
     X["target"] = y
@@ -48,7 +48,7 @@ def test_kl_div(test_plugin: Plugin) -> None:
     assert syn_score > rnd_score
 
 
-@pytest.mark.parametrize("test_plugin", [Plugins().get("marginal_distributions")])
+@pytest.mark.parametrize("test_plugin", [Plugins().get("dummy_sampler")])
 def test_evaluate_kolmogorov_smirnov_test(test_plugin: Plugin) -> None:
     X, y = load_iris(return_X_y=True, as_frame=True)
     X["target"] = y
@@ -63,7 +63,7 @@ def test_evaluate_kolmogorov_smirnov_test(test_plugin: Plugin) -> None:
     assert syn_score > rnd_score
 
 
-@pytest.mark.parametrize("test_plugin", [Plugins().get("marginal_distributions")])
+@pytest.mark.parametrize("test_plugin", [Plugins().get("dummy_sampler")])
 def test_evaluate_chi_squared_test(test_plugin: Plugin) -> None:
     X, y = load_iris(return_X_y=True, as_frame=True)
     X["target"] = y
@@ -79,7 +79,7 @@ def test_evaluate_chi_squared_test(test_plugin: Plugin) -> None:
 
 
 @pytest.mark.parametrize("kernel", ["linear", "rbf", "polynomial"])
-@pytest.mark.parametrize("test_plugin", [Plugins().get("marginal_distributions")])
+@pytest.mark.parametrize("test_plugin", [Plugins().get("dummy_sampler")])
 def test_evaluate_maximum_mean_discrepancy(kernel: str, test_plugin: Plugin) -> None:
     X, y = load_iris(return_X_y=True, as_frame=True)
     X["target"] = y
@@ -94,7 +94,7 @@ def test_evaluate_maximum_mean_discrepancy(kernel: str, test_plugin: Plugin) -> 
     assert syn_score < rnd_score
 
 
-@pytest.mark.parametrize("test_plugin", [Plugins().get("marginal_distributions")])
+@pytest.mark.parametrize("test_plugin", [Plugins().get("dummy_sampler")])
 def test_evaluate_inv_cdf_function(test_plugin: Plugin) -> None:
     X, y = load_iris(return_X_y=True, as_frame=True)
     X["target"] = y
@@ -109,7 +109,7 @@ def test_evaluate_inv_cdf_function(test_plugin: Plugin) -> None:
     assert syn_score < rnd_score
 
 
-@pytest.mark.parametrize("test_plugin", [Plugins().get("marginal_distributions")])
+@pytest.mark.parametrize("test_plugin", [Plugins().get("dummy_sampler")])
 def test_evaluate_avg_jensenshannon_distance(test_plugin: Plugin) -> None:
     X, y = load_iris(return_X_y=True, as_frame=True)
     X["target"] = y
@@ -124,7 +124,7 @@ def test_evaluate_avg_jensenshannon_distance(test_plugin: Plugin) -> None:
     assert syn_score < rnd_score
 
 
-@pytest.mark.parametrize("test_plugin", [Plugins().get("marginal_distributions")])
+@pytest.mark.parametrize("test_plugin", [Plugins().get("dummy_sampler")])
 def test_evaluate_feature_correlation(test_plugin: Plugin) -> None:
     X, y = load_iris(return_X_y=True, as_frame=True)
     X["target"] = y
