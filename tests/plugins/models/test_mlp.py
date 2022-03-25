@@ -1,83 +1,68 @@
 # third party
-import jax
 import pytest
 from sklearn.datasets import load_diabetes, load_digits
 
 # synthcity absolute
-from synthcity.plugins.models.mlp import MLP, BasicNetwork, NetworkConfig, _train_init
+from synthcity.plugins.models.mlp import MLP
 
 
 def test_network_config() -> None:
-    config = NetworkConfig(
+    net = MLP(
         task_type="regression",
-        model_type=str,
-        input_shape=12,
-        output_shape=11,
-        hidden_layers=[1, 2, 3, 4],
+        n_layers_hidden=2,
+        n_units_hidden=20,
         batch_size=23,
-        epochs=34,
-        learning_rate=1e-2,
+        n_iter=34,
+        lr=1e-2,
         dropout=0.5,
-        batchnorm=True,
+        batch_norm=True,
         nonlin="elu",
         patience=66,
         seed=77,
-        optimizer="sgd",
     )
 
-    assert config.model_type == str
-    assert config.input_shape == 12
-    assert config.output_shape == 11
-    assert list(config.hidden_layers) == [1, 2, 3, 4]
-    assert config.batch_size == 23
-    assert config.epochs == 34
-    assert config.learning_rate == 1e-2
-    assert config.dropout == 0.5
-    assert config.batchnorm is True
-    assert config.nonlin == "elu"
-    assert config.patience == 66
-    assert config.seed == 77
-    assert config.optimizer == "sgd"
+    assert net.n_layers_hidden == 2
+    assert net.n_units_hidden == 20
+    assert net.batch_size == 23
+    assert net.n_iter == 34
+    assert net.lr == 1e-2
+    assert net.dropout == 0.5
+    assert net.batch_norm is True
+    assert net.nonlin == "elu"
+    assert net.patience == 66
+    assert net.seed == 77
 
 
-@pytest.mark.parametrize("optimizer", ["adam", "sgd"])
 @pytest.mark.parametrize("task_type", ["regression", "classification"])
 @pytest.mark.parametrize("nonlin", ["relu", "elu", "leaky_relu"])
-@pytest.mark.parametrize("epochs", [10, 50, 100])
+@pytest.mark.parametrize("n_iter", [10, 50, 100])
 @pytest.mark.parametrize("dropout", [0, 0.5, 0.2])
-@pytest.mark.parametrize("batchnorm", [True, False])
+@pytest.mark.parametrize("batch_norm", [True, False])
+@pytest.mark.parametrize("lr", [1e-3, 3e-4])
 def test_basic_network(
-    optimizer: str,
     task_type: str,
     nonlin: str,
-    epochs: int,
+    n_iter: int,
     dropout: float,
-    batchnorm: bool,
+    batch_norm: bool,
+    lr: float,
 ) -> None:
-    config = NetworkConfig(
+    net = MLP(
         task_type=task_type,
-        model_type=BasicNetwork,
-        epochs=epochs,
+        n_iter=n_iter,
         dropout=dropout,
         nonlin=nonlin,
-        input_shape=5,
-        batchnorm=batchnorm,
-        output_shape=2,
-        hidden_layers=[1, 2],
-        optimizer=optimizer,
+        batch_norm=batch_norm,
+        n_layers_hidden=2,
+        lr=lr,
     )
 
-    rng = jax.random.PRNGKey(config.seed)
-    state = _train_init(config, rng)
-
-    assert state is not None
-
-    assert config.epochs == epochs
-    assert config.dropout == dropout
-    assert config.batchnorm == batchnorm
-    assert config.nonlin == nonlin
-    assert config.optimizer == optimizer
-    assert config.task_type == task_type
+    assert net.n_iter == n_iter
+    assert net.dropout == dropout
+    assert net.batch_norm == batch_norm
+    assert net.nonlin == nonlin
+    assert net.task_type == task_type
+    assert net.lr == lr
 
 
 def test_mlp_classification() -> None:
@@ -99,3 +84,4 @@ def test_mlp_regression() -> None:
     assert model.predict(X).shape == y.shape
     with pytest.raises(ValueError):
         model.predict_proba(X)
+    print(model.score(X, y))
