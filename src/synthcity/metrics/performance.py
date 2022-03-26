@@ -34,6 +34,7 @@ def evaluate_performance_classification(
     """
     encoder = LabelEncoder().fit(y_train)
     enc_y_train = encoder.transform(y_train)
+    model_args["n_units_out"] = len(np.unique(y_train))
     try:
         enc_y_test = encoder.transform(y_test)
         estimator = model(**model_args).fit(X_train, enc_y_train)
@@ -194,10 +195,13 @@ def evaluate_test_performance_mlp(
         MLP,
         {
             "task_type": "classification",
+            "n_units_in": X_gt.shape[1] - 1,
         },
         MLP,
         {
             "task_type": "regression",
+            "n_units_in": X_gt.shape[1] - 1,
+            "n_units_out": 1,
         },
         X_gt,
         X_syn,

@@ -20,6 +20,7 @@ NONLIN = {
     "relu": nn.ReLU,
     "leaky_relu": nn.LeakyReLU,
     "selu": nn.SELU,
+    "tanh": nn.Tanh,
 }
 
 
@@ -69,6 +70,8 @@ class MLP(nn.Module):
     def __init__(
         self,
         task_type: str,  # classification/regression
+        n_units_in: int,
+        n_units_out: int,
         n_layers_hidden: int = 1,
         n_units_hidden: int = 100,
         nonlin: str = "relu",
@@ -95,11 +98,34 @@ class MLP(nn.Module):
         self.seed = seed
 
         # network
-        self.n_layers_hidden = n_layers_hidden
-        self.n_units_hidden = n_units_hidden
-        self.nonlin = nonlin
-        self.dropout = dropout
-        self.batch_norm = batch_norm
+        NL = NONLIN[nonlin]
+        layers = []
+
+        if n_layers_hidden > 0:
+            layers.append(nn.Linear(n_units_in, n_units_hidden))
+            if batch_norm:
+                layers.append(nn.BatchNorm1d(n_units_hidden))
+            layers.append(NL())
+
+            # add required number of layers
+            for i in range(n_layers_hidden - 1):
+                if dropout > 0:
+                    layers.append(nn.Dropout(dropout))
+
+                layers.append(nn.Linear(n_units_hidden, n_units_hidden))
+                if batch_norm:
+                    layers.append(nn.BatchNorm1d(n_units_hidden))
+                layers.append(NL())
+
+            # add final layers
+            layers.append(nn.Linear(n_units_hidden, n_units_out))
+        else:
+            layers = [nn.Linear(n_units_in, n_units_out)]
+
+        if self.task_type == "classification":
+            layers.append(nn.Softmax(dim=-1))
+
+        self.model = nn.Sequential(*layers).to(DEVICE)
 
         # optimizer
         self.lr = lr
@@ -170,12 +196,6 @@ class MLP(nn.Module):
         if self.task_type == "classification":
             y = y.long()
 
-        n_units_in = X.shape[1]
-        n_units_out = 1
-
-        if self.task_type == "classification":
-            n_units_out = len(y.unique())
-
         # Load Dataset
         dataset = TensorDataset(X, y)
 
@@ -187,7 +207,6 @@ class MLP(nn.Module):
         loader = DataLoader(train_dataset, batch_size=self.batch_size, pin_memory=False)
 
         # Setup the network and optimizer
-        self.model = self._create_net(n_units_in, n_units_out)
         optimizer = torch.optim.Adam(
             self.parameters(), lr=self.lr, weight_decay=self.weight_decay
         )
@@ -247,35 +266,3 @@ class MLP(nn.Module):
             return X.to(DEVICE)
         else:
             return torch.from_numpy(np.asarray(X)).to(DEVICE)
-
-    @validate_arguments(config=dict(arbitrary_types_allowed=True))
-    def _create_net(self, n_unit_in: int, n_unit_out: int) -> nn.Sequential:
-        NL = NONLIN[self.nonlin]
-        layers = []
-
-        if self.n_layers_hidden > 0:
-            layers.append(nn.Linear(n_unit_in, self.n_units_hidden))
-            if self.batch_norm:
-                layers.append(nn.BatchNorm1d(self.n_units_hidden))
-            layers.append(NL())
-
-            # add required number of layers
-            for i in range(self.n_layers_hidden - 1):
-                if self.drouput > 0:
-                    layers.append(nn.Dropout(self.dropout))
-
-                layers.append(nn.Linear(self.n_units_hidden, self.n_units_hidden))
-                if self.batch_norm:
-                    layers.append(nn.BatchNorm1d(self.n_units_hidden))
-                layers.append(NL())
-
-            # add final layers
-            layers.append(nn.Linear(self.n_units_hidden, n_unit_out))
-        else:
-            layers = [nn.Linear(n_unit_in, n_unit_out)]
-
-        if self.task_type == "classification":
-            layers.append(nn.Softmax(dim=-1))
-
-        # return final architecture
-        return nn.Sequential(*layers).to(DEVICE)

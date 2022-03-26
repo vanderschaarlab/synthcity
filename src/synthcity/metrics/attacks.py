@@ -1,6 +1,5 @@
 # stdlib
-import copy
-from typing import Any, List
+from typing import Any, Dict, List
 
 # third party
 import numpy as np
@@ -17,7 +16,9 @@ from synthcity.plugins.models.mlp import MLP
 @validate_arguments(config=dict(arbitrary_types_allowed=True))
 def evaluate_sensitive_data_leakage(
     classifier_template: Any,
+    classifier_args: Dict,
     regressor_template: Any,
+    regressor_args: Dict,
     X_gt: pd.DataFrame,
     X_syn: pd.DataFrame,
     sensitive_columns: List[str] = [],
@@ -37,10 +38,11 @@ def evaluate_sensitive_data_leakage(
             task_type = "classification"
             encoder = LabelEncoder()
             target = encoder.fit_transform(target)
-            model = copy.deepcopy(classifier_template)
+            classifier_args["n_units_out"] = len(np.unique(target))
+            model = classifier_template(**classifier_args)
         else:
             task_type = "regression"
-            model = copy.deepcopy(regressor_template)
+            model = regressor_template(**regressor_args)
 
         model.fit(keys_data.values, np.asarray(target))
 
@@ -66,8 +68,10 @@ def evaluate_sensitive_data_leakage_mlp(
     sensitive_columns: List[str] = [],
 ) -> float:
     return evaluate_sensitive_data_leakage(
-        MLP(task_type="classification"),
-        MLP(task_type="regression"),
+        MLP,
+        {"task_type": "classification", "n_units_in": X_gt.shape[1] - 1},
+        MLP,
+        {"task_type": "regression", "n_units_in": X_gt.shape[1] - 1, "n_units_out": 1},
         X_gt,
         X_syn,
         sensitive_columns,
@@ -81,8 +85,10 @@ def evaluate_sensitive_data_leakage_xgb(
     sensitive_columns: List[str] = [],
 ) -> float:
     return evaluate_sensitive_data_leakage(
-        XGBClassifier(n_jobs=1),
-        XGBRegressor(n_jobs=1),
+        XGBClassifier,
+        {"n_jobs": 1},
+        XGBRegressor,
+        {"n_jobs": 1},
         X_gt,
         X_syn,
         sensitive_columns,
@@ -96,8 +102,10 @@ def evaluate_sensitive_data_leakage_linear(
     sensitive_columns: List[str] = [],
 ) -> float:
     return evaluate_sensitive_data_leakage(
-        LogisticRegression(),
-        LinearRegression(),
+        LogisticRegression,
+        {},
+        LinearRegression,
+        {},
         X_gt,
         X_syn,
         sensitive_columns,

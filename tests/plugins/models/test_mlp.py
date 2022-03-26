@@ -1,4 +1,5 @@
 # third party
+import numpy as np
 import pytest
 from sklearn.datasets import load_diabetes, load_digits
 
@@ -9,6 +10,8 @@ from synthcity.plugins.models.mlp import MLP
 def test_network_config() -> None:
     net = MLP(
         task_type="regression",
+        n_units_in=10,
+        n_units_out=2,
         n_layers_hidden=2,
         n_units_hidden=20,
         batch_size=23,
@@ -21,14 +24,10 @@ def test_network_config() -> None:
         seed=77,
     )
 
-    assert net.n_layers_hidden == 2
-    assert net.n_units_hidden == 20
+    assert len(net.model) == 8
     assert net.batch_size == 23
     assert net.n_iter == 34
     assert net.lr == 1e-2
-    assert net.dropout == 0.5
-    assert net.batch_norm is True
-    assert net.nonlin == "elu"
     assert net.patience == 66
     assert net.seed == 77
 
@@ -49,6 +48,8 @@ def test_basic_network(
 ) -> None:
     net = MLP(
         task_type=task_type,
+        n_units_in=10,
+        n_units_out=2,
         n_iter=n_iter,
         dropout=dropout,
         nonlin=nonlin,
@@ -58,16 +59,15 @@ def test_basic_network(
     )
 
     assert net.n_iter == n_iter
-    assert net.dropout == dropout
-    assert net.batch_norm == batch_norm
-    assert net.nonlin == nonlin
     assert net.task_type == task_type
     assert net.lr == lr
 
 
 def test_mlp_classification() -> None:
     X, y = load_digits(return_X_y=True)
-    model = MLP(task_type="classification")
+    model = MLP(
+        task_type="classification", n_units_in=X.shape[1], n_units_out=len(np.unique(y))
+    )
 
     model.fit(X, y)
 
@@ -77,7 +77,7 @@ def test_mlp_classification() -> None:
 
 def test_mlp_regression() -> None:
     X, y = load_diabetes(return_X_y=True)
-    model = MLP(task_type="regression")
+    model = MLP(task_type="regression", n_units_in=X.shape[1], n_units_out=1)
 
     model.fit(X, y)
 

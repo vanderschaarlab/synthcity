@@ -72,7 +72,8 @@ class PATEGAN:
 
     def __init__(
         self,
-        epochs: int = 1,  # the number of student training iterations
+        epochs: int = 100,  # the number of student training iterations
+        discr_epochs: int = 1,  # the number of student training iterations
         batch_size: int = 64,  # the number of batch size for training student and generator
         n_teachers: int = 10,  # the number of teachers
         epsilon: float = 1.0,  # Differential privacy parameters (epsilon)
@@ -83,6 +84,7 @@ class PATEGAN:
         clipping_value: float = 0.01,
     ) -> None:
         self.epochs = epochs
+        self.discr_epochs = discr_epochs
         self.batch_size = batch_size
         self.n_teachers = n_teachers
         self.epsilon = epsilon
@@ -99,8 +101,8 @@ class PATEGAN:
         """Basic PATE-GAN framework.
 
         Args:
-          - x_train: training data
-          - parameters: PATE-GAN parameters
+            - x_train: training data
+            - parameters: PATE-GAN parameters
             - epochs: the number of student training iterations
             - batch_size: the number of batch size for training student and generator
             - k: the number of teachers
@@ -136,12 +138,12 @@ class PATEGAN:
 
         idx = np.random.permutation(no)
 
-        for i in range(self.n_teachers):
+        for it in range(self.n_teachers):
             temp_idx = idx[
-                int(i * partition_data_no) : int((i + 1) * partition_data_no)
+                int(it * partition_data_no) : int((it + 1) * partition_data_no)
             ]
             temp_x = x_train[temp_idx, :]
-            x_partition = x_partition + [temp_x]
+            x_partition.append(temp_x)
 
         # NN variables
         self.generator = Generator(self.z_dim, generator_h_dim, dim)
@@ -164,17 +166,16 @@ class PATEGAN:
         G_solver.zero_grad()
 
         # Iterations
-        while epsilon_hat < self.epsilon:
-
+        for epoch in range(self.epochs):
             # 1. Train teacher models
             teacher_models: List = []
 
-            for _ in range(self.n_teachers):
+            for tidx in range(self.n_teachers):
 
                 Z_mb = self.sample_Z(partition_data_no, self.z_dim)
                 G_mb = self.generator(Z_mb).detach().cpu().numpy()
 
-                temp_x = x_partition[i]
+                temp_x = x_partition[tidx]
                 idx = np.random.permutation(len(temp_x[:, 0]))
                 X_mb = temp_x[idx[:partition_data_no], :]
 
@@ -200,7 +201,7 @@ class PATEGAN:
                 teacher_models = teacher_models + [model]
 
             # 2. Student training
-            for _ in range(self.epochs):
+            for _ in range(self.discr_epochs):
 
                 Z_mb = self.sample_Z(self.batch_size, self.z_dim)
                 G_mb = self.generator(Z_mb).detach().cpu().numpy()
@@ -235,6 +236,7 @@ class PATEGAN:
 
                 loss = student_loss(Y_mb, S_fake)
                 loss.backward()
+                print("student loss", loss)
 
                 nn.utils.clip_grad_norm_(self.student.parameters(), self.clipping_value)
 
@@ -257,13 +259,14 @@ class PATEGAN:
                 curr_list = curr_list + [temp_alpha]
 
             epsilon_hat = np.min(curr_list)
+            print("epsilon ", epsilon_hat)
 
         return self
 
     def sample(self, count: int) -> np.ndarray:
         with torch.no_grad():
             # TODO: fix schema
-            Z_mb = self.sample_Z(10 * count, self.z_dim)
+            Z_mb = self.sample_Z(count, self.z_dim)
 
             x_hat = self.generator(Z_mb).cpu().numpy()
 

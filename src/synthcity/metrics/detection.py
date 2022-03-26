@@ -98,6 +98,8 @@ def evaluate_mlp_detection_synthetic(X_gt: pd.DataFrame, X_syn: pd.DataFrame) ->
 
     model_args = {
         "task_type": "classification",
+        "n_units_in": X_gt.shape[1],
+        "n_units_out": 2,
     }
     return evaluate_sklearn_detection_synthetic(
         MLP,
