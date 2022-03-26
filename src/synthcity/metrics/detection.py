@@ -37,8 +37,8 @@ def evaluate_sklearn_detection_synthetic(
     X_syn = X_syn.reset_index(drop=True)
     labels_syn = pd.Series([1] * len(X_syn))
 
-    data = X_gt.append(X_syn).reset_index(drop=True)
-    labels = labels_gt.append(labels_syn).reset_index(drop=True)
+    data = pd.concat([X_gt, X_syn]).reset_index(drop=True)
+    labels = pd.concat([labels_gt, labels_syn]).reset_index(drop=True)
 
     res = []
 
