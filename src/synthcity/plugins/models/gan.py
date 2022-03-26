@@ -5,7 +5,6 @@ from typing import Callable, Optional, Tuple
 import numpy as np
 import torch
 from pydantic import validate_arguments
-from sklearn.preprocessing import MinMaxScaler
 from torch import nn
 from torch.utils.data import DataLoader, TensorDataset
 
@@ -95,6 +94,8 @@ class GAN(nn.Module):
         seed: int = 0,
         n_iter_min: int = 100,
         clipping_value: int = 1,
+        fake_labels_generator: Optional[Callable] = None,
+        true_labels_generator: Optional[Callable] = None,
     ) -> None:
         super(GAN, self).__init__()
 
@@ -143,11 +144,18 @@ class GAN(nn.Module):
         self.clipping_value = clipping_value
         self.criterion = nn.BCELoss()
 
-        self.encoder = MinMaxScaler()
         torch.manual_seed(seed)
 
+        def gen_fake_labels(X: torch.Tensor) -> torch.Tensor:
+            return torch.zeros((len(X),), device=DEVICE)
+
+        def gen_true_labels(X: torch.Tensor) -> torch.Tensor:
+            return torch.ones((len(X),), device=DEVICE)
+
+        self.fake_labels_generator = gen_fake_labels
+        self.true_labels_generator = gen_true_labels
+
     def fit(self, X: np.ndarray) -> "GAN":
-        X = self.encoder.fit_transform(X)
         Xt = self._check_tensor(X)
 
         self._train(Xt)
@@ -155,7 +163,7 @@ class GAN(nn.Module):
         return self
 
     def generate(self, count: int) -> np.ndarray:
-        return self.encoder.inverse_transform(self(count).cpu().numpy())
+        return self(count).cpu().numpy()
 
     @validate_arguments(config=dict(arbitrary_types_allowed=True))
     def forward(self, count: int) -> torch.Tensor:
@@ -163,17 +171,27 @@ class GAN(nn.Module):
         with torch.no_grad():
             return self.generator(fixed_noise).detach().cpu()
 
-    def _train_epoch_generator(self) -> float:
+    def train_epoch_generator(
+        self,
+        fake_labels_generator: Optional[Callable] = None,
+        true_labels_generator: Optional[Callable] = None,
+    ) -> float:
         # Update G network: maximize log(D(G(z)))
+        if fake_labels_generator is None:
+            fake_labels_generator = self.fake_labels_generator
+        if true_labels_generator is None:
+            true_labels_generator = self.true_labels_generator
+
         self.generator.optimizer.zero_grad()
 
         noise = torch.randn(self.batch_size, self.n_units_latent, device=DEVICE)
-        label = torch.full(
-            (self.batch_size,), 1.0, device=DEVICE
-        )  # All generated items should look real
-
         fake = self.generator(noise)
-        output = self.discriminator(fake).squeeze()
+
+        label = self.true_labels_generator(
+            fake
+        ).squeeze()  # All generated items look real for the generator
+
+        output = self.discriminator(fake).squeeze().float()
         # Calculate G's loss based on this output
         errG = self.criterion(output, label)
         # Calculate gradients for G
@@ -186,57 +204,90 @@ class GAN(nn.Module):
         # Return loss
         return errG.item()
 
-    def _train_epoch_discriminator(self, X: torch.Tensor) -> float:
+    def train_epoch_discriminator(
+        self,
+        X: torch.Tensor,
+        fake_labels_generator: Optional[Callable] = None,
+        true_labels_generator: Optional[Callable] = None,
+    ) -> float:
         # Update D network: maximize log(D(x)) + log(1 - D(G(z)))
+        if fake_labels_generator is None:
+            fake_labels_generator = self.fake_labels_generator
 
-        self.discriminator.zero_grad()
+        if true_labels_generator is None:
+            true_labels_generator = self.true_labels_generator
 
-        # Train with all-real batch
-        real_X, label = X.to(DEVICE), torch.ones((len(X),), device=DEVICE)
-        output = self.discriminator(real_X).squeeze()
-        errD_real = self.criterion(output, label)
-        errD_real.backward()
+        errors = []
+        for epoch in range(self.discriminator_n_iter):
+            self.discriminator.zero_grad()
 
-        # Train with all-fake batch
-        noise = torch.randn(self.batch_size, self.n_units_latent, device=DEVICE)
-        fake, label = self.generator(noise), torch.zeros(
-            (self.batch_size,), device=DEVICE
-        )
-        output = self.discriminator(fake.detach()).squeeze()
-        errD_fake = self.criterion(output, label)
-        errD_fake.backward()
+            # Train with all-real batch
+            real_X, label = X.to(DEVICE), true_labels_generator(X).squeeze()
+            output = self.discriminator(real_X).squeeze().float()
+            errD_real = self.criterion(output, label)
+            errD_real.backward()
 
-        # Compute error of D as sum over the fake and the real batches
-        errD = errD_real + errD_fake
+            # Train with all-fake batch
+            noise = torch.randn(self.batch_size, self.n_units_latent, device=DEVICE)
+            fake = self.generator(noise)
+            label = fake_labels_generator(fake).squeeze().float()
 
-        # Update D
-        torch.nn.utils.clip_grad_norm_(
-            self.discriminator.parameters(), self.clipping_value
-        )
-        self.discriminator.optimizer.step()
+            output = self.discriminator(fake.detach()).squeeze()
+            errD_fake = self.criterion(output, label)
+            errD_fake.backward()
 
-        return errD.item()
+            # Compute error of D as sum over the fake and the real batches
+            errD = errD_real + errD_fake
 
-    def _train_epoch(self, loader: DataLoader) -> Tuple[float, float]:
+            # Update D
+            torch.nn.utils.clip_grad_norm_(
+                self.discriminator.parameters(), self.clipping_value
+            )
+            self.discriminator.optimizer.step()
+
+            errors.append(errD.item())
+
+        return np.mean(errors)
+
+    def train_epoch(
+        self,
+        loader: DataLoader,
+        fake_labels_generator: Optional[Callable] = None,
+        true_labels_generator: Optional[Callable] = None,
+    ) -> Tuple[float, float]:
         G_losses = []
         D_losses = []
 
         for i, data in enumerate(loader):
-            D_losses.append(self._train_epoch_discriminator(data[0]))
-            G_losses.append(self._train_epoch_generator())
+            D_losses.append(
+                self.train_epoch_discriminator(
+                    data[0],
+                    fake_labels_generator=fake_labels_generator,
+                    true_labels_generator=true_labels_generator,
+                )
+            )
+            G_losses.append(
+                self.train_epoch_generator(
+                    fake_labels_generator=fake_labels_generator,
+                    true_labels_generator=true_labels_generator,
+                )
+            )
 
         return np.mean(G_losses), np.mean(D_losses)
+
+    def dataloader(self, X: torch.Tensor) -> DataLoader:
+        dataset = TensorDataset(X)
+        return DataLoader(dataset, batch_size=self.batch_size, pin_memory=False)
 
     def _train(self, X: torch.Tensor) -> "GAN":
         X = self._check_tensor(X).float()
 
         # Load Dataset
-        dataset = TensorDataset(X)
-        loader = DataLoader(dataset, batch_size=self.batch_size, pin_memory=False)
+        loader = self.dataloader(X)
 
         # Train loop
         for i in range(self.generator_n_iter):
-            g_loss, d_loss = self._train_epoch(loader)
+            g_loss, d_loss = self.train_epoch(loader)
             # Check how the generator is doing by saving G's output on fixed_noise
             if i % self.n_iter_print == 0:
                 log.info(

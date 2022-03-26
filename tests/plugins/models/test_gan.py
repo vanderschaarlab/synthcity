@@ -1,6 +1,7 @@
 # third party
 import pytest
 from sklearn.datasets import load_digits
+from sklearn.preprocessing import MinMaxScaler
 
 # synthcity absolute
 from synthcity.plugins.models.gan import GAN
@@ -82,9 +83,12 @@ def test_basic_network(
 
 def test_gan_classification() -> None:
     X, _ = load_digits(return_X_y=True)
+    X = MinMaxScaler().fit_transform(X)
+
     model = GAN(
         n_features=X.shape[1],
         n_units_latent=50,
+        generator_n_iter=100,
     )
     model.fit(X)
 

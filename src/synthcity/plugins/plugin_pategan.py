@@ -8,7 +8,7 @@ Last updated Date: Feburuary 15th 2020
 Code author: Jinsung Yoon (jsyoon0823@gmail.com)
 """
 # stdlib
-from typing import Any, List, Tuple
+from typing import Any, Dict, List, Tuple
 
 # third party
 import numpy as np
@@ -18,46 +18,96 @@ import pandas as pd
 import torch
 from sklearn.linear_model import LogisticRegression
 from sklearn.preprocessing import MinMaxScaler
-from torch import nn
 
 # synthcity absolute
 from synthcity.plugins.core.distribution import Distribution
 from synthcity.plugins.core.plugin import Plugin
 from synthcity.plugins.core.schema import Schema
+from synthcity.plugins.models import GAN
 
 
-class Generator(nn.Module):
+class Teachers:
     def __init__(
         self,
-        z_dim: int,
-        generator_h_dim: int,
-        dim: int,
+        n_teachers: int,
+        partition_size: int,
+        lamda: float = 1,  # PATE noise size
+        model_template: Any = LogisticRegression,
     ) -> None:
-        super(Generator, self).__init__()
-        # Generator
-        self.model = nn.Sequential(
-            nn.Linear(z_dim, generator_h_dim),
-            nn.Tanh(),
-            nn.Linear(generator_h_dim, generator_h_dim),
-            nn.Tanh(),
-            nn.Linear(generator_h_dim, dim),
-            nn.Sigmoid(),
-        )
+        self.n_teachers = n_teachers
+        self.partition_size = partition_size
+        self.model_template = model_template
+        self.lamda = lamda
 
-    def forward(self, z: torch.Tensor) -> torch.Tensor:
-        return self.model(z)
+    def fit(self, X: np.ndarray, generator: Any) -> "Teachers":
+        # 1. train teacher models
+        self.teacher_models: list = []
 
+        permutations = np.random.permutation(len(X))
 
-class Student(nn.Module):
-    def __init__(self, dim: int, student_h_dim: int) -> None:
-        super(Student, self).__init__()
-        self.model = nn.Sequential(
-            nn.Linear(dim, student_h_dim),
-            nn.ReLU(),
-        )
+        for tidx in range(self.n_teachers):
+            teacher_idx = permutations[
+                int(tidx * self.partition_size) : int((tidx + 1) * self.partition_size)
+            ]
+            teacher_X = X[teacher_idx, :]
 
-    def forward(self, X: torch.Tensor) -> torch.Tensor:
-        return self.model(X)
+            g_mb = generator(self.partition_size)
+
+            idx = np.random.permutation(len(teacher_X[:, 0]))
+            x_mb = teacher_X[idx[: self.partition_size], :]
+
+            x_comb = np.concatenate((x_mb, g_mb), axis=0)
+            y_comb = np.concatenate(
+                (
+                    np.ones(
+                        [
+                            self.partition_size,
+                        ]
+                    ),
+                    np.zeros(
+                        [
+                            self.partition_size,
+                        ]
+                    ),
+                ),
+                axis=0,
+            )
+
+            model = self.model_template()
+            model.fit(x_comb, y_comb)
+
+            self.teacher_models.append(model)
+
+        return self
+
+    def pate_lamda(self, x: np.ndarray) -> Tuple[int, int, int]:
+        """Returns PATE_lambda(x).
+
+        Args:
+          - x: feature vector
+          - teacher_models: a list of teacher models
+
+        Returns:
+          - n0, n1: the number of label 0 and 1, respectively
+          - out: label after adding laplace noise.
+        """
+
+        y_hat: List = []
+
+        for teacher in self.teacher_models:
+            temp_y = teacher.predict(np.reshape(x, [1, -1]))
+            y_hat = y_hat + [temp_y]
+
+        y_hat_np = np.asarray(y_hat)
+        n0 = sum(y_hat_np == 0)
+        n1 = sum(y_hat_np == 1)
+
+        lap_noise = np.random.laplace(loc=0.0, scale=self.lamda)
+
+        out = (n1 + lap_noise) / float(n0 + n1)
+        out = int(out > 0.5)
+
+        return n0, n1, out
 
 
 class PATEGAN:
@@ -96,7 +146,7 @@ class PATEGAN:
 
     def fit(
         self,
-        x_train: np.ndarray,
+        X_train: np.ndarray,
     ) -> "PATEGAN":
         """Basic PATE-GAN framework.
 
@@ -113,197 +163,92 @@ class PATEGAN:
           - x_train_hat: generated training data by differentially private generator
         """
 
-        self.encoder = MinMaxScaler().fit(np.asarray(x_train))
-        x_train = torch.from_numpy(np.asarray(x_train))
+        self.encoder = MinMaxScaler().fit(np.asarray(X_train))
+        X_train = torch.from_numpy(np.asarray(X_train))
+        features = X_train.shape[1]
+
+        self.model = GAN(
+            n_features=features,
+            n_units_latent=features,
+            generator_n_units_hidden=4 * features,
+            generator_nonlin="tanh",
+            generator_nonlin_out="sigmoid",
+            discriminator_n_units_hidden=4 * features,
+            discriminator_n_iter=self.discr_epochs,
+            batch_size=self.batch_size,
+            generator_lr=self.learning_rate,
+            discriminator_lr=self.learning_rate,
+            clipping_value=self.clipping_value,
+        )
+        partition_data_no = int(len(X_train) / self.n_teachers)
+
+        loader = self.model.dataloader(X_train)
 
         # alpha initialize
-        alpha = np.zeros([self.alpha])
+        self.alpha_dict = np.zeros([self.alpha])
 
         # initialize epsilon_hat
         epsilon_hat = 0
 
-        # Network parameters
-        no, dim = x_train.shape
-        # Random sample dimensions
-        self.z_dim = int(dim)
-
-        # Student hidden dimension
-        student_h_dim = int(dim)
-        # Generator hidden dimension
-        generator_h_dim = int(4 * dim)
-
-        # Partitioning the data into k subsets
-        x_partition: List = []
-        partition_data_no = int(no / self.n_teachers)
-
-        idx = np.random.permutation(no)
-
-        for it in range(self.n_teachers):
-            temp_idx = idx[
-                int(it * partition_data_no) : int((it + 1) * partition_data_no)
-            ]
-            temp_x = x_train[temp_idx, :]
-            x_partition.append(temp_x)
-
-        # NN variables
-        self.generator = Generator(self.z_dim, generator_h_dim, dim)
-        self.student = Student(dim, student_h_dim)
-
-        # Loss
-        def student_loss(Y: torch.Tensor, generated: torch.Tensor) -> torch.Tensor:
-            return torch.mean(Y * generated) - torch.mean((1 - Y) * generated)
-
-        def generator_loss(generated: torch.Tensor) -> torch.Tensor:
-            return -torch.mean(generated)
-
-        # Optimizer
-        S_solver = torch.optim.RMSprop(self.student.parameters(), lr=self.learning_rate)
-        G_solver = torch.optim.RMSprop(
-            self.generator.parameters(), lr=self.learning_rate
-        )
-
-        S_solver.zero_grad()
-        G_solver.zero_grad()
-
         # Iterations
-        for epoch in range(self.epochs):
+        while epsilon_hat < self.epsilon:
             # 1. Train teacher models
-            teacher_models: List = []
-
-            for tidx in range(self.n_teachers):
-
-                Z_mb = self.sample_Z(partition_data_no, self.z_dim)
-                G_mb = self.generator(Z_mb).detach().cpu().numpy()
-
-                temp_x = x_partition[tidx]
-                idx = np.random.permutation(len(temp_x[:, 0]))
-                X_mb = temp_x[idx[:partition_data_no], :]
-
-                X_comb = np.concatenate((X_mb, G_mb), axis=0)
-                Y_comb = np.concatenate(
-                    (
-                        np.ones(
-                            [
-                                partition_data_no,
-                            ]
-                        ),
-                        np.zeros(
-                            [
-                                partition_data_no,
-                            ]
-                        ),
-                    ),
-                    axis=0,
-                )
-
-                model = LogisticRegression()
-                model.fit(X_comb, Y_comb)
-                teacher_models = teacher_models + [model]
+            teachers = Teachers(self.n_teachers, partition_data_no, lamda=self.lamda)
+            teachers.fit(X_train.cpu().numpy(), self.model.generate)
 
             # 2. Student training
-            for _ in range(self.discr_epochs):
-
-                Z_mb = self.sample_Z(self.batch_size, self.z_dim)
-                G_mb = self.generator(Z_mb).detach().cpu().numpy()
-                Y_mb: List = []
-
-                for j in range(self.batch_size):
-                    n0, n1, r_j = self._pate_lamda(G_mb[j, :], teacher_models)
+            def fake_labels_generator(X: torch.Tensor) -> torch.Tensor:
+                Y_mb: list = []
+                for j in range(len(X)):
+                    n0, n1, r_j = teachers.pate_lamda(X[j, :].detach().cpu())
                     Y_mb = Y_mb + [r_j]
 
                     # Update moments accountant
-                    q = (
-                        np.log(2 + self.lamda * abs(n0 - n1))
-                        - np.log(4.0)
-                        - (self.lamda * abs(n0 - n1))
-                    )
-                    q = np.exp(q)
+                    q = self._update_moments_accountant(n0, n1)
 
                     # Compute alpha
-                    for lidx in range(self.alpha):
-                        temp1 = 2 * (self.lamda**2) * (lidx + 1) * (lidx + 2)
-                        temp2 = (1 - q) * (
-                            ((1 - q) / (1 - q * np.exp(2 * self.lamda))) ** (lidx + 1)
-                        ) + q * np.exp(2 * self.lamda * (lidx + 1))
-                        alpha[lidx] = alpha[lidx] + np.min([temp1, np.log(temp2)])
+                    self._update_alpha(q)
 
-                # PATE labels for G_mb
-                Y_mb = torch.from_numpy(np.reshape(np.asarray(Y_mb), [-1, 1]))
+                # PATE labels for X
+                return torch.from_numpy(np.reshape(np.asarray(Y_mb), [-1, 1]))
 
-                # Update student
-                G_sample = self.generator(Z_mb)
-                S_fake = self.student(G_sample)
-
-                loss = student_loss(Y_mb, S_fake)
-                loss.backward()
-                print("student loss", loss)
-
-                nn.utils.clip_grad_norm_(self.student.parameters(), self.clipping_value)
-
-                S_solver.step()
-
-            # Generator Update
-            Z_mb = self.sample_Z(self.batch_size, self.z_dim)
-            G_sample_mb = self.generator(Z_mb)
-            S_fake_mb = self.student(G_sample_mb)
-            g_loss = generator_loss(S_fake_mb)
-
-            g_loss.backward()
-
-            G_solver.step()
+            self.model.train_epoch(loader, fake_labels_generator=fake_labels_generator)
 
             # epsilon_hat computation
             curr_list: List = []
             for lidx in range(self.alpha):
-                temp_alpha = (alpha[lidx] + np.log(1 / self.delta)) / float(lidx + 1)
+                temp_alpha = (self.alpha_dict[lidx] + np.log(1 / self.delta)) / float(
+                    lidx + 1
+                )
                 curr_list = curr_list + [temp_alpha]
 
             epsilon_hat = np.min(curr_list)
-            print("epsilon ", epsilon_hat)
 
         return self
 
+    def _update_moments_accountant(self, n0: int, n1: int) -> float:
+        # Update moments accountant
+        q = (
+            np.log(2 + self.lamda * abs(n0 - n1))
+            - np.log(4.0)
+            - (self.lamda * abs(n0 - n1))
+        )
+        return np.exp(q)
+
+    def _update_alpha(self, q: float) -> Dict:
+        # Compute alpha
+        for lidx in range(self.alpha):
+            temp1 = 2 * (self.lamda**2) * (lidx + 1) * (lidx + 2)
+            temp2 = (1 - q) * (
+                ((1 - q) / (1 - q * np.exp(2 * self.lamda))) ** (lidx + 1)
+            ) + q * np.exp(2 * self.lamda * (lidx + 1))
+            self.alpha_dict[lidx] += np.min([temp1, np.log(temp2)])
+        return self.alpha_dict
+
     def sample(self, count: int) -> np.ndarray:
         with torch.no_grad():
-            # TODO: fix schema
-            Z_mb = self.sample_Z(count, self.z_dim)
-
-            x_hat = self.generator(Z_mb).cpu().numpy()
-
+            x_hat = self.model.generate(10 * count)
             return self.encoder.inverse_transform(x_hat)
-
-    # Sample from uniform distribution
-    def sample_Z(self, m: int, n: int) -> torch.Tensor:
-        return -2 * torch.rand(m, n) + 1
-
-    def _pate_lamda(self, x: np.ndarray, teacher_models: List) -> Tuple[int, int, int]:
-        """Returns PATE_lambda(x).
-
-        Args:
-          - x: feature vector
-          - teacher_models: a list of teacher models
-
-        Returns:
-          - n0, n1: the number of label 0 and 1, respectively
-          - out: label after adding laplace noise.
-        """
-
-        y_hat: List = []
-
-        for teacher in teacher_models:
-            temp_y = teacher.predict(np.reshape(x, [1, -1]))
-            y_hat = y_hat + [temp_y]
-
-        y_hat_np = np.asarray(y_hat)
-        n0 = sum(y_hat_np == 0)
-        n1 = sum(y_hat_np == 1)
-
-        lap_noise = np.random.laplace(loc=0.0, scale=self.lamda)
-
-        out = (n1 + lap_noise) / float(n0 + n1)
-        out = int(out > 0.5)
-
-        return n0, n1, out
 
 
 class PATEGANPlugin(Plugin):
@@ -320,7 +265,8 @@ class PATEGANPlugin(Plugin):
 
     def __init__(
         self,
-        epochs: int = 1,
+        epochs: int = 100,
+        discr_epochs: int = 1,
         batch_size: int = 64,
         n_teachers: int = 10,
         epsilon: float = 1.0,
@@ -332,6 +278,7 @@ class PATEGANPlugin(Plugin):
 
         self.model = PATEGAN(
             epochs=epochs,
+            discr_epochs=discr_epochs,
             batch_size=batch_size,
             n_teachers=n_teachers,
             epsilon=epsilon,
