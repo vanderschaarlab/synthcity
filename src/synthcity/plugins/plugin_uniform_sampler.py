@@ -44,15 +44,19 @@ class UniformSamplerPlugin(Plugin):
         return self
 
     def _generate(self, count: int, syn_schema: Schema, **kwargs: Any) -> pd.DataFrame:
-        X_rnd = pd.DataFrame(
-            np.zeros((count, len(self.schema().features()))),
-            columns=self.schema().features(),
-        )
+        def _sample(count: int) -> pd.DataFrame:
+            X_rnd = pd.DataFrame(
+                np.zeros((count, len(self.schema().features()))),
+                columns=self.schema().features(),
+            )
 
-        for feature in syn_schema:
-            sample = syn_schema[feature].sample(count=count)
-            X_rnd[feature] = sample
-        return X_rnd
+            for feature in syn_schema:
+                sample = syn_schema[feature].sample(count=count)
+                X_rnd[feature] = sample
+
+            return X_rnd
+
+        return self._safe_generate(_sample, count, syn_schema)
 
 
 plugin = UniformSamplerPlugin

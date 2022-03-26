@@ -38,7 +38,8 @@ def evaluate_sensitive_data_leakage(
             task_type = "classification"
             encoder = LabelEncoder()
             target = encoder.fit_transform(target)
-            classifier_args["n_units_out"] = len(np.unique(target))
+            if "n_units_out" in classifier_args:
+                classifier_args["n_units_out"] = len(np.unique(target))
             model = classifier_template(**classifier_args)
         else:
             task_type = "regression"
@@ -69,7 +70,11 @@ def evaluate_sensitive_data_leakage_mlp(
 ) -> float:
     return evaluate_sensitive_data_leakage(
         MLP,
-        {"task_type": "classification", "n_units_in": X_gt.shape[1] - 1},
+        {
+            "task_type": "classification",
+            "n_units_in": X_gt.shape[1] - 1,
+            "n_units_out": 0,
+        },
         MLP,
         {"task_type": "regression", "n_units_in": X_gt.shape[1] - 1, "n_units_out": 1},
         X_gt,

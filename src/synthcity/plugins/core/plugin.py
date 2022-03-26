@@ -213,10 +213,12 @@ class Plugin(metaclass=ABCMeta):
 
         data_synth = pd.DataFrame([], columns=self.schema().features())
         for it in range(self.sampling_patience):
+            # sample
             iter_samples = gen_cbk(count)
             iter_samples_df = pd.DataFrame(
                 iter_samples, columns=self.schema().features()
             )
+            # validate schema
             iter_samples_df = syn_schema.adapt_dtypes(iter_samples_df)
 
             iter_synth_valid = constraints.match(iter_samples_df)

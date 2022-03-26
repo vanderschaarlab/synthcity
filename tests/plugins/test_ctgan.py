@@ -79,6 +79,7 @@ def test_plugin_generate_constraints(test_plugin: Plugin) -> None:
     assert len(X_gen) == 50
     assert test_plugin.schema_includes(X_gen)
     assert constraints.filter(X_gen).sum() == len(X_gen)
+    assert list(X_gen.columns) == list(X.columns)
 
 
 def test_sample_hyperparams() -> None:

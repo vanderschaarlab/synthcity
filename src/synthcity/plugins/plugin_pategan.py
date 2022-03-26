@@ -4,8 +4,6 @@ Reference: James Jordon, Jinsung Yoon, Mihaela van der Schaar,
 "PATE-GAN: Generating Synthetic Data with Differential Privacy Guarantees,"
 International Conference on Learning Representations (ICLR), 2019.
 Paper link: https://openreview.net/forum?id=S1zk9iRqF7
-Last updated Date: Feburuary 15th 2020
-Code author: Jinsung Yoon (jsyoon0823@gmail.com)
 """
 # stdlib
 from typing import Any, Dict, List, Tuple
@@ -85,7 +83,6 @@ class Teachers:
 
         Args:
           - x: feature vector
-          - teacher_models: a list of teacher models
 
         Returns:
           - n0, n1: the number of label 0 and 1, respectively
@@ -111,14 +108,7 @@ class Teachers:
 
 
 class PATEGAN:
-    """Basic PATE-GAN framework.
-    Args:
-        - epochs: the number of student training iterations
-        - batch_size: the number of batch size for training student and generator
-        - k: the number of teachers
-        - epsilon, delta: Differential privacy parameters
-        - lamda: noise size
-    """
+    """Basic PATE-GAN framework."""
 
     def __init__(
         self,
@@ -143,27 +133,14 @@ class PATEGAN:
         self.alpha = alpha
         self.learning_rate = learning_rate
         self.clipping_value = clipping_value
+        self.encoder = MinMaxScaler()
 
     def fit(
         self,
         X_train: np.ndarray,
     ) -> "PATEGAN":
-        """Basic PATE-GAN framework.
+        X_train = self.encoder.fit_transform(X_train)
 
-        Args:
-            - x_train: training data
-            - parameters: PATE-GAN parameters
-            - epochs: the number of student training iterations
-            - batch_size: the number of batch size for training student and generator
-            - k: the number of teachers
-            - epsilon, delta: Differential privacy parameters
-            - lamda: noise size
-
-        Returns:
-          - x_train_hat: generated training data by differentially private generator
-        """
-
-        self.encoder = MinMaxScaler().fit(np.asarray(X_train))
         X_train = torch.from_numpy(np.asarray(X_train))
         features = X_train.shape[1]
 
@@ -257,8 +234,7 @@ class PATEGAN:
 
     def sample(self, count: int) -> np.ndarray:
         with torch.no_grad():
-            x_hat = self.model.generate(count)
-            return self.encoder.inverse_transform(x_hat)
+            return self.encoder.inverse_transform(self.model.generate(count))
 
 
 class PATEGANPlugin(Plugin):

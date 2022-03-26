@@ -50,6 +50,7 @@ def test_plugin_generate(test_plugin: Plugin) -> None:
     X_gen = test_plugin.generate(50)
     assert len(X_gen) == 50
     assert test_plugin.schema_includes(X_gen)
+    assert list(X_gen.columns) == list(X.columns)
 
 
 @pytest.mark.parametrize("test_plugin", generate_fixtures(plugin_name, plugin))
