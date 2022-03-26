@@ -278,6 +278,8 @@ class MLP(nn.Module):
             self.optimizer.zero_grad()
 
             X_next, y_next = sample
+            if len(X_next) < 2:
+                continue
 
             preds = self.forward(X_next).squeeze()
 

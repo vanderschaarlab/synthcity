@@ -44,6 +44,10 @@ class DummySamplerPlugin(Plugin):
     def _generate(self, count: int, syn_schema: Schema, **kwargs: Any) -> pd.DataFrame:
         def _sample(count: int) -> pd.DataFrame:
             baseline = self.X
+            constraints = syn_schema.as_constraints()
+
+            baseline = constraints.match(baseline)
+
             return baseline.sample(count, replace=True).reset_index(drop=True)
 
         return self._safe_generate(_sample, count, syn_schema)

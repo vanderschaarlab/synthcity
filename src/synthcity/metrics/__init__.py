@@ -5,9 +5,6 @@ from typing import Dict, List, Optional
 import pandas as pd
 from pydantic import validate_arguments
 
-# synthcity absolute
-from synthcity.utils.scores import ScoreEvaluator
-
 # synthcity relative
 from .attacks import (
     evaluate_sensitive_data_leakage_linear,
@@ -37,6 +34,7 @@ from .privacy import (
     evaluate_kmap,
     evaluate_l_diversity,
 )
+from .scores import ScoreEvaluator
 from .statistical import (
     evaluate_avg_jensenshannon_distance,
     evaluate_chi_squared_test,

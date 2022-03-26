@@ -9,9 +9,9 @@ from pydantic import validate_arguments
 # synthcity absolute
 import synthcity.logger as log
 from synthcity.metrics import Metrics
+from synthcity.metrics.scores import ScoreEvaluator
 from synthcity.plugins import Plugins
 from synthcity.plugins.core.constraints import Constraints
-from synthcity.utils.scores import ScoreEvaluator
 
 
 class Benchmarks:
@@ -75,6 +75,19 @@ class Benchmarks:
         results: Dict,
     ) -> None:
         pd.set_option("display.max_rows", None, "display.max_columns", None)
+
+        means = []
+        for plugin in results:
+            data = results[plugin]["mean"]
+            means.append(data)
+
+        avg = pd.concat(means, axis=1)
+        avg.set_axis(results.keys(), axis=1, inplace=True)
+
+        if len(means) > 1:
+            print()
+            print("\033[4m" + "\033[1m" + "Comparatives" + "\033[0m" + "\033[0m")
+            display(avg)
 
         for plugin in results:
             print()

@@ -219,7 +219,7 @@ class Plugin(metaclass=ABCMeta):
                 iter_samples, columns=self.schema().features()
             )
             # validate schema
-            iter_samples_df = syn_schema.adapt_dtypes(iter_samples_df)
+            iter_samples_df = self.schema().adapt_dtypes(iter_samples_df)
 
             iter_synth_valid = constraints.match(iter_samples_df)
             data_synth = pd.concat([data_synth, iter_synth_valid], ignore_index=True)
@@ -227,7 +227,7 @@ class Plugin(metaclass=ABCMeta):
             if len(data_synth) >= count:
                 break
 
-        data_synth = syn_schema.adapt_dtypes(data_synth).head(count)
+        data_synth = self.schema().adapt_dtypes(data_synth).head(count)
 
         return data_synth
 

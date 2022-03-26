@@ -103,7 +103,7 @@ def evaluate_kmap(
     """
     features = get_features(X, sensitive_columns)
 
-    values = [999]
+    values = []
     for n_clusters in [2, 5, 10, 15]:
         if len(X) / n_clusters < 10:
             continue
@@ -113,6 +113,9 @@ def evaluate_kmap(
         clusters = model.predict(X_syn[features])
         counts: dict = Counter(clusters)
         values.append(np.min(list(counts.values())))
+
+    if len(values) == 0:
+        return 0
 
     return int(np.min(values))
 
