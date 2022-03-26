@@ -170,14 +170,24 @@ class PATEGAN:
         self.model = GAN(
             n_features=features,
             n_units_latent=features,
+            batch_size=self.batch_size,
+            generator_n_layers_hidden=2,
             generator_n_units_hidden=4 * features,
             generator_nonlin="tanh",
             generator_nonlin_out="sigmoid",
+            generator_lr=self.learning_rate,
+            generator_residual=True,
+            generator_n_iter=self.epochs,
+            generator_batch_norm=False,
+            generator_dropout=0,
+            generator_weight_decay=1e-3,
             discriminator_n_units_hidden=4 * features,
             discriminator_n_iter=self.discr_epochs,
-            batch_size=self.batch_size,
-            generator_lr=self.learning_rate,
+            discriminator_nonlin="leaky_relu",
+            discriminator_batch_norm=False,
+            discriminator_dropout=0.1,
             discriminator_lr=self.learning_rate,
+            discriminator_weight_decay=1e-3,
             clipping_value=self.clipping_value,
         )
         partition_data_no = int(len(X_train) / self.n_teachers)
@@ -247,7 +257,7 @@ class PATEGAN:
 
     def sample(self, count: int) -> np.ndarray:
         with torch.no_grad():
-            x_hat = self.model.generate(10 * count)
+            x_hat = self.model.generate(count)
             return self.encoder.inverse_transform(x_hat)
 
 

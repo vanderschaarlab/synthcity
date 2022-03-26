@@ -97,8 +97,6 @@ class GAN(nn.Module):
         seed: int = 0,
         n_iter_min: int = 100,
         clipping_value: int = 1,
-        fake_labels_generator: Optional[Callable] = None,
-        true_labels_generator: Optional[Callable] = None,
     ) -> None:
         super(GAN, self).__init__()
 
