@@ -21,50 +21,49 @@ class GAN(nn.Module):
     """
     Basic GAN implementation.
 
-    Parameters
-    ----------
-    n_units_in: int
-        Number of features
-    generator_n_layers_hidden: int
-        Number of hidden layers in the generator
-    generator_n_units_hidden: int
-        Number of hidden units in each layer of the Generator
-    generator_nonlin: string, default 'elu'
-        Nonlinearity to use in the generator. Can be 'elu', 'relu', 'selu' or 'leaky_relu'.
-    generator_n_iter: int
-        Maximum number of iterations in the Generator.
-    generator_batch_norm: bool
-        Enable/disable batch norm for the generator
-    generator_dropout: float
-        Dropout value. If 0, the dropout is not used.
-    generator_residual: bool
-        Use residuals for the generator
-    discriminator_n_layers_hidden: int
-        Number of hidden layers in the discriminator
-    discriminator_n_units_hidden: int
-        Number of hidden units in each layer of the discriminator
-    discriminator_nonlin: string, default 'elu'
-        Nonlinearity to use in the discriminator. Can be 'elu', 'relu', 'selu' or 'leaky_relu'.
-    discriminator_n_iter: int
-        Maximum number of iterations in the discriminator.
-    discriminator_batch_norm: bool
-        Enable/disable batch norm for the discriminator
-    discriminator_dropout: float
-        Dropout value for the discriminator. If 0, the dropout is not used.
-    lr: float
-        learning rate for optimizer. step_size equivalent in the JAX version.
-    weight_decay: float
-        l2 (ridge) penalty for the weights.
-    batch_size: int
-        Batch size
-    n_iter_print: int
-        Number of iterations after which to print updates and check the validation loss.
-    seed: int
-        Seed used
-    n_iter_min: int
-        Minimum number of iterations to go through before starting early stopping
-    clipping_value: int, default 1
-        Gradients clipping value
+    Args:
+        n_units_in: int
+            Number of features
+        generator_n_layers_hidden: int
+            Number of hidden layers in the generator
+        generator_n_units_hidden: int
+            Number of hidden units in each layer of the Generator
+        generator_nonlin: string, default 'elu'
+            Nonlinearity to use in the generator. Can be 'elu', 'relu', 'selu' or 'leaky_relu'.
+        generator_n_iter: int
+            Maximum number of iterations in the Generator.
+        generator_batch_norm: bool
+            Enable/disable batch norm for the generator
+        generator_dropout: float
+            Dropout value. If 0, the dropout is not used.
+        generator_residual: bool
+            Use residuals for the generator
+        discriminator_n_layers_hidden: int
+            Number of hidden layers in the discriminator
+        discriminator_n_units_hidden: int
+            Number of hidden units in each layer of the discriminator
+        discriminator_nonlin: string, default 'relu'
+            Nonlinearity to use in the discriminator. Can be 'elu', 'relu', 'selu' or 'leaky_relu'.
+        discriminator_n_iter: int
+            Maximum number of iterations in the discriminator.
+        discriminator_batch_norm: bool
+            Enable/disable batch norm for the discriminator
+        discriminator_dropout: float
+            Dropout value for the discriminator. If 0, the dropout is not used.
+        lr: float
+            learning rate for optimizer. step_size equivalent in the JAX version.
+        weight_decay: float
+            l2 (ridge) penalty for the weights.
+        batch_size: int
+            Batch size
+        n_iter_print: int
+            Number of iterations after which to print updates and check the validation loss.
+        seed: int
+            Seed used
+        n_iter_min: int
+            Minimum number of iterations to go through before starting early stopping
+        clipping_value: int, default 1
+            Gradients clipping value
     """
 
     @validate_arguments(config=dict(arbitrary_types_allowed=True))
