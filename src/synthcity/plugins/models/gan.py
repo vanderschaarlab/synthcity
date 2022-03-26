@@ -37,6 +37,8 @@ class GAN(nn.Module):
         Enable/disable batch norm for the generator
     generator_dropout: float
         Dropout value. If 0, the dropout is not used.
+    generator_residual: bool
+        Use residuals for the generator
     discriminator_n_layers_hidden: int
         Number of hidden layers in the discriminator
     discriminator_n_units_hidden: int
@@ -80,6 +82,7 @@ class GAN(nn.Module):
         generator_loss: Optional[Callable] = None,
         generator_lr: float = 2e-4,
         generator_weight_decay: float = 1e-3,
+        generator_residual: bool = True,
         discriminator_n_layers_hidden: int = 3,
         discriminator_n_units_hidden: int = 300,
         discriminator_nonlin: str = "leaky_relu",
@@ -116,6 +119,7 @@ class GAN(nn.Module):
             loss=generator_loss,
             seed=seed,
             lr=generator_lr,
+            residual=generator_residual,
         ).to(DEVICE)
 
         self.discriminator = MLP(

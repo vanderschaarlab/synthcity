@@ -38,8 +38,8 @@ def test_network_config() -> None:
         clipping_value=1,
     )
 
-    assert len(net.generator.model) == 6
-    assert len(net.discriminator.model) == 8
+    assert len(net.generator.model) == 4
+    assert len(net.discriminator.model) == 5
     assert net.batch_size == 64
     assert net.generator_n_iter == 1001
     assert net.discriminator_n_iter == 1002

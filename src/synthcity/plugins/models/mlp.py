@@ -26,6 +26,62 @@ NONLIN = {
 }
 
 
+class LinearLayer(nn.Module):
+    @validate_arguments(config=dict(arbitrary_types_allowed=True))
+    def __init__(
+        self,
+        n_units_in: int,
+        n_units_out: int,
+        dropout: float = 0,
+        batch_norm: bool = False,
+        nonlin: Optional[str] = "relu",
+    ) -> None:
+        super(LinearLayer, self).__init__()
+
+        layers = []
+        if dropout > 0:
+            layers.append(nn.Dropout(dropout))
+
+        layers.append(nn.Linear(n_units_in, n_units_out))
+
+        if batch_norm:
+            layers.append(nn.BatchNorm1d(n_units_out))
+
+        if nonlin is not None:
+            NL = NONLIN[nonlin]
+            layers.append(NL())
+
+        self.model = nn.Sequential(*layers).to(DEVICE)
+
+    @validate_arguments(config=dict(arbitrary_types_allowed=True))
+    def forward(self, X: torch.Tensor) -> torch.Tensor:
+        return self.model(X.float())
+
+
+class ResidualLayer(LinearLayer):
+    @validate_arguments(config=dict(arbitrary_types_allowed=True))
+    def __init__(
+        self,
+        n_units_in: int,
+        n_units_out: int,
+        dropout: float = 0,
+        batch_norm: bool = False,
+        nonlin: Optional[str] = "relu",
+    ) -> None:
+        super(ResidualLayer, self).__init__(
+            n_units_in,
+            n_units_out,
+            dropout=dropout,
+            batch_norm=batch_norm,
+            nonlin=nonlin,
+        )
+
+    @validate_arguments(config=dict(arbitrary_types_allowed=True))
+    def forward(self, X: torch.Tensor) -> torch.Tensor:
+        out = self.model(X.float())
+        return torch.cat([out, X], dim=1)
+
+
 class MLP(nn.Module):
     """
     Basic neural net.
@@ -68,6 +124,8 @@ class MLP(nn.Module):
         Enable/disable batch norm
     early_stopping: bool
         Enable/disable early stopping
+    residual: bool
+        Add residuals.
     loss: Callable
         Optional Custom loss function. If None, the loss is CrossEntropy for classification tasks, or RMSE for regression.
     """
@@ -94,6 +152,7 @@ class MLP(nn.Module):
         clipping_value: int = 1,
         batch_norm: bool = True,
         early_stopping: bool = True,
+        residual: bool = False,
         loss: Optional[Callable] = None,
     ) -> None:
         super(MLP, self).__init__()
@@ -104,25 +163,32 @@ class MLP(nn.Module):
         self.task_type = task_type
         self.seed = seed
 
+        if residual:
+            block = ResidualLayer
+        else:
+            block = LinearLayer
+
         # network
-        NL = NONLIN[nonlin]
         layers = []
 
         if n_layers_hidden > 0:
-            layers.append(nn.Linear(n_units_in, n_units_hidden))
-            if batch_norm:
-                layers.append(nn.BatchNorm1d(n_units_hidden))
-            layers.append(NL())
+            layers.append(
+                block(n_units_in, n_units_hidden, batch_norm=batch_norm, nonlin=nonlin)
+            )
+            n_units_hidden += int(residual) * n_units_in
 
             # add required number of layers
             for i in range(n_layers_hidden - 1):
-                if dropout > 0:
-                    layers.append(nn.Dropout(dropout))
-
-                layers.append(nn.Linear(n_units_hidden, n_units_hidden))
-                if batch_norm:
-                    layers.append(nn.BatchNorm1d(n_units_hidden))
-                layers.append(NL())
+                layers.append(
+                    block(
+                        n_units_hidden,
+                        n_units_hidden,
+                        batch_norm=batch_norm,
+                        nonlin=nonlin,
+                        dropout=dropout,
+                    )
+                )
+                n_units_hidden += int(residual) * n_units_hidden
 
             # add final layers
             layers.append(nn.Linear(n_units_hidden, n_units_out))
