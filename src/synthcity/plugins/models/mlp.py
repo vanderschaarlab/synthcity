@@ -21,6 +21,8 @@ NONLIN = {
     "leaky_relu": nn.LeakyReLU,
     "selu": nn.SELU,
     "tanh": nn.Tanh,
+    "sigmoid": nn.Sigmoid,
+    "softmax": nn.Softmax,
 }
 
 
@@ -32,14 +34,18 @@ class MLP(nn.Module):
     ----------
     task_type: str
         classification or regression
+    n_units_int: int
+        Number of features
+    n_units_out: int
+        Number of outputs
     n_layers_hidden: int
-        Number of hidden layers (n_layers_hidden x n_units_hidden + 1 x Linear layer)
+        Number of hidden layers
     n_units_hidden: int
         Number of hidden units in each layer
     nonlin: string, default 'elu'
-        Nonlinearity to use in NN. Can be 'elu', 'relu', 'selu' or 'leaky_relu'.
+        Nonlinearity to use in NN. Can be 'elu', 'relu', 'selu', 'tanh' or 'leaky_relu'.
     lr: float
-        learning rate for optimizer. step_size equivalent in the JAX version.
+        learning rate for optimizer.
     weight_decay: float
         l2 (ridge) penalty for the weights.
     n_iter: int
@@ -75,6 +81,7 @@ class MLP(nn.Module):
         n_layers_hidden: int = 1,
         n_units_hidden: int = 100,
         nonlin: str = "relu",
+        nonlin_out: Optional[str] = None,
         lr: float = 1e-3,
         weight_decay: float = 1e-3,
         n_iter: int = 1000,
@@ -122,7 +129,10 @@ class MLP(nn.Module):
         else:
             layers = [nn.Linear(n_units_in, n_units_out)]
 
-        if self.task_type == "classification":
+        if nonlin_out is not None:
+            NL_out = NONLIN[nonlin_out]
+            layers.append(NL_out())
+        elif self.task_type == "classification":
             layers.append(nn.Softmax(dim=-1))
 
         self.model = nn.Sequential(*layers).to(DEVICE)
@@ -130,6 +140,9 @@ class MLP(nn.Module):
         # optimizer
         self.lr = lr
         self.weight_decay = weight_decay
+        self.optimizer = torch.optim.Adam(
+            self.parameters(), lr=self.lr, weight_decay=self.weight_decay
+        )
 
         # training
         self.n_iter = n_iter
@@ -146,6 +159,8 @@ class MLP(nn.Module):
                 self.loss = nn.CrossEntropyLoss()
             else:
                 self.loss = nn.MSELoss()
+
+        torch.manual_seed(seed)
 
     def fit(self, X: np.ndarray, y: np.ndarray) -> "MLP":
         Xt = self._check_tensor(X)
@@ -190,6 +205,28 @@ class MLP(nn.Module):
     def forward(self, X: torch.Tensor) -> torch.Tensor:
         return self.model(X.float())
 
+    def _train_epoch(self, loader: DataLoader) -> float:
+        train_loss = []
+
+        for batch_ndx, sample in enumerate(loader):
+            self.optimizer.zero_grad()
+
+            X_next, y_next = sample
+
+            preds = self.forward(X_next).squeeze()
+
+            batch_loss = self.loss(preds, y_next)
+
+            batch_loss.backward()
+
+            torch.nn.utils.clip_grad_norm_(self.parameters(), self.clipping_value)
+
+            self.optimizer.step()
+
+            train_loss.append(batch_loss.detach())
+
+        return torch.mean(torch.Tensor(train_loss))
+
     def _train(self, X: torch.Tensor, y: torch.Tensor) -> "MLP":
         X = self._check_tensor(X).float()
         y = self._check_tensor(y).squeeze().float()
@@ -207,35 +244,13 @@ class MLP(nn.Module):
         loader = DataLoader(train_dataset, batch_size=self.batch_size, pin_memory=False)
 
         # Setup the network and optimizer
-        optimizer = torch.optim.Adam(
-            self.parameters(), lr=self.lr, weight_decay=self.weight_decay
-        )
 
         val_loss_best = 999999
         patience = 0
 
         # do training
         for i in range(self.n_iter):
-            train_loss = []
-
-            for batch_ndx, sample in enumerate(loader):
-                optimizer.zero_grad()
-
-                X_next, y_next = sample
-
-                preds = self.forward(X_next).squeeze()
-
-                batch_loss = self.loss(preds, y_next)
-
-                batch_loss.backward()
-
-                torch.nn.utils.clip_grad_norm_(self.parameters(), self.clipping_value)
-
-                optimizer.step()
-
-                train_loss.append(batch_loss.detach())
-
-            train_loss = torch.Tensor(train_loss).to(DEVICE)
+            train_loss = self._train_epoch(loader)
 
             if self.early_stopping or i % self.n_iter_print == 0:
                 with torch.no_grad():
@@ -256,7 +271,7 @@ class MLP(nn.Module):
 
                     if i % self.n_iter_print == 0:
                         log.info(
-                            f"Epoch: {i}, loss: {val_loss}, train_loss: {torch.mean(train_loss)}"
+                            f"Epoch: {i}, loss: {val_loss}, train_loss: {train_loss}"
                         )
 
         return self
