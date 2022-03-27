@@ -127,7 +127,6 @@ class TabularEncoder(TransformerMixin, BaseEstimator):
         self, column_transform_info: ColumnTransformInfo, data: pd.DataFrame
     ) -> pd.DataFrame:
         column_name = data.columns[0]
-        data[column_name] = data[column_name].to_numpy().flatten()
         gm = column_transform_info.transform
         transformed = gm.transform(data, [column_name])
 
@@ -153,7 +152,7 @@ class TabularEncoder(TransformerMixin, BaseEstimator):
     ) -> pd.DataFrame:
         ohe = column_transform_info.transform
         return pd.DataFrame(
-            ohe.transform(data), columns=ohe.get_feature_names(data.columns)
+            ohe.transform(data), columns=ohe.get_feature_names_out(data.columns)
         )
 
     @validate_arguments(config=dict(arbitrary_types_allowed=True))
@@ -197,7 +196,7 @@ class TabularEncoder(TransformerMixin, BaseEstimator):
     ) -> pd.DataFrame:
         ohe = column_transform_info.transform
         column = column_transform_info.column_name
-        data = pd.DataFrame(column_data, columns=ohe.get_feature_names([column]))
+        data = pd.DataFrame(column_data, columns=ohe.get_feature_names_out([column]))
         return pd.DataFrame(
             ohe.inverse_transform(data),
             columns=[column],

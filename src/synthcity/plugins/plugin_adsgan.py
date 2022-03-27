@@ -113,7 +113,9 @@ class AdsGAN:
     @validate_arguments(config=dict(arbitrary_types_allowed=True))
     def sample(self, count: int) -> np.ndarray:
         with torch.no_grad():
-            samples = pd.DataFrame(self.model.generate(4 * count), columns=self.columns)
+            samples = pd.DataFrame(
+                self.model.generate(10 * count), columns=self.columns
+            )
             return self.encoder.inverse_transform(samples)
 
 
