@@ -14,8 +14,8 @@ import pandas as pd
 
 # Necessary packages
 import torch
+from pydantic import validate_arguments
 from sklearn.linear_model import LogisticRegression
-from sklearn.preprocessing import MinMaxScaler
 from xgboost import XGBClassifier
 
 # synthcity absolute
@@ -27,10 +27,11 @@ from synthcity.plugins.core.distribution import (
 )
 from synthcity.plugins.core.plugin import Plugin
 from synthcity.plugins.core.schema import Schema
-from synthcity.plugins.models import GAN
+from synthcity.plugins.models import GAN, TabularEncoder
 
 
 class Teachers:
+    @validate_arguments(config=dict(arbitrary_types_allowed=True))
     def __init__(
         self,
         n_teachers: int,
@@ -46,7 +47,8 @@ class Teachers:
         else:
             self.model_template = LogisticRegression
 
-    def fit(self, X: np.ndarray, generator: Any) -> "Teachers":
+    @validate_arguments(config=dict(arbitrary_types_allowed=True))
+    def fit(self, X: np.ndarray, generator: Any) -> Any:
         # 1. train teacher models
         self.teacher_models: list = []
 
@@ -87,6 +89,7 @@ class Teachers:
 
         return self
 
+    @validate_arguments(config=dict(arbitrary_types_allowed=True))
     def pate_lamda(self, x: np.ndarray) -> Tuple[int, int, int]:
         """Returns PATE_lambda(x).
 
@@ -119,6 +122,7 @@ class Teachers:
 class PATEGAN:
     """Basic PATE-GAN framework."""
 
+    @validate_arguments(config=dict(arbitrary_types_allowed=True))
     def __init__(
         self,
         # GAN
@@ -137,6 +141,7 @@ class PATEGAN:
         batch_size: int = 64,
         seed: int = 0,
         clipping_value: int = 1,
+        encoder_max_clusters: int = 20,
         # Privacy
         n_teachers: int = 10,
         teacher_template: str = "linear",
@@ -145,7 +150,7 @@ class PATEGAN:
         lamda: float = 1,
         alpha: int = 20,
     ) -> None:
-        self.encoder = MinMaxScaler()
+        self.encoder = TabularEncoder(max_clusters=encoder_max_clusters)
         self.generator_n_layers_hidden = generator_n_layers_hidden
         self.generator_n_units_hidden = generator_n_units_hidden
         self.generator_nonlin = generator_nonlin
@@ -169,11 +174,13 @@ class PATEGAN:
         self.lamda = lamda
         self.alpha = alpha
 
+    @validate_arguments(config=dict(arbitrary_types_allowed=True))
     def fit(
         self,
-        X_train: np.ndarray,
-    ) -> "PATEGAN":
+        X_train: pd.DataFrame,
+    ) -> Any:
         X_train = self.encoder.fit_transform(X_train)
+        self.columns = X_train.columns
 
         X_train = torch.from_numpy(np.asarray(X_train))
         features = X_train.shape[1]
@@ -227,7 +234,7 @@ class PATEGAN:
             def fake_labels_generator(X: torch.Tensor) -> torch.Tensor:
                 Y_mb: list = []
                 for j in range(len(X)):
-                    n0, n1, r_j = teachers.pate_lamda(X[j, :].detach().cpu())
+                    n0, n1, r_j = teachers.pate_lamda(X[j, :].detach().cpu().numpy())
                     Y_mb = Y_mb + [r_j]
 
                     # Update moments accountant
@@ -255,6 +262,7 @@ class PATEGAN:
 
         return self
 
+    @validate_arguments(config=dict(arbitrary_types_allowed=True))
     def _update_moments_accountant(self, n0: int, n1: int) -> float:
         # Update moments accountant
         q = (
@@ -264,6 +272,7 @@ class PATEGAN:
         )
         return np.exp(q)
 
+    @validate_arguments(config=dict(arbitrary_types_allowed=True))
     def _update_alpha(self, q: float) -> Dict:
         # Compute alpha
         for lidx in range(self.alpha):
@@ -274,9 +283,13 @@ class PATEGAN:
             self.alpha_dict[lidx] += np.min([temp1, np.log(temp2)])
         return self.alpha_dict
 
+    @validate_arguments(config=dict(arbitrary_types_allowed=True))
     def sample(self, count: int) -> np.ndarray:
         with torch.no_grad():
-            return self.encoder.inverse_transform(self.model.generate(count))
+            sampled = self.model.generate(4 * count)
+            return self.encoder.inverse_transform(
+                pd.DataFrame(sampled, columns=self.columns)
+            )
 
 
 class PATEGANPlugin(Plugin):
@@ -323,6 +336,10 @@ class PATEGANPlugin(Plugin):
             Differential privacy parameter
         lambda: float
             Noise size
+        encoder_max_clusters: int
+            The max number of clusters to create for continuous columns when encoding
+
+
     Example:
         >>> from synthcity.plugins import Plugins
         >>> plugin = Plugins().get("pategan")
@@ -332,6 +349,7 @@ class PATEGANPlugin(Plugin):
         >>> plugin.generate()
     """
 
+    @validate_arguments(config=dict(arbitrary_types_allowed=True))
     def __init__(
         self,
         # GAN
@@ -350,6 +368,7 @@ class PATEGANPlugin(Plugin):
         batch_size: int = 64,
         seed: int = 0,
         clipping_value: int = 1,
+        encoder_max_clusters: int = 20,
         # Privacy
         n_teachers: int = 10,
         teacher_template: str = "linear",
@@ -377,6 +396,7 @@ class PATEGANPlugin(Plugin):
             batch_size=batch_size,
             seed=seed,
             clipping_value=clipping_value,
+            encoder_max_clusters=encoder_max_clusters,
             # Privacy
             n_teachers=n_teachers,
             teacher_template=teacher_template,

@@ -16,7 +16,7 @@ import pandas as pd
 
 # Necessary packages
 import torch
-from sklearn.preprocessing import MinMaxScaler
+from pydantic import validate_arguments
 
 # synthcity absolute
 from synthcity.plugins.core.distribution import (
@@ -27,7 +27,7 @@ from synthcity.plugins.core.distribution import (
 )
 from synthcity.plugins.core.plugin import Plugin
 from synthcity.plugins.core.schema import Schema
-from synthcity.plugins.models import GAN
+from synthcity.plugins.models import GAN, TabularEncoder
 
 
 class AdsGAN:
@@ -50,8 +50,9 @@ class AdsGAN:
         batch_size: int = 64,
         seed: int = 0,
         clipping_value: int = 1,
+        encoder_max_clusters: int = 20,
     ) -> None:
-        self.encoder = MinMaxScaler()
+        self.encoder = TabularEncoder(max_clusters=encoder_max_clusters)
 
         self.generator_n_layers_hidden = generator_n_layers_hidden
         self.generator_n_units_hidden = generator_n_units_hidden
@@ -69,11 +70,13 @@ class AdsGAN:
         self.seed = seed
         self.clipping_value = clipping_value
 
+    @validate_arguments(config=dict(arbitrary_types_allowed=True))
     def fit(
         self,
-        X_train: np.ndarray,
-    ) -> "AdsGAN":
+        X_train: pd.DataFrame,
+    ) -> Any:
         X_train = self.encoder.fit_transform(X_train)
+        self.columns = X_train.columns
 
         X_train = torch.from_numpy(np.asarray(X_train))
         features = X_train.shape[1]
@@ -85,12 +88,9 @@ class AdsGAN:
             generator_n_layers_hidden=self.generator_n_layers_hidden,
             generator_n_units_hidden=self.generator_n_units_hidden,
             generator_nonlin=self.generator_nonlin,
-            generator_nonlin_out=[
-                (
-                    "tanh",
-                    features,
-                )
-            ],
+            generator_nonlin_out=self.encoder.activation_layout(
+                discrete_activation="softmax", continuous_activation="tanh"
+            ),
             generator_lr=self.lr,
             generator_residual=True,
             generator_n_iter=self.generator_n_iter,
@@ -110,9 +110,11 @@ class AdsGAN:
         self.model.fit(X_train)
         return self
 
+    @validate_arguments(config=dict(arbitrary_types_allowed=True))
     def sample(self, count: int) -> np.ndarray:
         with torch.no_grad():
-            return self.encoder.inverse_transform(self.model.generate(count))
+            samples = pd.DataFrame(self.model.generate(4 * count), columns=self.columns)
+            return self.encoder.inverse_transform(samples)
 
 
 class AdsGANPlugin(Plugin):
@@ -149,6 +151,8 @@ class AdsGANPlugin(Plugin):
             Seed used
         clipping_value: int, default 1
             Gradients clipping value
+        encoder_max_clusters: int
+            The max number of clusters to create for continuous columns when encoding
 
     Example:
         >>> from synthcity.plugins import Plugins
@@ -159,6 +163,7 @@ class AdsGANPlugin(Plugin):
         >>> plugin.generate()
     """
 
+    @validate_arguments(config=dict(arbitrary_types_allowed=True))
     def __init__(
         self,
         generator_n_layers_hidden: int = 2,
@@ -176,6 +181,7 @@ class AdsGANPlugin(Plugin):
         batch_size: int = 64,
         seed: int = 0,
         clipping_value: int = 1,
+        encoder_max_clusters: int = 20,
         **kwargs: Any
     ) -> None:
         super().__init__(**kwargs)
@@ -196,6 +202,7 @@ class AdsGANPlugin(Plugin):
             batch_size=batch_size,
             seed=seed,
             clipping_value=clipping_value,
+            encoder_max_clusters=encoder_max_clusters,
         )
 
     @staticmethod

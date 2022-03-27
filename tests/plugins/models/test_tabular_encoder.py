@@ -58,10 +58,8 @@ def test_encoder_fit_transform(max_clusters: int) -> None:
     X, _ = load_diabetes(return_X_y=True, as_frame=True)
     net = TabularEncoder(max_clusters=max_clusters, weight_threshold=0.1)
 
-    net.fit(X)
+    encoded = net.fit_transform(X)
     layout = net.layout()
-
-    encoded = net.transform(X)
 
     assert (X.index == encoded.index).all()
 
