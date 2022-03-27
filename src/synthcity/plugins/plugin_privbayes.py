@@ -6,7 +6,7 @@ Adapted from:
 # stdlib
 import random
 from collections import namedtuple
-from typing import Any, Dict, List, Set, Tuple
+from typing import Any, Dict, List, Optional, Set, Tuple
 
 # third party
 import numpy as np
@@ -231,29 +231,16 @@ class PrivBayes:
         return record
 
     @staticmethod
-    def mi_score(data: pd.DataFrame, columns_a: list, columns_b: list) -> float:
-        prob_a = compute_distribution(data[columns_a])
-        prob_b = compute_distribution(data[columns_b])
-        prob_joint = compute_distribution(data[columns_a + columns_b])
-
-        # todo: pull-request thomas to add option to normalize to remove 0's
-        # align
-        prob_div = prob_joint / (prob_b * prob_a)
-        prob_joint, prob_div = prob_joint.extend_and_reorder(prob_joint, prob_div)
-
-        # remove zeros as this will result in issues with log
-        prob_joint = prob_joint.values[prob_joint.values != 0]
-        prob_div = prob_div.values[prob_div.values != 0]
-        mi = np.sum(prob_joint * np.log(prob_div))
-        # mi = np.sum(p_nodeparents.values * np.log(p_nodeparents / (p_parents * p_node)))
-        return mi
-
-    @staticmethod
-    def r_score(data: pd.DataFrame, columns_a: list, columns_b: list) -> float:
+    def r_score(
+        data: pd.DataFrame, columns_a: list, columns_b: Optional[list]
+    ) -> float:
         """An alternative score function to mutual information with lower sensitivity - can be used on non-binary domains.
         Relies on the L1 distance from a joint distribution to a joint distributions that minimizes mutual information.
         Refer to Lemma 5.2
         """
+        if columns_b is None:
+            return 0
+
         if len(columns_b) == 0 or len(columns_a) == 0:
             return 0
         # compute distribution that minimizes mutual information
