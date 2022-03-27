@@ -1,5 +1,5 @@
 # stdlib
-from typing import Callable, Optional
+from typing import Callable, List, Optional, Tuple
 
 # third party
 import numpy as np
@@ -80,6 +80,35 @@ class ResidualLayer(LinearLayer):
     def forward(self, X: torch.Tensor) -> torch.Tensor:
         out = self.model(X.float())
         return torch.cat([out, X], dim=1)
+
+
+class MultiActivationHead(nn.Module):
+    """Final layer with multiple activations. Useful for tabular data."""
+
+    def __init__(self, activations: List[Tuple[nn.Module, int]]) -> None:
+        super(MultiActivationHead, self).__init__()
+        self.activations = []
+        self.activation_lengths = []
+
+        for activation, length in activations:
+            self.activations.append(activation)
+            self.activation_lengths.append(length)
+
+    @validate_arguments(config=dict(arbitrary_types_allowed=True))
+    def forward(self, X: torch.Tensor) -> torch.Tensor:
+        if X.shape[1] != np.sum(self.activation_lengths):
+            raise RuntimeError(
+                f"Shape mismatch for the activations: expected {np.sum(self.activation_lengths)}. Got shape {X.shape}."
+            )
+
+        split = 0
+        for activation, step in zip(self.activations, self.activation_lengths):
+            Xslice = X[:, split : split + step]
+            Xslice = activation(Xslice)
+
+            split += step
+
+        return X
 
 
 class MLP(nn.Module):

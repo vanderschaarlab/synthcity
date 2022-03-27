@@ -1,10 +1,16 @@
 # third party
 import numpy as np
 import pytest
+import torch
 from sklearn.datasets import load_diabetes, load_digits
 
 # synthcity absolute
-from synthcity.plugins.models.mlp import MLP
+from synthcity.plugins.models.mlp import (
+    MLP,
+    LinearLayer,
+    MultiActivationHead,
+    ResidualLayer,
+)
 
 
 def test_network_config() -> None:
@@ -64,6 +70,48 @@ def test_basic_network(
     assert net.n_iter == n_iter
     assert net.task_type == task_type
     assert net.lr == lr
+
+
+@pytest.mark.parametrize("layer", [LinearLayer, ResidualLayer])
+def test_custom_layers(layer: torch.nn.Module) -> None:
+    X, _ = load_digits(return_X_y=True)
+    Xt = torch.from_numpy(X)
+
+    mod = layer(Xt.shape[1], 10)
+    assert mod(Xt).shape[0] == Xt.shape[0]
+    assert mod(Xt).shape[1] >= 10
+
+
+@pytest.mark.parametrize(
+    "activations",
+    [
+        [(torch.nn.ReLU(), 10), (torch.nn.Softmax(), 30), (torch.nn.Tanh(), 24)],
+        [(torch.nn.ReLU(), 64)],
+        [(torch.nn.ReLU(), 1) for i in range(64)],
+    ],
+)
+def test_multiactivation_heads(activations: list) -> None:
+    X, _ = load_digits(return_X_y=True)
+    Xt = torch.from_numpy(X)
+
+    mod = MultiActivationHead(activations=activations)
+    assert mod(Xt).shape == Xt.shape
+
+
+@pytest.mark.parametrize(
+    "activations",
+    [
+        [(torch.nn.ReLU(), 10), (torch.nn.Softmax(), 30), (torch.nn.Tanh(), 2)],
+        [(torch.nn.ReLU(), 1)],
+        [(torch.nn.ReLU(), 1) for i in range(65)],
+    ],
+)
+def test_multiactivation_heads_failure(activations: list) -> None:
+    X, _ = load_digits(return_X_y=True)
+    Xt = torch.from_numpy(X)
+
+    with pytest.raises(RuntimeError):
+        MultiActivationHead(activations=activations)(Xt)
 
 
 @pytest.mark.parametrize("residual", [True, False])
