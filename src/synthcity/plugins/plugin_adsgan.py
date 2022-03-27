@@ -85,7 +85,12 @@ class AdsGAN:
             generator_n_layers_hidden=self.generator_n_layers_hidden,
             generator_n_units_hidden=self.generator_n_units_hidden,
             generator_nonlin=self.generator_nonlin,
-            generator_nonlin_out="sigmoid",
+            generator_nonlin_out=[
+                (
+                    "tanh",
+                    features,
+                )
+            ],
             generator_lr=self.lr,
             generator_residual=True,
             generator_n_iter=self.generator_n_iter,

@@ -15,7 +15,7 @@ def test_network_config() -> None:
         generator_n_layers_hidden=2,
         generator_n_units_hidden=100,
         generator_nonlin="elu",
-        generator_nonlin_out="sigmoid",
+        generator_nonlin_out=[("sigmoid", 10)],
         generator_n_iter=1001,
         generator_batch_norm=False,
         generator_dropout=0,

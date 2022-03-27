@@ -103,8 +103,7 @@ class MultiActivationHead(nn.Module):
 
         split = 0
         for activation, step in zip(self.activations, self.activation_lengths):
-            Xslice = X[:, split : split + step]
-            Xslice = activation(Xslice)
+            X[:, split : split + step] = activation(X[:, split : split + step])
 
             split += step
 
@@ -168,7 +167,7 @@ class MLP(nn.Module):
         n_layers_hidden: int = 1,
         n_units_hidden: int = 100,
         nonlin: str = "relu",
-        nonlin_out: Optional[str] = None,
+        nonlin_out: Optional[List[Tuple[str, int]]] = None,
         lr: float = 1e-3,
         weight_decay: float = 1e-3,
         n_iter: int = 1000,
@@ -225,10 +224,19 @@ class MLP(nn.Module):
             layers = [nn.Linear(n_units_in, n_units_out)]
 
         if nonlin_out is not None:
-            NL_out = NONLIN[nonlin_out]
-            layers.append(NL_out())
+            total_nonlin_len = 0
+            activations = []
+            for nonlin, nonlin_len in nonlin_out:
+                total_nonlin_len += nonlin_len
+                activations.append((NONLIN[nonlin](), nonlin_len))
+
+            if total_nonlin_len != n_units_out:
+                raise RuntimeError(
+                    f"Shape mismatch for the output layer. Expected length {n_units_out}, but got {nonlin_out} with length {total_nonlin_len}"
+                )
+            layers.append(MultiActivationHead(activations))
         elif self.task_type == "classification":
-            layers.append(nn.Softmax(dim=-1))
+            layers.append(MultiActivationHead([(nn.Softmax(dim=-1), n_units_out)]))
 
         self.model = nn.Sequential(*layers).to(DEVICE)
 

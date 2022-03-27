@@ -1,5 +1,5 @@
 # stdlib
-from typing import Callable, Optional, Tuple
+from typing import Callable, List, Optional, Tuple
 
 # third party
 import numpy as np
@@ -74,7 +74,7 @@ class GAN(nn.Module):
         generator_n_layers_hidden: int = 2,
         generator_n_units_hidden: int = 250,
         generator_nonlin: str = "leaky_relu",
-        generator_nonlin_out: Optional[str] = None,
+        generator_nonlin_out: Optional[List[Tuple[str, int]]] = None,
         generator_n_iter: int = 500,
         generator_batch_norm: bool = False,
         generator_dropout: float = 0,
@@ -126,7 +126,7 @@ class GAN(nn.Module):
             n_layers_hidden=discriminator_n_layers_hidden,
             n_units_hidden=discriminator_n_units_hidden,
             nonlin=discriminator_nonlin,
-            nonlin_out="sigmoid",
+            nonlin_out=[("sigmoid", 1)],
             n_iter=discriminator_n_iter,
             batch_norm=discriminator_batch_norm,
             dropout=discriminator_dropout,
