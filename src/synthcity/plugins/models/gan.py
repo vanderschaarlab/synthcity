@@ -190,7 +190,7 @@ class GAN(nn.Module):
 
         label = self.true_labels_generator(
             fake
-        ).squeeze()  # All generated items look real for the generator
+        ).to(DEVICE).squeeze()  # All generated items look real for the generator
 
         output = self.discriminator(fake).squeeze().float()
         # Calculate G's loss based on this output
@@ -223,7 +223,7 @@ class GAN(nn.Module):
             self.discriminator.zero_grad()
 
             # Train with all-real batch
-            real_X, label = X.to(DEVICE), true_labels_generator(X).squeeze()
+            real_X, label = X.to(DEVICE), true_labels_generator(X).to(DEVICE).squeeze()
             output = self.discriminator(real_X).squeeze().float()
             errD_real = self.criterion(output, label)
             errD_real.backward()
@@ -231,7 +231,7 @@ class GAN(nn.Module):
             # Train with all-fake batch
             noise = torch.randn(self.batch_size, self.n_units_latent, device=DEVICE)
             fake = self.generator(noise)
-            label = fake_labels_generator(fake).squeeze().float()
+            label = fake_labels_generator(fake).to(DEVICE).squeeze().float()
 
             output = self.discriminator(fake.detach()).squeeze()
             errD_fake = self.criterion(output, label)
