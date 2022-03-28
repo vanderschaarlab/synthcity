@@ -11,11 +11,9 @@ Paper link: https://ieeexplore.ieee.org/document/9034117
 from typing import Any, List
 
 # third party
-import numpy as np
 import pandas as pd
 
 # Necessary packages
-import torch
 from pydantic import validate_arguments
 
 # synthcity absolute
@@ -27,96 +25,7 @@ from synthcity.plugins.core.distribution import (
 )
 from synthcity.plugins.core.plugin import Plugin
 from synthcity.plugins.core.schema import Schema
-from synthcity.plugins.models import GAN, TabularEncoder
-
-
-class AdsGAN:
-    """Basic ADS-GAN framework."""
-
-    def __init__(
-        self,
-        generator_n_layers_hidden: int = 2,
-        generator_n_units_hidden: int = 100,
-        generator_nonlin: str = "tanh",
-        generator_n_iter: int = 100,
-        generator_dropout: float = 0,
-        discriminator_n_layers_hidden: int = 2,
-        discriminator_n_units_hidden: int = 100,
-        discriminator_nonlin: str = "leaky_relu",
-        discriminator_n_iter: int = 1,
-        discriminator_dropout: float = 0.1,
-        lr: float = 1e-4,
-        weight_decay: float = 1e-3,
-        batch_size: int = 64,
-        seed: int = 0,
-        clipping_value: int = 1,
-        encoder_max_clusters: int = 20,
-    ) -> None:
-        self.encoder = TabularEncoder(max_clusters=encoder_max_clusters)
-
-        self.generator_n_layers_hidden = generator_n_layers_hidden
-        self.generator_n_units_hidden = generator_n_units_hidden
-        self.generator_nonlin = generator_nonlin
-        self.generator_n_iter = generator_n_iter
-        self.generator_dropout = generator_dropout
-        self.discriminator_n_layers_hidden = discriminator_n_layers_hidden
-        self.discriminator_n_units_hidden = discriminator_n_units_hidden
-        self.discriminator_nonlin = discriminator_nonlin
-        self.discriminator_n_iter = discriminator_n_iter
-        self.discriminator_dropout = discriminator_dropout
-        self.lr = lr
-        self.weight_decay = weight_decay
-        self.batch_size = batch_size
-        self.seed = seed
-        self.clipping_value = clipping_value
-
-    @validate_arguments(config=dict(arbitrary_types_allowed=True))
-    def fit(
-        self,
-        X_train: pd.DataFrame,
-    ) -> Any:
-        X_train = self.encoder.fit_transform(X_train)
-        self.columns = X_train.columns
-
-        X_train = torch.from_numpy(np.asarray(X_train))
-        features = X_train.shape[1]
-
-        self.model = GAN(
-            n_features=features,
-            n_units_latent=features,
-            batch_size=self.batch_size,
-            generator_n_layers_hidden=self.generator_n_layers_hidden,
-            generator_n_units_hidden=self.generator_n_units_hidden,
-            generator_nonlin=self.generator_nonlin,
-            generator_nonlin_out=self.encoder.activation_layout(
-                discrete_activation="softmax", continuous_activation="tanh"
-            ),
-            generator_lr=self.lr,
-            generator_residual=True,
-            generator_n_iter=self.generator_n_iter,
-            generator_batch_norm=False,
-            generator_dropout=0,
-            generator_weight_decay=self.weight_decay,
-            discriminator_n_units_hidden=self.discriminator_n_units_hidden,
-            discriminator_n_layers_hidden=self.discriminator_n_layers_hidden,
-            discriminator_n_iter=self.discriminator_n_iter,
-            discriminator_nonlin=self.discriminator_nonlin,
-            discriminator_batch_norm=False,
-            discriminator_dropout=self.discriminator_dropout,
-            discriminator_lr=self.lr,
-            discriminator_weight_decay=self.weight_decay,
-            clipping_value=self.clipping_value,
-        )
-        self.model.fit(X_train)
-        return self
-
-    @validate_arguments(config=dict(arbitrary_types_allowed=True))
-    def sample(self, count: int) -> np.ndarray:
-        with torch.no_grad():
-            samples = pd.DataFrame(
-                self.model.generate(10 * count), columns=self.columns
-            )
-            return self.encoder.inverse_transform(samples)
+from synthcity.plugins.models import TabularGAN
 
 
 class AdsGANPlugin(Plugin):
@@ -187,25 +96,22 @@ class AdsGANPlugin(Plugin):
         **kwargs: Any
     ) -> None:
         super().__init__(**kwargs)
-
-        self.model = AdsGAN(
-            generator_n_layers_hidden=generator_n_layers_hidden,
-            generator_n_units_hidden=generator_n_units_hidden,
-            generator_nonlin=generator_nonlin,
-            generator_n_iter=generator_n_iter,
-            generator_dropout=generator_dropout,
-            discriminator_n_layers_hidden=discriminator_n_layers_hidden,
-            discriminator_n_units_hidden=discriminator_n_units_hidden,
-            discriminator_nonlin=discriminator_nonlin,
-            discriminator_n_iter=discriminator_n_iter,
-            discriminator_dropout=discriminator_dropout,
-            lr=lr,
-            weight_decay=weight_decay,
-            batch_size=batch_size,
-            seed=seed,
-            clipping_value=clipping_value,
-            encoder_max_clusters=encoder_max_clusters,
-        )
+        self.generator_n_layers_hidden = generator_n_layers_hidden
+        self.generator_n_units_hidden = generator_n_units_hidden
+        self.generator_nonlin = generator_nonlin
+        self.generator_n_iter = generator_n_iter
+        self.generator_dropout = generator_dropout
+        self.discriminator_n_layers_hidden = discriminator_n_layers_hidden
+        self.discriminator_n_units_hidden = discriminator_n_units_hidden
+        self.discriminator_nonlin = discriminator_nonlin
+        self.discriminator_n_iter = discriminator_n_iter
+        self.discriminator_dropout = discriminator_dropout
+        self.lr = lr
+        self.weight_decay = weight_decay
+        self.batch_size = batch_size
+        self.seed = seed
+        self.clipping_value = clipping_value
+        self.encoder_max_clusters = encoder_max_clusters
 
     @staticmethod
     def name() -> str:
@@ -243,12 +149,39 @@ class AdsGANPlugin(Plugin):
         ]
 
     def _fit(self, X: pd.DataFrame, *args: Any, **kwargs: Any) -> "AdsGANPlugin":
+        features = X.shape[1]
+        self.model = TabularGAN(
+            X,
+            n_units_latent=features,
+            batch_size=self.batch_size,
+            generator_n_layers_hidden=self.generator_n_layers_hidden,
+            generator_n_units_hidden=self.generator_n_units_hidden,
+            generator_nonlin=self.generator_nonlin,
+            generator_nonlin_out_discrete="softmax",
+            generator_nonlin_out_continuous="tanh",
+            generator_lr=self.lr,
+            generator_residual=True,
+            generator_n_iter=self.generator_n_iter,
+            generator_batch_norm=False,
+            generator_dropout=0,
+            generator_weight_decay=self.weight_decay,
+            discriminator_n_units_hidden=self.discriminator_n_units_hidden,
+            discriminator_n_layers_hidden=self.discriminator_n_layers_hidden,
+            discriminator_n_iter=self.discriminator_n_iter,
+            discriminator_nonlin=self.discriminator_nonlin,
+            discriminator_batch_norm=False,
+            discriminator_dropout=self.discriminator_dropout,
+            discriminator_lr=self.lr,
+            discriminator_weight_decay=self.weight_decay,
+            clipping_value=self.clipping_value,
+            encoder_max_clusters=self.encoder_max_clusters,
+        )
         self.model.fit(X)
 
         return self
 
     def _generate(self, count: int, syn_schema: Schema, **kwargs: Any) -> pd.DataFrame:
-        return self._safe_generate(self.model.sample, count, syn_schema)
+        return self._safe_generate(self.model.generate, count, syn_schema)
 
 
 plugin = AdsGANPlugin
