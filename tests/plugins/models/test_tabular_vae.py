@@ -77,7 +77,8 @@ def test_basic_network(
     assert net.model.lr == lr
 
 
-def test_gan_classification() -> None:
+@pytest.mark.parametrize("loss_strategy", ["standard", "robust_divergence"])
+def test_gan_classification(loss_strategy: str) -> None:
     X, _ = load_iris(return_X_y=True, as_frame=True)
 
     model = TabularVAE(
@@ -85,6 +86,7 @@ def test_gan_classification() -> None:
         n_units_embedding=50,
         n_iter=100,
         encoder_max_clusters=5,
+        loss_strategy=loss_strategy,
     )
     model.fit(X)
 

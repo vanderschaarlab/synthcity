@@ -89,7 +89,7 @@ class AdsGANPlugin(Plugin):
         discriminator_dropout: float = 0.1,
         lr: float = 1e-4,
         weight_decay: float = 1e-3,
-        batch_size: int = 64,
+        batch_size: int = 100,
         seed: int = 0,
         clipping_value: int = 1,
         encoder_max_clusters: int = 20,
@@ -175,6 +175,7 @@ class AdsGANPlugin(Plugin):
             discriminator_weight_decay=self.weight_decay,
             clipping_value=self.clipping_value,
             encoder_max_clusters=self.encoder_max_clusters,
+            discriminator_extra_penalties=["identifiability_loss"],
         )
         self.model.fit(X)
 

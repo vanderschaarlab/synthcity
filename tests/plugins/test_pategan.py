@@ -2,7 +2,7 @@
 import pandas as pd
 import pytest
 from helpers import generate_fixtures
-from sklearn.datasets import load_iris
+from sklearn.datasets import load_diabetes, load_iris
 
 # synthcity absolute
 from synthcity.plugins import Plugin
@@ -40,7 +40,7 @@ def test_plugin_fit(test_plugin: Plugin) -> None:
 
 @pytest.mark.parametrize("test_plugin", generate_fixtures(plugin_name, plugin))
 def test_plugin_generate(test_plugin: Plugin) -> None:
-    X = pd.DataFrame(load_iris()["data"])
+    X = pd.DataFrame(load_diabetes()["data"])
     test_plugin.fit(X)
 
     X_gen = test_plugin.generate()
