@@ -13,17 +13,24 @@ import synthcity.logger as log
 
 DEVICE = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
-EPS = 1e-8
 
-NONLIN = {
-    "elu": nn.ELU,
-    "relu": nn.ReLU,
-    "leaky_relu": nn.LeakyReLU,
-    "selu": nn.SELU,
-    "tanh": nn.Tanh,
-    "sigmoid": nn.Sigmoid,
-    "softmax": nn.Softmax,
-}
+def get_nonlin(name: str) -> nn.Module:
+    if name == "elu":
+        return nn.ELU()
+    elif name == "relu":
+        return nn.ReLU()
+    elif name == "leaky_relu":
+        return nn.LeakyReLU()
+    elif name == "selu":
+        return nn.SELU()
+    elif name == "tanh":
+        return nn.Tanh()
+    elif name == "sigmoid":
+        return nn.Sigmoid()
+    elif name == "softmax":
+        return nn.Softmax(dim=-1)
+    else:
+        raise ValueError(f"Unknown nonlinearity {name}")
 
 
 class LinearLayer(nn.Module):
@@ -48,8 +55,7 @@ class LinearLayer(nn.Module):
             layers.append(nn.BatchNorm1d(n_units_out))
 
         if nonlin is not None:
-            NL = NONLIN[nonlin]
-            layers.append(NL())
+            layers.append(get_nonlin(nonlin))
 
         self.model = nn.Sequential(*layers).to(DEVICE)
 
@@ -185,11 +191,9 @@ class MLP(nn.Module):
     ) -> None:
         super(MLP, self).__init__()
 
-        if nonlin not in list(NONLIN.keys()):
-            raise ValueError(f"Unknown nonlinearity {nonlin}")
-
         self.task_type = task_type
         self.seed = seed
+        torch.manual_seed(seed)
 
         if residual:
             block = ResidualLayer
@@ -228,7 +232,7 @@ class MLP(nn.Module):
             activations = []
             for nonlin, nonlin_len in nonlin_out:
                 total_nonlin_len += nonlin_len
-                activations.append((NONLIN[nonlin](), nonlin_len))
+                activations.append((get_nonlin(nonlin), nonlin_len))
 
             if total_nonlin_len != n_units_out:
                 raise RuntimeError(
@@ -386,3 +390,6 @@ class MLP(nn.Module):
             return X.to(DEVICE)
         else:
             return torch.from_numpy(np.asarray(X)).to(DEVICE)
+
+    def __len__(self) -> int:
+        return len(self.model)

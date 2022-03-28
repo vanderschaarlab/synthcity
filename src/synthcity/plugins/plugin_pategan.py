@@ -27,7 +27,7 @@ from synthcity.plugins.core.distribution import (
 )
 from synthcity.plugins.core.plugin import Plugin
 from synthcity.plugins.core.schema import Schema
-from synthcity.plugins.models import GAN, TabularEncoder
+from synthcity.plugins.models import TabularGAN
 
 
 class Teachers:
@@ -129,7 +129,7 @@ class PATEGAN:
         generator_n_layers_hidden: int = 2,
         generator_n_units_hidden: int = 100,
         generator_nonlin: str = "tanh",
-        generator_n_iter: int = 100,
+        generator_n_iter: int = 5,
         generator_dropout: float = 0,
         discriminator_n_layers_hidden: int = 2,
         discriminator_n_units_hidden: int = 100,
@@ -150,7 +150,6 @@ class PATEGAN:
         lamda: float = 1,
         alpha: int = 20,
     ) -> None:
-        self.encoder = TabularEncoder(max_clusters=encoder_max_clusters)
         self.generator_n_layers_hidden = generator_n_layers_hidden
         self.generator_n_units_hidden = generator_n_units_hidden
         self.generator_nonlin = generator_nonlin
@@ -173,26 +172,26 @@ class PATEGAN:
         self.delta = delta
         self.lamda = lamda
         self.alpha = alpha
+        self.encoder_max_clusters = encoder_max_clusters
 
     @validate_arguments(config=dict(arbitrary_types_allowed=True))
     def fit(
         self,
         X_train: pd.DataFrame,
     ) -> Any:
-        X_train = self.encoder.fit_transform(X_train)
         self.columns = X_train.columns
 
-        X_train = torch.from_numpy(np.asarray(X_train))
         features = X_train.shape[1]
 
-        self.model = GAN(
-            n_features=features,
+        self.model = TabularGAN(
+            X_train,
             n_units_latent=features,
             batch_size=self.batch_size,
             generator_n_layers_hidden=self.generator_n_layers_hidden,
             generator_n_units_hidden=self.generator_n_units_hidden,
             generator_nonlin=self.generator_nonlin,
-            generator_nonlin_out=[("tanh", features)],
+            generator_nonlin_out_discrete="softmax",
+            generator_nonlin_out_continuous="tanh",
             generator_lr=self.lr,
             generator_residual=True,
             generator_n_iter=self.generator_n_iter,
@@ -208,10 +207,9 @@ class PATEGAN:
             discriminator_lr=self.lr,
             discriminator_weight_decay=self.weight_decay,
             clipping_value=self.clipping_value,
+            encoder_max_clusters=self.encoder_max_clusters,
         )
         partition_data_no = int(len(X_train) / self.n_teachers)
-
-        loader = self.model.dataloader(X_train)
 
         # alpha initialize
         self.alpha_dict = np.zeros([self.alpha])
@@ -228,13 +226,14 @@ class PATEGAN:
                 lamda=self.lamda,
                 template=self.teacher_template,
             )
-            teachers.fit(X_train.cpu().numpy(), self.model.generate)
+            teachers.fit(np.asarray(X_train), self.model.generate)
 
             # 2. Student training
             def fake_labels_generator(X: torch.Tensor) -> torch.Tensor:
                 Y_mb: list = []
-                for j in range(len(X)):
-                    n0, n1, r_j = teachers.pate_lamda(X[j, :].detach().cpu().numpy())
+                X_batch = self.model.decode(pd.DataFrame(X.detach().cpu().numpy()))
+                for j in range(len(X_batch)):
+                    n0, n1, r_j = teachers.pate_lamda(np.asarray(X_batch)[j, :])
                     Y_mb = Y_mb + [r_j]
 
                     # Update moments accountant
@@ -248,7 +247,7 @@ class PATEGAN:
                     np.reshape(np.asarray(Y_mb, dtype=int), [-1, 1])
                 )
 
-            self.model.train_epoch(loader, fake_labels_generator=fake_labels_generator)
+            self.model.fit(X_train, fake_labels_generator=fake_labels_generator)
 
             # epsilon_hat computation
             curr_list: List = []
@@ -285,11 +284,7 @@ class PATEGAN:
 
     @validate_arguments(config=dict(arbitrary_types_allowed=True))
     def sample(self, count: int) -> np.ndarray:
-        with torch.no_grad():
-            sampled = self.model.generate(4 * count)
-            return self.encoder.inverse_transform(
-                pd.DataFrame(sampled, columns=self.columns)
-            )
+        return self.model.generate(4 * count)
 
 
 class PATEGANPlugin(Plugin):
@@ -356,7 +351,7 @@ class PATEGANPlugin(Plugin):
         generator_n_layers_hidden: int = 2,
         generator_n_units_hidden: int = 100,
         generator_nonlin: str = "tanh",
-        generator_n_iter: int = 100,
+        generator_n_iter: int = 5,
         generator_dropout: float = 0,
         discriminator_n_layers_hidden: int = 2,
         discriminator_n_units_hidden: int = 100,

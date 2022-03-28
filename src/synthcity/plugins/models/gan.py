@@ -138,13 +138,13 @@ class GAN(nn.Module):
         # training
         self.generator_n_iter = generator_n_iter
         self.discriminator_n_iter = discriminator_n_iter
-        self.seed = seed
         self.n_iter_print = n_iter_print
         self.n_iter_min = n_iter_min
         self.batch_size = batch_size
         self.clipping_value = clipping_value
         self.criterion = nn.BCELoss()
 
+        self.seed = seed
         torch.manual_seed(seed)
 
         def gen_fake_labels(X: torch.Tensor) -> torch.Tensor:
@@ -156,10 +156,19 @@ class GAN(nn.Module):
         self.fake_labels_generator = gen_fake_labels
         self.true_labels_generator = gen_true_labels
 
-    def fit(self, X: np.ndarray) -> "GAN":
+    def fit(
+        self,
+        X: np.ndarray,
+        fake_labels_generator: Optional[Callable] = None,
+        true_labels_generator: Optional[Callable] = None,
+    ) -> "GAN":
         Xt = self._check_tensor(X)
 
-        self._train(Xt)
+        self._train(
+            Xt,
+            fake_labels_generator=fake_labels_generator,
+            true_labels_generator=true_labels_generator,
+        )
 
         return self
 
@@ -172,7 +181,7 @@ class GAN(nn.Module):
         with torch.no_grad():
             return self.generator(fixed_noise).detach().cpu()
 
-    def train_epoch_generator(
+    def _train_epoch_generator(
         self,
         fake_labels_generator: Optional[Callable] = None,
         true_labels_generator: Optional[Callable] = None,
@@ -188,9 +197,9 @@ class GAN(nn.Module):
         noise = torch.randn(self.batch_size, self.n_units_latent, device=DEVICE)
         fake = self.generator(noise)
 
-        label = self.true_labels_generator(
-            fake
-        ).to(DEVICE).squeeze()  # All generated items look real for the generator
+        label = (
+            self.true_labels_generator(fake).to(DEVICE).squeeze()
+        )  # All generated items look real for the generator
 
         output = self.discriminator(fake).squeeze().float()
         # Calculate G's loss based on this output
@@ -205,7 +214,7 @@ class GAN(nn.Module):
         # Return loss
         return errG.item()
 
-    def train_epoch_discriminator(
+    def _train_epoch_discriminator(
         self,
         X: torch.Tensor,
         fake_labels_generator: Optional[Callable] = None,
@@ -250,7 +259,7 @@ class GAN(nn.Module):
 
         return np.mean(errors)
 
-    def train_epoch(
+    def _train_epoch(
         self,
         loader: DataLoader,
         fake_labels_generator: Optional[Callable] = None,
@@ -261,14 +270,14 @@ class GAN(nn.Module):
 
         for i, data in enumerate(loader):
             D_losses.append(
-                self.train_epoch_discriminator(
+                self._train_epoch_discriminator(
                     data[0],
                     fake_labels_generator=fake_labels_generator,
                     true_labels_generator=true_labels_generator,
                 )
             )
             G_losses.append(
-                self.train_epoch_generator(
+                self._train_epoch_generator(
                     fake_labels_generator=fake_labels_generator,
                     true_labels_generator=true_labels_generator,
                 )
@@ -280,7 +289,12 @@ class GAN(nn.Module):
         dataset = TensorDataset(X)
         return DataLoader(dataset, batch_size=self.batch_size, pin_memory=False)
 
-    def _train(self, X: torch.Tensor) -> "GAN":
+    def _train(
+        self,
+        X: torch.Tensor,
+        fake_labels_generator: Optional[Callable] = None,
+        true_labels_generator: Optional[Callable] = None,
+    ) -> "GAN":
         X = self._check_tensor(X).float()
 
         # Load Dataset
@@ -288,7 +302,11 @@ class GAN(nn.Module):
 
         # Train loop
         for i in range(self.generator_n_iter):
-            g_loss, d_loss = self.train_epoch(loader)
+            g_loss, d_loss = self._train_epoch(
+                loader,
+                fake_labels_generator=fake_labels_generator,
+                true_labels_generator=true_labels_generator,
+            )
             # Check how the generator is doing by saving G's output on fixed_noise
             if i % self.n_iter_print == 0:
                 log.info(

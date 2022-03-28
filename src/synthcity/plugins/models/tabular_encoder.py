@@ -152,7 +152,8 @@ class TabularEncoder(TransformerMixin, BaseEstimator):
     ) -> pd.DataFrame:
         ohe = column_transform_info.transform
         return pd.DataFrame(
-            ohe.transform(data), columns=ohe.get_feature_names_out(data.columns)
+            ohe.transform(np.asarray(data)),
+            columns=ohe.get_feature_names_out(data.columns),
         )
 
     @validate_arguments(config=dict(arbitrary_types_allowed=True))
@@ -242,6 +243,14 @@ class TabularEncoder(TransformerMixin, BaseEstimator):
         """
         return self._column_transform_info_list
 
+    def n_features(self) -> int:
+        return np.sum(
+            [
+                column_transform_info.output_dimensions
+                for column_transform_info in self._column_transform_info_list
+            ]
+        )
+
     @validate_arguments(config=dict(arbitrary_types_allowed=True))
     def activation_layout(
         self, discrete_activation: str, continuous_activation: str
@@ -255,8 +264,14 @@ class TabularEncoder(TransformerMixin, BaseEstimator):
         out = []
         for column_transform_info in self._column_transform_info_list:
             if column_transform_info.column_type == "continuous":
-                out.append(
-                    (continuous_activation, column_transform_info.output_dimensions)
+                out.extend(
+                    [
+                        (continuous_activation, 1),
+                        (
+                            discrete_activation,
+                            column_transform_info.output_dimensions - 1,
+                        ),
+                    ]
                 )
             else:
                 out.append(
