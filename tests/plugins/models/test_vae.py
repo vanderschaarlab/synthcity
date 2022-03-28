@@ -77,7 +77,8 @@ def test_basic_network(
     assert len(net.encoder.model) == hidden
 
 
-def test_vae_classification() -> None:
+@pytest.mark.parametrize("loss_strategy", ["standard", "robust_divergence"])
+def test_vae_classification(loss_strategy: str) -> None:
     X, _ = load_digits(return_X_y=True)
     X = MinMaxScaler().fit_transform(X)
 
@@ -85,6 +86,7 @@ def test_vae_classification() -> None:
         n_features=X.shape[1],
         n_units_embedding=50,
         n_iter=100,
+        loss_strategy=loss_strategy,
     )
     model.fit(X)
 
