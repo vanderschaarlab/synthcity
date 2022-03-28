@@ -103,13 +103,18 @@ def test_encoder_activation_layout() -> None:
     )
     layout = net.layout()
 
-    for col_act, col_layout in zip(act_layout, layout):
-        act, size = col_act
-        col_info = col_layout
+    assert len(layout) <= len(act_layout)
 
-        if act == "softmax":
-            assert col_info.column_type == "discrete"
+    act_step = 0
+
+    for col_info in layout:
+        if col_info.column_type == "continuous":
+            assert act_layout[act_step] == ("tanh", 1)
+            assert act_layout[act_step + 1] == (
+                "softmax",
+                col_info.output_dimensions - 1,
+            )
+            act_step += 2
         else:
-            assert col_info.column_type == "continuous"
-
-        assert size == col_info.output_dimensions
+            assert act_layout[act_step] == ("softmax", col_info.output_dimensions)
+            act_step += 1

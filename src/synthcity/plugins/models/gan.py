@@ -138,13 +138,13 @@ class GAN(nn.Module):
         # training
         self.generator_n_iter = generator_n_iter
         self.discriminator_n_iter = discriminator_n_iter
-        self.seed = seed
         self.n_iter_print = n_iter_print
         self.n_iter_min = n_iter_min
         self.batch_size = batch_size
         self.clipping_value = clipping_value
         self.criterion = nn.BCELoss()
 
+        self.seed = seed
         torch.manual_seed(seed)
 
         def gen_fake_labels(X: torch.Tensor) -> torch.Tensor:
@@ -162,9 +162,7 @@ class GAN(nn.Module):
         fake_labels_generator: Optional[Callable] = None,
         true_labels_generator: Optional[Callable] = None,
     ) -> "GAN":
-        Xt = self._check_tensor(
-            X,
-        )
+        Xt = self._check_tensor(X)
 
         self._train(
             Xt,
