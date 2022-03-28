@@ -44,10 +44,10 @@ class Encoder(nn.Module):
             dropout=dropout,
             batch_norm=batch_norm,
             residual=residual,
-        )
+        ).to(DEVICE)
 
-        self.mu_fc = nn.Linear(n_units_hidden, n_units_embedding)
-        self.logvar_fc = nn.Linear(n_units_hidden, n_units_embedding)
+        self.mu_fc = nn.Linear(n_units_hidden, n_units_embedding).to(DEVICE)
+        self.logvar_fc = nn.Linear(n_units_hidden, n_units_embedding).to(DEVICE)
 
     @validate_arguments(config=dict(arbitrary_types_allowed=True))
     def forward(self, X: Tensor) -> Tuple[Tensor, Tensor]:
@@ -85,7 +85,7 @@ class Decoder(nn.Module):
             dropout=dropout,
             batch_norm=batch_norm,
             residual=residual,
-        )
+        ).to(DEVICE)
 
     @validate_arguments(config=dict(arbitrary_types_allowed=True))
     def forward(self, X: Tensor) -> Tensor:

@@ -12,6 +12,7 @@ from typing import Any, Dict, List, Set, Tuple
 import numpy as np
 import pandas as pd
 from diffprivlib.mechanisms import Exponential
+from pydantic import validate_arguments
 from thomas.core import BayesianNetwork
 
 # synthcity absolute
@@ -39,6 +40,7 @@ class PrivBayes:
     Finally, PrivBayes samples tuples from the approximate distribution to construct a synthetic dataset, and then releases the synthetic data.
     """
 
+    @validate_arguments(config=dict(arbitrary_types_allowed=True))
     def __init__(
         self,
         epsilon: float = 1.0,
@@ -51,7 +53,8 @@ class PrivBayes:
         self.epsilon_split = epsilon_split  # also called Beta in paper
         self.score_function = score_function
 
-    def fit(self, data: pd.DataFrame) -> "PrivBayes":
+    @validate_arguments(config=dict(arbitrary_types_allowed=True))
+    def fit(self, data: pd.DataFrame) -> Any:
         self.columns_ = list(data.columns)
         self.n_records_fit_ = data.shape[0]
         self.dtypes_fit_ = data.dtypes
@@ -64,7 +67,8 @@ class PrivBayes:
     def sample(self, n_records: int) -> pd.DataFrame:
         return self._generate_data(n_records)
 
-    def _greedy_bayes(self, data: pd.DataFrame) -> "PrivBayes":
+    @validate_arguments(config=dict(arbitrary_types_allowed=True))
+    def _greedy_bayes(self, data: pd.DataFrame) -> Any:
         nodes, nodes_selected = self._init_network(data)
 
         # normally len(nodes) - 1, unless user initialized part of the network
@@ -85,10 +89,10 @@ class PrivBayes:
                 if len(max_parent_sets) == 0 or (
                     len(max_parent_sets) == 1 and len(max_parent_sets[0]) == 1
                 ):
-                    ap_pairs.append(APPair(node, parents=None))
+                    ap_pairs.append(APPair(node, parents=[]))
                 else:
                     ap_pairs.extend(
-                        [APPair(node, parents=tuple(p)) for p in max_parent_sets]
+                        [APPair(node, parents=[p]) for p in max_parent_sets]
                     )
 
             scores = self._compute_scores(data, ap_pairs)
@@ -98,6 +102,7 @@ class PrivBayes:
             self.network_.append(sampled_pair)
         return self
 
+    @validate_arguments(config=dict(arbitrary_types_allowed=True))
     def _max_domain_size(self, data: pd.DataFrame, node: str) -> int:
         """Computes the maximum domain size a node can have to satisfy theta-usefulness"""
         node_cardinality = cardinality(data[node])
@@ -106,14 +111,15 @@ class PrivBayes:
         ) / (2 * len(self.columns_) * self.theta_usefulness * node_cardinality)
         return max_domain_size
 
+    @validate_arguments(config=dict(arbitrary_types_allowed=True))
     def _max_parent_sets(
-        self, data: pd.DataFrame, v: Set, max_domain_size: int
+        self, data: pd.DataFrame, v: Set, max_domain_size: float
     ) -> List[Set]:
         """Refer to algorithm 5 in paper - max parent set is 1) theta-useful and 2) maximal."""
         if max_domain_size < 1:
-            return [set()]
+            return []
         if len(v) == 0:
-            return [set()]
+            return []
 
         x = np.random.choice(tuple(v))
         x_domain_size = cardinality(data[x])
@@ -141,13 +147,15 @@ class PrivBayes:
         nodes_selected = set()
 
         root = np.random.choice(tuple(nodes))
-        self.network_.append(APPair(attribute=root, parents=None))
+        self.network_.append(APPair(attribute=root, parents=[]))
         nodes_selected.add(root)
         return nodes, nodes_selected
 
     def _compute_scores(self, data: pd.DataFrame, ap_pairs: list) -> list:
         """Compute score for all ap_pairs"""
-        return [self.r_score(data, pair.attribute, pair.parents) for pair in ap_pairs]
+        return [
+            self.mi_score(data, [pair.attribute], pair.parents) for pair in ap_pairs
+        ]
 
     def _score_sensitivity(self) -> float:
         """Checks input score function and sets sensitivity"""
@@ -166,6 +174,7 @@ class PrivBayes:
 
         raise RuntimeError(f"Invalid score function {self.score_function}")
 
+    @validate_arguments(config=dict(arbitrary_types_allowed=True))
     def _exponential_mechanism(self, ap_pairs: list, scores: list) -> APPair:
         """select APPair with exponential mechanism"""
         local_epsilon = self.epsilon * self.epsilon_split / self._n_nodes_dp_computed
@@ -178,13 +187,14 @@ class PrivBayes:
         sampled_pair = dp_mech.randomise()
         return sampled_pair
 
-    def _compute_conditional_distributions(self, data: pd.DataFrame) -> "PrivBayes":
+    @validate_arguments(config=dict(arbitrary_types_allowed=True))
+    def _compute_conditional_distributions(self, data: pd.DataFrame) -> Any:
         self.cpt_ = dict()
 
         local_epsilon = self.epsilon * (1 - self.epsilon_split) / len(self.columns_)
 
         for idx, pair in enumerate(self.network_):
-            if pair.parents is None:
+            if len(pair.parents) == 0:
                 attributes = [pair.attribute]
             else:
                 attributes = [*pair.parents, pair.attribute]
@@ -195,6 +205,7 @@ class PrivBayes:
             self.cpt_[pair.attribute] = dp_cpt
         return self
 
+    @validate_arguments(config=dict(arbitrary_types_allowed=True))
     def _generate_data(self, n_records: int) -> np.ndarray:
         data_synth = np.empty([n_records, len(self.columns_)], dtype=object)
 
@@ -208,6 +219,7 @@ class PrivBayes:
         )
         return data_synth
 
+    @validate_arguments(config=dict(arbitrary_types_allowed=True))
     def _sample_record(self) -> Dict:
         """samples a value column for column by conditioning for parents"""
         record: Dict[str, list] = {}
@@ -232,6 +244,8 @@ class PrivBayes:
 
     @staticmethod
     def mi_score(data: pd.DataFrame, columns_a: list, columns_b: list) -> float:
+        if len(columns_b) == 0 or len(columns_a) == 0:
+            return 0
         prob_a = compute_distribution(data[columns_a])
         prob_b = compute_distribution(data[columns_b])
         prob_joint = compute_distribution(data[columns_a + columns_b])
@@ -254,7 +268,7 @@ class PrivBayes:
         Relies on the L1 distance from a joint distribution to a joint distributions that minimizes mutual information.
         Refer to Lemma 5.2
         """
-        if len(columns_b) == 0 or len(columns_a) == 0:
+        if len(columns_b) == 0:
             return 0
         # compute distribution that minimizes mutual information
         prob_a = compute_distribution(data[columns_a])
