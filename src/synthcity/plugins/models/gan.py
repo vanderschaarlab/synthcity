@@ -264,7 +264,7 @@ class GAN(nn.Module):
 
             for penalty in self.discriminator_extra_penalties:
                 if penalty == "identifiability_loss":
-                    eps = torch.rand([batch_size, 1])
+                    eps = torch.rand([batch_size, 1]).to(DEVICE)
                     interpolated = eps * real_X + (1.0 - eps) * fake
                     lam = 10
 

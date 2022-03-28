@@ -80,19 +80,19 @@ class AdsGANPlugin(Plugin):
         generator_n_layers_hidden: int = 2,
         generator_n_units_hidden: int = 100,
         generator_nonlin: str = "tanh",
-        generator_n_iter: int = 100,
+        generator_n_iter: int = 1,
         generator_dropout: float = 0,
         discriminator_n_layers_hidden: int = 2,
         discriminator_n_units_hidden: int = 100,
         discriminator_nonlin: str = "leaky_relu",
         discriminator_n_iter: int = 1,
-        discriminator_dropout: float = 0.1,
-        lr: float = 1e-4,
+        discriminator_dropout: float = 0,
+        lr: float = 1e-3,
         weight_decay: float = 1e-3,
         batch_size: int = 100,
         seed: int = 0,
         clipping_value: int = 1,
-        encoder_max_clusters: int = 20,
+        encoder_max_clusters: int = 10,
         **kwargs: Any
     ) -> None:
         super().__init__(**kwargs)
