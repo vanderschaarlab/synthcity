@@ -9,6 +9,9 @@ from torch import Tensor, nn
 from torch.optim import Adam
 from torch.utils.data import DataLoader, TensorDataset
 
+# synthcity absolute
+import synthcity.logger as log
+
 # synthcity relative
 from .mlp import MLP
 
@@ -157,7 +160,6 @@ class VAE(nn.Module):
             decoder_nonlin_out = [("none", n_features)]
         self.decoder_nonlin_out = decoder_nonlin_out
 
-    @validate_arguments(config=dict(arbitrary_types_allowed=True))
     def fit(self, X: np.ndarray) -> Any:
         Xt = self._check_tensor(X)
 
@@ -223,7 +225,7 @@ class VAE(nn.Module):
 
                 optimizer.step()
             if epoch % self.n_iter_print == 0:
-                print(f"[{epoch}/{self.n_iter}] Loss: {loss.detach()}")
+                log.info(f"[{epoch}/{self.n_iter}] Loss: {loss.detach()}")
 
     def _check_tensor(self, X: Tensor) -> Tensor:
         if isinstance(X, Tensor):
@@ -248,19 +250,18 @@ class VAE(nn.Module):
         for activation, length in self.decoder_nonlin_out:
             step_end = step + length
             if activation == "softmax":
-                loss.append(
-                    nn.functional.cross_entropy(
-                        reconstructed[:, step:step_end],
-                        torch.argmax(real[:, step:step_end], dim=-1),
-                    )
+                discr_loss = nn.functional.cross_entropy(
+                    reconstructed[:, step:step_end],
+                    torch.argmax(real[:, step:step_end], dim=-1),
+                    reduction="sum",
                 )
+                loss.append(discr_loss)
             else:
-                loss.append(
-                    nn.functional.mse_loss(
-                        reconstructed[:, step:step_end],
-                        real[:, step:step_end],
-                    )
-                )
+                cont_loss = (
+                    reconstructed[:, step:step_end] - real[:, step:step_end]
+                ) ** 2
+                cont_loss = torch.sum(cont_loss)
+                loss.append(cont_loss)
             step = step_end
 
         if step != reconstructed.size()[1]:
@@ -268,7 +269,7 @@ class VAE(nn.Module):
                 f"Invalid reconstructed features. Expected {step}, got {reconstructed.shape}"
             )
 
-        reconstruction_loss = torch.mean(torch.FloatTensor(loss))
+        reconstruction_loss = torch.sum(torch.FloatTensor(loss))
 
         KLD_loss = torch.mean(-0.5 * torch.sum(1 + logvar - mu**2 - logvar.exp()))
 
