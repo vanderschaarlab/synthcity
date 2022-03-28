@@ -55,7 +55,7 @@ class LinearLayer(nn.Module):
 
     @validate_arguments(config=dict(arbitrary_types_allowed=True))
     def forward(self, X: torch.Tensor) -> torch.Tensor:
-        return self.model(X.float())
+        return self.model(X.float()).to(DEVICE)
 
 
 class ResidualLayer(LinearLayer):
@@ -79,7 +79,7 @@ class ResidualLayer(LinearLayer):
     @validate_arguments(config=dict(arbitrary_types_allowed=True))
     def forward(self, X: torch.Tensor) -> torch.Tensor:
         out = self.model(X.float())
-        return torch.cat([out, X], dim=1)
+        return torch.cat([out, X], dim=1).to(DEVICE)
 
 
 class MultiActivationHead(nn.Module):
