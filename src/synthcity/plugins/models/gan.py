@@ -156,10 +156,21 @@ class GAN(nn.Module):
         self.fake_labels_generator = gen_fake_labels
         self.true_labels_generator = gen_true_labels
 
-    def fit(self, X: np.ndarray) -> "GAN":
-        Xt = self._check_tensor(X)
+    def fit(
+        self,
+        X: np.ndarray,
+        fake_labels_generator: Optional[Callable] = None,
+        true_labels_generator: Optional[Callable] = None,
+    ) -> "GAN":
+        Xt = self._check_tensor(
+            X,
+        )
 
-        self._train(Xt)
+        self._train(
+            Xt,
+            fake_labels_generator=fake_labels_generator,
+            true_labels_generator=true_labels_generator,
+        )
 
         return self
 
@@ -280,7 +291,12 @@ class GAN(nn.Module):
         dataset = TensorDataset(X)
         return DataLoader(dataset, batch_size=self.batch_size, pin_memory=False)
 
-    def _train(self, X: torch.Tensor) -> "GAN":
+    def _train(
+        self,
+        X: torch.Tensor,
+        fake_labels_generator: Optional[Callable] = None,
+        true_labels_generator: Optional[Callable] = None,
+    ) -> "GAN":
         X = self._check_tensor(X).float()
 
         # Load Dataset
@@ -288,7 +304,11 @@ class GAN(nn.Module):
 
         # Train loop
         for i in range(self.generator_n_iter):
-            g_loss, d_loss = self.train_epoch(loader)
+            g_loss, d_loss = self.train_epoch(
+                loader,
+                fake_labels_generator=fake_labels_generator,
+                true_labels_generator=true_labels_generator,
+            )
             # Check how the generator is doing by saving G's output on fixed_noise
             if i % self.n_iter_print == 0:
                 log.info(
