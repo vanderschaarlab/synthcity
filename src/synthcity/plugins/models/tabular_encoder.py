@@ -242,6 +242,14 @@ class TabularEncoder(TransformerMixin, BaseEstimator):
         """
         return self._column_transform_info_list
 
+    def n_features(self) -> int:
+        return np.sum(
+            [
+                column_transform_info.output_dimensions
+                for column_transform_info in self._column_transform_info_list
+            ]
+        )
+
     @validate_arguments(config=dict(arbitrary_types_allowed=True))
     def activation_layout(
         self, discrete_activation: str, continuous_activation: str
