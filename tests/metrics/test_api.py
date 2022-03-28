@@ -8,7 +8,7 @@ from synthcity.metrics import Metrics
 from synthcity.plugins import Plugins
 
 
-@pytest.mark.parametrize("test_plugin", Plugins().list())
+@pytest.mark.parametrize("test_plugin", ["dummy_sampler", "marginal_distributions"])
 def test_basic(test_plugin: str) -> None:
     model = Plugins().get(test_plugin)
 

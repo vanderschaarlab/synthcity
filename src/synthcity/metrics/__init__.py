@@ -5,9 +5,6 @@ from typing import Dict, List, Optional
 import pandas as pd
 from pydantic import validate_arguments
 
-# synthcity absolute
-from synthcity.utils.scores import ScoreEvaluator
-
 # synthcity relative
 from .attacks import (
     evaluate_sensitive_data_leakage_linear,
@@ -26,13 +23,18 @@ from .detection import (
     evaluate_mlp_detection_synthetic,
     evaluate_xgb_detection_synthetic,
 )
-from .performance import evaluate_test_performance
+from .performance import (
+    evaluate_test_performance_linear,
+    evaluate_test_performance_mlp,
+    evaluate_test_performance_xgb,
+)
 from .privacy import (
     evaluate_delta_presence,
     evaluate_k_anonymization,
     evaluate_kmap,
     evaluate_l_diversity,
 )
+from .scores import ScoreEvaluator
 from .statistical import (
     evaluate_avg_jensenshannon_distance,
     evaluate_chi_squared_test,
@@ -41,6 +43,7 @@ from .statistical import (
     evaluate_inv_kl_divergence,
     evaluate_kolmogorov_smirnov_test,
     evaluate_maximum_mean_discrepancy,
+    evaluate_wasserstein_distance,
 )
 
 standard_metrics = {
@@ -97,20 +100,35 @@ standard_metrics = {
             "ok_score": 0,
             "bad_score": 1,
         },
+        "feature_correlation": {
+            "cbk": evaluate_feature_correlation,
+            "ok_score": 1,
+            "bad_score": 0,
+        },
         "avg_jensenshannon_distance": {
             "cbk": evaluate_avg_jensenshannon_distance,
             "ok_score": 0,
             "bad_score": 1,
         },
-        "feature_correlation": {
-            "cbk": evaluate_feature_correlation,
+        "wasserstein_distance": {
+            "cbk": evaluate_wasserstein_distance,
             "ok_score": 0,
-            "bad_score": 1,
+            "bad_score": 100,
         },
     },
     "performance": {
-        "train_synth_test_real_data": {
-            "cbk": evaluate_test_performance,
+        "train_synth_test_real_data_xgb": {
+            "cbk": evaluate_test_performance_xgb,
+            "ok_score": 0,
+            "bad_score": 1,
+        },
+        "train_synth_test_real_data_linear": {
+            "cbk": evaluate_test_performance_linear,
+            "ok_score": 0,
+            "bad_score": 1,
+        },
+        "train_synth_test_real_data_mlp": {
+            "cbk": evaluate_test_performance_mlp,
             "ok_score": 0,
             "bad_score": 1,
         },

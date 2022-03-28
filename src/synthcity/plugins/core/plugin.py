@@ -4,7 +4,7 @@ from abc import ABCMeta, abstractmethod
 from importlib.abc import Loader
 from os.path import basename
 from pathlib import Path
-from typing import Any, Dict, Generator, List, Optional, Type
+from typing import Any, Callable, Dict, Generator, List, Optional, Type
 
 # third party
 import pandas as pd
@@ -49,6 +49,8 @@ class Plugin(metaclass=ABCMeta):
         dp_epsilon: float = 1.0,
         dp_delta: float = 0,
         sampling_strategy: str = "marginal",  # uniform, marginal
+        sampling_patience: int = 1000,
+        sensitive_columns: list = [],
         strict: bool = True,
     ) -> None:
         """
@@ -69,6 +71,8 @@ class Plugin(metaclass=ABCMeta):
         self.dp_enabled = dp_enabled
         self.dp_delta = dp_delta
         self.sampling_strategy = sampling_strategy
+        self.sampling_patience = sampling_patience
+        self.sensitive_columns = sensitive_columns
         self.strict = strict
 
     @staticmethod
@@ -85,7 +89,7 @@ class Plugin(metaclass=ABCMeta):
         results = {}
 
         for hp in param_space:
-            results[hp.name] = hp.sample()
+            results[hp.name] = hp.sample()[0]
 
         return results
 
@@ -201,6 +205,31 @@ class Plugin(metaclass=ABCMeta):
             <count> synthetic samples
         """
         ...
+
+    def _safe_generate(
+        self, gen_cbk: Callable, count: int, syn_schema: Schema
+    ) -> pd.DataFrame:
+        constraints = syn_schema.as_constraints()
+
+        data_synth = pd.DataFrame([], columns=self.schema().features())
+        for it in range(self.sampling_patience):
+            # sample
+            iter_samples = gen_cbk(count)
+            iter_samples_df = pd.DataFrame(
+                iter_samples, columns=self.schema().features()
+            )
+            # validate schema
+            iter_samples_df = self.schema().adapt_dtypes(iter_samples_df)
+
+            iter_synth_valid = constraints.match(iter_samples_df)
+            data_synth = pd.concat([data_synth, iter_synth_valid], ignore_index=True)
+
+            if len(data_synth) >= count:
+                break
+
+        data_synth = self.schema().adapt_dtypes(data_synth).head(count)
+
+        return data_synth
 
     @validate_arguments(config=dict(arbitrary_types_allowed=True))
     def schema_includes(self, other: pd.DataFrame) -> bool:

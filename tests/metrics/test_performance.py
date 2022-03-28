@@ -1,3 +1,6 @@
+# stdlib
+from typing import Callable
+
 # third party
 import numpy as np
 import pandas as pd
@@ -5,19 +8,33 @@ import pytest
 from sklearn.datasets import load_diabetes, load_iris
 
 # synthcity absolute
-from synthcity.metrics.performance import evaluate_test_performance
+from synthcity.metrics.performance import (
+    evaluate_test_performance_linear,
+    evaluate_test_performance_mlp,
+    evaluate_test_performance_xgb,
+)
 from synthcity.plugins import Plugin, Plugins
 
 
 @pytest.mark.parametrize("test_plugin", [Plugins().get("marginal_distributions")])
-def test_evaluate_performance_classifier(test_plugin: Plugin) -> None:
+@pytest.mark.parametrize(
+    "evaluator",
+    [
+        evaluate_test_performance_xgb,
+        evaluate_test_performance_linear,
+        evaluate_test_performance_mlp,
+    ],
+)
+def test_evaluate_performance_classifier(
+    test_plugin: Plugin, evaluator: Callable
+) -> None:
     X, y = load_iris(return_X_y=True, as_frame=True)
     X["target"] = y
 
     test_plugin.fit(X)
     X_gen = test_plugin.generate(100)
 
-    good_score = evaluate_test_performance(
+    good_score = evaluator(
         X,
         X_gen,
     )
@@ -26,7 +43,7 @@ def test_evaluate_performance_classifier(test_plugin: Plugin) -> None:
 
     sz = 100
     X_rnd = pd.DataFrame(np.random.randn(sz, len(X.columns)), columns=X.columns)
-    score = evaluate_test_performance(
+    score = evaluator(
         X,
         X_rnd,
     )
@@ -36,14 +53,24 @@ def test_evaluate_performance_classifier(test_plugin: Plugin) -> None:
 
 
 @pytest.mark.parametrize("test_plugin", [Plugins().get("marginal_distributions")])
-def test_evaluate_performance_regression(test_plugin: Plugin) -> None:
+@pytest.mark.parametrize(
+    "evaluator",
+    [
+        evaluate_test_performance_xgb,
+        evaluate_test_performance_linear,
+        evaluate_test_performance_mlp,
+    ],
+)
+def test_evaluate_performance_regression(
+    test_plugin: Plugin, evaluator: Callable
+) -> None:
     X, y = load_diabetes(return_X_y=True, as_frame=True)
     X["target"] = y
 
     test_plugin.fit(X)
     X_gen = test_plugin.generate(100)
 
-    good_score = evaluate_test_performance(
+    good_score = evaluator(
         X,
         X_gen,
     )
@@ -52,7 +79,7 @@ def test_evaluate_performance_regression(test_plugin: Plugin) -> None:
 
     sz = 100
     X_rnd = pd.DataFrame(np.random.randn(sz, len(X.columns)), columns=X.columns)
-    score = evaluate_test_performance(
+    score = evaluator(
         X,
         X_rnd,
     )

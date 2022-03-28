@@ -31,7 +31,7 @@ class DummySamplerPlugin(Plugin):
 
     @staticmethod
     def type() -> str:
-        return "sampling"
+        return "debug"
 
     @staticmethod
     def hyperparameter_space(**kwargs: Any) -> List[Distribution]:
@@ -42,15 +42,15 @@ class DummySamplerPlugin(Plugin):
         return self
 
     def _generate(self, count: int, syn_schema: Schema, **kwargs: Any) -> pd.DataFrame:
-        if self.X is None:
-            raise RuntimeError("Fit the model first")
+        def _sample(count: int) -> pd.DataFrame:
+            baseline = self.X
+            constraints = syn_schema.as_constraints()
 
-        baseline = self.X
-        constraints = syn_schema.as_constraints()
+            baseline = constraints.match(baseline)
 
-        baseline = constraints.match(baseline)
+            return baseline.sample(count, replace=True).reset_index(drop=True)
 
-        return baseline.sample(count, replace=True).reset_index(drop=True)
+        return self._safe_generate(_sample, count, syn_schema)
 
 
 plugin = DummySamplerPlugin

@@ -37,8 +37,8 @@ def evaluate_sklearn_detection_synthetic(
     X_syn = X_syn.reset_index(drop=True)
     labels_syn = pd.Series([1] * len(X_syn))
 
-    data = X_gt.append(X_syn).reset_index(drop=True)
-    labels = labels_gt.append(labels_syn).reset_index(drop=True)
+    data = pd.concat([X_gt, X_syn]).reset_index(drop=True)
+    labels = pd.concat([labels_gt, labels_syn]).reset_index(drop=True)
 
     res = []
 
@@ -98,6 +98,8 @@ def evaluate_mlp_detection_synthetic(X_gt: pd.DataFrame, X_syn: pd.DataFrame) ->
 
     model_args = {
         "task_type": "classification",
+        "n_units_in": X_gt.shape[1],
+        "n_units_out": 2,
     }
     return evaluate_sklearn_detection_synthetic(
         MLP,

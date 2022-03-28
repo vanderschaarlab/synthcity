@@ -1,88 +1,128 @@
 # third party
-import jax
+import numpy as np
 import pytest
+import torch
 from sklearn.datasets import load_diabetes, load_digits
 
 # synthcity absolute
-from synthcity.plugins.models.mlp import MLP, BasicNetwork, NetworkConfig, _train_init
+from synthcity.plugins.models.mlp import (
+    MLP,
+    LinearLayer,
+    MultiActivationHead,
+    ResidualLayer,
+)
 
 
 def test_network_config() -> None:
-    config = NetworkConfig(
+    net = MLP(
         task_type="regression",
-        model_type=str,
-        input_shape=12,
-        output_shape=11,
-        hidden_layers=[1, 2, 3, 4],
+        n_units_in=10,
+        n_units_out=2,
+        n_layers_hidden=2,
+        n_units_hidden=20,
         batch_size=23,
-        epochs=34,
-        learning_rate=1e-2,
+        n_iter=34,
+        lr=1e-2,
         dropout=0.5,
-        batchnorm=True,
+        batch_norm=True,
         nonlin="elu",
         patience=66,
         seed=77,
-        optimizer="sgd",
     )
 
-    assert config.model_type == str
-    assert config.input_shape == 12
-    assert config.output_shape == 11
-    assert list(config.hidden_layers) == [1, 2, 3, 4]
-    assert config.batch_size == 23
-    assert config.epochs == 34
-    assert config.learning_rate == 1e-2
-    assert config.dropout == 0.5
-    assert config.batchnorm is True
-    assert config.nonlin == "elu"
-    assert config.patience == 66
-    assert config.seed == 77
-    assert config.optimizer == "sgd"
+    assert len(net.model) == 3
+    assert net.batch_size == 23
+    assert net.n_iter == 34
+    assert net.lr == 1e-2
+    assert net.patience == 66
+    assert net.seed == 77
 
 
-@pytest.mark.parametrize("optimizer", ["adam", "sgd"])
 @pytest.mark.parametrize("task_type", ["regression", "classification"])
 @pytest.mark.parametrize("nonlin", ["relu", "elu", "leaky_relu"])
-@pytest.mark.parametrize("epochs", [10, 50, 100])
+@pytest.mark.parametrize("n_iter", [10, 50, 100])
 @pytest.mark.parametrize("dropout", [0, 0.5, 0.2])
-@pytest.mark.parametrize("batchnorm", [True, False])
+@pytest.mark.parametrize("batch_norm", [True, False])
+@pytest.mark.parametrize("lr", [1e-3, 3e-4])
+@pytest.mark.parametrize("residual", [True, False])
 def test_basic_network(
-    optimizer: str,
     task_type: str,
     nonlin: str,
-    epochs: int,
+    n_iter: int,
     dropout: float,
-    batchnorm: bool,
+    batch_norm: bool,
+    lr: float,
+    residual: bool,
 ) -> None:
-    config = NetworkConfig(
+    net = MLP(
         task_type=task_type,
-        model_type=BasicNetwork,
-        epochs=epochs,
+        n_units_in=10,
+        n_units_out=2,
+        n_iter=n_iter,
         dropout=dropout,
         nonlin=nonlin,
-        input_shape=5,
-        batchnorm=batchnorm,
-        output_shape=2,
-        hidden_layers=[1, 2],
-        optimizer=optimizer,
+        batch_norm=batch_norm,
+        n_layers_hidden=2,
+        lr=lr,
+        residual=residual,
     )
 
-    rng = jax.random.PRNGKey(config.seed)
-    state = _train_init(config, rng)
-
-    assert state is not None
-
-    assert config.epochs == epochs
-    assert config.dropout == dropout
-    assert config.batchnorm == batchnorm
-    assert config.nonlin == nonlin
-    assert config.optimizer == optimizer
-    assert config.task_type == task_type
+    assert net.n_iter == n_iter
+    assert net.task_type == task_type
+    assert net.lr == lr
 
 
-def test_mlp_classification() -> None:
+@pytest.mark.parametrize("layer", [LinearLayer, ResidualLayer])
+def test_custom_layers(layer: torch.nn.Module) -> None:
+    X, _ = load_digits(return_X_y=True)
+    Xt = torch.from_numpy(X)
+
+    mod = layer(Xt.shape[1], 10).cpu()
+    assert mod(Xt).shape[0] == Xt.shape[0]
+    assert mod(Xt).shape[1] >= 10
+
+
+@pytest.mark.parametrize(
+    "activations",
+    [
+        [(torch.nn.ReLU(), 10), (torch.nn.Softmax(), 30), (torch.nn.Tanh(), 24)],
+        [(torch.nn.ReLU(), 64)],
+        [(torch.nn.ReLU(), 1) for i in range(64)],
+    ],
+)
+def test_multiactivation_heads(activations: list) -> None:
+    X, _ = load_digits(return_X_y=True)
+    Xt = torch.from_numpy(X)
+
+    mod = MultiActivationHead(activations=activations)
+    assert mod(Xt).shape == Xt.shape
+
+
+@pytest.mark.parametrize(
+    "activations",
+    [
+        [(torch.nn.ReLU(), 10), (torch.nn.Softmax(), 30), (torch.nn.Tanh(), 2)],
+        [(torch.nn.ReLU(), 1)],
+        [(torch.nn.ReLU(), 1) for i in range(65)],
+    ],
+)
+def test_multiactivation_heads_failure(activations: list) -> None:
+    X, _ = load_digits(return_X_y=True)
+    Xt = torch.from_numpy(X)
+
+    with pytest.raises(RuntimeError):
+        MultiActivationHead(activations=activations)(Xt)
+
+
+@pytest.mark.parametrize("residual", [True, False])
+def test_mlp_classification(residual: bool) -> None:
     X, y = load_digits(return_X_y=True)
-    model = MLP(task_type="classification")
+    model = MLP(
+        task_type="classification",
+        n_units_in=X.shape[1],
+        n_units_out=len(np.unique(y)),
+        residual=residual,
+    )
 
     model.fit(X, y)
 
@@ -90,12 +130,16 @@ def test_mlp_classification() -> None:
     assert model.predict_proba(X).shape == (len(y), 10)
 
 
-def test_mlp_regression() -> None:
+@pytest.mark.parametrize("residual", [True, False])
+def test_mlp_regression(residual: bool) -> None:
     X, y = load_diabetes(return_X_y=True)
-    model = MLP(task_type="regression")
+    model = MLP(
+        task_type="regression", n_units_in=X.shape[1], n_units_out=1, residual=residual
+    )
 
     model.fit(X, y)
 
     assert model.predict(X).shape == y.shape
     with pytest.raises(ValueError):
         model.predict_proba(X)
+    print(model.score(X, y))

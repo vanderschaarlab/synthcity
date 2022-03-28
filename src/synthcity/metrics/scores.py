@@ -113,26 +113,29 @@ class ScoreEvaluator:
             score_stddev = np.std(values)
             score_iqr = iqr(values)
             score_rounds = len(values)
-            output = output.append(
-                pd.DataFrame(
-                    [
+            output = pd.concat(
+                [
+                    output,
+                    pd.DataFrame(
                         [
-                            score_min,
-                            score_max,
-                            score_mean,
-                            score_stddev,
-                            score_median,
-                            score_iqr,
-                            score_rounds,
-                            errors,
-                            durations,
-                            ok_score,
-                            bad_score,
-                        ]
-                    ],
-                    columns=output_metrics,
-                    index=[metric],
-                )
+                            [
+                                score_min,
+                                score_max,
+                                score_mean,
+                                score_stddev,
+                                score_median,
+                                score_iqr,
+                                score_rounds,
+                                errors,
+                                durations,
+                                ok_score,
+                                bad_score,
+                            ]
+                        ],
+                        columns=output_metrics,
+                        index=[metric],
+                    ),
+                ],
             )
 
         return output

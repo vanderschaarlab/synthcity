@@ -56,11 +56,11 @@ class Schema(BaseModel):
                     feature_domain[col] = CategoricalDistribution(
                         name=col, data=X[col], **dp_args
                     )
-                elif X[col].dtype == "int":
+                elif X[col].dtype in ["int", "int32", "int64", "uint32", "uint64"]:
                     feature_domain[col] = IntegerDistribution(
                         name=col, data=X[col], **dp_args
                     )
-                elif X[col].dtype == "float":
+                elif X[col].dtype in ["float", "float64", "double"]:
                     feature_domain[col] = FloatDistribution(
                         name=col, data=X[col], **dp_args
                     )
@@ -72,11 +72,11 @@ class Schema(BaseModel):
                     feature_domain[col] = CategoricalDistribution(
                         name=col, choices=list(X[col].unique())
                     )
-                elif X[col].dtype == "int":
+                elif X[col].dtype in ["int", "int32", "int64", "uint32", "uint64"]:
                     feature_domain[col] = IntegerDistribution(
                         name=col, low=X[col].min(), high=X[col].max()
                     )
-                elif X[col].dtype == "float":
+                elif X[col].dtype in ["float", "float64", "double"]:
                     feature_domain[col] = FloatDistribution(
                         name=col, low=X[col].min(), high=X[col].max()
                     )

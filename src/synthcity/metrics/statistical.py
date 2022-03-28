@@ -4,8 +4,10 @@ from typing import Dict, Tuple
 # third party
 import numpy as np
 import pandas as pd
+import torch
 from copulas.univariate.base import Univariate
 from dython.nominal import associations
+from geomloss import SamplesLoss
 from pydantic import validate_arguments
 from scipy.spatial.distance import jensenshannon
 from scipy.special import kl_div
@@ -227,3 +229,24 @@ def evaluate_feature_correlation(
     stats_gt, stats_syn = evaluate_feature_correlation_stats(X_gt, X_syn)
 
     return np.linalg.norm(stats_gt - stats_syn, "fro")
+
+
+@validate_arguments(config=dict(arbitrary_types_allowed=True))
+def evaluate_wasserstein_distance(
+    X: pd.DataFrame,
+    X_syn: pd.DataFrame,
+) -> float:
+    """Compare Wasserstein distance between original data and synthetic data.
+
+    Args:
+        X: original data
+        X_syn: synthetically generated data
+
+    Returns:
+        WD_value: Wasserstein distance
+    """
+    X_ten = torch.from_numpy(X.values)
+    Xsyn_ten = torch.from_numpy(X_syn.values)
+    OT_solver = SamplesLoss(loss="sinkhorn")
+
+    return OT_solver(X_ten, Xsyn_ten).cpu().numpy()
