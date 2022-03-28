@@ -91,6 +91,7 @@ class TabularGAN(nn.Module):
         discriminator_loss: Optional[Callable] = None,
         discriminator_lr: float = 2e-4,
         discriminator_weight_decay: float = 1e-3,
+        discriminator_extra_penalties: list = [],  # "identifiability_loss"
         batch_size: int = 64,
         n_iter_print: int = 10,
         seed: int = 0,
@@ -129,6 +130,7 @@ class TabularGAN(nn.Module):
             discriminator_loss=discriminator_loss,
             discriminator_lr=discriminator_lr,
             discriminator_weight_decay=discriminator_weight_decay,
+            discriminator_extra_penalties=discriminator_extra_penalties,
             clipping_value=clipping_value,
             n_iter_print=n_iter_print,
             seed=seed,
