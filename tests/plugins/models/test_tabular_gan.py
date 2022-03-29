@@ -50,13 +50,11 @@ def test_network_config() -> None:
 
 
 @pytest.mark.parametrize("nonlin", ["relu", "elu", "leaky_relu"])
-@pytest.mark.parametrize("n_iter", [10, 50, 100])
 @pytest.mark.parametrize("dropout", [0, 0.5, 0.2])
 @pytest.mark.parametrize("batch_norm", [True, False])
 @pytest.mark.parametrize("lr", [1e-3, 3e-4])
 def test_basic_network(
     nonlin: str,
-    n_iter: int,
     dropout: float,
     batch_norm: bool,
     lr: float,
@@ -65,8 +63,8 @@ def test_basic_network(
     net = TabularGAN(
         X,
         n_units_latent=2,
-        generator_n_iter=n_iter,
-        discriminator_n_iter=n_iter,
+        generator_n_iter=3,
+        discriminator_n_iter=3,
         generator_dropout=dropout,
         discriminator_dropout=dropout,
         generator_nonlin=nonlin,
@@ -80,8 +78,8 @@ def test_basic_network(
         encoder_max_clusters=5,
     )
 
-    assert net.model.generator_n_iter == n_iter
-    assert net.model.discriminator_n_iter == n_iter
+    assert net.model.generator_n_iter == 3
+    assert net.model.discriminator_n_iter == 3
     assert net.model.generator.lr == lr
     assert net.model.discriminator.lr == lr
 
@@ -92,7 +90,7 @@ def test_gan_classification() -> None:
     model = TabularGAN(
         X,
         n_units_latent=50,
-        generator_n_iter=100,
+        generator_n_iter=10,
         encoder_max_clusters=5,
     )
     model.fit(X)
