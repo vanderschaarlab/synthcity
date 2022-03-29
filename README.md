@@ -112,6 +112,12 @@ score = Benchmarks.evaluate(
 |**Marginal distributions sampler**| A differentially private method that samples from the marginal distributions of the training set|  --- |
 |**Uniform distributions sampler**| A differentially private method that uniformly samples from the [min, max] ranges of each column.|  --- |
 
+### Normalizing Flows
+
+| Method | Description | Reference |
+|--- | --- | --- |
+|**Neural Spline Flows**| Normalizing Flows are generative models which produce tractable distributions where both sampling and density evaluation can be efficient and exact.| [Neural Spline Flows](https://arxiv.org/abs/1906.04032) |
+|**Affine coupling methods**| | [Density estimation using Real NVP](https://arxiv.org/abs/1605.08803) |
 
 ### Debug methods
 | Method | Description | Reference |
