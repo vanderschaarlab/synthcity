@@ -8,7 +8,7 @@ from pgmpy.models import BayesianNetwork
 from pgmpy.sampling import BayesianModelSampling
 
 # synthcity absolute
-from synthcity.plugins.core.distribution import Distribution
+from synthcity.plugins.core.distribution import CategoricalDistribution, Distribution
 from synthcity.plugins.core.plugin import Plugin
 from synthcity.plugins.core.schema import Schema
 
@@ -50,7 +50,15 @@ class BayesianNetworkPlugin(Plugin):
 
     @staticmethod
     def hyperparameter_space(**kwargs: Any) -> List[Distribution]:
-        return []
+        return [
+            CategoricalDistribution(
+                name="struct_learning_search_method",
+                choices=["hillclimb", "pc", "tree_search", "mmhc", "exhaustive"],
+            ),
+            CategoricalDistribution(
+                name="struct_learning_score", choices=["k2", "bdeu", "bic", "bds"]
+            ),
+        ]
 
     def _get_structure_scorer(self) -> Any:
         return {
