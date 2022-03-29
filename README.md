@@ -1,6 +1,6 @@
-<h3 align="center">
+<h2 align="center">
   synthcity
-</h3>
+</h2>
 
 <h4 align="center">
     A library for synthetic data quality assurance.
@@ -68,7 +68,7 @@ from synthcity.benchmark import Benchmarks
 constraints = Constraints(rules = [("target", "ge", 150)])
 
 score = Benchmarks.evaluate(
-    ["marginal_distributions", "random_noise"],
+    ["marginal_distributions", "pategan"],
     X, y,
     sensitive_columns = ["sex"],
     synthetic_size = 1000,
@@ -88,41 +88,40 @@ score = Benchmarks.evaluate(
 ### Bayesian methods
 | Method | Description | Reference |
 |--- | --- | --- |
-|**Bayesian network**| The method represents a set of random variables and their conditional dependencies via a directed acyclic graph (DAG), and uses it to sample new data points| [pgmpy](https://pgmpy.org/)|
-|**PrivBayes**|  A differentially private method for releasing high-dimensional data. | [PrivBayes: Private Data Release via Bayesian Networks](https://dl.acm.org/doi/10.1145/3134428)|
+|**bayesian_network**| The method represents a set of random variables and their conditional dependencies via a directed acyclic graph (DAG), and uses it to sample new data points| [pgmpy](https://pgmpy.org/)|
+|**privbayes**|  A differentially private method for releasing high-dimensional data. | [PrivBayes: Private Data Release via Bayesian Networks](https://dl.acm.org/doi/10.1145/3134428)|
 
 ### Generative adversarial networks(GANs)
 | Method | Description | Reference |
 |--- | --- | --- |
-|**AdsGAN**| A conditional GAN framework that generates synthetic data while minimize patient identifiability that is defined based on the probability of re-identification given the combination of all data on any individual patient|  [Anonymization Through Data Synthesis Using Generative Adversarial Networks (ADS-GAN)](https://pubmed.ncbi.nlm.nih.gov/32167919/) |
-|**PATE-GAN**| The methos uses the Private Aggregation of Teacher Ensembles (PATE) framework and applies it to GANs, allowing to tightly bound the influence of any individual sample on the model, resulting in tight differential privacy guarantees and thus an improved performance over models with the same guarantees.|  [PATE-GAN: Generating Synthetic Data with Differential Privacy Guarantees](https://openreview.net/forum?id=S1zk9iRqF7) |
-|**CTGAN**| A conditional generative adversarial network which can handle tabular data.| [Modeling Tabular data using Conditional GAN](https://arxiv.org/abs/1907.00503)|
-|**CopulaGAN**| The model is a variation of the CTGAN Model which takes advantage of the CDF based transformation that the GaussianCopulas apply to make the underlying CTGAN model task of learning the data easier.|  |
+|**adsgan**| A conditional GAN framework that generates synthetic data while minimize patient identifiability that is defined based on the probability of re-identification given the combination of all data on any individual patient|  [Anonymization Through Data Synthesis Using Generative Adversarial Networks (ADS-GAN)](https://pubmed.ncbi.nlm.nih.gov/32167919/) |
+|**pategan**| The methos uses the Private Aggregation of Teacher Ensembles (PATE) framework and applies it to GANs, allowing to tightly bound the influence of any individual sample on the model, resulting in tight differential privacy guarantees and thus an improved performance over models with the same guarantees.|  [PATE-GAN: Generating Synthetic Data with Differential Privacy Guarantees](https://openreview.net/forum?id=S1zk9iRqF7) |
+|**ctgan**| A conditional generative adversarial network which can handle tabular data.| [Modeling Tabular data using Conditional GAN](https://arxiv.org/abs/1907.00503)|
+|**copulagan**| The model is a variation of the CTGAN Model which takes advantage of the CDF based transformation that the GaussianCopulas apply to make the underlying CTGAN model task of learning the data easier.|  |
 
 ### Variational autoencoders(VAE)
 | Method | Description | Reference |
 |--- | --- | --- |
-|**TVAE**| A conditional VAE network which can handle tabular data.|  [Modeling Tabular data using Conditional GAN](https://arxiv.org/abs/1907.00503) |
-|**RTVAE**| A robust variational autoencoder with β divergence for tabular data (RTVAE) with mixed categorical and continuous features.|  [Robust Variational Autoencoder for Tabular Data with β Divergence](https://arxiv.org/abs/2006.08204) |
+|**tvae**| A conditional VAE network which can handle tabular data.|  [Modeling Tabular data using Conditional GAN](https://arxiv.org/abs/1907.00503) |
+|**rtvae**| A robust variational autoencoder with β divergence for tabular data (RTVAE) with mixed categorical and continuous features.|  [Robust Variational Autoencoder for Tabular Data with β Divergence](https://arxiv.org/abs/2006.08204) |
 
 
 ### Sampling methods
 | Method | Description | Reference |
 |--- | --- | --- |
-|**Marginal distributions sampler**| A differentially private method that samples from the marginal distributions of the training set|  --- |
-|**Uniform distributions sampler**| A differentially private method that uniformly samples from the [min, max] ranges of each column.|  --- |
+|**marginal_distributions**| A differentially private method that samples from the marginal distributions of the training set|  --- |
+|**uniform_sampler**| A differentially private method that uniformly samples from the [min, max] ranges of each column.|  --- |
 
 ### Normalizing Flows
 
 | Method | Description | Reference |
 |--- | --- | --- |
-|**Neural Spline Flows**| Normalizing Flows are generative models which produce tractable distributions where both sampling and density evaluation can be efficient and exact.| [Neural Spline Flows](https://arxiv.org/abs/1906.04032) |
-|**Affine coupling methods**| | [Density estimation using Real NVP](https://arxiv.org/abs/1605.08803) |
+|**nflow**| Normalizing Flows are generative models which produce tractable distributions where both sampling and density evaluation can be efficient and exact.| [Neural Spline Flows](https://arxiv.org/abs/1906.04032) |
 
 ### Debug methods
 | Method | Description | Reference |
 |--- | --- | --- |
-|**Dummy sampler**| Resample data points from the training set|  --- |
+|**dummy_sampler**| Resample data points from the training set|  --- |
 
 ## :zap: Evaluation metrics
 The following table contains the available evaluation metrics:

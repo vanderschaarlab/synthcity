@@ -142,16 +142,16 @@ class NormalizingFlows(nn.Module):
         # Load Dataset
         X = self.encoder.fit_transform(X)
 
-        X = self._check_tensor(X).float()
+        X = self._check_tensor(X).float().to(DEVICE)
         loader = self.dataloader(X)
 
         # Prepare flow
         features = X.shape[1]
-        base_dist = self._get_base_distribution()(shape=[X.shape[1]])
+        base_dist = self._get_base_distribution()(shape=[X.shape[1]]).to(DEVICE)
 
-        transform = self._create_transform(features)
+        transform = self._create_transform(features).to(DEVICE)
 
-        self.flow = Flow(transform=transform, distribution=base_dist)
+        self.flow = Flow(transform=transform, distribution=base_dist).to(DEVICE)
 
         # Prepare optimizer
         optimizer = optim.Adam(self.flow.parameters(), lr=self.lr)
