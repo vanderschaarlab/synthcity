@@ -14,7 +14,7 @@ from synthcity.plugins.core.distribution import (
 )
 from synthcity.plugins.core.plugin import Plugin
 from synthcity.plugins.core.schema import Schema
-from synthcity.plugins.models import NormalizingFlows
+from synthcity.plugins.models import TabularFlows
 
 
 class NormalizingFlowsPlugin(Plugin):
@@ -72,8 +72,8 @@ class NormalizingFlowsPlugin(Plugin):
     def __init__(
         self,
         n_iter: int = 1000,
-        n_layers_hidden: int = 5,
-        n_units_hidden: int = 10,
+        n_layers_hidden: int = 2,
+        n_units_hidden: int = 100,
         batch_size: int = 100,
         num_transform_blocks: int = 2,
         dropout: float = 0.25,
@@ -85,26 +85,28 @@ class NormalizingFlowsPlugin(Plugin):
         base_distribution: str = "standard_normal",  # "standard_normal"
         linear_transform_type: str = "permutation",  # "lu", "permutation", "svd"
         base_transform_type: str = "rq-autoregressive",  # "affine-coupling", "quadratic-coupling", "rq-coupling", "affine-autoregressive", "quadratic-autoregressive", "rq-autoregressive"
+        encoder_max_clusters: int = 20,
         **kwargs: Any,
     ) -> None:
         super().__init__(**kwargs)
 
-        self.model = NormalizingFlows(
-            n_iter=n_iter,
-            n_layers_hidden=n_layers_hidden,
-            n_units_hidden=n_units_hidden,
-            batch_size=batch_size,
-            num_transform_blocks=num_transform_blocks,
-            dropout=dropout,
-            batch_norm=batch_norm,
-            num_bins=num_bins,
-            tail_bound=tail_bound,
-            lr=lr,
-            apply_unconditional_transform=apply_unconditional_transform,
-            base_distribution=base_distribution,
-            linear_transform_type=linear_transform_type,
-            base_transform_type=base_transform_type,
-        )
+        self.n_iter = n_iter
+        self.n_layers_hidden = n_layers_hidden
+        self.n_units_hidden = n_units_hidden
+        self.batch_size = batch_size
+        self.num_transform_blocks = num_transform_blocks
+        self.dropout = dropout
+        self.batch_norm = batch_norm
+        self.num_bins = num_bins
+        self.tail_bound = tail_bound
+        self.apply_unconditional_transform = apply_unconditional_transform
+        self.lr = lr
+
+        self.base_distribution = base_distribution
+        self.linear_transform_type = linear_transform_type
+        self.base_transform_type = base_transform_type
+
+        self.encoder_max_clusters = encoder_max_clusters
 
     @staticmethod
     def name() -> str:
@@ -143,6 +145,25 @@ class NormalizingFlowsPlugin(Plugin):
     def _fit(
         self, X: pd.DataFrame, *args: Any, **kwargs: Any
     ) -> "NormalizingFlowsPlugin":
+        self.model = TabularFlows(
+            X,
+            n_iter=self.n_iter,
+            n_layers_hidden=self.n_layers_hidden,
+            n_units_hidden=self.n_units_hidden,
+            batch_size=self.batch_size,
+            num_transform_blocks=self.num_transform_blocks,
+            dropout=self.dropout,
+            batch_norm=self.batch_norm,
+            num_bins=self.num_bins,
+            tail_bound=self.tail_bound,
+            lr=self.lr,
+            apply_unconditional_transform=self.apply_unconditional_transform,
+            base_distribution=self.base_distribution,
+            linear_transform_type=self.linear_transform_type,
+            base_transform_type=self.base_transform_type,
+            encoder_max_clusters=self.encoder_max_clusters,
+        )
+
         self.model.fit(X)
         return self
 
