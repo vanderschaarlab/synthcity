@@ -80,6 +80,43 @@ score = Benchmarks.evaluate(
 ## 📓 Tutorials
  - [Tutorial 0: Basics](tutorials/tutorial0_basic_examples.ipynb)
  - [Tutorial 1: Write a new plugin](tutorials/tutorial1_add_a_new_plugin.ipynb)
+ - [Tutorial 1: Benchmarks](tutorials/tutorial2_benchmarks.ipynb)
+
+
+## 🔑 Methods
+
+### Bayesian methods
+| Method | Description | Reference |
+|--- | --- | --- |
+|**Bayesian network**| The method represents a set of random variables and their conditional dependencies via a directed acyclic graph (DAG), and uses it to sample new data points| [pgmpy](https://pgmpy.org/)|
+|**PrivBayes**|  A differentially private method for releasing high-dimensional data. | [PrivBayes: Private Data Release via Bayesian Networks](https://dl.acm.org/doi/10.1145/3134428)|
+
+### Generative adversarial networks(GANs)
+| Method | Description | Reference |
+|--- | --- | --- |
+|**AdsGAN**| A conditional GAN framework that generates synthetic data while minimize patient identifiability that is defined based on the probability of re-identification given the combination of all data on any individual patient|  [Anonymization Through Data Synthesis Using Generative Adversarial Networks (ADS-GAN)](https://pubmed.ncbi.nlm.nih.gov/32167919/) |
+|**PATE-GAN**| The methos uses the Private Aggregation of Teacher Ensembles (PATE) framework and applies it to GANs, allowing to tightly bound the influence of any individual sample on the model, resulting in tight differential privacy guarantees and thus an improved performance over models with the same guarantees.|  [PATE-GAN: Generating Synthetic Data with Differential Privacy Guarantees](https://openreview.net/forum?id=S1zk9iRqF7) |
+|**CTGAN**| A conditional generative adversarial network which can handle tabular data.| [Modeling Tabular data using Conditional GAN](https://arxiv.org/abs/1907.00503)|
+|**CopulaGAN**| The model is a variation of the CTGAN Model which takes advantage of the CDF based transformation that the GaussianCopulas apply to make the underlying CTGAN model task of learning the data easier.|  |
+
+### Variational autoencoders(VAE)
+| Method | Description | Reference |
+|--- | --- | --- |
+|**TVAE**| A conditional VAE network which can handle tabular data.|  [Modeling Tabular data using Conditional GAN](https://arxiv.org/abs/1907.00503) |
+|**RTVAE**| A robust variational autoencoder with β divergence for tabular data (RTVAE) with mixed categorical and continuous features.|  [Robust Variational Autoencoder for Tabular Data with β Divergence](https://arxiv.org/abs/2006.08204) |
+
+
+### Sampling methods
+| Method | Description | Reference |
+|--- | --- | --- |
+|**Marginal distributions sampler**| A differentially private method that samples from the marginal distributions of the training set|  --- |
+|**Uniform distributions sampler**| A differentially private method that uniformly samples from the [min, max] ranges of each column.|  --- |
+
+
+### Debug methods
+| Method | Description | Reference |
+|--- | --- | --- |
+|**Dummy sampler**| Resample data points from the training set|  --- |
 
 ## :zap: Evaluation metrics
 The following table contains the available evaluation metrics:
@@ -103,13 +140,17 @@ The following table contains the available evaluation metrics:
 |**inverse_cdf_distance**|The total distance between continuous features, |0: The distributions are the same. <br/>1: The distributions are totally different.|
 |**avg_jensenshannon_distance**|The Jensen-Shannon distance (metric) between two probability arrays. This is the square root of the Jensen-Shannon divergence. |0: The distributions are the same. <br/>1: The distributions are totally different.|
 |**feature_correlation**| The correlation/strength-of-association of features in data-set with both categorical and continuous features using: * Pearson's R for continuous-continuous cases * Cramer's V or Theil's U for categorical-categorical cases |0: The distributions are the same. <br/>1: The distributions are totally different.|
+|**asserstein_distance**| Wasserstein Distance is a measure of the distance between two probability distributions. |0: The distributions are the same.|
+
 
 
 
 #### Synthetic Data quality
 | Metric | Description| Values |
 |--- | --- | --- |
-|**train_synth_test_real_data**|Train a classifier or regressor on the synthetic data and evaluate the performance on real test data.|close to 0: similar performance <br/>1: massive performance degradation|
+|**train_synth_test_real_data_xbg**|Train an XGBoost classifier or regressor on the synthetic data and evaluate the performance on real test data.|close to 0: similar performance <br/>1: massive performance degradation|
+|**train_synth_test_real_data_linear**|Train a Linear classifier or regressor on the synthetic data and evaluate the performance on real test data.|close to 0: similar performance <br/>1: massive performance degradation|
+|**train_synth_test_real_data_mlp**|Train a Neural Net classifier or regressor on the synthetic data and evaluate the performance on real test data.|close to 0: similar performance <br/>1: massive performance degradation|
 |**gmm_detection**|Train a GaussianMixture model to differentiate the synthetic data from the real data.|0: The datasets are indistinguishable. <br/>1: The datasets are totally distinguishable.|
 |**xgb_detection**|Train an XGBoost model to differentiate the synthetic data from the real data.|0: The datasets are indistinguishable. <br/>1: The datasets are totally distinguishable.|
 |**mlp_detection**|Train an Neural net to differentiate the synthetic data from the real data.|0: The datasets are indistinguishable. <br/>1: The datasets are totally distinguishable.|

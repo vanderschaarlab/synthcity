@@ -7,9 +7,9 @@ from sklearn.datasets import load_iris
 # synthcity absolute
 from synthcity.plugins import Plugin
 from synthcity.plugins.core.constraints import Constraints
-from synthcity.plugins.plugin_adsgan import plugin
+from synthcity.plugins.plugin_bayesian_network import plugin
 
-plugin_name = "adsgan"
+plugin_name = "bayesian_network"
 
 
 @pytest.mark.parametrize("test_plugin", generate_fixtures(plugin_name, plugin))
@@ -24,24 +24,32 @@ def test_plugin_name(test_plugin: Plugin) -> None:
 
 @pytest.mark.parametrize("test_plugin", generate_fixtures(plugin_name, plugin))
 def test_plugin_type(test_plugin: Plugin) -> None:
-    assert test_plugin.type() == "gan"
+    assert test_plugin.type() == "bayesian"
 
 
 @pytest.mark.parametrize("test_plugin", generate_fixtures(plugin_name, plugin))
 def test_plugin_hyperparams(test_plugin: Plugin) -> None:
-    assert len(test_plugin.hyperparameter_space()) == 13
+    assert len(test_plugin.hyperparameter_space()) == 0
 
 
-@pytest.mark.parametrize("test_plugin", generate_fixtures(plugin_name, plugin))
-def test_plugin_fit(test_plugin: Plugin) -> None:
+@pytest.mark.parametrize(
+    "struct_learning_search_method",
+    ["hillclimb", "mmhc", "pc", "tree_search", "exhaustive"],
+)
+@pytest.mark.parametrize("struct_learning_score", ["k2", "bdeu", "bic", "bds"])
+def test_plugin_fit(
+    struct_learning_search_method: str, struct_learning_score: str
+) -> None:
+    test_plugin = plugin(
+        struct_learning_search_method=struct_learning_search_method,
+        struct_learning_score=struct_learning_score,
+    )
     X = pd.DataFrame(load_iris()["data"])
     test_plugin.fit(X)
 
 
-def test_plugin_generate() -> None:
-    test_plugin = plugin(
-        generator_n_layers_hidden=1, generator_n_units_hidden=10, generator_n_iter=10
-    )
+@pytest.mark.parametrize("test_plugin", generate_fixtures(plugin_name, plugin))
+def test_plugin_generate(test_plugin: Plugin) -> None:
     X = pd.DataFrame(load_iris()["data"])
     test_plugin.fit(X)
 
@@ -52,12 +60,11 @@ def test_plugin_generate() -> None:
     X_gen = test_plugin.generate(50)
     assert len(X_gen) == 50
     assert test_plugin.schema_includes(X_gen)
+    assert list(X_gen.columns) == list(X.columns)
 
 
-def test_plugin_generate_constraints() -> None:
-    test_plugin = plugin(
-        generator_n_layers_hidden=1, generator_n_units_hidden=10, generator_n_iter=10
-    )
+@pytest.mark.parametrize("test_plugin", generate_fixtures(plugin_name, plugin))
+def test_plugin_generate_constraints(test_plugin: Plugin) -> None:
     X = pd.DataFrame(load_iris()["data"])
     test_plugin.fit(X)
 
@@ -83,11 +90,3 @@ def test_plugin_generate_constraints() -> None:
     assert len(X_gen) == 50
     assert test_plugin.schema_includes(X_gen)
     assert constraints.filter(X_gen).sum() == len(X_gen)
-    assert list(X_gen.columns) == list(X.columns)
-
-
-def test_sample_hyperparams() -> None:
-    for i in range(100):
-        args = plugin.sample_hyperparameters()
-
-        assert plugin(**args) is not None

@@ -91,6 +91,7 @@ class GAN(nn.Module):
         discriminator_loss: Optional[Callable] = None,
         discriminator_lr: float = 2e-4,
         discriminator_weight_decay: float = 1e-3,
+        discriminator_extra_penalties: list = [],  # "identifiability_loss"
         batch_size: int = 64,
         n_iter_print: int = 10,
         seed: int = 0,
@@ -98,6 +99,11 @@ class GAN(nn.Module):
         clipping_value: int = 1,
     ) -> None:
         super(GAN, self).__init__()
+
+        extra_penalty_list = ["identifiability_loss"]
+        for penalty in discriminator_extra_penalties:
+            assert penalty in extra_penalty_list, f"Unsupported penalty {penalty}"
+        self.discriminator_extra_penalties = discriminator_extra_penalties
 
         self.n_features = n_features
         self.n_units_latent = n_units_latent
@@ -181,6 +187,10 @@ class GAN(nn.Module):
         with torch.no_grad():
             return self.generator(fixed_noise).detach().cpu()
 
+    def dataloader(self, X: torch.Tensor) -> DataLoader:
+        dataset = TensorDataset(X)
+        return DataLoader(dataset, batch_size=self.batch_size, pin_memory=False)
+
     def _train_epoch_generator(
         self,
         fake_labels_generator: Optional[Callable] = None,
@@ -228,6 +238,9 @@ class GAN(nn.Module):
             true_labels_generator = self.true_labels_generator
 
         errors = []
+
+        batch_size = min(self.batch_size, len(X))
+
         for epoch in range(self.discriminator_n_iter):
             self.discriminator.zero_grad()
 
@@ -238,7 +251,7 @@ class GAN(nn.Module):
             errD_real.backward()
 
             # Train with all-fake batch
-            noise = torch.randn(self.batch_size, self.n_units_latent, device=DEVICE)
+            noise = torch.randn(batch_size, self.n_units_latent, device=DEVICE)
             fake = self.generator(noise)
             label = fake_labels_generator(fake).to(DEVICE).squeeze().float()
 
@@ -248,6 +261,22 @@ class GAN(nn.Module):
 
             # Compute error of D as sum over the fake and the real batches
             errD = errD_real + errD_fake
+
+            for penalty in self.discriminator_extra_penalties:
+                if penalty == "identifiability_loss":
+                    eps = torch.rand([batch_size, 1]).to(DEVICE)
+                    interpolated = eps * real_X + (1.0 - eps) * fake
+                    lam = 10
+
+                    label = true_labels_generator(X).to(DEVICE).squeeze()
+                    output = self.discriminator(interpolated).squeeze()
+                    errD_interp = self.criterion(output, label)
+
+                    grad = torch.autograd.grad([errD_interp], [interpolated])[0]
+                    grad_norm = torch.sqrt(torch.sum((grad) ** 2 + 1e-8, axis=1))
+                    grad_pen = lam * torch.sum((grad_norm - 1) ** 2)
+
+                    errD += grad_pen
 
             # Update D
             torch.nn.utils.clip_grad_norm_(
@@ -284,10 +313,6 @@ class GAN(nn.Module):
             )
 
         return np.mean(G_losses), np.mean(D_losses)
-
-    def dataloader(self, X: torch.Tensor) -> DataLoader:
-        dataset = TensorDataset(X)
-        return DataLoader(dataset, batch_size=self.batch_size, pin_memory=False)
 
     def _train(
         self,

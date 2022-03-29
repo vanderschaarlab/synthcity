@@ -81,7 +81,7 @@ class RTVAEPlugin(Plugin):
         batch_size: int = 64,
         seed: int = 0,
         clipping_value: int = 1,
-        encoder_max_clusters: int = 20,
+        loss_strategy: str = "robust_divergence",
         decoder_n_layers_hidden: int = 2,
         decoder_n_units_hidden: int = 100,
         decoder_nonlin: str = "tanh",
@@ -90,6 +90,8 @@ class RTVAEPlugin(Plugin):
         encoder_n_units_hidden: int = 100,
         encoder_nonlin: str = "leaky_relu",
         encoder_dropout: float = 0.1,
+        data_encoder_max_clusters: int = 20,
+        robust_divergence_beta: int = 2,  # used only for loss_strategy "robust_divergence"
         **kwargs: Any
     ) -> None:
         super().__init__(**kwargs)
@@ -107,7 +109,8 @@ class RTVAEPlugin(Plugin):
         self.batch_size = batch_size
         self.seed = seed
         self.clipping_value = clipping_value
-        self.encoder_max_clusters = encoder_max_clusters
+        self.data_encoder_max_clusters = data_encoder_max_clusters
+        self.loss_strategy = loss_strategy
 
     @staticmethod
     def name() -> str:
@@ -152,6 +155,7 @@ class RTVAEPlugin(Plugin):
             lr=self.lr,
             weight_decay=self.weight_decay,
             n_iter=self.n_iter,
+            loss_strategy=self.loss_strategy,
             decoder_n_layers_hidden=self.decoder_n_layers_hidden,
             decoder_n_units_hidden=self.decoder_n_units_hidden,
             decoder_nonlin=self.decoder_nonlin,
@@ -166,7 +170,7 @@ class RTVAEPlugin(Plugin):
             encoder_batch_norm=False,
             encoder_dropout=self.encoder_dropout,
             clipping_value=self.clipping_value,
-            encoder_max_clusters=self.encoder_max_clusters,
+            encoder_max_clusters=self.data_encoder_max_clusters,
         )
         self.model.fit(X)
 

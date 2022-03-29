@@ -2,7 +2,7 @@
 import pandas as pd
 import pytest
 from helpers import generate_fixtures
-from sklearn.datasets import load_iris
+from sklearn.datasets import load_diabetes, load_iris
 
 # synthcity absolute
 from synthcity.plugins import Plugin
@@ -38,9 +38,9 @@ def test_plugin_fit(test_plugin: Plugin) -> None:
     test_plugin.fit(X)
 
 
-@pytest.mark.parametrize("test_plugin", generate_fixtures(plugin_name, plugin))
-def test_plugin_generate(test_plugin: Plugin) -> None:
-    X = pd.DataFrame(load_iris()["data"])
+def test_plugin_generate() -> None:
+    test_plugin = plugin(generator_n_layers_hidden=1, generator_n_units_hidden=10)
+    X = pd.DataFrame(load_diabetes()["data"])
     test_plugin.fit(X)
 
     X_gen = test_plugin.generate()
@@ -52,8 +52,8 @@ def test_plugin_generate(test_plugin: Plugin) -> None:
     assert test_plugin.schema_includes(X_gen)
 
 
-@pytest.mark.parametrize("test_plugin", generate_fixtures(plugin_name, plugin))
-def test_plugin_generate_constraints(test_plugin: Plugin) -> None:
+def test_plugin_generate_constraints() -> None:
+    test_plugin = plugin(generator_n_layers_hidden=1, generator_n_units_hidden=10)
     X = pd.DataFrame(load_iris()["data"])
     test_plugin.fit(X)
 
