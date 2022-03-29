@@ -103,13 +103,17 @@ The following table contains the available evaluation metrics:
 |**inverse_cdf_distance**|The total distance between continuous features, |0: The distributions are the same. <br/>1: The distributions are totally different.|
 |**avg_jensenshannon_distance**|The Jensen-Shannon distance (metric) between two probability arrays. This is the square root of the Jensen-Shannon divergence. |0: The distributions are the same. <br/>1: The distributions are totally different.|
 |**feature_correlation**| The correlation/strength-of-association of features in data-set with both categorical and continuous features using: * Pearson's R for continuous-continuous cases * Cramer's V or Theil's U for categorical-categorical cases |0: The distributions are the same. <br/>1: The distributions are totally different.|
+|**asserstein_distance**| Wasserstein Distance is a measure of the distance between two probability distributions. |0: The distributions are the same.|
+
 
 
 
 #### Synthetic Data quality
 | Metric | Description| Values |
 |--- | --- | --- |
-|**train_synth_test_real_data**|Train a classifier or regressor on the synthetic data and evaluate the performance on real test data.|close to 0: similar performance <br/>1: massive performance degradation|
+|**train_synth_test_real_data_xbg**|Train an XGBoost classifier or regressor on the synthetic data and evaluate the performance on real test data.|close to 0: similar performance <br/>1: massive performance degradation|
+|**train_synth_test_real_data_linear**|Train a Linear classifier or regressor on the synthetic data and evaluate the performance on real test data.|close to 0: similar performance <br/>1: massive performance degradation|
+|**train_synth_test_real_data_mlp**|Train a Neural Net classifier or regressor on the synthetic data and evaluate the performance on real test data.|close to 0: similar performance <br/>1: massive performance degradation|
 |**gmm_detection**|Train a GaussianMixture model to differentiate the synthetic data from the real data.|0: The datasets are indistinguishable. <br/>1: The datasets are totally distinguishable.|
 |**xgb_detection**|Train an XGBoost model to differentiate the synthetic data from the real data.|0: The datasets are indistinguishable. <br/>1: The datasets are totally distinguishable.|
 |**mlp_detection**|Train an Neural net to differentiate the synthetic data from the real data.|0: The datasets are indistinguishable. <br/>1: The datasets are totally distinguishable.|
