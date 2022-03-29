@@ -89,7 +89,7 @@ def test_gan_classification(discriminator_extra_loss: list) -> None:
     model = GAN(
         n_features=X.shape[1],
         n_units_latent=50,
-        generator_n_iter=100,
+        generator_n_iter=10,
         discriminator_extra_penalties=discriminator_extra_loss,
     )
     model.fit(X)

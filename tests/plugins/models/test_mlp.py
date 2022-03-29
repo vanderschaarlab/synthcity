@@ -122,6 +122,7 @@ def test_mlp_classification(residual: bool) -> None:
         n_units_in=X.shape[1],
         n_units_out=len(np.unique(y)),
         residual=residual,
+        n_iter=10,
     )
 
     model.fit(X, y)
@@ -134,7 +135,11 @@ def test_mlp_classification(residual: bool) -> None:
 def test_mlp_regression(residual: bool) -> None:
     X, y = load_diabetes(return_X_y=True)
     model = MLP(
-        task_type="regression", n_units_in=X.shape[1], n_units_out=1, residual=residual
+        task_type="regression",
+        n_units_in=X.shape[1],
+        n_units_out=1,
+        residual=residual,
+        n_iter=10,
     )
 
     model.fit(X, y)

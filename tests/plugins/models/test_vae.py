@@ -43,14 +43,12 @@ def test_network_config() -> None:
 
 
 @pytest.mark.parametrize("nonlin", ["relu", "elu", "leaky_relu"])
-@pytest.mark.parametrize("n_iter", [10, 50, 100])
 @pytest.mark.parametrize("dropout", [0, 0.5, 0.2])
 @pytest.mark.parametrize("batch_norm", [True, False])
 @pytest.mark.parametrize("lr", [1e-3, 3e-4])
 @pytest.mark.parametrize("hidden", [2, 3])
 def test_basic_network(
     nonlin: str,
-    n_iter: int,
     dropout: float,
     batch_norm: bool,
     lr: float,
@@ -59,7 +57,7 @@ def test_basic_network(
     net = VAE(
         n_features=10,
         n_units_embedding=2,
-        n_iter=n_iter,
+        n_iter=10,
         lr=lr,
         decoder_dropout=dropout,
         encoder_dropout=dropout,
@@ -71,7 +69,7 @@ def test_basic_network(
         encoder_n_layers_hidden=hidden,
     )
 
-    assert net.n_iter == n_iter
+    assert net.n_iter == 10
     assert net.lr == lr
     assert len(net.decoder.model) == hidden + 1
     assert len(net.encoder.model) == hidden
@@ -85,7 +83,7 @@ def test_vae_classification(loss_strategy: str) -> None:
     model = VAE(
         n_features=X.shape[1],
         n_units_embedding=50,
-        n_iter=100,
+        n_iter=10,
         loss_strategy=loss_strategy,
     )
     model.fit(X)

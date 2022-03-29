@@ -7,49 +7,50 @@ from sklearn.datasets import load_iris
 # synthcity absolute
 from synthcity.plugins import Plugin
 from synthcity.plugins.core.constraints import Constraints
-from synthcity.plugins.plugin_bayesian_network import plugin
+from synthcity.plugins.plugin_nflow import plugin
 
-plugin_name = "bayesian_network"
+plugin_name = "nflow"
+plugin_args = {"n_iter": 10}
 
 
-@pytest.mark.parametrize("test_plugin", generate_fixtures(plugin_name, plugin))
+@pytest.mark.parametrize(
+    "test_plugin", generate_fixtures(plugin_name, plugin, plugin_args)
+)
 def test_plugin_sanity(test_plugin: Plugin) -> None:
     assert test_plugin is not None
 
 
-@pytest.mark.parametrize("test_plugin", generate_fixtures(plugin_name, plugin))
+@pytest.mark.parametrize(
+    "test_plugin", generate_fixtures(plugin_name, plugin, plugin_args)
+)
 def test_plugin_name(test_plugin: Plugin) -> None:
     assert test_plugin.name() == plugin_name
 
 
-@pytest.mark.parametrize("test_plugin", generate_fixtures(plugin_name, plugin))
+@pytest.mark.parametrize(
+    "test_plugin", generate_fixtures(plugin_name, plugin, plugin_args)
+)
 def test_plugin_type(test_plugin: Plugin) -> None:
-    assert test_plugin.type() == "bayesian"
-
-
-@pytest.mark.parametrize("test_plugin", generate_fixtures(plugin_name, plugin))
-def test_plugin_hyperparams(test_plugin: Plugin) -> None:
-    assert len(test_plugin.hyperparameter_space()) == 2
+    assert test_plugin.type() == "flows"
 
 
 @pytest.mark.parametrize(
-    "struct_learning_search_method",
-    ["hillclimb", "mmhc", "pc", "tree_search", "exhaustive"],
+    "test_plugin", generate_fixtures(plugin_name, plugin, plugin_args)
 )
-@pytest.mark.parametrize("struct_learning_score", ["k2", "bdeu", "bic", "bds"])
-def test_plugin_fit(
-    struct_learning_search_method: str, struct_learning_score: str
-) -> None:
-    test_plugin = plugin(
-        struct_learning_search_method=struct_learning_search_method,
-        struct_learning_score=struct_learning_score,
-    )
+def test_plugin_hyperparams(test_plugin: Plugin) -> None:
+    assert len(test_plugin.hyperparameter_space()) == 9
+
+
+@pytest.mark.parametrize(
+    "test_plugin", generate_fixtures(plugin_name, plugin, plugin_args)
+)
+def test_plugin_fit(test_plugin: Plugin) -> None:
     X = pd.DataFrame(load_iris()["data"])
     test_plugin.fit(X)
 
 
-@pytest.mark.parametrize("test_plugin", generate_fixtures(plugin_name, plugin))
-def test_plugin_generate(test_plugin: Plugin) -> None:
+def test_plugin_generate() -> None:
+    test_plugin = plugin(n_layers_hidden=1, n_units_hidden=10, n_iter=100)
     X = pd.DataFrame(load_iris()["data"])
     test_plugin.fit(X)
 
@@ -60,11 +61,10 @@ def test_plugin_generate(test_plugin: Plugin) -> None:
     X_gen = test_plugin.generate(50)
     assert len(X_gen) == 50
     assert test_plugin.schema_includes(X_gen)
-    assert list(X_gen.columns) == list(X.columns)
 
 
-@pytest.mark.parametrize("test_plugin", generate_fixtures(plugin_name, plugin))
-def test_plugin_generate_constraints(test_plugin: Plugin) -> None:
+def test_plugin_generate_constraints() -> None:
+    test_plugin = plugin(n_layers_hidden=1, n_units_hidden=10, n_iter=100)
     X = pd.DataFrame(load_iris()["data"])
     test_plugin.fit(X)
 
@@ -90,3 +90,11 @@ def test_plugin_generate_constraints(test_plugin: Plugin) -> None:
     assert len(X_gen) == 50
     assert test_plugin.schema_includes(X_gen)
     assert constraints.filter(X_gen).sum() == len(X_gen)
+    assert list(X_gen.columns) == list(X.columns)
+
+
+def test_sample_hyperparams() -> None:
+    for i in range(100):
+        args = plugin.sample_hyperparameters()
+
+        assert plugin(**args) is not None
