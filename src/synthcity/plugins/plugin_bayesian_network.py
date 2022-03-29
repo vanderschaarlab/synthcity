@@ -28,7 +28,7 @@ class BayesianNetworkPlugin(Plugin):
     def __init__(
         self,
         struct_learning_n_iter: int = 1000,
-        struct_learning_search_method: str = "hillclimb",  # hillclimb, pc, tree_search, mmhc, exhaustive
+        struct_learning_search_method: str = "tree_search",  # hillclimb, pc, tree_search, mmhc, exhaustive
         struct_learning_score: str = "k2",  # k2, bdeu, bic, bds
         struct_max_indegree: int = 4,
         **kwargs: Any,
