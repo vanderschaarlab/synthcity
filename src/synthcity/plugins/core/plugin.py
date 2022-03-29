@@ -49,7 +49,7 @@ class Plugin(metaclass=ABCMeta):
         dp_epsilon: float = 1.0,
         dp_delta: float = 0,
         sampling_strategy: str = "marginal",  # uniform, marginal
-        sampling_patience: int = 10000,
+        sampling_patience: int = 100,
         sensitive_columns: list = [],
         strict: bool = True,
     ) -> None:
