@@ -34,7 +34,7 @@ class kAnonymization(PrivacyEvaluator):
 
     @staticmethod
     def name() -> str:
-        return "k-anonymization"
+        return "k-anonymization.real_syn_ratio"
 
     @staticmethod
     def direction() -> str:
@@ -72,7 +72,7 @@ class lDiversity(PrivacyEvaluator):
 
     @staticmethod
     def name() -> str:
-        return "l-diversity"
+        return "l-diversity.real_syn_ratio"
 
     @staticmethod
     def direction() -> str:
