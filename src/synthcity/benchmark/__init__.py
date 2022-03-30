@@ -55,8 +55,7 @@ class Benchmarks:
                 mean_score = evaluation["mean"].to_dict()
                 errors = evaluation["errors"].to_dict()
                 duration = evaluation["durations"].to_dict()
-                ok_score = evaluation["ok_score"].to_dict()
-                bad_score = evaluation["bad_score"].to_dict()
+                direction = evaluation["direction"].to_dict()
 
                 for key in mean_score:
                     scores.add(
@@ -64,8 +63,7 @@ class Benchmarks:
                         mean_score[key],
                         errors[key],
                         duration[key],
-                        ok_score[key],
-                        bad_score[key],
+                        direction[key],
                     )
             out[plugin] = scores.to_dataframe()
 
@@ -95,5 +93,5 @@ class Benchmarks:
             print()
             print("\033[4m" + "\033[1m" + f"Plugin : {plugin}" + "\033[0m" + "\033[0m")
 
-            display(results[plugin].drop(columns=["ok_score", "bad_score"]))
+            display(results[plugin].drop(columns=["direction"]))
             print()

@@ -1,13 +1,16 @@
+# stdlib
+from typing import Type
+
 # third party
 import pytest
 from sklearn.datasets import load_diabetes, load_iris
 
 # synthcity absolute
 from synthcity.metrics.privacy import (
-    evaluate_delta_presence,
-    evaluate_k_anonymization,
-    evaluate_kmap,
-    evaluate_l_diversity,
+    DeltaPresence,
+    kAnonymization,
+    kMap,
+    lDiversity,
     select_outliers,
     select_quantiles,
 )
@@ -39,33 +42,26 @@ def test_select_quantiles(test_plugin: Plugin) -> None:
     assert original_duplicates > len(quantiles.drop_duplicates())
 
 
-def test_evaluate_k_anonymization() -> None:
-    X, y = load_diabetes(return_X_y=True, as_frame=True)
-
-    assert evaluate_k_anonymization(X) == 18
-
-
-def test_evaluate_l_diversity() -> None:
-    X, y = load_diabetes(return_X_y=True, as_frame=True)
-
-    assert evaluate_l_diversity(X, ["sex", "bmi"]) == 20
-
-
+@pytest.mark.parametrize(
+    "evaluator_t",
+    [
+        DeltaPresence,
+        kAnonymization,
+        kMap,
+        lDiversity,
+    ],
+)
 @pytest.mark.parametrize("test_plugin", [Plugins().get("dummy_sampler")])
-def test_evaluate_kmap(test_plugin: Plugin) -> None:
+def test_evaluator(evaluator_t: Type, test_plugin: Plugin) -> None:
     X, y = load_diabetes(return_X_y=True, as_frame=True)
 
     test_plugin.fit(X)
     X_gen = test_plugin.generate(2 * len(X))
 
-    assert evaluate_kmap(X, X_gen, ["sex", "bmi"]) > 18
+    evaluator = evaluator_t(sensitive_columns=["sex", "bmi"])
 
+    score = evaluator.evaluate(X, X_gen)
 
-@pytest.mark.parametrize("test_plugin", [Plugins().get("dummy_sampler")])
-def test_evaluate_delta_presence(test_plugin: Plugin) -> None:
-    X, y = load_diabetes(return_X_y=True, as_frame=True)
+    assert score > 0
 
-    test_plugin.fit(X)
-    X_gen = test_plugin.generate(2 * len(X))
-
-    assert 0 < evaluate_delta_presence(X, X_gen, ["sex", "bmi"]) < 1
+    assert evaluator.type() == "privacy"
