@@ -50,7 +50,7 @@ def test_plugin_fit(test_plugin: Plugin) -> None:
 
 
 def test_plugin_generate() -> None:
-    test_plugin = plugin(n_layers_hidden=2, n_units_hidden=100, n_iter=1000)
+    test_plugin = plugin(n_layers_hidden=2, n_units_hidden=100, n_iter=500)
     X = pd.DataFrame(load_iris()["data"])
     test_plugin.fit(X)
 

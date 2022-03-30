@@ -41,7 +41,7 @@ class kAnonymization(PrivacyEvaluator):
         return "maximize"
 
     @validate_arguments(config=dict(arbitrary_types_allowed=True))
-    def _evaluate_data(self, X: pd.DataFrame) -> int:
+    def evaluate_data(self, X: pd.DataFrame) -> int:
 
         features = get_features(X, self._sensitive_columns)
 
@@ -59,7 +59,7 @@ class kAnonymization(PrivacyEvaluator):
 
     @validate_arguments(config=dict(arbitrary_types_allowed=True))
     def evaluate(self, X: pd.DataFrame, X_syn: pd.DataFrame) -> float:
-        return self._evaluate_data(X) / (self._evaluate_data(X_syn) + 1e-8)
+        return self.evaluate_data(X) / (self.evaluate_data(X_syn) + 1e-8)
 
 
 class lDiversity(PrivacyEvaluator):
@@ -78,7 +78,7 @@ class lDiversity(PrivacyEvaluator):
     def direction() -> str:
         return "maximize"
 
-    def _evaluate_data(self, X: pd.DataFrame) -> int:
+    def evaluate_data(self, X: pd.DataFrame) -> int:
         features = get_features(X, self._sensitive_columns)
 
         values = [999]
@@ -99,7 +99,7 @@ class lDiversity(PrivacyEvaluator):
 
     @validate_arguments(config=dict(arbitrary_types_allowed=True))
     def evaluate(self, X: pd.DataFrame, X_syn: pd.DataFrame) -> float:
-        return self._evaluate_data(X) / (self._evaluate_data(X_syn) + 1e-8)
+        return self.evaluate_data(X) / (self.evaluate_data(X_syn) + 1e-8)
 
 
 class kMap(PrivacyEvaluator):

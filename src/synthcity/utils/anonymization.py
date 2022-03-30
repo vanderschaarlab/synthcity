@@ -50,7 +50,7 @@ class DatasetAnonymization:
     def is_anonymous(self, X: pd.DataFrame, sensitive_columns: List[str] = []) -> bool:
         """True if the dataset is valid according to the k-anonymity criteria, False otherwise."""
         evaluator = kAnonymization(sensitive_columns=sensitive_columns)
-        return bool(evaluator._evaluate_data(X) >= self.k_threshold)
+        return bool(evaluator.evaluate_data(X) >= self.k_threshold)
 
     def _setup(self, X: pd.DataFrame) -> Tuple[pd.DataFrame, Dict]:
         encoders = {}
