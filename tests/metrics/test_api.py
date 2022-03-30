@@ -42,7 +42,15 @@ def test_basic(test_plugin: str) -> None:
 
 def test_list() -> None:
     assert set(Metrics.list().keys()) == set(
-        ["privacy", "statistical", "sanity", "attack", "detection", "performance"]
+        [
+            "privacy",
+            "statistical.marginal",
+            "statistical.joint",
+            "sanity",
+            "attack",
+            "detection",
+            "performance",
+        ]
     )
 
 
@@ -50,7 +58,10 @@ def test_list() -> None:
     "metric_filter",
     [
         {"sanity": ["data_mismatch_score", "common_rows_proportion"]},
-        {"sanity": ["data_mismatch_score"], "statistical": ["inverse_kl_divergence"]},
+        {
+            "sanity": ["data_mismatch_score"],
+            "statistical.marginal": ["inverse_kl_divergence"],
+        },
     ],
 )
 def test_metric_filter(metric_filter: dict) -> None:

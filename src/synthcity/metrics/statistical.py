@@ -19,16 +19,7 @@ from synthcity.metrics._utils import get_frequency
 from synthcity.metrics.core import MetricEvaluator
 
 
-class StatisticalEvaluator(MetricEvaluator):
-    def __init__(self, **kwargs: Any) -> None:
-        super().__init__(**kwargs)
-
-    @staticmethod
-    def type() -> str:
-        return "statistical"
-
-
-class InverseKLDivergence(StatisticalEvaluator):
+class InverseKLDivergence(MetricEvaluator):
     """Returns the average inverse of the Kullback–Leibler Divergence metric.
 
     Score:
@@ -38,6 +29,10 @@ class InverseKLDivergence(StatisticalEvaluator):
 
     def __init__(self, **kwargs: Any) -> None:
         super().__init__(**kwargs)
+
+    @staticmethod
+    def type() -> str:
+        return "statistical.marginal"
 
     @staticmethod
     def name() -> str:
@@ -58,7 +53,7 @@ class InverseKLDivergence(StatisticalEvaluator):
         return self.reduction()(res)
 
 
-class KolmogorovSmirnovTest(StatisticalEvaluator):
+class KolmogorovSmirnovTest(MetricEvaluator):
     """Performs the Kolmogorov-Smirnov test for goodness of fit.
 
     Score:
@@ -68,6 +63,10 @@ class KolmogorovSmirnovTest(StatisticalEvaluator):
 
     def __init__(self, **kwargs: Any) -> None:
         super().__init__(**kwargs)
+
+    @staticmethod
+    def type() -> str:
+        return "statistical.marginal"
 
     @staticmethod
     def name() -> str:
@@ -87,7 +86,7 @@ class KolmogorovSmirnovTest(StatisticalEvaluator):
         return self.reduction()(res)
 
 
-class ChiSquaredTest(StatisticalEvaluator):
+class ChiSquaredTest(MetricEvaluator):
     """Performs the one-way chi-square test.
 
     Returns:
@@ -100,6 +99,10 @@ class ChiSquaredTest(StatisticalEvaluator):
 
     def __init__(self, **kwargs: Any) -> None:
         super().__init__(**kwargs)
+
+    @staticmethod
+    def type() -> str:
+        return "statistical.marginal"
 
     @staticmethod
     def name() -> str:
@@ -127,7 +130,7 @@ class ChiSquaredTest(StatisticalEvaluator):
         return self.reduction()(res)
 
 
-class MaximumMeanDiscrepancy(StatisticalEvaluator):
+class MaximumMeanDiscrepancy(MetricEvaluator):
     """Empirical maximum mean discrepancy. The lower the result the more evidence that distributions are the same.
 
     Args:
@@ -143,6 +146,10 @@ class MaximumMeanDiscrepancy(StatisticalEvaluator):
         super().__init__(**kwargs)
 
         self.kernel = kernel
+
+    @staticmethod
+    def type() -> str:
+        return "statistical.joint"
 
     @staticmethod
     def name() -> str:
@@ -190,7 +197,7 @@ class MaximumMeanDiscrepancy(StatisticalEvaluator):
             raise ValueError(f"Unsupported kernel {self.kernel}")
 
 
-class InverseCDFDistance(StatisticalEvaluator):
+class InverseCDFDistance(MetricEvaluator):
     """Evaluate the distance between continuous features."""
 
     @validate_arguments(config=dict(arbitrary_types_allowed=True))
@@ -198,6 +205,10 @@ class InverseCDFDistance(StatisticalEvaluator):
         super().__init__(**kwargs)
 
         self.p = p
+
+    @staticmethod
+    def type() -> str:
+        return "statistical.marginal"
 
     @staticmethod
     def name() -> str:
@@ -232,7 +243,7 @@ class InverseCDFDistance(StatisticalEvaluator):
         return self.reduction()(distances)
 
 
-class JensenShannonDistance(StatisticalEvaluator):
+class JensenShannonDistance(MetricEvaluator):
     """Evaluate the average Jensen-Shannon distance (metric) between two probability arrays."""
 
     @validate_arguments(config=dict(arbitrary_types_allowed=True))
@@ -240,6 +251,10 @@ class JensenShannonDistance(StatisticalEvaluator):
         super().__init__(**kwargs)
 
         self.normalize = normalize
+
+    @staticmethod
+    def type() -> str:
+        return "statistical.marginal"
 
     @staticmethod
     def name() -> str:
@@ -288,7 +303,7 @@ class JensenShannonDistance(StatisticalEvaluator):
         return sum(stats_.values()) / len(stats_.keys())
 
 
-class FeatureCorrelation(StatisticalEvaluator):
+class FeatureCorrelation(MetricEvaluator):
     """Evaluate the correlation/strength-of-association of features in data-set with both categorical and continuous features using: * Pearson's R for continuous-continuous cases ** Cramer's V or Theil's U for categorical-categorical cases."""
 
     def __init__(
@@ -298,6 +313,10 @@ class FeatureCorrelation(StatisticalEvaluator):
 
         self.nom_nom_assoc = nom_nom_assoc
         self.nominal_columns = nominal_columns
+
+    @staticmethod
+    def type() -> str:
+        return "statistical.joint"
 
     @staticmethod
     def name() -> str:
@@ -341,7 +360,7 @@ class FeatureCorrelation(StatisticalEvaluator):
         return np.linalg.norm(stats_gt - stats_syn, "fro")
 
 
-class WassersteinDistance(StatisticalEvaluator):
+class WassersteinDistance(MetricEvaluator):
     """Compare Wasserstein distance between original data and synthetic data.
 
     Args:
@@ -354,6 +373,10 @@ class WassersteinDistance(StatisticalEvaluator):
 
     def __init__(self, **kwargs: Any) -> None:
         super().__init__(**kwargs)
+
+    @staticmethod
+    def type() -> str:
+        return "statistical.joint"
 
     @staticmethod
     def name() -> str:

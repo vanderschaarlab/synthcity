@@ -51,7 +51,7 @@ def test_kl_div(test_plugin: Plugin) -> None:
     assert syn_score > rnd_score
 
     assert InverseKLDivergence.name() == "inverse_kl_divergence"
-    assert InverseKLDivergence.type() == "statistical"
+    assert InverseKLDivergence.type() == "statistical.marginal"
     assert InverseKLDivergence.direction() == "maximize"
 
 
@@ -70,7 +70,7 @@ def test_evaluate_kolmogorov_smirnov_test(test_plugin: Plugin) -> None:
     assert syn_score > rnd_score
 
     assert KolmogorovSmirnovTest.name() == "kolmogorov_smirnov_test"
-    assert KolmogorovSmirnovTest.type() == "statistical"
+    assert KolmogorovSmirnovTest.type() == "statistical.marginal"
     assert KolmogorovSmirnovTest.direction() == "maximize"
 
 
@@ -89,7 +89,7 @@ def test_evaluate_chi_squared_test(test_plugin: Plugin) -> None:
     assert syn_score > rnd_score
 
     assert ChiSquaredTest.name() == "chi_squared_test"
-    assert ChiSquaredTest.type() == "statistical"
+    assert ChiSquaredTest.type() == "statistical.marginal"
     assert ChiSquaredTest.direction() == "maximize"
 
 
@@ -109,7 +109,7 @@ def test_evaluate_maximum_mean_discrepancy(kernel: str, test_plugin: Plugin) -> 
     assert syn_score < rnd_score
 
     assert MaximumMeanDiscrepancy.name() == "maximum_mean_discrepancy"
-    assert MaximumMeanDiscrepancy.type() == "statistical"
+    assert MaximumMeanDiscrepancy.type() == "statistical.joint"
     assert MaximumMeanDiscrepancy.direction() == "minimize"
 
 
@@ -128,7 +128,7 @@ def test_evaluate_inv_cdf_function(test_plugin: Plugin) -> None:
     assert syn_score < rnd_score
 
     assert InverseCDFDistance.name() == "inverse_cdf_distance"
-    assert InverseCDFDistance.type() == "statistical"
+    assert InverseCDFDistance.type() == "statistical.marginal"
     assert InverseCDFDistance.direction() == "minimize"
 
 
@@ -147,7 +147,7 @@ def test_evaluate_avg_jensenshannon_distance(test_plugin: Plugin) -> None:
     assert syn_score < rnd_score
 
     assert JensenShannonDistance.name() == "jensenshannon_distance"
-    assert JensenShannonDistance.type() == "statistical"
+    assert JensenShannonDistance.type() == "statistical.marginal"
     assert JensenShannonDistance.direction() == "minimize"
 
 
@@ -166,7 +166,7 @@ def test_evaluate_feature_correlation(test_plugin: Plugin) -> None:
     assert syn_score < rnd_score
 
     assert FeatureCorrelation.name() == "feature_correlation"
-    assert FeatureCorrelation.type() == "statistical"
+    assert FeatureCorrelation.type() == "statistical.joint"
     assert FeatureCorrelation.direction() == "minimize"
 
 
@@ -185,5 +185,5 @@ def test_evaluate_wasserstein_distance(test_plugin: Plugin) -> None:
     assert syn_score < rnd_score
 
     assert WassersteinDistance.name() == "wasserstein_distance"
-    assert WassersteinDistance.type() == "statistical"
+    assert WassersteinDistance.type() == "statistical.joint"
     assert WassersteinDistance.direction() == "minimize"
