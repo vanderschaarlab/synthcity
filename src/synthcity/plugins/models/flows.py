@@ -3,6 +3,7 @@ from typing import Any
 
 # third party
 import numpy as np
+import pandas as pd
 import torch
 from nflows.distributions.normal import StandardNormal
 from nflows.flows.base import Flow
@@ -21,7 +22,6 @@ from nflows.transforms.coupling import (
 from nflows.transforms.lu import LULinear
 from nflows.transforms.permutations import RandomPermutation
 from nflows.transforms.svd import SVDLinear
-from sklearn.preprocessing import MinMaxScaler
 from torch import nn, optim
 from torch.nn import functional as F
 from torch.utils.data import DataLoader, TensorDataset
@@ -125,23 +125,20 @@ class NormalizingFlows(nn.Module):
         self.linear_transform_type = linear_transform_type
         self.base_transform_type = base_transform_type
 
-        self.encoder = MinMaxScaler()
-
     def dataloader(self, X: torch.Tensor) -> DataLoader:
         dataset = TensorDataset(X)
         return DataLoader(dataset, batch_size=self.batch_size, pin_memory=False)
 
     def generate(self, count: int) -> np.ndarray:
-        return self.encoder.inverse_transform(self(count).detach().cpu().numpy())
+        return self(count).detach().cpu().numpy()
 
     def forward(self, count: int) -> torch.Tensor:
+        self.flow.eval()
         with torch.no_grad():
             return self.flow.sample(count)
 
-    def fit(self, X: np.ndarray) -> Any:
+    def fit(self, X: pd.DataFrame) -> Any:
         # Load Dataset
-        X = self.encoder.fit_transform(X)
-
         X = self._check_tensor(X).float().to(DEVICE)
         loader = self.dataloader(X)
 

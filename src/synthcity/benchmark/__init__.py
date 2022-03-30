@@ -39,8 +39,10 @@ class Benchmarks:
                     X_syn = generator.generate(
                         count=synthetic_size, constraints=synthetic_constraints
                     )
+                    if len(X_syn) == 0:
+                        raise RuntimeError("Plugin failed to generate data")
                 except BaseException as e:
-                    log.critical(f" Experiment {repeat} failed: {e}")
+                    log.critical(f"[{plugin}][take {repeat}] failed: {e}")
                     continue
 
                 evaluation = Metrics.evaluate(
