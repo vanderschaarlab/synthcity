@@ -1,28 +1,24 @@
 # stdlib
-from typing import Callable
+from typing import Type
 
 # third party
 import pytest
 from sklearn.datasets import load_diabetes
 
 # synthcity absolute
-from synthcity.metrics.attacks import (
-    evaluate_sensitive_data_leakage_linear,
-    evaluate_sensitive_data_leakage_mlp,
-    evaluate_sensitive_data_leakage_xgb,
-)
+from synthcity.metrics.attacks import DataLeakageLinear, DataLeakageMLP, DataLeakageXGB
 from synthcity.plugins import Plugins
 
 
 @pytest.mark.parametrize(
-    "evaluator",
+    "evaluator_t",
     [
-        evaluate_sensitive_data_leakage_linear,
-        evaluate_sensitive_data_leakage_xgb,
-        evaluate_sensitive_data_leakage_mlp,
+        DataLeakageLinear,
+        DataLeakageXGB,
+        DataLeakageMLP,
     ],
 )
-def test_evaluate_sensitive_data_leakage(evaluator: Callable) -> None:
+def test_evaluate_sensitive_data_leakage(evaluator_t: Type) -> None:
     X, y = load_diabetes(return_X_y=True, as_frame=True)
     X["target"] = y
 
@@ -31,24 +27,13 @@ def test_evaluate_sensitive_data_leakage(evaluator: Callable) -> None:
     test_plugin.fit(X)
     X_gen = test_plugin.generate(2 * len(X))
 
-    score = evaluator(
-        X,
-        X_gen,
-    )
-    assert score == 0
+    evaluator = evaluator_t(sensitive_columns=["sex"])
 
-    score = evaluator(
+    score = evaluator.evaluate(
         X,
         X_gen,
-        sensitive_columns=["sex"],
     )
     assert score > 0.5
-
-    score = evaluator(
-        X,
-        X_gen,
-        sensitive_columns=["age"],
-    )
     assert score < 1
 
     # Random noise
@@ -57,9 +42,11 @@ def test_evaluate_sensitive_data_leakage(evaluator: Callable) -> None:
     test_plugin.fit(X)
     X_gen = test_plugin.generate(2 * len(X))
 
-    score = evaluator(
+    score = evaluator.evaluate(
         X,
         X_gen,
-        sensitive_columns=["sex"],
     )
     assert score < 1
+
+    assert evaluator.type() == "attack"
+    assert evaluator.direction() == "minimize"

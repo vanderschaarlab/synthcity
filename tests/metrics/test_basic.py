@@ -8,12 +8,12 @@ import pytest
 from sklearn.datasets import load_iris
 
 # synthcity absolute
-from synthcity.metrics.basic import (
-    evaluate_avg_distance_nearest_synth_neighbor,
-    evaluate_common_rows_proportion,
-    evaluate_data_mismatch_score,
-    evaluate_inlier_probability,
-    evaluate_outlier_probability,
+from synthcity.metrics.sanity import (
+    CommonRowsProportion,
+    DataMismatchScore,
+    InlierProbability,
+    NearestSyntheticNeighborDistance,
+    OutlierProbability,
 )
 from synthcity.plugins import Plugin, Plugins
 
@@ -42,7 +42,9 @@ def test_evaluate_data_mismatch_score(test_plugin: Plugin) -> None:
     test_plugin.fit(X)
     X_gen = test_plugin.generate(100)
 
-    score = evaluate_data_mismatch_score(
+    evaluator = DataMismatchScore()
+
+    score = evaluator.evaluate(
         X,
         X_gen,
     )
@@ -52,13 +54,17 @@ def test_evaluate_data_mismatch_score(test_plugin: Plugin) -> None:
     X_fail = X.head(100)
     X["target"] = "a"
 
-    score = evaluate_data_mismatch_score(
+    score = evaluator.evaluate(
         X,
         X_fail,
     )
 
     assert score > 0
     assert score < 1
+
+    assert evaluator.type() == "sanity"
+    assert evaluator.name() == "data_mismatch_score"
+    assert evaluator.direction() == "minimize"
 
 
 @pytest.mark.parametrize("test_plugin", [Plugins().get("dummy_sampler")])
@@ -69,11 +75,16 @@ def test_common_rows(test_plugin: Plugin) -> None:
     test_plugin.fit(X)
     X_gen = test_plugin.generate(100)
 
-    syn_score, rnd_score = _eval_plugin(evaluate_common_rows_proportion, X, X_gen)
+    evaluator = CommonRowsProportion()
+    syn_score, rnd_score = _eval_plugin(evaluator.evaluate, X, X_gen)
 
     assert syn_score > 0
     assert syn_score < 1
     assert rnd_score == 0
+
+    assert evaluator.type() == "sanity"
+    assert evaluator.name() == "common_rows_proportion"
+    assert evaluator.direction() == "minimize"
 
 
 @pytest.mark.parametrize("test_plugin", [Plugins().get("dummy_sampler")])
@@ -84,9 +95,9 @@ def test_evaluate_avg_distance_nearest_synth_neighbor(test_plugin: Plugin) -> No
     test_plugin.fit(X)
     X_gen = test_plugin.generate(100)
 
-    syn_score, rnd_score = _eval_plugin(
-        evaluate_avg_distance_nearest_synth_neighbor, X, X_gen
-    )
+    evaluator = NearestSyntheticNeighborDistance()
+
+    syn_score, rnd_score = _eval_plugin(evaluator.evaluate, X, X_gen)
 
     assert syn_score > 0
     assert syn_score < 1
@@ -94,6 +105,10 @@ def test_evaluate_avg_distance_nearest_synth_neighbor(test_plugin: Plugin) -> No
     assert rnd_score > 0
     assert rnd_score < 1
     assert syn_score < rnd_score
+
+    assert evaluator.type() == "sanity"
+    assert evaluator.name() == "nearest_syn_neighbor_distance"
+    assert evaluator.direction() == "minimize"
 
 
 @pytest.mark.parametrize("test_plugin", [Plugins().get("dummy_sampler")])
@@ -104,11 +119,16 @@ def test_evaluate_inlier_probability(test_plugin: Plugin) -> None:
     test_plugin.fit(X)
     X_gen = test_plugin.generate(100)
 
-    syn_score, rnd_score = _eval_plugin(evaluate_inlier_probability, X, X_gen)
+    evaluator = InlierProbability()
+    syn_score, rnd_score = _eval_plugin(evaluator.evaluate, X, X_gen)
 
     assert 0 < syn_score < 1
     assert 0 < rnd_score < 1
     assert syn_score > rnd_score
+
+    assert evaluator.type() == "sanity"
+    assert evaluator.name() == "inlier_probability"
+    assert evaluator.direction() == "maximize"
 
 
 @pytest.mark.parametrize("test_plugin", [Plugins().get("dummy_sampler")])
@@ -119,8 +139,13 @@ def test_evaluate_outlier_probability(test_plugin: Plugin) -> None:
     test_plugin.fit(X)
     X_gen = test_plugin.generate(100)
 
-    syn_score, rnd_score = _eval_plugin(evaluate_outlier_probability, X, X_gen)
+    evaluator = OutlierProbability()
+    syn_score, rnd_score = _eval_plugin(evaluator.evaluate, X, X_gen)
 
     assert 0 < syn_score < 1
     assert 0 < rnd_score < 1
     assert syn_score < rnd_score
+
+    assert evaluator.type() == "sanity"
+    assert evaluator.name() == "outlier_probability"
+    assert evaluator.direction() == "minimize"

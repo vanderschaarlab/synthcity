@@ -9,11 +9,7 @@ import seaborn as sns
 from pydantic import validate_arguments
 
 # synthcity absolute
-from synthcity.metrics.statistical import (
-    evaluate_avg_jensenshannon_stats,
-    evaluate_feature_correlation,
-    evaluate_feature_correlation_stats,
-)
+from synthcity.metrics.statistical import FeatureCorrelation, JensenShannonDistance
 
 COLOR_PALETTE = ["#2b2d42", "#d90429"]
 LABELS = ["real", "syn"]
@@ -23,7 +19,8 @@ LABELS = ["real", "syn"]
 def plot_marginal_comparison(
     plt: Any, X_gt: pd.DataFrame, X_syn: pd.DataFrame, normalize: bool = True
 ) -> None:
-    stats_, stats_gt, stats_syn = evaluate_avg_jensenshannon_stats(X_gt, X_syn, bins=10)
+    evaluator = JensenShannonDistance(n_histogram_bins=10)
+    stats_, stats_gt, stats_syn = evaluator._evaluate_stats(X_gt, X_syn)
 
     column_names = stats_gt.keys()
     plots_cnt = len(column_names)
@@ -90,12 +87,11 @@ def plot_associations_comparison(
     nom_nom_assoc: str = "theil",
     nominal_columns: str = "auto",
 ) -> None:
-    stats_gt, stats_syn = evaluate_feature_correlation_stats(
-        X_gt, X_syn, nom_nom_assoc=nom_nom_assoc, nominal_columns=nominal_columns
+    evaluator = FeatureCorrelation(
+        nom_nom_assoc=nom_nom_assoc, nominal_columns=nominal_columns
     )
-    pcd = evaluate_feature_correlation(
-        X_gt, X_syn, nom_nom_assoc=nom_nom_assoc, nominal_columns=nominal_columns
-    )
+    stats_gt, stats_syn = evaluator._evaluate_stats(X_gt, X_syn)
+    pcd = evaluator.evaluate(X_gt, X_syn)
 
     fig, ax = plt.subplots(1, 2, figsize=(12, 10))
     cbar_ax = fig.add_axes([0.91, 0.3, 0.01, 0.4])

@@ -1,5 +1,5 @@
 # stdlib
-from typing import Callable
+from typing import Type
 
 # third party
 import numpy as np
@@ -9,30 +9,32 @@ from sklearn.datasets import load_iris
 
 # synthcity absolute
 from synthcity.metrics.detection import (
-    evaluate_gmm_detection_synthetic,
-    evaluate_mlp_detection_synthetic,
-    evaluate_xgb_detection_synthetic,
+    SyntheticDetectionGMM,
+    SyntheticDetectionMLP,
+    SyntheticDetectionXGB,
 )
 from synthcity.plugins import Plugin, Plugins
 
 
 @pytest.mark.parametrize("test_plugin", [Plugins().get("marginal_distributions")])
 @pytest.mark.parametrize(
-    "method",
+    "evaluator_t",
     [
-        evaluate_xgb_detection_synthetic,
-        evaluate_mlp_detection_synthetic,
-        evaluate_gmm_detection_synthetic,
+        SyntheticDetectionXGB,
+        SyntheticDetectionGMM,
+        SyntheticDetectionMLP,
     ],
 )
-def test_detect_synth(test_plugin: Plugin, method: Callable) -> None:
+def test_detect_synth(test_plugin: Plugin, evaluator_t: Type) -> None:
     X, y = load_iris(return_X_y=True, as_frame=True)
     X["target"] = y
 
     test_plugin.fit(X)
     X_gen = test_plugin.generate(100)
 
-    good_score = method(
+    evaluator = evaluator_t()
+
+    good_score = evaluator.evaluate(
         X,
         X_gen,
     )
@@ -42,7 +44,7 @@ def test_detect_synth(test_plugin: Plugin, method: Callable) -> None:
 
     sz = 100
     X_rnd = pd.DataFrame(np.random.randn(sz, len(X.columns)), columns=X.columns)
-    score = method(
+    score = evaluator.evaluate(
         X,
         X_rnd,
     )
@@ -50,3 +52,6 @@ def test_detect_synth(test_plugin: Plugin, method: Callable) -> None:
     assert score > 0
     assert score <= 1
     assert good_score < score
+
+    assert evaluator.type() == "detection"
+    assert evaluator.direction() == "minimize"

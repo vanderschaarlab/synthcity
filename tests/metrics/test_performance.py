@@ -1,5 +1,5 @@
 # stdlib
-from typing import Callable
+from typing import Type
 
 # third party
 import numpy as np
@@ -9,24 +9,24 @@ from sklearn.datasets import load_diabetes, load_iris
 
 # synthcity absolute
 from synthcity.metrics.performance import (
-    evaluate_test_performance_linear,
-    evaluate_test_performance_mlp,
-    evaluate_test_performance_xgb,
+    PerformanceEvaluatorLinear,
+    PerformanceEvaluatorMLP,
+    PerformanceEvaluatorXGB,
 )
 from synthcity.plugins import Plugin, Plugins
 
 
 @pytest.mark.parametrize("test_plugin", [Plugins().get("marginal_distributions")])
 @pytest.mark.parametrize(
-    "evaluator",
+    "evaluator_t",
     [
-        evaluate_test_performance_xgb,
-        evaluate_test_performance_linear,
-        evaluate_test_performance_mlp,
+        PerformanceEvaluatorLinear,
+        PerformanceEvaluatorMLP,
+        PerformanceEvaluatorXGB,
     ],
 )
 def test_evaluate_performance_classifier(
-    test_plugin: Plugin, evaluator: Callable
+    test_plugin: Plugin, evaluator_t: Type
 ) -> None:
     X, y = load_iris(return_X_y=True, as_frame=True)
     X["target"] = y
@@ -34,7 +34,8 @@ def test_evaluate_performance_classifier(
     test_plugin.fit(X)
     X_gen = test_plugin.generate(100)
 
-    good_score = evaluator(
+    evaluator = evaluator_t()
+    good_score = evaluator.evaluate(
         X,
         X_gen,
     )
@@ -43,7 +44,7 @@ def test_evaluate_performance_classifier(
 
     sz = 100
     X_rnd = pd.DataFrame(np.random.randn(sz, len(X.columns)), columns=X.columns)
-    score = evaluator(
+    score = evaluator.evaluate(
         X,
         X_rnd,
     )
@@ -51,18 +52,21 @@ def test_evaluate_performance_classifier(
     assert np.abs(good_score) < 1
     assert score > good_score
 
+    assert evaluator.type() == "performance"
+    assert evaluator.direction() == "maximize"
+
 
 @pytest.mark.parametrize("test_plugin", [Plugins().get("marginal_distributions")])
 @pytest.mark.parametrize(
-    "evaluator",
+    "evaluator_t",
     [
-        evaluate_test_performance_xgb,
-        evaluate_test_performance_linear,
-        evaluate_test_performance_mlp,
+        PerformanceEvaluatorLinear,
+        PerformanceEvaluatorMLP,
+        PerformanceEvaluatorXGB,
     ],
 )
 def test_evaluate_performance_regression(
-    test_plugin: Plugin, evaluator: Callable
+    test_plugin: Plugin, evaluator_t: Type
 ) -> None:
     X, y = load_diabetes(return_X_y=True, as_frame=True)
     X["target"] = y
@@ -70,7 +74,8 @@ def test_evaluate_performance_regression(
     test_plugin.fit(X)
     X_gen = test_plugin.generate(100)
 
-    good_score = evaluator(
+    evaluator = evaluator_t()
+    good_score = evaluator.evaluate(
         X,
         X_gen,
     )
@@ -79,7 +84,7 @@ def test_evaluate_performance_regression(
 
     sz = 100
     X_rnd = pd.DataFrame(np.random.randn(sz, len(X.columns)), columns=X.columns)
-    score = evaluator(
+    score = evaluator.evaluate(
         X,
         X_rnd,
     )
