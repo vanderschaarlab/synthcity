@@ -7,7 +7,7 @@ from pydantic import validate_arguments
 from sklearn.preprocessing import LabelEncoder
 
 # synthcity absolute
-from synthcity.metrics.privacy import evaluate_k_anonymization
+from synthcity.metrics.privacy import kAnonymization
 
 
 class DatasetAnonymization:
@@ -49,7 +49,8 @@ class DatasetAnonymization:
     @validate_arguments(config=dict(arbitrary_types_allowed=True))
     def is_anonymous(self, X: pd.DataFrame, sensitive_columns: List[str] = []) -> bool:
         """True if the dataset is valid according to the k-anonymity criteria, False otherwise."""
-        return bool(evaluate_k_anonymization(X, sensitive_columns) >= self.k_threshold)
+        evaluator = kAnonymization(sensitive_columns=sensitive_columns)
+        return bool(evaluator._evaluate_data(X) >= self.k_threshold)
 
     def _setup(self, X: pd.DataFrame) -> Tuple[pd.DataFrame, Dict]:
         encoders = {}

@@ -90,7 +90,6 @@ class Metrics:
         scores = ScoreEvaluator()
 
         for metric in standard_metrics:
-            print(metric)
             if metric.type() not in metrics:
                 continue
             if metric.name() not in metrics[metric.type()]:
