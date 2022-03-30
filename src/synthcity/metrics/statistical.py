@@ -15,18 +15,20 @@ from scipy.stats import chisquare, ks_2samp
 from sklearn import metrics
 
 # synthcity absolute
-from synthcity.metrics._utils import get_freq
+from synthcity.metrics._utils import get_frequency
 
 
 @validate_arguments(config=dict(arbitrary_types_allowed=True))
-def evaluate_inv_kl_divergence(X_gt: pd.DataFrame, X_syn: pd.DataFrame) -> float:
+def evaluate_inv_kl_divergence(
+    X_gt: pd.DataFrame, X_syn: pd.DataFrame, n_bins: int = 10
+) -> float:
     """Returns the average inverse of the Kullback–Leibler Divergence metric.
 
     Score:
         0: the datasets are from different distributions.
         1: the datasets are from the same distribution.
     """
-    freqs = get_freq(X_gt, X_syn)
+    freqs = get_frequency(X_gt, X_syn, n_bins=n_bins)
     res = []
     for col in X_gt.columns:
         gt_freq, synth_freq = freqs[col]
@@ -53,7 +55,9 @@ def evaluate_kolmogorov_smirnov_test(X_gt: pd.DataFrame, X_syn: pd.DataFrame) ->
 
 
 @validate_arguments(config=dict(arbitrary_types_allowed=True))
-def evaluate_chi_squared_test(X_gt: pd.DataFrame, X_syn: pd.DataFrame) -> float:
+def evaluate_chi_squared_test(
+    X_gt: pd.DataFrame, X_syn: pd.DataFrame, n_bins: int = 10
+) -> float:
     """Performs the one-way chi-square test.
 
     Returns:
@@ -65,7 +69,7 @@ def evaluate_chi_squared_test(X_gt: pd.DataFrame, X_syn: pd.DataFrame) -> float:
     """
 
     res = []
-    freqs = get_freq(X_gt, X_syn)
+    freqs = get_frequency(X_gt, X_syn, n_bins=n_bins)
 
     for col in X_gt.columns:
         gt_freq, synth_freq = freqs[col]
@@ -155,7 +159,7 @@ def evaluate_avg_jensenshannon_stats(
     X_gt: pd.DataFrame,
     X_syn: pd.DataFrame,
     normalize: bool = True,
-    bins: int = 10,
+    n_bins: int = 10,
 ) -> Tuple[Dict, Dict, Dict]:
     """Evaluate the average Jensen-Shannon distance (metric) between two probability arrays."""
 
@@ -164,7 +168,7 @@ def evaluate_avg_jensenshannon_stats(
     stats_ = {}
 
     for col in X_gt.columns:
-        local_bins = min(bins, len(X_gt[col].unique()))
+        local_bins = min(n_bins, len(X_gt[col].unique()))
         X_gt_bin, gt_bins = pd.cut(X_gt[col], bins=local_bins, retbins=True)
         X_syn_bin = pd.cut(X_syn[col], bins=gt_bins)
         stats_gt[col], stats_syn[col] = X_gt_bin.value_counts(

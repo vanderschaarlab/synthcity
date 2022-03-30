@@ -16,7 +16,7 @@ from sklearn.preprocessing import label_binarize
 
 
 @validate_arguments(config=dict(arbitrary_types_allowed=True))
-def get_freq(X_gt: pd.DataFrame, X_synth: pd.DataFrame) -> dict:
+def get_frequency(X_gt: pd.DataFrame, X_synth: pd.DataFrame, n_bins: int = 10) -> dict:
     """Get percentual frequencies for each possible real categorical value.
 
     Returns:
@@ -24,11 +24,13 @@ def get_freq(X_gt: pd.DataFrame, X_synth: pd.DataFrame) -> dict:
     """
     res = {}
     for col in X_gt.columns:
+        local_bins = min(n_bins, len(X_gt[col].unique()))
+
         if len(X_gt[col].unique()) < 5:  # categorical
             gt = (X_gt[col].value_counts() / len(X_gt)).to_dict()
             synth = (X_synth[col].value_counts() / len(X_synth)).to_dict()
         else:
-            gt_vals, bins = np.histogram(X_gt[col])
+            gt_vals, bins = np.histogram(X_gt[col], bins=local_bins)
             synth_vals, _ = np.histogram(X_synth[col], bins=bins)
             gt = {k: v / (sum(gt_vals) + 1e-8) for k, v in zip(bins, gt_vals)}
             synth = {k: v / (sum(synth_vals) + 1e-8) for k, v in zip(bins, synth_vals)}
