@@ -6,7 +6,6 @@ import pandas as pd
 from pydantic import validate_arguments
 
 # synthcity relative
-from .eval_attacks import DataLeakageLinear, DataLeakageMLP, DataLeakageXGB
 from .eval_detection import (
     SyntheticDetectionGMM,
     SyntheticDetectionMLP,
@@ -61,10 +60,6 @@ standard_metrics = [
     SyntheticDetectionXGB,
     SyntheticDetectionMLP,
     SyntheticDetectionGMM,
-    # attacks
-    DataLeakageMLP,
-    DataLeakageLinear,
-    DataLeakageXGB,
     # privacy tests
     DeltaPresence,
     kAnonymization,

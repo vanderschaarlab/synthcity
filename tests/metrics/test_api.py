@@ -46,7 +46,6 @@ def test_list() -> None:
             "privacy",
             "stats",
             "sanity",
-            "attack",
             "detection",
             "performance",
         ]
