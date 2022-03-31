@@ -3,7 +3,7 @@ import pytest
 from sklearn.datasets import load_breast_cancer, load_diabetes
 
 # synthcity absolute
-from synthcity.metrics.privacy import kAnonymization, lDiversityDistinct
+from synthcity.metrics.eval_privacy import kAnonymization, lDiversityDistinct
 from synthcity.utils.anonymization import DatasetAnonymization
 
 

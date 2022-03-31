@@ -48,21 +48,24 @@ class ScoreEvaluator:
         self.pending_tasks: list = []
 
     def add(
-        self, key: str, result: Dict, failed: int, duration: float, direction: str
+        self, key: str, result: float, failed: int, duration: float, direction: str
     ) -> None:
         if key not in self.scores:
             self.scores[key] = {
-                "values": {},
+                "values": [],
                 "errors": 0,
                 "durations": [],
                 "direction": direction,
             }
         self.scores[key]["durations"].append(duration)
         self.scores[key]["errors"] += int(failed)
-        for subkey in result:
-            if subkey not in self.scores[key]["values"]:
-                self.scores[key]["values"][subkey] = []
-            self.scores[key]["values"][subkey].append(result[subkey])
+        self.scores[key]["values"].append(result)
+
+    def add_multiple(
+        self, key: str, results: Dict, failed: int, duration: float, direction: str
+    ) -> None:
+        for subkey in results:
+            self.add(f"{key}.{subkey}", results[subkey], failed, duration, direction)
 
     def queue(
         self,
@@ -80,7 +83,7 @@ class ScoreEvaluator:
         self.pending_tasks = []
 
         for key, result, failed, duration, direction in results:
-            self.add(key, result, failed, duration, direction)
+            self.add_multiple(key, result, failed, duration, direction)
 
     def to_dataframe(self) -> pd.DataFrame:
         output_metrics = [
@@ -102,36 +105,35 @@ class ScoreEvaluator:
             durations = round(np.mean(self.scores[metric]["durations"]), 2)
             values = self.scores[metric]["values"]
 
-            for submetric in values:
-                score_min = np.min(values[submetric])
-                score_max = np.max(values[submetric])
-                score_mean = np.mean(values[submetric])
-                score_median = np.median(values[submetric])
-                score_stddev = np.std(values[submetric])
-                score_iqr = iqr(values[submetric])
-                score_rounds = len(values[submetric])
-                output = pd.concat(
-                    [
-                        output,
-                        pd.DataFrame(
+            score_min = np.min(values)
+            score_max = np.max(values)
+            score_mean = np.mean(values)
+            score_median = np.median(values)
+            score_stddev = np.std(values)
+            score_iqr = iqr(values)
+            score_rounds = len(values)
+            output = pd.concat(
+                [
+                    output,
+                    pd.DataFrame(
+                        [
                             [
-                                [
-                                    score_min,
-                                    score_max,
-                                    score_mean,
-                                    score_stddev,
-                                    score_median,
-                                    score_iqr,
-                                    score_rounds,
-                                    errors,
-                                    durations,
-                                    direction,
-                                ]
-                            ],
-                            columns=output_metrics,
-                            index=[f"{metric}.{submetric}"],
-                        ),
-                    ],
-                )
+                                score_min,
+                                score_max,
+                                score_mean,
+                                score_stddev,
+                                score_median,
+                                score_iqr,
+                                score_rounds,
+                                errors,
+                                durations,
+                                direction,
+                            ]
+                        ],
+                        columns=output_metrics,
+                        index=[metric],
+                    ),
+                ],
+            )
 
         return output
