@@ -89,7 +89,7 @@ class AdsGANPlugin(Plugin):
         discriminator_dropout: float = 0,
         lr: float = 1e-3,
         weight_decay: float = 1e-3,
-        batch_size: int = 100,
+        batch_size: int = 500,
         seed: int = 0,
         clipping_value: int = 1,
         encoder_max_clusters: int = 10,

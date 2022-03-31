@@ -177,7 +177,7 @@ class MLP(nn.Module):
         lr: float = 1e-3,
         weight_decay: float = 1e-3,
         n_iter: int = 1000,
-        batch_size: int = 64,
+        batch_size: int = 500,
         n_iter_print: int = 100,
         seed: int = 0,
         patience: int = 10,
@@ -379,7 +379,7 @@ class MLP(nn.Module):
                             break
 
                     if i % self.n_iter_print == 0:
-                        log.info(
+                        log.debug(
                             f"Epoch: {i}, loss: {val_loss}, train_loss: {train_loss}"
                         )
 

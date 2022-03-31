@@ -30,7 +30,7 @@ def _safe_evaluate(
     **kwargs: Any,
 ) -> Tuple[str, float, bool, float, str]:
     start = time.time()
-    log.info(f" >> Evaluating metric {name}")
+    log.debug(f" >> Evaluating metric {name}")
     failed = False
     try:
         result = evaluator.evaluate(*args, **kwargs)

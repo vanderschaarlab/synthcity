@@ -285,7 +285,7 @@ class VAE(nn.Module):
 
                 optimizer.step()
             if epoch % self.n_iter_print == 0:
-                log.info(f"[{epoch}/{self.n_iter}] Loss: {loss.detach()}")
+                log.debug(f"[{epoch}/{self.n_iter}] Loss: {loss.detach()}")
 
     def _check_tensor(self, X: Tensor) -> Tensor:
         if isinstance(X, Tensor):

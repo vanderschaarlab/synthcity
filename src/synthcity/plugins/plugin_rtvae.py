@@ -78,7 +78,7 @@ class RTVAEPlugin(Plugin):
         n_iter: int = 100,
         lr: float = 1e-4,
         weight_decay: float = 1e-3,
-        batch_size: int = 64,
+        batch_size: int = 500,
         seed: int = 0,
         clipping_value: int = 1,
         loss_strategy: str = "robust_divergence",

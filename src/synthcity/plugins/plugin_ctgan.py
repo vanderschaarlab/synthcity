@@ -68,7 +68,7 @@ class CTGANPlugin(Plugin):
         discriminator_n_layers: int = 2,
         discriminator_lr: float = 2e-4,
         discriminator_decay: float = 1e-6,
-        batch_size: int = 100,
+        batch_size: int = 500,
         discriminator_steps: int = 1,
         epochs: int = 300,
         pac: int = 10,
