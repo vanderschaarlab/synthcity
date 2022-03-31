@@ -8,12 +8,37 @@ import pytest
 from sklearn.datasets import load_iris
 
 # synthcity absolute
-from synthcity.metrics.detection import (
+from synthcity.metrics.eval_detection import (
     SyntheticDetectionGMM,
     SyntheticDetectionMLP,
     SyntheticDetectionXGB,
 )
 from synthcity.plugins import Plugin, Plugins
+
+
+@pytest.mark.parametrize("reduction", ["mean", "max", "min"])
+@pytest.mark.parametrize(
+    "evaluator_t",
+    [
+        SyntheticDetectionXGB,
+    ],
+)
+def test_detect_reduction(reduction: str, evaluator_t: Type) -> None:
+    X, y = load_iris(return_X_y=True, as_frame=True)
+    X["target"] = y
+
+    test_plugin = Plugins().get("marginal_distributions")
+    test_plugin.fit(X)
+    X_gen = test_plugin.generate(100)
+
+    evaluator = evaluator_t(reduction=reduction)
+
+    score = evaluator.evaluate(
+        X,
+        X_gen,
+    )
+
+    assert reduction in score
 
 
 @pytest.mark.parametrize("test_plugin", [Plugins().get("marginal_distributions")])
@@ -37,7 +62,7 @@ def test_detect_synth(test_plugin: Plugin, evaluator_t: Type) -> None:
     good_score = evaluator.evaluate(
         X,
         X_gen,
-    )
+    )["mean"]
 
     assert good_score > 0
     assert good_score <= 1
@@ -47,7 +72,7 @@ def test_detect_synth(test_plugin: Plugin, evaluator_t: Type) -> None:
     score = evaluator.evaluate(
         X,
         X_rnd,
-    )
+    )["mean"]
 
     assert score > 0
     assert score <= 1

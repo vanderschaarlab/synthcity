@@ -9,7 +9,7 @@ import seaborn as sns
 from pydantic import validate_arguments
 
 # synthcity absolute
-from synthcity.metrics.statistical import FeatureCorrelation, JensenShannonDistance
+from synthcity.metrics.eval_statistical import FeatureCorrelation, JensenShannonDistance
 
 COLOR_PALETTE = ["#2b2d42", "#d90429"]
 LABELS = ["real", "syn"]
@@ -91,7 +91,7 @@ def plot_associations_comparison(
         nom_nom_assoc=nom_nom_assoc, nominal_columns=nominal_columns
     )
     stats_gt, stats_syn = evaluator._evaluate_stats(X_gt, X_syn)
-    pcd = evaluator.evaluate(X_gt, X_syn)
+    pcd = evaluator.evaluate(X_gt, X_syn)["joint"]
 
     fig, ax = plt.subplots(1, 2, figsize=(12, 10))
     cbar_ax = fig.add_axes([0.91, 0.3, 0.01, 0.4])

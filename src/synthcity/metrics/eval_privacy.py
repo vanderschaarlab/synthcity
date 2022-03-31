@@ -1,6 +1,6 @@
 # stdlib
 from collections import Counter
-from typing import Any
+from typing import Any, Dict
 
 # third party
 import numpy as np
@@ -34,7 +34,7 @@ class kAnonymization(PrivacyEvaluator):
 
     @staticmethod
     def name() -> str:
-        return "k-anonymization.real_syn_ratio"
+        return "k-anonymization"
 
     @staticmethod
     def direction() -> str:
@@ -58,8 +58,8 @@ class kAnonymization(PrivacyEvaluator):
         return int(np.min(values))
 
     @validate_arguments(config=dict(arbitrary_types_allowed=True))
-    def evaluate(self, X: pd.DataFrame, X_syn: pd.DataFrame) -> float:
-        return self.evaluate_data(X) / (self.evaluate_data(X_syn) + 1e-8)
+    def evaluate(self, X: pd.DataFrame, X_syn: pd.DataFrame) -> Dict:
+        return {"gt": self.evaluate_data(X), "syn": (self.evaluate_data(X_syn) + 1e-8)}
 
 
 class lDiversityDistinct(PrivacyEvaluator):
@@ -72,7 +72,7 @@ class lDiversityDistinct(PrivacyEvaluator):
 
     @staticmethod
     def name() -> str:
-        return "distinct l-diversity.real_syn_ratio"
+        return "distinct l-diversity"
 
     @staticmethod
     def direction() -> str:
@@ -98,8 +98,8 @@ class lDiversityDistinct(PrivacyEvaluator):
         return int(np.min(values))
 
     @validate_arguments(config=dict(arbitrary_types_allowed=True))
-    def evaluate(self, X: pd.DataFrame, X_syn: pd.DataFrame) -> float:
-        return self.evaluate_data(X) / (self.evaluate_data(X_syn) + 1e-8)
+    def evaluate(self, X: pd.DataFrame, X_syn: pd.DataFrame) -> Dict:
+        return {"gt": self.evaluate_data(X), "syn": (self.evaluate_data(X_syn) + 1e-8)}
 
 
 class kMap(PrivacyEvaluator):
@@ -117,7 +117,7 @@ class kMap(PrivacyEvaluator):
         return "maximize"
 
     @validate_arguments(config=dict(arbitrary_types_allowed=True))
-    def evaluate(self, X: pd.DataFrame, X_syn: pd.DataFrame) -> float:
+    def evaluate(self, X: pd.DataFrame, X_syn: pd.DataFrame) -> Dict:
         features = get_features(X, self._sensitive_columns)
 
         values = []
@@ -132,9 +132,9 @@ class kMap(PrivacyEvaluator):
             values.append(np.min(list(counts.values())))
 
         if len(values) == 0:
-            return 0
+            return {"score": 0}
 
-        return int(np.min(values))
+        return {"score": int(np.min(values))}
 
 
 class DeltaPresence(PrivacyEvaluator):
@@ -152,7 +152,7 @@ class DeltaPresence(PrivacyEvaluator):
         return "maximize"
 
     @validate_arguments(config=dict(arbitrary_types_allowed=True))
-    def evaluate(self, X: pd.DataFrame, X_syn: pd.DataFrame) -> float:
+    def evaluate(self, X: pd.DataFrame, X_syn: pd.DataFrame) -> Dict:
         features = get_features(X, self._sensitive_columns)
 
         values = []
@@ -176,7 +176,7 @@ class DeltaPresence(PrivacyEvaluator):
 
                 values.append(delta)
 
-        return float(np.max(values))
+        return {"score": float(np.max(values))}
 
 
 @validate_arguments(config=dict(arbitrary_types_allowed=True))

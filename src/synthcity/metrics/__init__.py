@@ -6,27 +6,26 @@ import pandas as pd
 from pydantic import validate_arguments
 
 # synthcity relative
-from .attacks import DataLeakageLinear, DataLeakageMLP, DataLeakageXGB
-from .detection import (
+from .eval_attacks import DataLeakageLinear, DataLeakageMLP, DataLeakageXGB
+from .eval_detection import (
     SyntheticDetectionGMM,
     SyntheticDetectionMLP,
     SyntheticDetectionXGB,
 )
-from .performance import (
+from .eval_performance import (
     PerformanceEvaluatorLinear,
     PerformanceEvaluatorMLP,
     PerformanceEvaluatorXGB,
 )
-from .privacy import DeltaPresence, kAnonymization, kMap, lDiversityDistinct
-from .sanity import (
+from .eval_privacy import DeltaPresence, kAnonymization, kMap, lDiversityDistinct
+from .eval_sanity import (
     CloseValuesProbability,
     CommonRowsProportion,
     DataMismatchScore,
     DistantValuesProbability,
     NearestSyntheticNeighborDistance,
 )
-from .scores import ScoreEvaluator
-from .statistical import (
+from .eval_statistical import (
     ChiSquaredTest,
     FeatureCorrelation,
     InverseCDFDistance,
@@ -36,6 +35,7 @@ from .statistical import (
     MaximumMeanDiscrepancy,
     WassersteinDistance,
 )
+from .scores import ScoreEvaluator
 
 standard_metrics = [
     # sanity tests
@@ -94,9 +94,7 @@ class Metrics:
                 continue
             if metric.name() not in metrics[metric.type()]:
                 continue
-            key = f"{metric.type()}.{metric.name()}"
             scores.queue(
-                key,
                 metric(
                     sensitive_columns=sensitive_columns,
                     reduction=reduction,

@@ -97,12 +97,11 @@ class PerformanceEvaluator(MetricEvaluator):
         regression_args: Any,
         X_gt: pd.DataFrame,
         X_syn: pd.DataFrame,
-    ) -> float:
+    ) -> Dict:
         """Train a classifier or regressor on the synthetic data and evaluate the performance on real test data. Returns the average performance discrepancy between training on real data vs on synthetic data.
 
-        Score:
-            close to 0: similar performance
-            1: massive performance degradation
+        Returns:
+            gt and syn performance scores
         """
 
         target_col = X_gt.columns[-1]
@@ -142,7 +141,10 @@ class PerformanceEvaluator(MetricEvaluator):
             real_scores.append(real_score)
             syn_scores.append(synth_score)
 
-        return np.mean(real_scores) - np.mean(syn_scores)
+        return {
+            "gt": self.reduction()(real_scores),
+            "syn": self.reduction()(syn_scores),
+        }
 
 
 class PerformanceEvaluatorXGB(PerformanceEvaluator):
@@ -155,14 +157,14 @@ class PerformanceEvaluatorXGB(PerformanceEvaluator):
 
     @staticmethod
     def name() -> str:
-        return "performance_xgb"
+        return "xgb"
 
     @validate_arguments(config=dict(arbitrary_types_allowed=True))
     def evaluate(
         self,
         X_gt: pd.DataFrame,
         X_syn: pd.DataFrame,
-    ) -> float:
+    ) -> Dict:
 
         return self._evaluate_test_performance(
             XGBClassifier,
@@ -194,14 +196,14 @@ class PerformanceEvaluatorLinear(PerformanceEvaluator):
 
     @staticmethod
     def name() -> str:
-        return "performance_linear"
+        return "linear_model"
 
     @validate_arguments(config=dict(arbitrary_types_allowed=True))
     def evaluate(
         self,
         X_gt: pd.DataFrame,
         X_syn: pd.DataFrame,
-    ) -> float:
+    ) -> Dict:
 
         return self._evaluate_test_performance(
             LogisticRegression, {}, LinearRegression, {}, X_gt, X_syn
@@ -218,14 +220,14 @@ class PerformanceEvaluatorMLP(PerformanceEvaluator):
 
     @staticmethod
     def name() -> str:
-        return "performance_mlp"
+        return "mlp"
 
     @validate_arguments(config=dict(arbitrary_types_allowed=True))
     def evaluate(
         self,
         X_gt: pd.DataFrame,
         X_syn: pd.DataFrame,
-    ) -> float:
+    ) -> Dict:
 
         return self._evaluate_test_performance(
             MLP,
