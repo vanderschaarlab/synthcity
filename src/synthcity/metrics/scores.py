@@ -6,6 +6,7 @@ from typing import Any, Tuple
 # third party
 import numpy as np
 import pandas as pd
+import torch
 from joblib import Parallel, delayed
 from scipy.stats import iqr
 
@@ -15,7 +16,11 @@ import synthcity.logger as log
 # synthcity relative
 from .core.metric import MetricEvaluator
 
-dispatcher = Parallel(n_jobs=multiprocessing.cpu_count())
+n_jobs = torch.cuda.device_count()
+if n_jobs == 0:
+    n_jobs = multiprocessing.cpu_count()
+
+dispatcher = Parallel(n_jobs=n_jobs)
 
 
 def _safe_evaluate(
