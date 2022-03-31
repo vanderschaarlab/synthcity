@@ -43,6 +43,9 @@ class AttackEvaluator(MetricEvaluator):
             target = X_syn[col]
             keys_data = X_syn.drop(columns=[col])
 
+            if len(np.unique(target)) < 2:
+                continue
+
             if len(target.unique()) < 15:
                 task_type = "classification"
                 encoder = LabelEncoder()
