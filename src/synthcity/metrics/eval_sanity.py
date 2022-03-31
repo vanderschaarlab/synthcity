@@ -108,7 +108,7 @@ class NearestSyntheticNeighborDistance(BasicMetricEvaluator):
         dist = BasicMetricEvaluator._helper_nearest_neighbor(X_gt, X_synth)
 
         dist = (dist - np.min(dist)) / (np.max(dist) - np.min(dist) + 1e-8)
-        return {self._reduction: self.reduction()(dist)}
+        return {self._reduction: float(self.reduction()(dist))}
 
 
 class CloseValuesProbability(BasicMetricEvaluator):

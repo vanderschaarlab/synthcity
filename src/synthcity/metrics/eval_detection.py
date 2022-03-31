@@ -72,7 +72,7 @@ class DetectionEvaluator(MetricEvaluator):
             score = roc_auc_score(np.asarray(test_labels), np.asarray(test_pred))
             res.append(score)
 
-        return {self._reduction: self.reduction()(res)}
+        return {self._reduction: float(self.reduction()(res))}
 
 
 class SyntheticDetectionXGB(DetectionEvaluator):

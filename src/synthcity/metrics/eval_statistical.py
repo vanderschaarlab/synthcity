@@ -50,7 +50,7 @@ class InverseKLDivergence(MetricEvaluator):
             gt_freq, synth_freq = freqs[col]
             res.append(1 / (1 + np.sum(kl_div(gt_freq, synth_freq))))
 
-        return {"marginal": self.reduction()(res)}
+        return {"marginal": float(self.reduction()(res))}
 
 
 class KolmogorovSmirnovTest(MetricEvaluator):
@@ -83,7 +83,7 @@ class KolmogorovSmirnovTest(MetricEvaluator):
             statistic, _ = ks_2samp(X_gt[col], X_syn[col])
             res.append(1 - statistic)
 
-        return {"marginal": self.reduction()(res)}
+        return {"marginal": float(self.reduction()(res))}
 
 
 class ChiSquaredTest(MetricEvaluator):
@@ -126,7 +126,7 @@ class ChiSquaredTest(MetricEvaluator):
 
             res.append(pvalue)
 
-        return {"marginal": self.reduction()(res)}
+        return {"marginal": float(self.reduction()(res))}
 
 
 class MaximumMeanDiscrepancy(MetricEvaluator):
@@ -195,7 +195,7 @@ class MaximumMeanDiscrepancy(MetricEvaluator):
         else:
             raise ValueError(f"Unsupported kernel {self.kernel}")
 
-        return {"joint": score}
+        return {"joint": float(score)}
 
 
 class InverseCDFDistance(MetricEvaluator):
@@ -241,7 +241,7 @@ class InverseCDFDistance(MetricEvaluator):
                 np.mean(abs(syn_percentiles - gt_percentiles[1]) ** self.p)
             )
 
-        return {"marginal": self.reduction()(distances)}
+        return {"marginal": float(self.reduction()(distances))}
 
 
 class JensenShannonDistance(MetricEvaluator):

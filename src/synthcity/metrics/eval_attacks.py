@@ -68,7 +68,7 @@ class AttackEvaluator(MetricEvaluator):
                 (np.asarray(preds) == np.asarray(test_target)).sum() / (len(preds) + 1)
             )
 
-        return {self._reduction: self.reduction()(output)}
+        return {self._reduction: float(self.reduction()(output))}
 
 
 class DataLeakageMLP(AttackEvaluator):

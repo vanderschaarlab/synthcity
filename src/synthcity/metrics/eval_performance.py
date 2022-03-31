@@ -142,8 +142,8 @@ class PerformanceEvaluator(MetricEvaluator):
             syn_scores.append(synth_score)
 
         return {
-            "gt": self.reduction()(real_scores),
-            "syn": self.reduction()(syn_scores),
+            "gt": float(self.reduction()(real_scores)),
+            "syn": float(self.reduction()(syn_scores)),
         }
 
 
