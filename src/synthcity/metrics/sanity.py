@@ -111,7 +111,7 @@ class NearestSyntheticNeighborDistance(BasicMetricEvaluator):
         return self.reduction()(dist)
 
 
-class InlierProbability(BasicMetricEvaluator):
+class CloseValuesProbability(BasicMetricEvaluator):
     """Compute the probability of close values between the real and synthetic data.
 
     Score:
@@ -121,7 +121,7 @@ class InlierProbability(BasicMetricEvaluator):
 
     @staticmethod
     def name() -> str:
-        return "inlier_probability"
+        return "close_values_probability"
 
     @staticmethod
     def direction() -> str:
@@ -140,7 +140,7 @@ class InlierProbability(BasicMetricEvaluator):
         return (dist <= threshold).sum() / len(dist)
 
 
-class OutlierProbability(BasicMetricEvaluator):
+class DistantValuesProbability(BasicMetricEvaluator):
     """Compute the probability of distant values between the real and synthetic data.
 
     Score:
@@ -150,7 +150,7 @@ class OutlierProbability(BasicMetricEvaluator):
 
     @staticmethod
     def name() -> str:
-        return "outlier_probability"
+        return "distant_values_probability"
 
     @staticmethod
     def direction() -> str:

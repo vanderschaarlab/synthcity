@@ -62,17 +62,17 @@ class kAnonymization(PrivacyEvaluator):
         return self.evaluate_data(X) / (self.evaluate_data(X_syn) + 1e-8)
 
 
-class lDiversity(PrivacyEvaluator):
-    """Returns the l-diversity ratio between the real data and the synthetic data.
+class lDiversityDistinct(PrivacyEvaluator):
+    """Returns the distinct l-diversity ratio between the real data and the synthetic data.
 
-    For each dataset, it computes the minimum value l which satisfies the l-diversity rule: every generalized block has to contain at least l different sensitive values.
+    For each dataset, it computes the minimum value l which satisfies the distinct l-diversity rule: every generalized block has to contain at least l different sensitive values.
 
     We simulate a set of the cluster over the dataset, and we return the minimum length of unique sensitive values for any cluster.
     """
 
     @staticmethod
     def name() -> str:
-        return "l-diversity.real_syn_ratio"
+        return "distinct l-diversity.real_syn_ratio"
 
     @staticmethod
     def direction() -> str:

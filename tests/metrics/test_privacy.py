@@ -10,7 +10,7 @@ from synthcity.metrics.privacy import (
     DeltaPresence,
     kAnonymization,
     kMap,
-    lDiversity,
+    lDiversityDistinct,
     select_outliers,
     select_quantiles,
 )
@@ -48,7 +48,7 @@ def test_select_quantiles(test_plugin: Plugin) -> None:
         DeltaPresence,
         kAnonymization,
         kMap,
-        lDiversity,
+        lDiversityDistinct,
     ],
 )
 @pytest.mark.parametrize("test_plugin", [Plugins().get("dummy_sampler")])

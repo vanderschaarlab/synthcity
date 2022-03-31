@@ -10,7 +10,7 @@ from pydantic import validate_arguments
 # synthcity absolute
 import synthcity.logger as log
 from synthcity.metrics import Metrics
-from synthcity.metrics.privacy import kAnonymization, lDiversity
+from synthcity.metrics.privacy import kAnonymization, lDiversityDistinct
 from synthcity.metrics.scores import ScoreEvaluator
 from synthcity.plugins import Plugins
 from synthcity.plugins.core.constraints import Constraints
@@ -82,10 +82,17 @@ class Benchmarks:
                     kdir,
                 )
                 lscore, lerr, ldur, ldir = Benchmarks._eval_dataset(
-                    lDiversity, X, sensitive_columns=sensitive_columns, repeats=repeats
+                    lDiversityDistinct,
+                    X,
+                    sensitive_columns=sensitive_columns,
+                    repeats=repeats,
                 )
                 scores.add(
-                    f"{lDiversity.type()}.l-diversity.real", lscore, lerr, ldur, ldir
+                    f"{lDiversityDistinct.type()}.l-diversity.real",
+                    lscore,
+                    lerr,
+                    ldur,
+                    ldir,
                 )
             out[plugin] = scores.to_dataframe()
 

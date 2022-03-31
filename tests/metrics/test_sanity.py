@@ -9,11 +9,11 @@ from sklearn.datasets import load_iris
 
 # synthcity absolute
 from synthcity.metrics.sanity import (
+    CloseValuesProbability,
     CommonRowsProportion,
     DataMismatchScore,
-    InlierProbability,
+    DistantValuesProbability,
     NearestSyntheticNeighborDistance,
-    OutlierProbability,
 )
 from synthcity.plugins import Plugin, Plugins
 
@@ -112,14 +112,14 @@ def test_evaluate_avg_distance_nearest_synth_neighbor(test_plugin: Plugin) -> No
 
 
 @pytest.mark.parametrize("test_plugin", [Plugins().get("dummy_sampler")])
-def test_evaluate_inlier_probability(test_plugin: Plugin) -> None:
+def test_evaluate_close_values(test_plugin: Plugin) -> None:
     X, y = load_iris(return_X_y=True, as_frame=True)
     X["target"] = y
 
     test_plugin.fit(X)
     X_gen = test_plugin.generate(100)
 
-    evaluator = InlierProbability()
+    evaluator = CloseValuesProbability()
     syn_score, rnd_score = _eval_plugin(evaluator.evaluate, X, X_gen)
 
     assert 0 < syn_score < 1
@@ -127,19 +127,19 @@ def test_evaluate_inlier_probability(test_plugin: Plugin) -> None:
     assert syn_score > rnd_score
 
     assert evaluator.type() == "sanity"
-    assert evaluator.name() == "inlier_probability"
+    assert evaluator.name() == "close_values_probability"
     assert evaluator.direction() == "maximize"
 
 
 @pytest.mark.parametrize("test_plugin", [Plugins().get("dummy_sampler")])
-def test_evaluate_outlier_probability(test_plugin: Plugin) -> None:
+def test_evaluate_distant_values(test_plugin: Plugin) -> None:
     X, y = load_iris(return_X_y=True, as_frame=True)
     X["target"] = y
 
     test_plugin.fit(X)
     X_gen = test_plugin.generate(100)
 
-    evaluator = OutlierProbability()
+    evaluator = DistantValuesProbability()
     syn_score, rnd_score = _eval_plugin(evaluator.evaluate, X, X_gen)
 
     assert 0 < syn_score < 1
@@ -147,5 +147,5 @@ def test_evaluate_outlier_probability(test_plugin: Plugin) -> None:
     assert syn_score < rnd_score
 
     assert evaluator.type() == "sanity"
-    assert evaluator.name() == "outlier_probability"
+    assert evaluator.name() == "distant_values_probability"
     assert evaluator.direction() == "minimize"

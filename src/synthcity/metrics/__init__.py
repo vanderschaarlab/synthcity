@@ -17,13 +17,13 @@ from .performance import (
     PerformanceEvaluatorMLP,
     PerformanceEvaluatorXGB,
 )
-from .privacy import DeltaPresence, kAnonymization, kMap, lDiversity
+from .privacy import DeltaPresence, kAnonymization, kMap, lDiversityDistinct
 from .sanity import (
+    CloseValuesProbability,
     CommonRowsProportion,
     DataMismatchScore,
-    InlierProbability,
+    DistantValuesProbability,
     NearestSyntheticNeighborDistance,
-    OutlierProbability,
 )
 from .scores import ScoreEvaluator
 from .statistical import (
@@ -42,8 +42,8 @@ standard_metrics = [
     DataMismatchScore,
     CommonRowsProportion,
     NearestSyntheticNeighborDistance,
-    InlierProbability,
-    OutlierProbability,
+    CloseValuesProbability,
+    DistantValuesProbability,
     # statistical tests
     JensenShannonDistance,
     ChiSquaredTest,
@@ -69,7 +69,7 @@ standard_metrics = [
     DeltaPresence,
     kAnonymization,
     kMap,
-    lDiversity,
+    lDiversityDistinct,
 ]
 
 
