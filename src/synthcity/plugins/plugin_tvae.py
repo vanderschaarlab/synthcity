@@ -33,8 +33,8 @@ class TVAEPlugin(Plugin):
             Regularization term.
         batch_size: int = 500
             Number of data samples to process in each step.
-        epochs: int = 300
-            Number of training epochs.
+        n_iter: int = 300
+            Number of training n_iter.
         loss_factor: int = 2
             Multiplier for the reconstruction error.
 
@@ -56,7 +56,7 @@ class TVAEPlugin(Plugin):
         decompress_n_layers: int = 2,
         l2scale: float = 1e-5,
         batch_size: int = 500,
-        epochs: int = 300,
+        n_iter: int = 300,
         loss_factor: int = 2,
         **kwargs: Any
     ) -> None:
@@ -70,7 +70,7 @@ class TVAEPlugin(Plugin):
             ),
             l2scale=l2scale,
             batch_size=batch_size,
-            epochs=epochs,
+            n_iter=n_iter,
             loss_factor=loss_factor,
         )
 
@@ -91,7 +91,7 @@ class TVAEPlugin(Plugin):
             IntegerDistribution(name="compress_n_layers", low=1, high=3),
             IntegerDistribution(name="decompress_n_layers", low=1, high=3),
             IntegerDistribution(name="batch_size", low=100, high=300, step=50),
-            IntegerDistribution(name="epochs", low=100, high=500, step=50),
+            IntegerDistribution(name="n_iter", low=100, high=500, step=50),
             CategoricalDistribution(name="l2scale", choices=[1e-5, 1e-4, 1e-3]),
             IntegerDistribution(name="loss_factor", low=1, high=5),
         ]
