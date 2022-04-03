@@ -129,7 +129,7 @@ class PATEGAN:
         generator_n_layers_hidden: int = 2,
         generator_n_units_hidden: int = 100,
         generator_nonlin: str = "tanh",
-        generator_n_iter: int = 5,
+        n_iter: int = 5,
         generator_dropout: float = 0,
         discriminator_n_layers_hidden: int = 2,
         discriminator_n_units_hidden: int = 100,
@@ -153,7 +153,7 @@ class PATEGAN:
         self.generator_n_layers_hidden = generator_n_layers_hidden
         self.generator_n_units_hidden = generator_n_units_hidden
         self.generator_nonlin = generator_nonlin
-        self.generator_n_iter = generator_n_iter
+        self.n_iter = n_iter
         self.generator_dropout = generator_dropout
         self.discriminator_n_layers_hidden = discriminator_n_layers_hidden
         self.discriminator_n_units_hidden = discriminator_n_units_hidden
@@ -194,7 +194,7 @@ class PATEGAN:
             generator_nonlin_out_continuous="tanh",
             generator_lr=self.lr,
             generator_residual=True,
-            generator_n_iter=self.generator_n_iter,
+            n_iter=self.n_iter,
             generator_batch_norm=False,
             generator_dropout=0,
             generator_weight_decay=self.weight_decay,
@@ -297,7 +297,7 @@ class PATEGANPlugin(Plugin):
             Number of hidden units in each layer of the Generator
         generator_nonlin: string, default 'tanh'
             Nonlinearity to use in the generator. Can be 'elu', 'relu', 'selu' or 'leaky_relu'.
-        generator_n_iter: int
+        n_iter: int
             Maximum number of iterations in the Generator.
         generator_dropout: float
             Dropout value. If 0, the dropout is not used.
@@ -348,10 +348,10 @@ class PATEGANPlugin(Plugin):
     def __init__(
         self,
         # GAN
+        n_iter: int = 5,
         generator_n_layers_hidden: int = 2,
         generator_n_units_hidden: int = 100,
         generator_nonlin: str = "tanh",
-        generator_n_iter: int = 5,
         generator_dropout: float = 0,
         discriminator_n_layers_hidden: int = 2,
         discriminator_n_units_hidden: int = 100,
@@ -379,7 +379,7 @@ class PATEGANPlugin(Plugin):
             generator_n_layers_hidden=generator_n_layers_hidden,
             generator_n_units_hidden=generator_n_units_hidden,
             generator_nonlin=generator_nonlin,
-            generator_n_iter=generator_n_iter,
+            generator_n_iter=n_iter,
             generator_dropout=generator_dropout,
             discriminator_n_layers_hidden=discriminator_n_layers_hidden,
             discriminator_n_units_hidden=discriminator_n_units_hidden,
@@ -418,7 +418,7 @@ class PATEGANPlugin(Plugin):
             CategoricalDistribution(
                 name="generator_nonlin", choices=["relu", "leaky_relu", "tanh", "elu"]
             ),
-            IntegerDistribution(name="generator_n_iter", low=100, high=500, step=100),
+            IntegerDistribution(name="n_iter", low=100, high=500, step=100),
             FloatDistribution(name="generator_dropout", low=0, high=0.2),
             IntegerDistribution(name="discriminator_n_layers_hidden", low=1, high=5),
             IntegerDistribution(
@@ -437,6 +437,7 @@ class PATEGANPlugin(Plugin):
             CategoricalDistribution(
                 name="teacher_template", choices=["linear", "xgboost"]
             ),
+            IntegerDistribution(name="encoder_max_clusters", low=2, high=20),
         ]
 
     def _fit(self, X: pd.DataFrame, *args: Any, **kwargs: Any) -> "PATEGANPlugin":

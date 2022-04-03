@@ -25,14 +25,20 @@ class Benchmarks:
         repeats: int = 3,
         synthetic_size: Optional[int] = None,
         synthetic_constraints: Optional[Constraints] = None,
+        plugin_kwargs: Dict = {},
     ) -> pd.DataFrame:
         out = {}
         for plugin in plugins:
             log.info(f"Benchmarking plugin : {plugin}")
             scores = ScoreEvaluator()
+
+            kwargs = {}
+            if plugin in plugin_kwargs:
+                kwargs = plugin_kwargs[plugin]
+
             for repeat in range(repeats):
                 log.info(f" Experiment repeat: {repeat}")
-                generator = Plugins().get(plugin)
+                generator = Plugins().get(plugin, **kwargs)
 
                 try:
                     generator.fit(X)
