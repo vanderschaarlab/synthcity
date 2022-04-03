@@ -29,7 +29,7 @@ def test_plugin_type(test_plugin: Plugin) -> None:
 
 @pytest.mark.parametrize("test_plugin", generate_fixtures(plugin_name, plugin))
 def test_plugin_hyperparams(test_plugin: Plugin) -> None:
-    assert len(test_plugin.hyperparameter_space()) == 15
+    assert len(test_plugin.hyperparameter_space()) == 16
 
 
 @pytest.mark.parametrize("test_plugin", generate_fixtures(plugin_name, plugin))

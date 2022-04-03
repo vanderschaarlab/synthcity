@@ -88,7 +88,7 @@ class CTGANPlugin(Plugin):
             discriminator_decay=discriminator_decay,
             batch_size=batch_size,
             discriminator_steps=discriminator_steps,
-            n_iter=n_iter,
+            epochs=n_iter,
             pac=pac,
             verbose=False,
         )

@@ -70,7 +70,7 @@ class TVAEPlugin(Plugin):
             ),
             l2scale=l2scale,
             batch_size=batch_size,
-            n_iter=n_iter,
+            epochs=n_iter,
             loss_factor=loss_factor,
         )
 
