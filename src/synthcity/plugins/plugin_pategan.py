@@ -153,7 +153,7 @@ class PATEGAN:
         weight_decay: float = 1e-3,
         batch_size: int = 500,
         seed: int = 0,
-        clipping_value: int = 1,
+        clipping_value: int = 0,
         encoder_max_clusters: int = 20,
         # Privacy
         n_teachers: int = 10,
@@ -343,8 +343,8 @@ class PATEGANPlugin(Plugin):
             Batch size
         seed: int
             Seed used
-        clipping_value: int, default 1
-            Gradients clipping value
+        clipping_value: int, default 0
+            Gradients clipping value. Zero disables the feature
         n_teachers: int
             Number of teachers to train
         teacher_template: str
@@ -386,7 +386,7 @@ class PATEGANPlugin(Plugin):
         weight_decay: float = 1e-3,
         batch_size: int = 500,
         seed: int = 0,
-        clipping_value: int = 1,
+        clipping_value: int = 0,
         encoder_max_clusters: int = 20,
         # Privacy
         n_teachers: int = 10,

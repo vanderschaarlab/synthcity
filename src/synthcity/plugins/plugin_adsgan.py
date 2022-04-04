@@ -60,8 +60,8 @@ class AdsGANPlugin(Plugin):
             Batch size
         seed: int
             Seed used
-        clipping_value: int, default 1
-            Gradients clipping value
+        clipping_value: int, default 0
+            Gradients clipping value. Zero disables the feature
         encoder_max_clusters: int
             The max number of clusters to create for continuous columns when encoding
 
@@ -91,7 +91,7 @@ class AdsGANPlugin(Plugin):
         weight_decay: float = 1e-3,
         batch_size: int = 500,
         seed: int = 0,
-        clipping_value: int = 1,
+        clipping_value: int = 0,
         lambda_gradient_penalty: float = 10,
         lambda_identifiability_penalty: float = 0.1,
         encoder_max_clusters: int = 5,

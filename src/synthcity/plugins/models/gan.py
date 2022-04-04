@@ -62,8 +62,8 @@ class GAN(nn.Module):
             Seed used
         n_iter_min: int
             Minimum number of iterations to go through before starting early stopping
-        clipping_value: int, default 1
-            Gradients clipping value
+        clipping_value: int, default 0
+            Gradients clipping value. Zero disables the feature
         criterion: str
             Loss criterion:
                 - bce: Uses BCELoss for discriminating the outputs.
@@ -96,12 +96,14 @@ class GAN(nn.Module):
         discriminator_loss: Optional[Callable] = None,
         discriminator_lr: float = 2e-4,
         discriminator_weight_decay: float = 1e-3,
-        discriminator_extra_penalties: list = [],  # "gradient_penalty", "identifiability_penalty"
+        discriminator_extra_penalties: list = [
+            "gradient_penalty"
+        ],  # "gradient_penalty", "identifiability_penalty"
         batch_size: int = 64,
         n_iter_print: int = 10,
         seed: int = 0,
         n_iter_min: int = 100,
-        clipping_value: int = 1,
+        clipping_value: int = 0,
         criterion: str = "wd",  # wd - Wasserstein distance, BCE
         lambda_gradient_penalty: float = 10,
         lambda_identifiability_penalty: float = 0.1,
@@ -238,7 +240,10 @@ class GAN(nn.Module):
         errG.backward()
 
         # Update G
-        torch.nn.utils.clip_grad_norm_(self.generator.parameters(), self.clipping_value)
+        if self.clipping_value > 0:
+            torch.nn.utils.clip_grad_norm_(
+                self.generator.parameters(), self.clipping_value
+            )
         self.generator.optimizer.step()
 
         # Return loss
@@ -298,9 +303,10 @@ class GAN(nn.Module):
                     )
 
             # Update D
-            torch.nn.utils.clip_grad_norm_(
-                self.discriminator.parameters(), self.clipping_value
-            )
+            if self.clipping_value > 0:
+                torch.nn.utils.clip_grad_norm_(
+                    self.discriminator.parameters(), self.clipping_value
+                )
             self.discriminator.optimizer.step()
 
             errors.append(errD.item())

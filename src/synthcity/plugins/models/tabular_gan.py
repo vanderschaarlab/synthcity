@@ -59,7 +59,7 @@ class TabularGAN(nn.Module):
             Seed used
         n_iter_min: int
             Minimum number of iterations to go through before starting early stopping
-        clipping_value: int, default 1
+        clipping_value: int, default 0
             Gradients clipping value
         lambda_gradient_penalty: float
             Lambda weight for the gradient penalty
@@ -97,12 +97,14 @@ class TabularGAN(nn.Module):
         discriminator_loss: Optional[Callable] = None,
         discriminator_lr: float = 2e-4,
         discriminator_weight_decay: float = 1e-3,
-        discriminator_extra_penalties: list = [],  # "identifiability_loss"
+        discriminator_extra_penalties: list = [
+            "gradient_penalty"
+        ],  # "identifiability_penalty", "gradient_penalty"
         batch_size: int = 64,
         n_iter_print: int = 10,
         seed: int = 0,
         n_iter_min: int = 100,
-        clipping_value: int = 1,
+        clipping_value: int = 0,
         lambda_gradient_penalty: float = 10,
         lambda_identifiability_penalty: float = 0.1,
         criterion: str = "wd",
