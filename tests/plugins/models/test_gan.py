@@ -81,7 +81,7 @@ def test_basic_network(
     assert net.discriminator.lr == lr
 
 
-@pytest.mark.parametrize("discriminator_extra_loss", [[], ["identifiability_loss"]])
+@pytest.mark.parametrize("discriminator_extra_loss", [[], ["gradient_penalty"]])
 def test_gan_classification(discriminator_extra_loss: list) -> None:
     X, _ = load_digits(return_X_y=True)
     X = MinMaxScaler().fit_transform(X)
