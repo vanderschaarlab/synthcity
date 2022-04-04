@@ -372,7 +372,7 @@ class PATEGANPlugin(Plugin):
     def __init__(
         self,
         # GAN
-        n_iter: int = 5,
+        n_iter: int = 50,
         generator_n_layers_hidden: int = 2,
         generator_n_units_hidden: int = 100,
         generator_nonlin: str = "tanh",

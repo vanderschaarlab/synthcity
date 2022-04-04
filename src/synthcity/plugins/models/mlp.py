@@ -15,7 +15,9 @@ DEVICE = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
 
 def get_nonlin(name: str) -> nn.Module:
-    if name == "elu":
+    if name == "none":
+        return nn.Identity()
+    elif name == "elu":
         return nn.ELU()
     elif name == "relu":
         return nn.ReLU()

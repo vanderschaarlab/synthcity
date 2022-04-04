@@ -48,6 +48,17 @@ class PerformanceEvaluator(MetricEvaluator):
         """
         labels = list(y_train) + list(y_test)
 
+        X_test_df = pd.DataFrame(X_test)
+        y_test_df = pd.Series(y_test, index=X_test_df.index)
+        for v in np.unique(labels):
+            if v not in list(y_train):
+                X_test_df = X_test_df[y_test_df != v]
+                y_test_df = y_test_df[y_test_df != v]
+
+        X_test = np.asarray(X_test_df)
+        y_test = np.asarray(y_test_df)
+        labels = list(y_train) + list(y_test)
+
         encoder = LabelEncoder().fit(labels)
         enc_y_train = encoder.transform(y_train)
         if "n_units_out" in model_args:

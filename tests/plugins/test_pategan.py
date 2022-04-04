@@ -1,10 +1,12 @@
 # third party
+import numpy as np
 import pandas as pd
 import pytest
 from helpers import generate_fixtures
 from sklearn.datasets import load_diabetes, load_iris
 
 # synthcity absolute
+from synthcity.metrics import PerformanceEvaluatorXGB
 from synthcity.plugins import Plugin
 from synthcity.plugins.core.constraints import Constraints
 from synthcity.plugins.plugin_pategan import plugin
@@ -87,3 +89,21 @@ def test_sample_hyperparams() -> None:
         args = plugin.sample_hyperparameters()
 
         assert plugin(**args) is not None
+
+
+def test_eval_performance() -> None:
+    results = []
+
+    X, y = load_iris(return_X_y=True, as_frame=True)
+    X["target"] = y
+
+    for retry in range(3):
+        test_plugin = plugin()
+        evaluator = PerformanceEvaluatorXGB()
+
+        test_plugin.fit(X)
+        X_syn = test_plugin.generate()
+
+        results.append(evaluator.evaluate(X, X_syn)["syn"])
+
+    assert np.mean(results) > 0.7
