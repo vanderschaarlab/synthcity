@@ -91,7 +91,7 @@ class GAN(nn.Module):
         discriminator_loss: Optional[Callable] = None,
         discriminator_lr: float = 2e-4,
         discriminator_weight_decay: float = 1e-3,
-        discriminator_extra_penalties: list = [],  # "identifiability_loss"
+        discriminator_extra_penalties: list = [],  # "gradient_penalty"
         batch_size: int = 64,
         n_iter_print: int = 10,
         seed: int = 0,
@@ -101,7 +101,7 @@ class GAN(nn.Module):
     ) -> None:
         super(GAN, self).__init__()
 
-        extra_penalty_list = ["identifiability_loss"]
+        extra_penalty_list = ["gradient_penalty"]
         for penalty in discriminator_extra_penalties:
             assert penalty in extra_penalty_list, f"Unsupported penalty {penalty}"
         self.discriminator_extra_penalties = discriminator_extra_penalties
@@ -265,7 +265,7 @@ class GAN(nn.Module):
             errD = errD_real + errD_fake
 
             for penalty in self.discriminator_extra_penalties:
-                if penalty == "identifiability_loss":
+                if penalty == "gradient_penalty":
                     errD += self.lambda_gp * self._loss_gradient_penalty(
                         real_samples=real_X,
                         fake_samples=fake,

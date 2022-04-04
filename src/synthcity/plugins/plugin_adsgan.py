@@ -179,7 +179,7 @@ class AdsGANPlugin(Plugin):
             clipping_value=self.clipping_value,
             encoder_max_clusters=self.encoder_max_clusters,
             encoder=self.encoder,
-            discriminator_extra_penalties=["identifiability_loss"],
+            discriminator_extra_penalties=["gradient_penalty"],
         )
         self.model.fit(X)
 
