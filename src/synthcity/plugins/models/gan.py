@@ -64,6 +64,11 @@ class GAN(nn.Module):
             Minimum number of iterations to go through before starting early stopping
         clipping_value: int, default 1
             Gradients clipping value
+        criterion: str
+            Loss criterion:
+                - bce: Uses BCELoss for discriminating the outputs.
+                - wd: Uses the WGAN strategy for the critic.
+
     """
 
     @validate_arguments(config=dict(arbitrary_types_allowed=True))
@@ -97,11 +102,22 @@ class GAN(nn.Module):
         seed: int = 0,
         n_iter_min: int = 100,
         clipping_value: int = 1,
+        criterion: str = "wd",  # wd - Wasserstein distance, BCE
         lambda_gradient_penalty: float = 10,
         lambda_identifiability_penalty: float = 0.1,
     ) -> None:
         super(GAN, self).__init__()
 
+        if criterion == "bce":
+            self.criterion = nn.BCELoss()
+        elif criterion == "wd":
+
+            def _criterion(y_hat: torch.Tensor, y: torch.Tensor) -> torch.Tensor:
+                return torch.mean(y_hat)
+
+            self.criterion = _criterion
+        else:
+            raise ValueError(f"Unknown criterion {criterion}")
         extra_penalty_list = ["gradient_penalty", "identifiability_penalty"]
         for penalty in discriminator_extra_penalties:
             assert penalty in extra_penalty_list, f"Unsupported penalty {penalty}"
@@ -150,7 +166,7 @@ class GAN(nn.Module):
         self.n_iter_min = n_iter_min
         self.batch_size = batch_size
         self.clipping_value = clipping_value
-        self.criterion = nn.BCELoss()
+
         self.lambda_gradient_penalty = lambda_gradient_penalty
         self.lambda_identifiability_penalty = lambda_identifiability_penalty
 
@@ -217,7 +233,7 @@ class GAN(nn.Module):
 
         output = self.discriminator(fake).squeeze().float()
         # Calculate G's loss based on this output
-        errG = self.criterion(output, label)
+        errG = -self.criterion(output, label)
         # Calculate gradients for G
         errG.backward()
 

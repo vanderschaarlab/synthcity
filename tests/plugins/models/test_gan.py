@@ -36,6 +36,9 @@ def test_network_config() -> None:
         seed=77,
         n_iter_min=100,
         clipping_value=1,
+        criterion="wd",
+        lambda_gradient_penalty=2,
+        lambda_identifiability_penalty=3,
     )
 
     assert len(net.generator.model) == 4
@@ -44,6 +47,8 @@ def test_network_config() -> None:
     assert net.generator_n_iter == 1001
     assert net.discriminator_n_iter == 1002
     assert net.seed == 77
+    assert net.lambda_gradient_penalty == 2
+    assert net.lambda_identifiability_penalty == 3
 
 
 @pytest.mark.parametrize("nonlin", ["relu", "elu", "leaky_relu"])
@@ -51,12 +56,14 @@ def test_network_config() -> None:
 @pytest.mark.parametrize("dropout", [0, 0.5, 0.2])
 @pytest.mark.parametrize("batch_norm", [True, False])
 @pytest.mark.parametrize("lr", [1e-3, 3e-4])
+@pytest.mark.parametrize("criterion", ["wd", "bce"])
 def test_basic_network(
     nonlin: str,
     n_iter: int,
     dropout: float,
     batch_norm: bool,
     lr: float,
+    criterion: str,
 ) -> None:
     net = GAN(
         n_features=10,
@@ -73,6 +80,7 @@ def test_basic_network(
         discriminator_n_layers_hidden=2,
         generator_lr=lr,
         discriminator_lr=lr,
+        criterion=criterion,
     )
 
     assert net.generator_n_iter == n_iter

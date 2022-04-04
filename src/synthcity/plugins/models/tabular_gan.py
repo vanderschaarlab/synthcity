@@ -105,6 +105,7 @@ class TabularGAN(nn.Module):
         clipping_value: int = 1,
         lambda_gradient_penalty: float = 10,
         lambda_identifiability_penalty: float = 0.1,
+        criterion: str = "wd",
         encoder_max_clusters: int = 20,
         encoder: Any = None,
     ) -> None:
@@ -143,6 +144,7 @@ class TabularGAN(nn.Module):
             discriminator_lr=discriminator_lr,
             discriminator_weight_decay=discriminator_weight_decay,
             discriminator_extra_penalties=discriminator_extra_penalties,
+            criterion=criterion,
             lambda_gradient_penalty=lambda_gradient_penalty,
             lambda_identifiability_penalty=lambda_identifiability_penalty,
             clipping_value=clipping_value,
