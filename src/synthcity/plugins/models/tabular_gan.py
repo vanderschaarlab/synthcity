@@ -98,10 +98,14 @@ class TabularGAN(nn.Module):
         n_iter_min: int = 100,
         clipping_value: int = 1,
         encoder_max_clusters: int = 20,
+        encoder: Any = None,
     ) -> None:
         super(TabularGAN, self).__init__()
         self.columns = X.columns
-        self.encoder = TabularEncoder(max_clusters=encoder_max_clusters).fit(X)
+        if encoder is not None:
+            self.encoder = encoder
+        else:
+            self.encoder = TabularEncoder(max_clusters=encoder_max_clusters).fit(X)
 
         self.model = GAN(
             self.encoder.n_features(),

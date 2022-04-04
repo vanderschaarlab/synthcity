@@ -97,6 +97,7 @@ class GAN(nn.Module):
         seed: int = 0,
         n_iter_min: int = 100,
         clipping_value: int = 1,
+        lambda_gp: float = 10,
     ) -> None:
         super(GAN, self).__init__()
 
@@ -149,6 +150,7 @@ class GAN(nn.Module):
         self.batch_size = batch_size
         self.clipping_value = clipping_value
         self.criterion = nn.BCELoss()
+        self.lambda_gp = lambda_gp
 
         self.seed = seed
         torch.manual_seed(seed)
@@ -264,19 +266,13 @@ class GAN(nn.Module):
 
             for penalty in self.discriminator_extra_penalties:
                 if penalty == "identifiability_loss":
-                    eps = torch.rand([batch_size, 1]).to(DEVICE)
-                    interpolated = eps * real_X + (1.0 - eps) * fake
-                    lam = 10
-
-                    label = true_labels_generator(X).to(DEVICE).squeeze()
-                    output = self.discriminator(interpolated).squeeze()
-                    errD_interp = self.criterion(output, label)
-
-                    grad = torch.autograd.grad([errD_interp], [interpolated])[0]
-                    grad_norm = torch.sqrt(torch.sum((grad) ** 2 + 1e-8, axis=1))
-                    grad_pen = lam * torch.sum((grad_norm - 1) ** 2)
-
-                    errD += grad_pen
+                    errD += self.lambda_gp * self._loss_gradient_penalty(
+                        real_samples=real_X,
+                        fake_samples=fake,
+                        batch_size=batch_size,
+                        fake_labels_generator=fake_labels_generator,
+                        true_labels_generator=true_labels_generator,
+                    )
 
             # Update D
             torch.nn.utils.clip_grad_norm_(
@@ -345,3 +341,33 @@ class GAN(nn.Module):
             return X.to(DEVICE)
         else:
             return torch.from_numpy(np.asarray(X)).to(DEVICE)
+
+    def _loss_gradient_penalty(
+        self,
+        real_samples: torch.tensor,
+        fake_samples: torch.Tensor,
+        batch_size: int,
+        fake_labels_generator: Callable,
+        true_labels_generator: Callable,
+    ) -> torch.Tensor:
+        """Calculates the gradient penalty loss for WGAN GP"""
+        # Random weight term for interpolation between real and fake samples
+        alpha = torch.rand([batch_size, 1]).to(DEVICE)
+        # Get random interpolation between real and fake samples
+        interpolated = (
+            alpha * real_samples + ((1 - alpha) * fake_samples)
+        ).requires_grad_(True)
+        d_interpolated = self.discriminator(interpolated).squeeze()
+        labels = true_labels_generator(interpolated).to(DEVICE).squeeze()
+        # Get gradient w.r.t. interpolates
+        gradients = torch.autograd.grad(
+            outputs=d_interpolated,
+            inputs=interpolated,
+            grad_outputs=labels,
+            create_graph=True,
+            retain_graph=True,
+            only_inputs=True,
+        )[0]
+        gradients = gradients.view(gradients.size(0), -1)
+        gradient_penalty = ((gradients.norm(2, dim=1) - 1) ** 2).mean()
+        return gradient_penalty

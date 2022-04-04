@@ -46,7 +46,9 @@ class PerformanceEvaluator(MetricEvaluator):
             1 means perfect predictions.
             0 means only incorrect predictions.
         """
-        encoder = LabelEncoder().fit(y_train)
+        labels = list(y_train) + list(y_test)
+
+        encoder = LabelEncoder().fit(labels)
         enc_y_train = encoder.transform(y_train)
         if "n_units_out" in model_args:
             model_args["n_units_out"] = len(np.unique(y_train))
@@ -56,7 +58,7 @@ class PerformanceEvaluator(MetricEvaluator):
             y_pred = estimator.predict_proba(X_test)
             score, _ = evaluate_auc(enc_y_test, y_pred)
         except BaseException as e:
-            log.error(f"classifier evaluation failed {e}")
+            log.error(f"classifier evaluation failed {e}.")
             score = 0
 
         return score

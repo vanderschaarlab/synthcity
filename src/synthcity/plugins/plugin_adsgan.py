@@ -93,6 +93,7 @@ class AdsGANPlugin(Plugin):
         seed: int = 0,
         clipping_value: int = 1,
         encoder_max_clusters: int = 5,
+        encoder: Any = None,
         **kwargs: Any
     ) -> None:
         super().__init__(**kwargs)
@@ -112,6 +113,7 @@ class AdsGANPlugin(Plugin):
         self.seed = seed
         self.clipping_value = clipping_value
         self.encoder_max_clusters = encoder_max_clusters
+        self.encoder = encoder
 
     @staticmethod
     def name() -> str:
@@ -124,18 +126,18 @@ class AdsGANPlugin(Plugin):
     @staticmethod
     def hyperparameter_space(**kwargs: Any) -> List[Distribution]:
         return [
-            IntegerDistribution(name="generator_n_layers_hidden", low=1, high=5),
+            IntegerDistribution(name="generator_n_layers_hidden", low=1, high=4),
             IntegerDistribution(
-                name="generator_n_units_hidden", low=50, high=500, step=50
+                name="generator_n_units_hidden", low=50, high=150, step=50
             ),
             CategoricalDistribution(
                 name="generator_nonlin", choices=["relu", "leaky_relu", "tanh", "elu"]
             ),
             IntegerDistribution(name="n_iter", low=100, high=500, step=100),
             FloatDistribution(name="generator_dropout", low=0, high=0.2),
-            IntegerDistribution(name="discriminator_n_layers_hidden", low=1, high=5),
+            IntegerDistribution(name="discriminator_n_layers_hidden", low=1, high=4),
             IntegerDistribution(
-                name="discriminator_n_units_hidden", low=50, high=500, step=50
+                name="discriminator_n_units_hidden", low=50, high=150, step=50
             ),
             CategoricalDistribution(
                 name="discriminator_nonlin",
@@ -145,7 +147,7 @@ class AdsGANPlugin(Plugin):
             FloatDistribution(name="discriminator_dropout", low=0, high=0.2),
             CategoricalDistribution(name="lr", choices=[1e-3, 2e-4, 1e-4]),
             CategoricalDistribution(name="weight_decay", choices=[1e-3, 1e-4]),
-            CategoricalDistribution(name="batch_size", choices=[64, 128, 256, 512]),
+            CategoricalDistribution(name="batch_size", choices=[100, 200, 500]),
             IntegerDistribution(name="encoder_max_clusters", low=2, high=20),
         ]
 
@@ -176,6 +178,7 @@ class AdsGANPlugin(Plugin):
             discriminator_weight_decay=self.weight_decay,
             clipping_value=self.clipping_value,
             encoder_max_clusters=self.encoder_max_clusters,
+            encoder=self.encoder,
             discriminator_extra_penalties=["identifiability_loss"],
         )
         self.model.fit(X)
