@@ -120,6 +120,7 @@ class GAN(nn.Module):
             self.criterion = _criterion
         else:
             raise ValueError(f"Unknown criterion {criterion}")
+
         extra_penalty_list = ["gradient_penalty", "identifiability_penalty"]
         for penalty in discriminator_extra_penalties:
             assert penalty in extra_penalty_list, f"Unsupported penalty {penalty}"
@@ -358,7 +359,7 @@ class GAN(nn.Module):
                 true_labels_generator=true_labels_generator,
             )
             # Check how the generator is doing by saving G's output on fixed_noise
-            if i % self.n_iter_print == 0:
+            if (i + 1) % self.n_iter_print == 0:
                 log.debug(
                     f"[{i}/{self.generator_n_iter}]\tLoss_D: {d_loss}\tLoss_G: {g_loss}"
                 )
