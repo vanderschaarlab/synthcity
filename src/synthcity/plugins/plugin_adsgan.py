@@ -92,6 +92,8 @@ class AdsGANPlugin(Plugin):
         batch_size: int = 500,
         seed: int = 0,
         clipping_value: int = 1,
+        lambda_gradient_penalty: float = 10,
+        lambda_identifiability_penalty: float = 0.1,
         encoder_max_clusters: int = 5,
         encoder: Any = None,
         **kwargs: Any
@@ -112,6 +114,9 @@ class AdsGANPlugin(Plugin):
         self.batch_size = batch_size
         self.seed = seed
         self.clipping_value = clipping_value
+        self.lambda_gradient_penalty = lambda_gradient_penalty
+        self.lambda_identifiability_penalty = lambda_identifiability_penalty
+
         self.encoder_max_clusters = encoder_max_clusters
         self.encoder = encoder
 
@@ -177,9 +182,14 @@ class AdsGANPlugin(Plugin):
             discriminator_lr=self.lr,
             discriminator_weight_decay=self.weight_decay,
             clipping_value=self.clipping_value,
+            lambda_gradient_penalty=self.lambda_gradient_penalty,
+            lambda_identifiability_penalty=self.lambda_identifiability_penalty,
             encoder_max_clusters=self.encoder_max_clusters,
             encoder=self.encoder,
-            discriminator_extra_penalties=["gradient_penalty"],
+            discriminator_extra_penalties=[
+                "gradient_penalty",
+                "identifiability_penalty",
+            ],
         )
         self.model.fit(X)
 

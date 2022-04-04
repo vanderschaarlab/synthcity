@@ -91,17 +91,18 @@ class GAN(nn.Module):
         discriminator_loss: Optional[Callable] = None,
         discriminator_lr: float = 2e-4,
         discriminator_weight_decay: float = 1e-3,
-        discriminator_extra_penalties: list = [],  # "gradient_penalty"
+        discriminator_extra_penalties: list = [],  # "gradient_penalty", "identifiability_penalty"
         batch_size: int = 64,
         n_iter_print: int = 10,
         seed: int = 0,
         n_iter_min: int = 100,
         clipping_value: int = 1,
-        lambda_gp: float = 10,
+        lambda_gradient_penalty: float = 10,
+        lambda_identifiability_penalty: float = 0.1,
     ) -> None:
         super(GAN, self).__init__()
 
-        extra_penalty_list = ["gradient_penalty"]
+        extra_penalty_list = ["gradient_penalty", "identifiability_penalty"]
         for penalty in discriminator_extra_penalties:
             assert penalty in extra_penalty_list, f"Unsupported penalty {penalty}"
         self.discriminator_extra_penalties = discriminator_extra_penalties
@@ -150,7 +151,8 @@ class GAN(nn.Module):
         self.batch_size = batch_size
         self.clipping_value = clipping_value
         self.criterion = nn.BCELoss()
-        self.lambda_gp = lambda_gp
+        self.lambda_gradient_penalty = lambda_gradient_penalty
+        self.lambda_identifiability_penalty = lambda_identifiability_penalty
 
         self.seed = seed
         torch.manual_seed(seed)
@@ -262,16 +264,21 @@ class GAN(nn.Module):
             errD_fake.backward()
 
             # Compute error of D as sum over the fake and the real batches
-            errD = errD_real + errD_fake
+            errD = -errD_real + errD_fake
 
             for penalty in self.discriminator_extra_penalties:
                 if penalty == "gradient_penalty":
-                    errD += self.lambda_gp * self._loss_gradient_penalty(
+                    errD += self._loss_gradient_penalty(
                         real_samples=real_X,
                         fake_samples=fake,
                         batch_size=batch_size,
                         fake_labels_generator=fake_labels_generator,
                         true_labels_generator=true_labels_generator,
+                    )
+                elif penalty == "identifiability_penalty":
+                    errD += self._loss_identifiability_penalty(
+                        real_samples=real_X,
+                        fake_samples=fake,
                     )
 
             # Update D
@@ -370,4 +377,14 @@ class GAN(nn.Module):
         )[0]
         gradients = gradients.view(gradients.size(0), -1)
         gradient_penalty = ((gradients.norm(2, dim=1) - 1) ** 2).mean()
-        return gradient_penalty
+        return self.lambda_gradient_penalty * gradient_penalty
+
+    def _loss_identifiability_penalty(
+        self,
+        real_samples: torch.tensor,
+        fake_samples: torch.Tensor,
+    ) -> torch.Tensor:
+        """Calculates the identifiability penalty"""
+        return self.lambda_identifiability_penalty * torch.sqrt(
+            nn.MSELoss()(real_samples, fake_samples)
+        )
