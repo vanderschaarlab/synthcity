@@ -77,16 +77,18 @@ class AdsGANPlugin(Plugin):
     @validate_arguments(config=dict(arbitrary_types_allowed=True))
     def __init__(
         self,
-        n_iter: int = 1000,
+        n_iter: int = 500,
         generator_n_layers_hidden: int = 2,
         generator_n_units_hidden: int = 100,
         generator_nonlin: str = "tanh",
         generator_dropout: float = 0,
+        generator_opt_betas: tuple = (0.5, 0.999),
         discriminator_n_layers_hidden: int = 2,
         discriminator_n_units_hidden: int = 100,
         discriminator_nonlin: str = "leaky_relu",
         discriminator_n_iter: int = 1,
         discriminator_dropout: float = 0,
+        discriminator_opt_betas: tuple = (0.5, 0.999),
         lr: float = 1e-3,
         weight_decay: float = 1e-3,
         batch_size: int = 500,
@@ -104,11 +106,16 @@ class AdsGANPlugin(Plugin):
         self.generator_nonlin = generator_nonlin
         self.n_iter = n_iter
         self.generator_dropout = generator_dropout
+        self.generator_opt_betas = generator_opt_betas
+        self.generator_extra_penalties = ["identifiability_penalty"]
         self.discriminator_n_layers_hidden = discriminator_n_layers_hidden
         self.discriminator_n_units_hidden = discriminator_n_units_hidden
         self.discriminator_nonlin = discriminator_nonlin
         self.discriminator_n_iter = discriminator_n_iter
         self.discriminator_dropout = discriminator_dropout
+        self.discriminator_extra_penalties = ["gradient_penalty"]
+        self.discriminator_opt_betas = discriminator_opt_betas
+
         self.lr = lr
         self.weight_decay = weight_decay
         self.batch_size = batch_size
@@ -138,7 +145,7 @@ class AdsGANPlugin(Plugin):
             CategoricalDistribution(
                 name="generator_nonlin", choices=["relu", "leaky_relu", "tanh", "elu"]
             ),
-            IntegerDistribution(name="n_iter", low=100, high=500, step=100),
+            IntegerDistribution(name="n_iter", low=100, high=1000, step=100),
             FloatDistribution(name="generator_dropout", low=0, high=0.2),
             IntegerDistribution(name="discriminator_n_layers_hidden", low=1, high=4),
             IntegerDistribution(
@@ -173,6 +180,8 @@ class AdsGANPlugin(Plugin):
             generator_batch_norm=False,
             generator_dropout=0,
             generator_weight_decay=self.weight_decay,
+            generator_opt_betas=self.generator_opt_betas,
+            generator_extra_penalties=self.generator_extra_penalties,
             discriminator_n_units_hidden=self.discriminator_n_units_hidden,
             discriminator_n_layers_hidden=self.discriminator_n_layers_hidden,
             discriminator_n_iter=self.discriminator_n_iter,
@@ -181,15 +190,13 @@ class AdsGANPlugin(Plugin):
             discriminator_dropout=self.discriminator_dropout,
             discriminator_lr=self.lr,
             discriminator_weight_decay=self.weight_decay,
+            discriminator_opt_betas=self.discriminator_opt_betas,
+            discriminator_extra_penalties=self.discriminator_extra_penalties,
+            encoder=self.encoder,
             clipping_value=self.clipping_value,
             lambda_gradient_penalty=self.lambda_gradient_penalty,
             lambda_identifiability_penalty=self.lambda_identifiability_penalty,
             encoder_max_clusters=self.encoder_max_clusters,
-            encoder=self.encoder,
-            discriminator_extra_penalties=[
-                "gradient_penalty",
-                "identifiability_penalty",
-            ],
         )
         self.model.fit(X)
 

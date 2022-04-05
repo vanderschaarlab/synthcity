@@ -88,6 +88,8 @@ class GAN(nn.Module):
         generator_lr: float = 2e-4,
         generator_weight_decay: float = 1e-3,
         generator_residual: bool = True,
+        generator_opt_betas: tuple = (0.9, 0.999),
+        generator_extra_penalties: list = [],  # "gradient_penalty", "identifiability_penalty"
         discriminator_n_layers_hidden: int = 3,
         discriminator_n_units_hidden: int = 300,
         discriminator_nonlin: str = "leaky_relu",
@@ -97,6 +99,7 @@ class GAN(nn.Module):
         discriminator_loss: Optional[Callable] = None,
         discriminator_lr: float = 2e-4,
         discriminator_weight_decay: float = 1e-3,
+        discriminator_opt_betas: tuple = (0.9, 0.999),
         discriminator_extra_penalties: list = [
             "gradient_penalty"
         ],  # "gradient_penalty", "identifiability_penalty"
@@ -112,8 +115,16 @@ class GAN(nn.Module):
 
         extra_penalty_list = ["gradient_penalty", "identifiability_penalty"]
         for penalty in discriminator_extra_penalties:
-            assert penalty in extra_penalty_list, f"Unsupported penalty {penalty}"
+            assert (
+                penalty in extra_penalty_list
+            ), f"Unsupported dscriminator penalty {penalty}"
+        for penalty in generator_extra_penalties:
+            assert (
+                penalty in extra_penalty_list
+            ), f"Unsupported generator penalty {penalty}"
+
         self.discriminator_extra_penalties = discriminator_extra_penalties
+        self.generator_extra_penalties = generator_extra_penalties
 
         self.n_features = n_features
         self.n_units_latent = n_units_latent
@@ -133,6 +144,7 @@ class GAN(nn.Module):
             seed=seed,
             lr=generator_lr,
             residual=generator_residual,
+            opt_betas=generator_opt_betas,
         ).to(DEVICE)
 
         self.discriminator = MLP(
@@ -149,6 +161,7 @@ class GAN(nn.Module):
             loss=discriminator_loss,
             seed=seed,
             lr=discriminator_lr,
+            opt_betas=discriminator_opt_betas,
         ).to(DEVICE)
 
         # training
@@ -207,18 +220,31 @@ class GAN(nn.Module):
 
     def _train_epoch_generator(
         self,
+        X: torch.Tensor,
         fake_labels_generator: Callable,
         true_labels_generator: Callable,
     ) -> float:
         # Update the G network
         self.generator.optimizer.zero_grad()
 
-        noise = torch.randn(self.batch_size, self.n_units_latent, device=DEVICE)
+        real_X = X.to(DEVICE)
+        batch_size = len(real_X)
+
+        noise = torch.randn(batch_size, self.n_units_latent, device=DEVICE)
         fake = self.generator(noise)
 
         output = self.discriminator(fake).squeeze().float()
         # Calculate G's loss based on this output
         errG = -torch.mean(output)
+        errG -= self._extra_penalties(
+            self.generator_extra_penalties,
+            real_samples=real_X,
+            fake_samples=fake,
+            batch_size=batch_size,
+            fake_labels_generator=fake_labels_generator,
+            true_labels_generator=true_labels_generator,
+        )
+
         # Calculate gradients for G
         errG.backward()
 
@@ -258,30 +284,24 @@ class GAN(nn.Module):
             fake_output = self.discriminator(fake.detach()).squeeze()
 
             # Compute errors. Some fake inputs might be marked as real for privacy guarantees.
-            errD_real = torch.mean(real_labels * real_output) + torch.mean(
-                fake_labels * fake_output
-            )
-            errD_fake = torch.mean((1 - real_labels) * real_output) + torch.mean(
-                (1 - fake_labels) * fake_output
-            )
 
-            errD = -(errD_real) + errD_fake
+            real_real_output = real_output[(real_labels * real_output) != 0]
+            real_fake_output = fake_output[(fake_labels * fake_output) != 0]
+            errD_real = torch.mean(torch.concat((real_real_output, real_fake_output)))
 
-            for penalty in self.discriminator_extra_penalties:
-                if penalty == "gradient_penalty":
-                    errGP = self._loss_gradient_penalty(
-                        real_samples=real_X,
-                        fake_samples=fake,
-                        batch_size=batch_size,
-                        fake_labels_generator=fake_labels_generator,
-                        true_labels_generator=true_labels_generator,
-                    )
-                    errD += errGP
-                elif penalty == "identifiability_penalty":
-                    errD += self._loss_identifiability_penalty(
-                        real_samples=real_X,
-                        fake_samples=fake,
-                    )
+            fake_real_output = real_output[((1 - real_labels) * real_output) != 0]
+            fake_fake_output = fake_output[((1 - fake_labels) * fake_output) != 0]
+            errD_fake = torch.mean(torch.concat((fake_real_output, fake_fake_output)))
+
+            errD = -errD_real + errD_fake
+            errD += self._extra_penalties(
+                self.discriminator_extra_penalties,
+                real_samples=real_X,
+                fake_samples=fake,
+                batch_size=batch_size,
+                fake_labels_generator=fake_labels_generator,
+                true_labels_generator=true_labels_generator,
+            )
 
             errD.backward()
             # Update D
@@ -319,6 +339,7 @@ class GAN(nn.Module):
             )
             G_losses.append(
                 self._train_epoch_generator(
+                    data[0],
                     fake_labels_generator=fake_labels_generator,
                     true_labels_generator=true_labels_generator,
                 )
@@ -357,6 +378,33 @@ class GAN(nn.Module):
             return X.to(DEVICE)
         else:
             return torch.from_numpy(np.asarray(X)).to(DEVICE)
+
+    def _extra_penalties(
+        self,
+        penalties: list,
+        real_samples: torch.tensor,
+        fake_samples: torch.Tensor,
+        batch_size: int,
+        fake_labels_generator: Callable,
+        true_labels_generator: Callable,
+    ) -> torch.Tensor:
+        """Calculates additional penalties for the training"""
+        err: torch.Tensor = 0
+        for penalty in penalties:
+            if penalty == "gradient_penalty":
+                err += self._loss_gradient_penalty(
+                    real_samples=real_samples,
+                    fake_samples=fake_samples,
+                    batch_size=batch_size,
+                    fake_labels_generator=fake_labels_generator,
+                    true_labels_generator=true_labels_generator,
+                )
+            elif penalty == "identifiability_penalty":
+                err += self._loss_identifiability_penalty(
+                    real_samples=real_samples,
+                    fake_samples=fake_samples,
+                )
+        return err
 
     def _loss_gradient_penalty(
         self,

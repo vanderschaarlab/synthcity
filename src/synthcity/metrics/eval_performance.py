@@ -69,7 +69,7 @@ class PerformanceEvaluator(MetricEvaluator):
             y_pred = estimator.predict_proba(X_test)
             score, _ = evaluate_auc(enc_y_test, y_pred)
         except BaseException as e:
-            log.error(f"classifier evaluation failed {e}.")
+            print(f"classifier evaluation failed {e}.")
             score = 0
 
         return score
