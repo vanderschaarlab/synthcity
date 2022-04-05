@@ -451,6 +451,7 @@ class PATEGANPlugin(Plugin):
     @staticmethod
     def hyperparameter_space(**kwargs: Any) -> List[Distribution]:
         return [
+            IntegerDistribution(name="max_iter", low=1, high=15),
             IntegerDistribution(name="generator_n_layers_hidden", low=1, high=4),
             IntegerDistribution(
                 name="generator_n_units_hidden", low=50, high=150, step=50
