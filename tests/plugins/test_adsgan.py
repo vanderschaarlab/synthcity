@@ -97,7 +97,7 @@ def test_eval_performance() -> None:
     X, y = load_iris(return_X_y=True, as_frame=True)
     X["target"] = y
 
-    for retry in range(3):
+    for retry in range(2):
         test_plugin = plugin()
         evaluator = PerformanceEvaluatorXGB()
 
