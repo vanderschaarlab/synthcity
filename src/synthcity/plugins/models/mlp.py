@@ -15,7 +15,9 @@ DEVICE = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
 
 def get_nonlin(name: str) -> nn.Module:
-    if name == "elu":
+    if name == "none":
+        return nn.Identity()
+    elif name == "elu":
         return nn.ELU()
     elif name == "relu":
         return nn.ReLU()
@@ -176,8 +178,9 @@ class MLP(nn.Module):
         nonlin_out: Optional[List[Tuple[str, int]]] = None,
         lr: float = 1e-3,
         weight_decay: float = 1e-3,
+        opt_betas: tuple = (0.9, 0.999),
         n_iter: int = 1000,
-        batch_size: int = 64,
+        batch_size: int = 500,
         n_iter_print: int = 100,
         seed: int = 0,
         patience: int = 10,
@@ -247,8 +250,12 @@ class MLP(nn.Module):
         # optimizer
         self.lr = lr
         self.weight_decay = weight_decay
+        self.opt_betas = opt_betas
         self.optimizer = torch.optim.Adam(
-            self.parameters(), lr=self.lr, weight_decay=self.weight_decay
+            self.parameters(),
+            lr=self.lr,
+            weight_decay=self.weight_decay,
+            betas=self.opt_betas,
         )
 
         # training
@@ -379,7 +386,7 @@ class MLP(nn.Module):
                             break
 
                     if i % self.n_iter_print == 0:
-                        log.info(
+                        log.debug(
                             f"Epoch: {i}, loss: {val_loss}, train_loss: {train_loss}"
                         )
 

@@ -46,7 +46,20 @@ class PerformanceEvaluator(MetricEvaluator):
             1 means perfect predictions.
             0 means only incorrect predictions.
         """
-        encoder = LabelEncoder().fit(y_train)
+        labels = list(y_train) + list(y_test)
+
+        X_test_df = pd.DataFrame(X_test)
+        y_test_df = pd.Series(y_test, index=X_test_df.index)
+        for v in np.unique(labels):
+            if v not in list(y_train):
+                X_test_df = X_test_df[y_test_df != v]
+                y_test_df = y_test_df[y_test_df != v]
+
+        X_test = np.asarray(X_test_df)
+        y_test = np.asarray(y_test_df)
+        labels = list(y_train) + list(y_test)
+
+        encoder = LabelEncoder().fit(labels)
         enc_y_train = encoder.transform(y_train)
         if "n_units_out" in model_args:
             model_args["n_units_out"] = len(np.unique(y_train))
@@ -56,7 +69,7 @@ class PerformanceEvaluator(MetricEvaluator):
             y_pred = estimator.predict_proba(X_test)
             score, _ = evaluate_auc(enc_y_test, y_pred)
         except BaseException as e:
-            log.error(f"classifier evaluation failed {e}")
+            print(f"classifier evaluation failed {e}.")
             score = 0
 
         return score
@@ -97,12 +110,11 @@ class PerformanceEvaluator(MetricEvaluator):
         regression_args: Any,
         X_gt: pd.DataFrame,
         X_syn: pd.DataFrame,
-    ) -> float:
+    ) -> Dict:
         """Train a classifier or regressor on the synthetic data and evaluate the performance on real test data. Returns the average performance discrepancy between training on real data vs on synthetic data.
 
-        Score:
-            close to 0: similar performance
-            1: massive performance degradation
+        Returns:
+            gt and syn performance scores
         """
 
         target_col = X_gt.columns[-1]
@@ -142,7 +154,10 @@ class PerformanceEvaluator(MetricEvaluator):
             real_scores.append(real_score)
             syn_scores.append(synth_score)
 
-        return np.mean(real_scores) - np.mean(syn_scores)
+        return {
+            "gt": float(self.reduction()(real_scores)),
+            "syn": float(self.reduction()(syn_scores)),
+        }
 
 
 class PerformanceEvaluatorXGB(PerformanceEvaluator):
@@ -155,14 +170,14 @@ class PerformanceEvaluatorXGB(PerformanceEvaluator):
 
     @staticmethod
     def name() -> str:
-        return "performance_xgb"
+        return "xgb"
 
     @validate_arguments(config=dict(arbitrary_types_allowed=True))
     def evaluate(
         self,
         X_gt: pd.DataFrame,
         X_syn: pd.DataFrame,
-    ) -> float:
+    ) -> Dict:
 
         return self._evaluate_test_performance(
             XGBClassifier,
@@ -194,14 +209,14 @@ class PerformanceEvaluatorLinear(PerformanceEvaluator):
 
     @staticmethod
     def name() -> str:
-        return "performance_linear"
+        return "linear_model"
 
     @validate_arguments(config=dict(arbitrary_types_allowed=True))
     def evaluate(
         self,
         X_gt: pd.DataFrame,
         X_syn: pd.DataFrame,
-    ) -> float:
+    ) -> Dict:
 
         return self._evaluate_test_performance(
             LogisticRegression, {}, LinearRegression, {}, X_gt, X_syn
@@ -218,14 +233,14 @@ class PerformanceEvaluatorMLP(PerformanceEvaluator):
 
     @staticmethod
     def name() -> str:
-        return "performance_mlp"
+        return "mlp"
 
     @validate_arguments(config=dict(arbitrary_types_allowed=True))
     def evaluate(
         self,
         X_gt: pd.DataFrame,
         X_syn: pd.DataFrame,
-    ) -> float:
+    ) -> Dict:
 
         return self._evaluate_test_performance(
             MLP,

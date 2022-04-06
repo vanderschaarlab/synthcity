@@ -31,9 +31,9 @@ class AttackEvaluator(MetricEvaluator):
         regressor_args: Dict,
         X_gt: pd.DataFrame,
         X_syn: pd.DataFrame,
-    ) -> float:
-        if self._sensitive_columns == []:
-            return 0
+    ) -> Dict:
+        if len(self._sensitive_columns) == 0:
+            return {}
 
         output = []
         for col in self._sensitive_columns:
@@ -68,7 +68,10 @@ class AttackEvaluator(MetricEvaluator):
                 (np.asarray(preds) == np.asarray(test_target)).sum() / (len(preds) + 1)
             )
 
-        return self.reduction()(output)
+        if len(output) == 0:
+            return {}
+
+        return {self._reduction: self.reduction()(output)}
 
 
 class DataLeakageMLP(AttackEvaluator):
@@ -85,7 +88,7 @@ class DataLeakageMLP(AttackEvaluator):
         self,
         X_gt: pd.DataFrame,
         X_syn: pd.DataFrame,
-    ) -> float:
+    ) -> Dict:
         return self._evaluate_leakage(
             MLP,
             {
@@ -118,7 +121,7 @@ class DataLeakageXGB(AttackEvaluator):
         self,
         X_gt: pd.DataFrame,
         X_syn: pd.DataFrame,
-    ) -> float:
+    ) -> Dict:
         return self._evaluate_leakage(
             XGBClassifier,
             {
@@ -146,7 +149,7 @@ class DataLeakageLinear(AttackEvaluator):
         self,
         X_gt: pd.DataFrame,
         X_syn: pd.DataFrame,
-    ) -> float:
+    ) -> Dict:
         return self._evaluate_leakage(
             LogisticRegression,
             {},

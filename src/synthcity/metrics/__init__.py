@@ -6,49 +6,46 @@ import pandas as pd
 from pydantic import validate_arguments
 
 # synthcity relative
-from .attacks import DataLeakageLinear, DataLeakageMLP, DataLeakageXGB
-from .detection import (
+from .eval_detection import (
     SyntheticDetectionGMM,
     SyntheticDetectionMLP,
     SyntheticDetectionXGB,
 )
-from .performance import (
+from .eval_performance import (
     PerformanceEvaluatorLinear,
     PerformanceEvaluatorMLP,
     PerformanceEvaluatorXGB,
 )
-from .privacy import DeltaPresence, kAnonymization, kMap, lDiversity
-from .sanity import (
+from .eval_privacy import DeltaPresence, kAnonymization, kMap, lDiversityDistinct
+from .eval_sanity import (
+    CloseValuesProbability,
     CommonRowsProportion,
     DataMismatchScore,
-    InlierProbability,
+    DistantValuesProbability,
     NearestSyntheticNeighborDistance,
-    OutlierProbability,
 )
-from .scores import ScoreEvaluator
-from .statistical import (
+from .eval_statistical import (
     ChiSquaredTest,
     FeatureCorrelation,
-    InverseCDFDistance,
     InverseKLDivergence,
     JensenShannonDistance,
     KolmogorovSmirnovTest,
     MaximumMeanDiscrepancy,
     WassersteinDistance,
 )
+from .scores import ScoreEvaluator
 
 standard_metrics = [
     # sanity tests
     DataMismatchScore,
     CommonRowsProportion,
     NearestSyntheticNeighborDistance,
-    InlierProbability,
-    OutlierProbability,
+    CloseValuesProbability,
+    DistantValuesProbability,
     # statistical tests
     JensenShannonDistance,
     ChiSquaredTest,
     FeatureCorrelation,
-    InverseCDFDistance,
     InverseKLDivergence,
     KolmogorovSmirnovTest,
     MaximumMeanDiscrepancy,
@@ -61,15 +58,11 @@ standard_metrics = [
     SyntheticDetectionXGB,
     SyntheticDetectionMLP,
     SyntheticDetectionGMM,
-    # attacks
-    DataLeakageMLP,
-    DataLeakageLinear,
-    DataLeakageXGB,
     # privacy tests
     DeltaPresence,
     kAnonymization,
     kMap,
-    lDiversity,
+    lDiversityDistinct,
 ]
 
 
@@ -94,9 +87,7 @@ class Metrics:
                 continue
             if metric.name() not in metrics[metric.type()]:
                 continue
-            key = f"{metric.type()}.{metric.name()}"
             scores.queue(
-                key,
                 metric(
                     sensitive_columns=sensitive_columns,
                     reduction=reduction,

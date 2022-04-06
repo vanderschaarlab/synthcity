@@ -8,12 +8,12 @@ import pytest
 from sklearn.datasets import load_iris
 
 # synthcity absolute
-from synthcity.metrics.sanity import (
+from synthcity.metrics.eval_sanity import (
+    CloseValuesProbability,
     CommonRowsProportion,
     DataMismatchScore,
-    InlierProbability,
+    DistantValuesProbability,
     NearestSyntheticNeighborDistance,
-    OutlierProbability,
 )
 from synthcity.plugins import Plugin, Plugins
 
@@ -23,6 +23,7 @@ def _eval_plugin(cbk: Callable, X: pd.DataFrame, X_syn: pd.DataFrame) -> Tuple:
         X,
         X_syn,
     )
+    print(syn_score)
 
     sz = len(X_syn)
     X_rnd = pd.DataFrame(np.random.randn(sz, len(X.columns)), columns=X.columns)
@@ -49,7 +50,8 @@ def test_evaluate_data_mismatch_score(test_plugin: Plugin) -> None:
         X_gen,
     )
 
-    assert score == 0
+    for key in score:
+        assert score[key] == 0
 
     X_fail = X.head(100)
     X["target"] = "a"
@@ -59,11 +61,12 @@ def test_evaluate_data_mismatch_score(test_plugin: Plugin) -> None:
         X_fail,
     )
 
-    assert score > 0
-    assert score < 1
+    for key in score:
+        assert score[key] > 0
+        assert score[key] < 1
 
     assert evaluator.type() == "sanity"
-    assert evaluator.name() == "data_mismatch_score"
+    assert evaluator.name() == "data_mismatch"
     assert evaluator.direction() == "minimize"
 
 
@@ -78,9 +81,10 @@ def test_common_rows(test_plugin: Plugin) -> None:
     evaluator = CommonRowsProportion()
     syn_score, rnd_score = _eval_plugin(evaluator.evaluate, X, X_gen)
 
-    assert syn_score > 0
-    assert syn_score < 1
-    assert rnd_score == 0
+    for key in syn_score:
+        assert syn_score[key] > 0
+        assert syn_score[key] < 1
+        assert rnd_score[key] == 0
 
     assert evaluator.type() == "sanity"
     assert evaluator.name() == "common_rows_proportion"
@@ -99,12 +103,13 @@ def test_evaluate_avg_distance_nearest_synth_neighbor(test_plugin: Plugin) -> No
 
     syn_score, rnd_score = _eval_plugin(evaluator.evaluate, X, X_gen)
 
-    assert syn_score > 0
-    assert syn_score < 1
+    for key in syn_score:
+        assert syn_score[key] > 0
+        assert syn_score[key] < 1
 
-    assert rnd_score > 0
-    assert rnd_score < 1
-    assert syn_score < rnd_score
+        assert rnd_score[key] > 0
+        assert rnd_score[key] < 1
+        assert syn_score[key] < rnd_score[key]
 
     assert evaluator.type() == "sanity"
     assert evaluator.name() == "nearest_syn_neighbor_distance"
@@ -112,40 +117,42 @@ def test_evaluate_avg_distance_nearest_synth_neighbor(test_plugin: Plugin) -> No
 
 
 @pytest.mark.parametrize("test_plugin", [Plugins().get("dummy_sampler")])
-def test_evaluate_inlier_probability(test_plugin: Plugin) -> None:
+def test_evaluate_close_values(test_plugin: Plugin) -> None:
     X, y = load_iris(return_X_y=True, as_frame=True)
     X["target"] = y
 
     test_plugin.fit(X)
     X_gen = test_plugin.generate(100)
 
-    evaluator = InlierProbability()
+    evaluator = CloseValuesProbability()
     syn_score, rnd_score = _eval_plugin(evaluator.evaluate, X, X_gen)
 
-    assert 0 < syn_score < 1
-    assert 0 < rnd_score < 1
-    assert syn_score > rnd_score
+    for key in syn_score:
+        assert 0 < syn_score[key] < 1
+        assert 0 < rnd_score[key] < 1
+        assert syn_score[key] > rnd_score[key]
 
     assert evaluator.type() == "sanity"
-    assert evaluator.name() == "inlier_probability"
+    assert evaluator.name() == "close_values_probability"
     assert evaluator.direction() == "maximize"
 
 
 @pytest.mark.parametrize("test_plugin", [Plugins().get("dummy_sampler")])
-def test_evaluate_outlier_probability(test_plugin: Plugin) -> None:
+def test_evaluate_distant_values(test_plugin: Plugin) -> None:
     X, y = load_iris(return_X_y=True, as_frame=True)
     X["target"] = y
 
     test_plugin.fit(X)
     X_gen = test_plugin.generate(100)
 
-    evaluator = OutlierProbability()
+    evaluator = DistantValuesProbability()
     syn_score, rnd_score = _eval_plugin(evaluator.evaluate, X, X_gen)
 
-    assert 0 < syn_score < 1
-    assert 0 < rnd_score < 1
-    assert syn_score < rnd_score
+    for key in syn_score:
+        assert 0 < syn_score[key] < 1
+        assert 0 < rnd_score[key] < 1
+        assert syn_score[key] < rnd_score[key]
 
     assert evaluator.type() == "sanity"
-    assert evaluator.name() == "outlier_probability"
+    assert evaluator.name() == "distant_values_probability"
     assert evaluator.direction() == "minimize"

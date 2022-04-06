@@ -1,10 +1,12 @@
 # third party
+import numpy as np
 import pandas as pd
 import pytest
 from helpers import generate_fixtures
 from sklearn.datasets import load_iris
 
 # synthcity absolute
+from synthcity.metrics import PerformanceEvaluatorXGB
 from synthcity.plugins import Plugin
 from synthcity.plugins.core.constraints import Constraints
 from synthcity.plugins.plugin_adsgan import plugin
@@ -29,7 +31,7 @@ def test_plugin_type(test_plugin: Plugin) -> None:
 
 @pytest.mark.parametrize("test_plugin", generate_fixtures(plugin_name, plugin))
 def test_plugin_hyperparams(test_plugin: Plugin) -> None:
-    assert len(test_plugin.hyperparameter_space()) == 13
+    assert len(test_plugin.hyperparameter_space()) == 14
 
 
 @pytest.mark.parametrize("test_plugin", generate_fixtures(plugin_name, plugin))
@@ -39,9 +41,7 @@ def test_plugin_fit(test_plugin: Plugin) -> None:
 
 
 def test_plugin_generate() -> None:
-    test_plugin = plugin(
-        generator_n_layers_hidden=1, generator_n_units_hidden=10, generator_n_iter=10
-    )
+    test_plugin = plugin(generator_n_layers_hidden=1, generator_n_units_hidden=10)
     X = pd.DataFrame(load_iris()["data"])
     test_plugin.fit(X)
 
@@ -55,9 +55,7 @@ def test_plugin_generate() -> None:
 
 
 def test_plugin_generate_constraints() -> None:
-    test_plugin = plugin(
-        generator_n_layers_hidden=1, generator_n_units_hidden=10, generator_n_iter=10
-    )
+    test_plugin = plugin(generator_n_layers_hidden=1, generator_n_units_hidden=10)
     X = pd.DataFrame(load_iris()["data"])
     test_plugin.fit(X)
 
@@ -91,3 +89,21 @@ def test_sample_hyperparams() -> None:
         args = plugin.sample_hyperparameters()
 
         assert plugin(**args) is not None
+
+
+def test_eval_performance() -> None:
+    results = []
+
+    X, y = load_iris(return_X_y=True, as_frame=True)
+    X["target"] = y
+
+    for retry in range(2):
+        test_plugin = plugin()
+        evaluator = PerformanceEvaluatorXGB()
+
+        test_plugin.fit(X)
+        X_syn = test_plugin.generate()
+
+        results.append(evaluator.evaluate(X, X_syn)["syn"])
+
+    assert np.mean(results) > 0.7

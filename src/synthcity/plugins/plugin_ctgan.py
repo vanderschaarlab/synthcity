@@ -43,8 +43,8 @@ class CTGANPlugin(Plugin):
             Number of data samples to process in each step. Must be multiple of <pac>.
         discriminator_steps: int
             Number of discriminator updates to do for each generator update.
-        epochs: int
-            Number of training epochs.
+        n_iter: int
+            Number of training n_iter.
         pac: int
             Number of samples to group together when applying the discriminator.
 
@@ -68,9 +68,9 @@ class CTGANPlugin(Plugin):
         discriminator_n_layers: int = 2,
         discriminator_lr: float = 2e-4,
         discriminator_decay: float = 1e-6,
-        batch_size: int = 100,
+        batch_size: int = 500,
         discriminator_steps: int = 1,
-        epochs: int = 300,
+        n_iter: int = 300,
         pac: int = 10,
         **kwargs: Any
     ) -> None:
@@ -88,7 +88,7 @@ class CTGANPlugin(Plugin):
             discriminator_decay=discriminator_decay,
             batch_size=batch_size,
             discriminator_steps=discriminator_steps,
-            epochs=epochs,
+            epochs=n_iter,
             pac=pac,
             verbose=False,
         )
@@ -113,7 +113,7 @@ class CTGANPlugin(Plugin):
             IntegerDistribution(name="discriminator_n_layers", low=1, high=3),
             IntegerDistribution(name="batch_size", low=100, high=300, step=50),
             IntegerDistribution(name="discriminator_steps", low=1, high=10),
-            IntegerDistribution(name="epochs", low=100, high=500, step=50),
+            IntegerDistribution(name="n_iter", low=100, high=500, step=50),
             CategoricalDistribution(name="generator_lr", choices=[1e-3, 2e-4]),
             CategoricalDistribution(name="discriminator_lr", choices=[1e-3, 2e-4]),
             CategoricalDistribution(name="generator_decay", choices=[1e-3, 1e-6]),

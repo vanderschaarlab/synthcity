@@ -6,11 +6,11 @@ import pytest
 from sklearn.datasets import load_diabetes, load_iris
 
 # synthcity absolute
-from synthcity.metrics.privacy import (
+from synthcity.metrics.eval_privacy import (
     DeltaPresence,
     kAnonymization,
     kMap,
-    lDiversity,
+    lDiversityDistinct,
     select_outliers,
     select_quantiles,
 )
@@ -48,7 +48,7 @@ def test_select_quantiles(test_plugin: Plugin) -> None:
         DeltaPresence,
         kAnonymization,
         kMap,
-        lDiversity,
+        lDiversityDistinct,
     ],
 )
 @pytest.mark.parametrize("test_plugin", [Plugins().get("dummy_sampler")])
@@ -62,6 +62,7 @@ def test_evaluator(evaluator_t: Type, test_plugin: Plugin) -> None:
 
     score = evaluator.evaluate(X, X_gen)
 
-    assert score > 0
+    for submetric in score:
+        assert score[submetric] > 0
 
     assert evaluator.type() == "privacy"

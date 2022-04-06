@@ -38,8 +38,8 @@ class TabularEncoder(TransformerMixin, BaseEstimator):
             weight_threshold (float):
                 Weight threshold for a Gaussian distribution to be kept.
         """
-        self._max_clusters = max_clusters
-        self._weight_threshold = weight_threshold
+        self.max_clusters = max_clusters
+        self.weight_threshold = weight_threshold
 
     @validate_arguments(config=dict(arbitrary_types_allowed=True))
     def _fit_continuous(self, data: pd.DataFrame) -> ColumnTransformInfo:
@@ -55,7 +55,7 @@ class TabularEncoder(TransformerMixin, BaseEstimator):
         """
         column_name = data.columns[0]
         gm = BayesGMMTransformer(
-            max_clusters=self._max_clusters, weight_threshold=self._weight_threshold
+            max_clusters=self.max_clusters, weight_threshold=self.weight_threshold
         )
         gm.fit(data, [column_name])
         num_components = sum(gm.valid_component_indicator)

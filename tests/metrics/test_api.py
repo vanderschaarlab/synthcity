@@ -44,10 +44,8 @@ def test_list() -> None:
     assert set(Metrics.list().keys()) == set(
         [
             "privacy",
-            "statistical.marginal",
-            "statistical.joint",
+            "stats",
             "sanity",
-            "attack",
             "detection",
             "performance",
         ]
@@ -57,11 +55,7 @@ def test_list() -> None:
 @pytest.mark.parametrize(
     "metric_filter",
     [
-        {"sanity": ["data_mismatch_score", "common_rows_proportion"]},
-        {
-            "sanity": ["data_mismatch_score"],
-            "statistical.marginal": ["inverse_kl_divergence"],
-        },
+        {"sanity": ["data_mismatch", "common_rows_proportion"]},
     ],
 )
 def test_metric_filter(metric_filter: dict) -> None:
@@ -80,7 +74,7 @@ def test_metric_filter(metric_filter: dict) -> None:
     )
 
     expected_index = [
-        f"{category}.{metric}"
+        f"{category}.{metric}.score"
         for category in metric_filter
         for metric in metric_filter[category]
     ]

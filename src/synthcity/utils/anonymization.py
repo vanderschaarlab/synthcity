@@ -7,7 +7,7 @@ from pydantic import validate_arguments
 from sklearn.preprocessing import LabelEncoder
 
 # synthcity absolute
-from synthcity.metrics.privacy import kAnonymization
+from synthcity.metrics.eval_privacy import kAnonymization
 
 
 class DatasetAnonymization:

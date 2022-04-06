@@ -51,4 +51,4 @@ def test_benchmark_invalid_metric() -> None:
         sensitive_columns=["sex"],
         metrics={"sanity": ["invalid"]},
     )
-    assert len(score["uniform_sampler"]) == 2
+    assert len(score["uniform_sampler"]) == 0

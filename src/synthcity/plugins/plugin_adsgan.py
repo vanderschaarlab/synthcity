@@ -38,7 +38,7 @@ class AdsGANPlugin(Plugin):
             Number of hidden units in each layer of the Generator
         generator_nonlin: string, default 'tanh'
             Nonlinearity to use in the generator. Can be 'elu', 'relu', 'selu' or 'leaky_relu'.
-        generator_n_iter: int
+        n_iter: int
             Maximum number of iterations in the Generator.
         generator_dropout: float
             Dropout value. If 0, the dropout is not used.
@@ -60,8 +60,8 @@ class AdsGANPlugin(Plugin):
             Batch size
         seed: int
             Seed used
-        clipping_value: int, default 1
-            Gradients clipping value
+        clipping_value: int, default 0
+            Gradients clipping value. Zero disables the feature
         encoder_max_clusters: int
             The max number of clusters to create for continuous columns when encoding
 
@@ -77,41 +77,55 @@ class AdsGANPlugin(Plugin):
     @validate_arguments(config=dict(arbitrary_types_allowed=True))
     def __init__(
         self,
+        n_iter: int = 500,
         generator_n_layers_hidden: int = 2,
         generator_n_units_hidden: int = 100,
         generator_nonlin: str = "tanh",
-        generator_n_iter: int = 100,
         generator_dropout: float = 0,
+        generator_opt_betas: tuple = (0.5, 0.999),
         discriminator_n_layers_hidden: int = 2,
         discriminator_n_units_hidden: int = 100,
         discriminator_nonlin: str = "leaky_relu",
         discriminator_n_iter: int = 1,
         discriminator_dropout: float = 0,
+        discriminator_opt_betas: tuple = (0.5, 0.999),
         lr: float = 1e-3,
         weight_decay: float = 1e-3,
-        batch_size: int = 100,
+        batch_size: int = 500,
         seed: int = 0,
-        clipping_value: int = 1,
-        encoder_max_clusters: int = 10,
+        clipping_value: int = 0,
+        lambda_gradient_penalty: float = 10,
+        lambda_identifiability_penalty: float = 0.1,
+        encoder_max_clusters: int = 5,
+        encoder: Any = None,
         **kwargs: Any
     ) -> None:
         super().__init__(**kwargs)
         self.generator_n_layers_hidden = generator_n_layers_hidden
         self.generator_n_units_hidden = generator_n_units_hidden
         self.generator_nonlin = generator_nonlin
-        self.generator_n_iter = generator_n_iter
+        self.n_iter = n_iter
         self.generator_dropout = generator_dropout
+        self.generator_opt_betas = generator_opt_betas
+        self.generator_extra_penalties = ["identifiability_penalty"]
         self.discriminator_n_layers_hidden = discriminator_n_layers_hidden
         self.discriminator_n_units_hidden = discriminator_n_units_hidden
         self.discriminator_nonlin = discriminator_nonlin
         self.discriminator_n_iter = discriminator_n_iter
         self.discriminator_dropout = discriminator_dropout
+        self.discriminator_extra_penalties = ["gradient_penalty"]
+        self.discriminator_opt_betas = discriminator_opt_betas
+
         self.lr = lr
         self.weight_decay = weight_decay
         self.batch_size = batch_size
         self.seed = seed
         self.clipping_value = clipping_value
+        self.lambda_gradient_penalty = lambda_gradient_penalty
+        self.lambda_identifiability_penalty = lambda_identifiability_penalty
+
         self.encoder_max_clusters = encoder_max_clusters
+        self.encoder = encoder
 
     @staticmethod
     def name() -> str:
@@ -124,18 +138,18 @@ class AdsGANPlugin(Plugin):
     @staticmethod
     def hyperparameter_space(**kwargs: Any) -> List[Distribution]:
         return [
-            IntegerDistribution(name="generator_n_layers_hidden", low=1, high=5),
+            IntegerDistribution(name="generator_n_layers_hidden", low=1, high=4),
             IntegerDistribution(
-                name="generator_n_units_hidden", low=50, high=500, step=50
+                name="generator_n_units_hidden", low=50, high=150, step=50
             ),
             CategoricalDistribution(
                 name="generator_nonlin", choices=["relu", "leaky_relu", "tanh", "elu"]
             ),
-            IntegerDistribution(name="generator_n_iter", low=100, high=500, step=100),
+            IntegerDistribution(name="n_iter", low=100, high=1000, step=100),
             FloatDistribution(name="generator_dropout", low=0, high=0.2),
-            IntegerDistribution(name="discriminator_n_layers_hidden", low=1, high=5),
+            IntegerDistribution(name="discriminator_n_layers_hidden", low=1, high=4),
             IntegerDistribution(
-                name="discriminator_n_units_hidden", low=50, high=500, step=50
+                name="discriminator_n_units_hidden", low=50, high=150, step=50
             ),
             CategoricalDistribution(
                 name="discriminator_nonlin",
@@ -145,7 +159,8 @@ class AdsGANPlugin(Plugin):
             FloatDistribution(name="discriminator_dropout", low=0, high=0.2),
             CategoricalDistribution(name="lr", choices=[1e-3, 2e-4, 1e-4]),
             CategoricalDistribution(name="weight_decay", choices=[1e-3, 1e-4]),
-            CategoricalDistribution(name="batch_size", choices=[64, 128, 256, 512]),
+            CategoricalDistribution(name="batch_size", choices=[100, 200, 500]),
+            IntegerDistribution(name="encoder_max_clusters", low=2, high=20),
         ]
 
     def _fit(self, X: pd.DataFrame, *args: Any, **kwargs: Any) -> "AdsGANPlugin":
@@ -161,10 +176,12 @@ class AdsGANPlugin(Plugin):
             generator_nonlin_out_continuous="tanh",
             generator_lr=self.lr,
             generator_residual=True,
-            generator_n_iter=self.generator_n_iter,
+            generator_n_iter=self.n_iter,
             generator_batch_norm=False,
             generator_dropout=0,
             generator_weight_decay=self.weight_decay,
+            generator_opt_betas=self.generator_opt_betas,
+            generator_extra_penalties=self.generator_extra_penalties,
             discriminator_n_units_hidden=self.discriminator_n_units_hidden,
             discriminator_n_layers_hidden=self.discriminator_n_layers_hidden,
             discriminator_n_iter=self.discriminator_n_iter,
@@ -173,9 +190,13 @@ class AdsGANPlugin(Plugin):
             discriminator_dropout=self.discriminator_dropout,
             discriminator_lr=self.lr,
             discriminator_weight_decay=self.weight_decay,
+            discriminator_opt_betas=self.discriminator_opt_betas,
+            discriminator_extra_penalties=self.discriminator_extra_penalties,
+            encoder=self.encoder,
             clipping_value=self.clipping_value,
+            lambda_gradient_penalty=self.lambda_gradient_penalty,
+            lambda_identifiability_penalty=self.lambda_identifiability_penalty,
             encoder_max_clusters=self.encoder_max_clusters,
-            discriminator_extra_penalties=["identifiability_loss"],
         )
         self.model.fit(X)
 

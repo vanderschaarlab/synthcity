@@ -1,11 +1,12 @@
 # stdlib
 import multiprocessing
 import time
-from typing import Any, Tuple
+from typing import Any, Dict, Tuple
 
 # third party
 import numpy as np
 import pandas as pd
+import torch
 from joblib import Parallel, delayed
 from scipy.stats import iqr
 
@@ -15,27 +16,30 @@ import synthcity.logger as log
 # synthcity relative
 from .core.metric import MetricEvaluator
 
-dispatcher = Parallel(n_jobs=multiprocessing.cpu_count())
+n_jobs = torch.cuda.device_count()
+if n_jobs == 0:
+    n_jobs = multiprocessing.cpu_count()
+
+dispatcher = Parallel(n_jobs=n_jobs)
 
 
 def _safe_evaluate(
-    name: str,
     evaluator: MetricEvaluator,
     *args: Any,
     **kwargs: Any,
-) -> Tuple[str, float, bool, float, str]:
+) -> Tuple[str, Dict, bool, float, str]:
     start = time.time()
-    log.info(f" >> Evaluating metric {name}")
+    log.debug(f" >> Evaluating metric {evaluator.fqdn()}")
     failed = False
     try:
         result = evaluator.evaluate(*args, **kwargs)
     except BaseException:
-        result = 0
+        result = {}
         failed = True
 
     duration = float(time.time() - start)
-    log.debug(f" >> Evaluating metric {name} done. Duration: {duration} s")
-    return name, result, failed, duration, evaluator.direction()
+    log.debug(f" >> Evaluating metric {evaluator.fqdn()} done. Duration: {duration} s")
+    return evaluator.fqdn(), result, failed, duration, evaluator.direction()
 
 
 class ScoreEvaluator:
@@ -53,28 +57,33 @@ class ScoreEvaluator:
                 "durations": [],
                 "direction": direction,
             }
-        self.scores[key]["values"].append(result)
         self.scores[key]["durations"].append(duration)
         self.scores[key]["errors"] += int(failed)
+        self.scores[key]["values"].append(result)
+
+    def add_multiple(
+        self, key: str, results: Dict, failed: int, duration: float, direction: str
+    ) -> None:
+        for subkey in results:
+            self.add(f"{key}.{subkey}", results[subkey], failed, duration, direction)
 
     def queue(
         self,
-        key: str,
         evaluator: MetricEvaluator,
         *args: Any,
         **kwargs: Any,
     ) -> None:
-        self.pending_tasks.append((key, evaluator, args, kwargs))
+        self.pending_tasks.append((evaluator, args, kwargs))
 
     def compute(self) -> None:
         results = dispatcher(
-            delayed(_safe_evaluate)(key, evaluator, *args, **kwargs)
-            for (key, evaluator, args, kwargs) in self.pending_tasks
+            delayed(_safe_evaluate)(evaluator, *args, **kwargs)
+            for (evaluator, args, kwargs) in self.pending_tasks
         )
         self.pending_tasks = []
 
         for key, result, failed, duration, direction in results:
-            self.add(key, result, failed, duration, direction)
+            self.add_multiple(key, result, failed, duration, direction)
 
     def to_dataframe(self) -> pd.DataFrame:
         output_metrics = [
@@ -91,10 +100,10 @@ class ScoreEvaluator:
         ]
         output = pd.DataFrame([], columns=output_metrics)
         for metric in self.scores:
-            values = self.scores[metric]["values"]
             errors = self.scores[metric]["errors"]
             direction = self.scores[metric]["direction"]
             durations = round(np.mean(self.scores[metric]["durations"]), 2)
+            values = self.scores[metric]["values"]
 
             score_min = np.min(values)
             score_max = np.max(values)

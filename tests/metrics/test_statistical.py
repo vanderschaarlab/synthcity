@@ -8,7 +8,7 @@ import pytest
 from sklearn.datasets import load_iris
 
 # synthcity absolute
-from synthcity.metrics.statistical import (
+from synthcity.metrics.eval_statistical import (
     ChiSquaredTest,
     FeatureCorrelation,
     InverseCDFDistance,
@@ -46,12 +46,13 @@ def test_kl_div(test_plugin: Plugin) -> None:
 
     syn_score, rnd_score = _eval_plugin(InverseKLDivergence, X, X_gen)
 
-    assert syn_score > 0
-    assert rnd_score > 0
-    assert syn_score > rnd_score
+    for key in syn_score:
+        assert syn_score[key] > 0
+        assert rnd_score[key] > 0
+        assert syn_score[key] > rnd_score[key]
 
-    assert InverseKLDivergence.name() == "inverse_kl_divergence"
-    assert InverseKLDivergence.type() == "statistical.marginal"
+    assert InverseKLDivergence.name() == "inv_kl_divergence"
+    assert InverseKLDivergence.type() == "stats"
     assert InverseKLDivergence.direction() == "maximize"
 
 
@@ -65,12 +66,13 @@ def test_evaluate_kolmogorov_smirnov_test(test_plugin: Plugin) -> None:
 
     syn_score, rnd_score = _eval_plugin(KolmogorovSmirnovTest, X, X_gen)
 
-    assert syn_score > 0
-    assert rnd_score > 0
-    assert syn_score > rnd_score
+    for key in syn_score:
+        assert syn_score[key] > 0
+        assert rnd_score[key] > 0
+        assert syn_score[key] > rnd_score[key]
 
-    assert KolmogorovSmirnovTest.name() == "kolmogorov_smirnov_test"
-    assert KolmogorovSmirnovTest.type() == "statistical.marginal"
+    assert KolmogorovSmirnovTest.name() == "ks_test"
+    assert KolmogorovSmirnovTest.type() == "stats"
     assert KolmogorovSmirnovTest.direction() == "maximize"
 
 
@@ -84,12 +86,13 @@ def test_evaluate_chi_squared_test(test_plugin: Plugin) -> None:
 
     syn_score, rnd_score = _eval_plugin(ChiSquaredTest, X, X_gen)
 
-    assert syn_score > 0
-    assert rnd_score > 0
-    assert syn_score > rnd_score
+    for key in syn_score:
+        assert syn_score[key] > 0
+        assert rnd_score[key] > 0
+        assert syn_score[key] > rnd_score[key]
 
     assert ChiSquaredTest.name() == "chi_squared_test"
-    assert ChiSquaredTest.type() == "statistical.marginal"
+    assert ChiSquaredTest.type() == "stats"
     assert ChiSquaredTest.direction() == "maximize"
 
 
@@ -104,12 +107,13 @@ def test_evaluate_maximum_mean_discrepancy(kernel: str, test_plugin: Plugin) -> 
 
     syn_score, rnd_score = _eval_plugin(MaximumMeanDiscrepancy, X, X_gen)
 
-    assert syn_score > 0
-    assert rnd_score > 0
-    assert syn_score < rnd_score
+    for key in syn_score:
+        assert syn_score[key] > 0
+        assert rnd_score[key] > 0
+        assert syn_score[key] < rnd_score[key]
 
-    assert MaximumMeanDiscrepancy.name() == "maximum_mean_discrepancy"
-    assert MaximumMeanDiscrepancy.type() == "statistical.joint"
+    assert MaximumMeanDiscrepancy.name() == "max_mean_discrepancy"
+    assert MaximumMeanDiscrepancy.type() == "stats"
     assert MaximumMeanDiscrepancy.direction() == "minimize"
 
 
@@ -123,12 +127,13 @@ def test_evaluate_inv_cdf_function(test_plugin: Plugin) -> None:
 
     syn_score, rnd_score = _eval_plugin(InverseCDFDistance, X, X_gen)
 
-    assert syn_score > 0
-    assert rnd_score > 0
-    assert syn_score < rnd_score
+    for key in syn_score:
+        assert syn_score[key] > 0
+        assert rnd_score[key] > 0
+        assert syn_score[key] < rnd_score[key]
 
-    assert InverseCDFDistance.name() == "inverse_cdf_distance"
-    assert InverseCDFDistance.type() == "statistical.marginal"
+    assert InverseCDFDistance.name() == "inv_cdf_dist"
+    assert InverseCDFDistance.type() == "stats"
     assert InverseCDFDistance.direction() == "minimize"
 
 
@@ -142,12 +147,13 @@ def test_evaluate_avg_jensenshannon_distance(test_plugin: Plugin) -> None:
 
     syn_score, rnd_score = _eval_plugin(JensenShannonDistance, X, X_gen)
 
-    assert syn_score > 0
-    assert rnd_score > 0
-    assert syn_score < rnd_score
+    for key in syn_score:
+        assert syn_score[key] > 0
+        assert rnd_score[key] > 0
+        assert syn_score[key] < rnd_score[key]
 
-    assert JensenShannonDistance.name() == "jensenshannon_distance"
-    assert JensenShannonDistance.type() == "statistical.marginal"
+    assert JensenShannonDistance.name() == "jensenshannon_dist"
+    assert JensenShannonDistance.type() == "stats"
     assert JensenShannonDistance.direction() == "minimize"
 
 
@@ -161,12 +167,13 @@ def test_evaluate_feature_correlation(test_plugin: Plugin) -> None:
 
     syn_score, rnd_score = _eval_plugin(FeatureCorrelation, X, X_gen)
 
-    assert syn_score > 0
-    assert rnd_score > 0
-    assert syn_score < rnd_score
+    for key in syn_score:
+        assert syn_score[key] > 0
+        assert rnd_score[key] > 0
+        assert syn_score[key] < rnd_score[key]
 
-    assert FeatureCorrelation.name() == "feature_correlation"
-    assert FeatureCorrelation.type() == "statistical.joint"
+    assert FeatureCorrelation.name() == "feature_corr"
+    assert FeatureCorrelation.type() == "stats"
     assert FeatureCorrelation.direction() == "minimize"
 
 
@@ -180,10 +187,11 @@ def test_evaluate_wasserstein_distance(test_plugin: Plugin) -> None:
 
     syn_score, rnd_score = _eval_plugin(WassersteinDistance, X, X_gen)
 
-    assert syn_score > 0
-    assert rnd_score > 0
-    assert syn_score < rnd_score
+    for key in syn_score:
+        assert syn_score[key] > 0
+        assert rnd_score[key] > 0
+        assert syn_score[key] < rnd_score[key]
 
-    assert WassersteinDistance.name() == "wasserstein_distance"
-    assert WassersteinDistance.type() == "statistical.joint"
+    assert WassersteinDistance.name() == "wasserstein_dist"
+    assert WassersteinDistance.type() == "stats"
     assert WassersteinDistance.direction() == "minimize"

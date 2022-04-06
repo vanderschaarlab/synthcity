@@ -36,6 +36,8 @@ def test_network_config() -> None:
         seed=77,
         n_iter_min=100,
         clipping_value=1,
+        lambda_gradient_penalty=2,
+        lambda_identifiability_penalty=3,
     )
 
     assert len(net.generator.model) == 4
@@ -44,6 +46,8 @@ def test_network_config() -> None:
     assert net.generator_n_iter == 1001
     assert net.discriminator_n_iter == 1002
     assert net.seed == 77
+    assert net.lambda_gradient_penalty == 2
+    assert net.lambda_identifiability_penalty == 3
 
 
 @pytest.mark.parametrize("nonlin", ["relu", "elu", "leaky_relu"])
@@ -81,7 +85,9 @@ def test_basic_network(
     assert net.discriminator.lr == lr
 
 
-@pytest.mark.parametrize("discriminator_extra_loss", [[], ["identifiability_loss"]])
+@pytest.mark.parametrize(
+    "discriminator_extra_loss", [[], ["gradient_penalty"], ["identifiability_penalty"]]
+)
 def test_gan_classification(discriminator_extra_loss: list) -> None:
     X, _ = load_digits(return_X_y=True)
     X = MinMaxScaler().fit_transform(X)

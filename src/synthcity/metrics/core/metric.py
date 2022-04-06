@@ -1,6 +1,6 @@
 # stdlib
 from abc import ABCMeta, abstractmethod
-from typing import Callable, List
+from typing import Callable, Dict, List
 
 # third party
 import numpy as np
@@ -24,7 +24,7 @@ class MetricEvaluator(metaclass=ABCMeta):
 
     @validate_arguments(config=dict(arbitrary_types_allowed=True))
     @abstractmethod
-    def evaluate(self, X_gt: pd.DataFrame, X_syn: pd.DataFrame) -> float:
+    def evaluate(self, X_gt: pd.DataFrame, X_syn: pd.DataFrame) -> Dict:
         ...
 
     @staticmethod
@@ -40,7 +40,11 @@ class MetricEvaluator(metaclass=ABCMeta):
     @staticmethod
     @abstractmethod
     def name() -> str:
-        raise NotImplementedError()
+        ...
+
+    @classmethod
+    def fqdn(cls) -> str:
+        return f"{cls.type()}.{cls.name()}"
 
     def reduction(self) -> Callable:
         if self._reduction == "mean":

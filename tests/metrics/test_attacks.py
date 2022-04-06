@@ -6,8 +6,40 @@ import pytest
 from sklearn.datasets import load_diabetes
 
 # synthcity absolute
-from synthcity.metrics.attacks import DataLeakageLinear, DataLeakageMLP, DataLeakageXGB
+from synthcity.metrics.eval_attacks import (
+    DataLeakageLinear,
+    DataLeakageMLP,
+    DataLeakageXGB,
+)
 from synthcity.plugins import Plugins
+
+
+@pytest.mark.parametrize("reduction", ["mean", "max", "min"])
+@pytest.mark.parametrize(
+    "evaluator_t",
+    [
+        DataLeakageLinear,
+        DataLeakageXGB,
+        DataLeakageMLP,
+    ],
+)
+def test_reduction(reduction: str, evaluator_t: Type) -> None:
+    X, y = load_diabetes(return_X_y=True, as_frame=True)
+    X["target"] = y
+
+    # Sampler
+    test_plugin = Plugins().get("dummy_sampler")
+    test_plugin.fit(X)
+    X_gen = test_plugin.generate(10)
+
+    evaluator = evaluator_t(reduction=reduction, sensitive_columns=["sex"])
+
+    score = evaluator.evaluate(
+        X,
+        X_gen,
+    )
+
+    assert reduction in score
 
 
 @pytest.mark.parametrize(
@@ -32,7 +64,7 @@ def test_evaluate_sensitive_data_leakage(evaluator_t: Type) -> None:
     score = evaluator.evaluate(
         X,
         X_gen,
-    )
+    )["mean"]
     assert score > 0.5
     assert score < 1
 
@@ -45,7 +77,7 @@ def test_evaluate_sensitive_data_leakage(evaluator_t: Type) -> None:
     score = evaluator.evaluate(
         X,
         X_gen,
-    )
+    )["mean"]
     assert score < 1
 
     assert evaluator.type() == "attack"

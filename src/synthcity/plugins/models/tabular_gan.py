@@ -59,10 +59,16 @@ class TabularGAN(nn.Module):
             Seed used
         n_iter_min: int
             Minimum number of iterations to go through before starting early stopping
-        clipping_value: int, default 1
+        clipping_value: int, default 0
             Gradients clipping value
+        lambda_gradient_penalty: float
+            Lambda weight for the gradient penalty
+        lambda_identifiability_penalty: float
+            Lambda weight for the identifiability loss
         encoder_max_clusters: int
             The max number of clusters to create for continuous columns when encoding
+        encoder:
+            Pre-trained tabular encoder. If None, a new encoder is trained.
     """
 
     @validate_arguments(config=dict(arbitrary_types_allowed=True))
@@ -79,29 +85,40 @@ class TabularGAN(nn.Module):
         generator_batch_norm: bool = False,
         generator_dropout: float = 0,
         generator_loss: Optional[Callable] = None,
-        generator_lr: float = 2e-4,
+        generator_lr: float = 1e-3,
         generator_weight_decay: float = 1e-3,
+        generator_opt_betas: tuple = (0.9, 0.999),
         generator_residual: bool = True,
+        generator_extra_penalties: list = [],  # "gradient_penalty", "identifiability_penalty"
         discriminator_n_layers_hidden: int = 3,
         discriminator_n_units_hidden: int = 300,
         discriminator_nonlin: str = "leaky_relu",
         discriminator_n_iter: int = 1,
         discriminator_batch_norm: bool = False,
-        discriminator_dropout: float = 0.1,
+        discriminator_dropout: float = 0.5,
         discriminator_loss: Optional[Callable] = None,
-        discriminator_lr: float = 2e-4,
+        discriminator_lr: float = 1e-3,
         discriminator_weight_decay: float = 1e-3,
-        discriminator_extra_penalties: list = [],  # "identifiability_loss"
+        discriminator_opt_betas: tuple = (0.9, 0.999),
+        discriminator_extra_penalties: list = [
+            "gradient_penalty"
+        ],  # "identifiability_penalty", "gradient_penalty"
         batch_size: int = 64,
-        n_iter_print: int = 10,
+        n_iter_print: int = 50,
         seed: int = 0,
         n_iter_min: int = 100,
-        clipping_value: int = 1,
+        clipping_value: int = 0,
+        lambda_gradient_penalty: float = 10,
+        lambda_identifiability_penalty: float = 0.1,
         encoder_max_clusters: int = 20,
+        encoder: Any = None,
     ) -> None:
         super(TabularGAN, self).__init__()
         self.columns = X.columns
-        self.encoder = TabularEncoder(max_clusters=encoder_max_clusters).fit(X)
+        if encoder is not None:
+            self.encoder = encoder
+        else:
+            self.encoder = TabularEncoder(max_clusters=encoder_max_clusters).fit(X)
 
         self.model = GAN(
             self.encoder.n_features(),
@@ -121,6 +138,8 @@ class TabularGAN(nn.Module):
             generator_lr=generator_lr,
             generator_residual=generator_residual,
             generator_weight_decay=generator_weight_decay,
+            generator_opt_betas=generator_opt_betas,
+            generator_extra_penalties=generator_extra_penalties,
             discriminator_n_units_hidden=discriminator_n_units_hidden,
             discriminator_n_layers_hidden=discriminator_n_layers_hidden,
             discriminator_n_iter=discriminator_n_iter,
@@ -131,6 +150,9 @@ class TabularGAN(nn.Module):
             discriminator_lr=discriminator_lr,
             discriminator_weight_decay=discriminator_weight_decay,
             discriminator_extra_penalties=discriminator_extra_penalties,
+            discriminator_opt_betas=discriminator_opt_betas,
+            lambda_gradient_penalty=lambda_gradient_penalty,
+            lambda_identifiability_penalty=lambda_identifiability_penalty,
             clipping_value=clipping_value,
             n_iter_print=n_iter_print,
             seed=seed,
@@ -151,8 +173,12 @@ class TabularGAN(nn.Module):
         X: pd.DataFrame,
         fake_labels_generator: Optional[Callable] = None,
         true_labels_generator: Optional[Callable] = None,
+        encoded: bool = False,
     ) -> Any:
-        X_enc = self.encode(X)
+        if encoded:
+            X_enc = X
+        else:
+            X_enc = self.encode(X)
         self.model.fit(
             X_enc,
             fake_labels_generator=fake_labels_generator,

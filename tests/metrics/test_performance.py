@@ -8,7 +8,7 @@ import pytest
 from sklearn.datasets import load_diabetes, load_iris
 
 # synthcity absolute
-from synthcity.metrics.performance import (
+from synthcity.metrics.eval_performance import (
     PerformanceEvaluatorLinear,
     PerformanceEvaluatorMLP,
     PerformanceEvaluatorXGB,
@@ -40,7 +40,11 @@ def test_evaluate_performance_classifier(
         X_gen,
     )
 
-    assert np.abs(good_score) < 1
+    assert "gt" in good_score
+    assert "syn" in good_score
+
+    assert good_score["gt"] > 0
+    assert good_score["syn"] > 0
 
     sz = 100
     X_rnd = pd.DataFrame(np.random.randn(sz, len(X.columns)), columns=X.columns)
@@ -49,8 +53,10 @@ def test_evaluate_performance_classifier(
         X_rnd,
     )
 
-    assert np.abs(good_score) < 1
-    assert score > good_score
+    assert "gt" in score
+    assert "syn" in score
+
+    assert score["syn"] < good_score["syn"]
 
     assert evaluator.type() == "performance"
     assert evaluator.direction() == "maximize"
@@ -80,7 +86,8 @@ def test_evaluate_performance_regression(
         X_gen,
     )
 
-    assert np.abs(good_score) < 1
+    assert "gt" in good_score
+    assert "syn" in good_score
 
     sz = 100
     X_rnd = pd.DataFrame(np.random.randn(sz, len(X.columns)), columns=X.columns)
@@ -89,5 +96,7 @@ def test_evaluate_performance_regression(
         X_rnd,
     )
 
-    assert np.abs(good_score) < 1
-    assert score > good_score
+    assert "gt" in score
+    assert "syn" in score
+
+    assert score["syn"] < good_score["syn"]

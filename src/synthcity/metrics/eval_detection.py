@@ -1,5 +1,5 @@
 # stdlib
-from typing import Any
+from typing import Any, Dict
 
 # third party
 import numpy as np
@@ -44,7 +44,7 @@ class DetectionEvaluator(MetricEvaluator):
         X_gt: pd.DataFrame,
         X_syn: pd.DataFrame,
         **model_args: Any,
-    ) -> float:
+    ) -> Dict:
         X_gt = X_gt.reset_index(drop=True)
         labels_gt = pd.Series([0] * len(X_gt))
 
@@ -72,7 +72,7 @@ class DetectionEvaluator(MetricEvaluator):
             score = roc_auc_score(np.asarray(test_labels), np.asarray(test_pred))
             res.append(score)
 
-        return self.reduction()(res)
+        return {self._reduction: float(self.reduction()(res))}
 
 
 class SyntheticDetectionXGB(DetectionEvaluator):
@@ -91,7 +91,7 @@ class SyntheticDetectionXGB(DetectionEvaluator):
         return "detection_xgb"
 
     @validate_arguments(config=dict(arbitrary_types_allowed=True))
-    def evaluate(self, X_gt: pd.DataFrame, X_syn: pd.DataFrame) -> float:
+    def evaluate(self, X_gt: pd.DataFrame, X_syn: pd.DataFrame) -> Dict:
         model_template = XGBClassifier
         model_args = {
             "n_jobs": 1,
@@ -119,7 +119,7 @@ class SyntheticDetectionMLP(DetectionEvaluator):
         return "detection_mlp"
 
     @validate_arguments(config=dict(arbitrary_types_allowed=True))
-    def evaluate(self, X_gt: pd.DataFrame, X_syn: pd.DataFrame) -> float:
+    def evaluate(self, X_gt: pd.DataFrame, X_syn: pd.DataFrame) -> Dict:
         model_args = {
             "task_type": "classification",
             "n_units_in": X_gt.shape[1],
@@ -153,7 +153,7 @@ class SyntheticDetectionGMM(DetectionEvaluator):
         self,
         X_gt: pd.DataFrame,
         X_syn: pd.DataFrame,
-    ) -> float:
+    ) -> Dict:
 
         scores = []
 
@@ -169,4 +169,4 @@ class SyntheticDetectionGMM(DetectionEvaluator):
         )  # transform scores to [0, 1]
         scores_np = 1 - scores_np  # invert scores - lower is better
 
-        return np.mean(scores_np)
+        return {self._reduction: self.reduction()(scores_np)}
