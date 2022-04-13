@@ -230,7 +230,9 @@ class PATEGAN:
         )
         X_train_enc = self.model.encode(X_train)
 
-        partition_data_no = int(len(X_train_enc) / self.n_teachers)
+        partition_data_no = len(X_train_enc)
+        if self.n_teachers > 0:
+            partition_data_no = int(len(X_train_enc) / self.n_teachers)
 
         # alpha initialize
         self.alpha_dict = np.zeros([self.alpha])
@@ -261,6 +263,9 @@ class PATEGAN:
 
             # 2. Student training
             def fake_labels_generator(X: torch.Tensor) -> torch.Tensor:
+                if self.n_teachers == 0:
+                    return torch.zeros((len(X),))
+
                 X_batch = pd.DataFrame(X.detach().cpu().numpy())
 
                 n0_mb, n1_mb, Y_mb = teachers.pate_lamda(np.asarray(X_batch))
@@ -319,7 +324,7 @@ class PATEGAN:
 
     @validate_arguments(config=dict(arbitrary_types_allowed=True))
     def sample(self, count: int) -> np.ndarray:
-        samples = self.model(count)
+        samples = self.model(count).detach().cpu().numpy()
         return self.model.decode(pd.DataFrame(samples))
 
 
