@@ -37,6 +37,7 @@ from .eval_statistical import (
     JensenShannonDistance,
     KolmogorovSmirnovTest,
     MaximumMeanDiscrepancy,
+    PRDCScore,
     WassersteinDistance,
 )
 from .scores import ScoreEvaluator
@@ -56,6 +57,7 @@ standard_metrics = [
     KolmogorovSmirnovTest,
     MaximumMeanDiscrepancy,
     WassersteinDistance,
+    PRDCScore,
     # performance tests
     PerformanceEvaluatorLinear,
     PerformanceEvaluatorMLP,

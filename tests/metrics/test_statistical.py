@@ -9,6 +9,7 @@ from sklearn.datasets import load_iris
 
 # synthcity absolute
 from synthcity.metrics.eval_statistical import (
+    AlphaPrecision,
     ChiSquaredTest,
     FeatureCorrelation,
     InverseCDFDistance,
@@ -214,5 +215,26 @@ def test_evaluate_prdc(test_plugin: Plugin) -> None:
         assert syn_score[key] > rnd_score[key]
 
     assert PRDCScore.name() == "prdc"
+    assert PRDCScore.type() == "stats"
+    assert PRDCScore.direction() == "maximize"
+
+
+@pytest.mark.parametrize("test_plugin", [Plugins().get("dummy_sampler")])
+def test_evaluate_alpha_precision(test_plugin: Plugin) -> None:
+    X, y = load_iris(return_X_y=True, as_frame=True)
+    X["target"] = y
+
+    test_plugin.fit(X)
+    X_gen = test_plugin.generate(len(X))
+
+    syn_score, rnd_score = _eval_plugin(AlphaPrecision, X, X_gen)
+
+    for key in syn_score:
+        print(key, syn_score, rnd_score)
+        assert syn_score[key] >= 0
+        assert rnd_score[key] >= 0
+        assert syn_score[key] > rnd_score[key]
+
+    assert PRDCScore.name() == "alpha_precision"
     assert PRDCScore.type() == "stats"
     assert PRDCScore.direction() == "maximize"
