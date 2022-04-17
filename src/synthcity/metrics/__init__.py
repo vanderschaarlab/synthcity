@@ -16,7 +16,13 @@ from .eval_performance import (
     PerformanceEvaluatorMLP,
     PerformanceEvaluatorXGB,
 )
-from .eval_privacy import DeltaPresence, kAnonymization, kMap, lDiversityDistinct
+from .eval_privacy import (
+    DeltaPresence,
+    IdentifiabilityScore,
+    kAnonymization,
+    kMap,
+    lDiversityDistinct,
+)
 from .eval_sanity import (
     CloseValuesProbability,
     CommonRowsProportion,
@@ -63,6 +69,7 @@ standard_metrics = [
     kAnonymization,
     kMap,
     lDiversityDistinct,
+    IdentifiabilityScore,
 ]
 
 

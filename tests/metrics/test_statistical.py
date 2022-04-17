@@ -16,6 +16,7 @@ from synthcity.metrics.eval_statistical import (
     JensenShannonDistance,
     KolmogorovSmirnovTest,
     MaximumMeanDiscrepancy,
+    PRDCScore,
     WassersteinDistance,
 )
 from synthcity.plugins import Plugin, Plugins
@@ -195,3 +196,23 @@ def test_evaluate_wasserstein_distance(test_plugin: Plugin) -> None:
     assert WassersteinDistance.name() == "wasserstein_dist"
     assert WassersteinDistance.type() == "stats"
     assert WassersteinDistance.direction() == "minimize"
+
+
+@pytest.mark.parametrize("test_plugin", [Plugins().get("dummy_sampler")])
+def test_evaluate_prdc(test_plugin: Plugin) -> None:
+    X, y = load_iris(return_X_y=True, as_frame=True)
+    X["target"] = y
+
+    test_plugin.fit(X)
+    X_gen = test_plugin.generate(1000)
+
+    syn_score, rnd_score = _eval_plugin(PRDCScore, X, X_gen)
+
+    for key in syn_score:
+        assert syn_score[key] >= 0
+        assert rnd_score[key] >= 0
+        assert syn_score[key] > rnd_score[key]
+
+    assert PRDCScore.name() == "prdc"
+    assert PRDCScore.type() == "stats"
+    assert PRDCScore.direction() == "maximize"
