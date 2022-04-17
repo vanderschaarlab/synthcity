@@ -60,7 +60,7 @@ class Schema(BaseModel):
                     feature_domain[col] = IntegerDistribution(
                         name=col, data=X[col], **dp_args
                     )
-                elif X[col].dtype in ["float", "float64", "double"]:
+                elif X[col].dtype in ["float", "float32", "float64", "double"]:
                     feature_domain[col] = FloatDistribution(
                         name=col, data=X[col], **dp_args
                     )

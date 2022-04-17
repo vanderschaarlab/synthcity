@@ -6,10 +6,11 @@ from typing import Any, Dict
 import numpy as np
 import pandas as pd
 from pydantic import validate_arguments
+from scipy.stats import entropy
 from sklearn.cluster import KMeans
 from sklearn.covariance import EllipticEnvelope
 from sklearn.ensemble import IsolationForest
-from sklearn.neighbors import LocalOutlierFactor
+from sklearn.neighbors import LocalOutlierFactor, NearestNeighbors
 
 # synthcity absolute
 from synthcity.metrics._utils import get_features
@@ -177,6 +178,79 @@ class DeltaPresence(PrivacyEvaluator):
                 values.append(delta)
 
         return {"score": float(np.max(values))}
+
+
+class IdentifiabilityScore(PrivacyEvaluator):
+    """Returns the maximum re-identification probability on the real dataset from the synthetic dataset.
+
+    For each dataset partition, we report the maximum ratio of unique sensitive information between the real dataset and in the synthetic dataset.
+    """
+
+    @staticmethod
+    def name() -> str:
+        return "identifiability_score"
+
+    @staticmethod
+    def direction() -> str:
+        return "minimize"
+
+    @validate_arguments(config=dict(arbitrary_types_allowed=True))
+    def evaluate(self, X_df: pd.DataFrame, X_syn_df: pd.DataFrame) -> Dict:
+        """Compare Wasserstein distance between original data and synthetic data.
+
+        Args:
+            orig_data: original data
+            synth_data: synthetically generated data
+
+        Returns:
+            WD_value: Wasserstein distance
+        """
+
+        X = np.asarray(X_df)
+        X_syn = np.asarray(X_syn_df)
+
+        # Entropy computation
+        def compute_entropy(labels: np.ndarray) -> np.ndarray:
+            value, counts = np.unique(np.round(labels), return_counts=True)
+            return entropy(counts)
+
+        # Parameters
+        no, x_dim = X.shape
+
+        # Weights
+        W = np.zeros(
+            [
+                x_dim,
+            ]
+        )
+
+        for i in range(x_dim):
+            W[i] = compute_entropy(X[:, i])
+
+        # Normalization
+        X_hat = X.copy()
+        X_syn_hat = X_syn.copy()
+
+        eps = 1e-16
+        W = np.ones_like(W)
+
+        for i in range(x_dim):
+            X_hat[:, i] = X[:, i] * 1.0 / (W[i] + eps)
+            X_syn_hat[:, i] = X_syn[:, i] * 1.0 / (W[i] + eps)
+
+        # r_i computation
+        nbrs = NearestNeighbors(n_neighbors=2).fit(X_hat)
+        distance, _ = nbrs.kneighbors(X_hat)
+
+        # hat{r_i} computation
+        nbrs_hat = NearestNeighbors(n_neighbors=1).fit(X_syn_hat)
+        distance_hat, _ = nbrs_hat.kneighbors(X_hat)
+
+        # See which one is bigger
+        R_Diff = distance_hat[:, 0] - distance[:, 1]
+        identifiability_value = np.sum(R_Diff < 0) / float(no)
+
+        return {"score": identifiability_value}
 
 
 @validate_arguments(config=dict(arbitrary_types_allowed=True))
