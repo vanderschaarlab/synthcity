@@ -269,6 +269,11 @@ class PATEGAN:
                 X_batch = pd.DataFrame(X.detach().cpu().numpy())
 
                 n0_mb, n1_mb, Y_mb = teachers.pate_lamda(np.asarray(X_batch))
+                if np.sum(Y_mb) >= len(X) / 2:
+                    log.debug(
+                        f"[pategan it {it}] Teachers high error-rate: n0 = {len(X) - np.sum(Y_mb)}, n1 = {np.sum(Y_mb)}"
+                    )
+                    return torch.zeros((len(X),))
 
                 for j in range(len(X_batch)):
                     n0, n1 = n0_mb[j], n1_mb[j]
@@ -287,7 +292,6 @@ class PATEGAN:
                 X_train_enc, fake_labels_generator=fake_labels_generator, encoded=True
             )
 
-            log.debug(f"[pategan it {it}] 3. eps update")
             # epsilon_hat computation
             curr_list: List = []
             for lidx in range(self.alpha):
@@ -297,6 +301,7 @@ class PATEGAN:
                 curr_list = curr_list + [temp_alpha]
 
             epsilon_hat = np.min(curr_list)
+            log.debug(f"[pategan it {it}] 3. eps update {epsilon_hat}")
 
         log.debug("pategan training done")
         return self
@@ -389,7 +394,7 @@ class PATEGANPlugin(Plugin):
     def __init__(
         self,
         # GAN
-        max_iter: int = 10,
+        n_iter: int = 10,
         generator_n_iter: int = 10,
         generator_n_layers_hidden: int = 2,
         generator_n_units_hidden: int = 100,
@@ -409,7 +414,7 @@ class PATEGANPlugin(Plugin):
         # Privacy
         n_teachers: int = 10,
         teacher_template: str = "xgboost",
-        epsilon: float = 1.0,
+        epsilon: float = 10.0,
         delta: float = 0.00001,
         lamda: float = 1,
         alpha: int = 20,
@@ -419,7 +424,7 @@ class PATEGANPlugin(Plugin):
         super().__init__(**kwargs)
 
         self.model = PATEGAN(
-            max_iter=max_iter,
+            max_iter=n_iter,
             generator_n_layers_hidden=generator_n_layers_hidden,
             generator_n_units_hidden=generator_n_units_hidden,
             generator_nonlin=generator_nonlin,
@@ -456,7 +461,7 @@ class PATEGANPlugin(Plugin):
     @staticmethod
     def hyperparameter_space(**kwargs: Any) -> List[Distribution]:
         return [
-            IntegerDistribution(name="max_iter", low=1, high=15),
+            IntegerDistribution(name="n_iter", low=1, high=15),
             IntegerDistribution(name="generator_n_layers_hidden", low=1, high=4),
             IntegerDistribution(
                 name="generator_n_units_hidden", low=50, high=150, step=50
@@ -485,7 +490,6 @@ class PATEGANPlugin(Plugin):
             ),
             IntegerDistribution(name="encoder_max_clusters", low=2, high=20),
             FloatDistribution(name="lamda", low=1, high=10),
-            FloatDistribution(name="epsilon", low=0.1, high=4),
             CategoricalDistribution(
                 name="delta", choices=[1e-3, 1e-4, 1e-5, 1e-6, 1e-7, 1e-8]
             ),
