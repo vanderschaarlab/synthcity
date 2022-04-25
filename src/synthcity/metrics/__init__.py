@@ -16,7 +16,13 @@ from .eval_performance import (
     PerformanceEvaluatorMLP,
     PerformanceEvaluatorXGB,
 )
-from .eval_privacy import DeltaPresence, kAnonymization, kMap, lDiversityDistinct
+from .eval_privacy import (
+    DeltaPresence,
+    IdentifiabilityScore,
+    kAnonymization,
+    kMap,
+    lDiversityDistinct,
+)
 from .eval_sanity import (
     CloseValuesProbability,
     CommonRowsProportion,
@@ -31,6 +37,7 @@ from .eval_statistical import (
     JensenShannonDistance,
     KolmogorovSmirnovTest,
     MaximumMeanDiscrepancy,
+    PRDCScore,
     WassersteinDistance,
 )
 from .scores import ScoreEvaluator
@@ -50,6 +57,7 @@ standard_metrics = [
     KolmogorovSmirnovTest,
     MaximumMeanDiscrepancy,
     WassersteinDistance,
+    PRDCScore,
     # performance tests
     PerformanceEvaluatorLinear,
     PerformanceEvaluatorMLP,
@@ -63,6 +71,7 @@ standard_metrics = [
     kAnonymization,
     kMap,
     lDiversityDistinct,
+    IdentifiabilityScore,
 ]
 
 

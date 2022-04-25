@@ -8,6 +8,7 @@ from sklearn.datasets import load_diabetes, load_iris
 # synthcity absolute
 from synthcity.metrics.eval_privacy import (
     DeltaPresence,
+    IdentifiabilityScore,
     kAnonymization,
     kMap,
     lDiversityDistinct,
@@ -49,6 +50,7 @@ def test_select_quantiles(test_plugin: Plugin) -> None:
         kAnonymization,
         kMap,
         lDiversityDistinct,
+        IdentifiabilityScore,
     ],
 )
 @pytest.mark.parametrize("test_plugin", [Plugins().get("dummy_sampler")])
