@@ -23,7 +23,7 @@ def expected_time_error(T: pd.Series, E: pd.Series, pred_T: pd.Series) -> float:
         err += censored_err
 
     if (E == 1).sum() > 0:
-        obs_error = mean_squared_error(T[E == 1], pred_T[E == 1])
+        obs_error = np.sqrt(mean_squared_error(T[E == 1], pred_T[E == 1]))
         err += obs_error
 
     return err
@@ -42,9 +42,9 @@ def ranking_error(T: pd.Series, E: pd.Series, pred_T: pd.Series) -> float:
 
     rank_errs = 0
     for idx in range(len(T)):
-        actual_order = (T[E == 1] < T[idx]).astype(int)
-        pred_order = (pred_T[E == 1] < pred_T[idx]).astype(int)
-        rank_errs += mean_squared_error(pred_order, actual_order)
+        actual_order = (T[E == 1] < T.iloc[idx]).astype(int)
+        pred_order = (pred_T[E == 1] < pred_T.iloc[idx]).astype(int)
+        rank_errs += np.sqrt(mean_squared_error(pred_order, actual_order))
 
     return rank_errs
 
@@ -55,4 +55,4 @@ def rush_error(T: pd.Series, pred_T: pd.Series) -> float:
     Returns the proportions of time-to-event predictions before the actual observed/censoring time.
     """
 
-    return (T <= pred_T).sum() / len(pred_T)
+    return (T > pred_T).sum() / len(pred_T)

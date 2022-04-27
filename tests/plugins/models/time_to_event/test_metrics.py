@@ -45,4 +45,4 @@ def test_rush_error() -> None:
 
     T = pd.Series([10, 12])
     pred_T = pd.Series([11, 13], index=T.index)
-    assert rush_error(T, pred_T) == 1
+    assert rush_error(T, pred_T) == 0

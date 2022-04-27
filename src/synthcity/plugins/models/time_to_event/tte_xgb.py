@@ -89,7 +89,7 @@ class XGBTimeToEvent(TimeToEventPlugin):
         "Predict time-to-event"
 
         surv_f = self.model.predict(X)
-        return pd.Series(trapz(surv_f.values, surv_f.T.index), index=surv_f.index)
+        return pd.Series(trapz(surv_f.values, surv_f.T.index), index=X.index)
 
     @staticmethod
     def name() -> str:

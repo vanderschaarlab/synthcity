@@ -28,9 +28,9 @@ DEVICE = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 class DeephitTimeToEvent(TimeToEventPlugin):
     def __init__(
         self,
-        num_durations: int = 1000,
+        num_durations: int = 50,
         batch_size: int = 100,
-        epochs: int = 5000,
+        epochs: int = 2000,
         lr: float = 1e-2,
         dim_hidden: int = 300,
         alpha: float = 0.28,
@@ -117,7 +117,7 @@ class DeephitTimeToEvent(TimeToEventPlugin):
 
         surv_f = self.model.predict_surv_df(X_np)
 
-        return pd.Series(trapz(surv_f.T.values, surv_f.index), index=surv_f.T.index)
+        return pd.Series(trapz(surv_f.T.values, surv_f.index), index=X.index)
 
     @staticmethod
     def name() -> str:

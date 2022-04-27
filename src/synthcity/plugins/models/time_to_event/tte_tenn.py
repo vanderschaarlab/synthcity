@@ -33,10 +33,10 @@ class TimeEventNN(nn.Module):
     def __init__(
         self,
         n_features: int,
-        n_layers_hidden: int = 5,
+        n_layers_hidden: int = 3,
         n_units_hidden: int = 300,
         nonlin: str = "leaky_relu",
-        n_iter: int = 5000,
+        n_iter: int = 2000,
         batch_norm: bool = False,
         dropout: float = 0,
         lr: float = 1e-3,
@@ -49,9 +49,8 @@ class TimeEventNN(nn.Module):
         n_iter_min: int = 100,
         clipping_value: int = 0,
         lambda_calibration: int = 10,
-        lambda_regression_nc: int = 10,
-        lambda_regression_c: int = 1,
-        verbose: bool = False,
+        lambda_regression_nc: int = 50,
+        lambda_regression_c: int = 100,
     ) -> None:
         super(TimeEventNN, self).__init__()
 
@@ -59,7 +58,6 @@ class TimeEventNN(nn.Module):
         self.lambda_calibration = lambda_calibration
         self.lambda_regression_nc = lambda_regression_nc
         self.lambda_regression_c = lambda_regression_c
-        self.verbose = verbose
 
         self.generator = MLP(
             task_type="regression",
@@ -193,7 +191,7 @@ class TimeEventNN(nn.Module):
         for i in range(self.n_iter):
             g_loss = self._train_epoch(loader)
             # Check how the generator is doing by saving G's output on fixed_noise
-            if self.verbose and (i + 1) % self.n_iter_print == 0:
+            if (i + 1) % self.n_iter_print == 0:
                 log.info(f"[{i}/{self.n_iter}]\tLoss_G: {g_loss}")
 
         return self
@@ -209,7 +207,10 @@ class TimeEventNN(nn.Module):
         X: torch.Tensor,
         T: torch.Tensor,
     ) -> torch.Tensor:
-        # Evaluate noncensored error
+        # Evaluate calibration error
+        if len(X) == 0:
+            return 0
+
         X = X.to(DEVICE)
         T = T.to(DEVICE)
         pred_T = self.generator(X).squeeze()
@@ -230,6 +231,9 @@ class TimeEventNN(nn.Module):
         T: torch.Tensor,
     ) -> torch.Tensor:
         # Evaluate censored error
+        if len(X) == 0:
+            return 0
+
         X = X.to(DEVICE)
         T = T.to(DEVICE)
         fake_T = self.generator(X)
@@ -247,6 +251,9 @@ class TimeEventNN(nn.Module):
         T: torch.Tensor,
     ) -> torch.Tensor:
         # Evaluate noncensored error
+        if len(X) == 0:
+            return 0
+
         X = X.to(DEVICE)
         T = T.to(DEVICE)
         fake_T = self.generator(X)

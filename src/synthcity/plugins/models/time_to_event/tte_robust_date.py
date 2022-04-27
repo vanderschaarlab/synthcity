@@ -23,15 +23,14 @@ from synthcity.plugins.core.distribution import (
     IntegerDistribution,
 )
 from synthcity.plugins.models.mlp import MLP
+from synthcity.plugins.models.time_to_event._base import TimeToEventPlugin
+from synthcity.plugins.models.time_to_event.samplers import ImbalancedDatasetSampler
 from synthcity.utils.reproducibility import enable_reproducible_results
-
-# synthcity relative
-from ._base import TimeToEventPlugin
 
 DEVICE = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
 
-class TimeEventGAN(nn.Module):
+class RobustTimeEventGAN(nn.Module):
     @validate_arguments(config=dict(arbitrary_types_allowed=True))
     def __init__(
         self,
@@ -41,7 +40,7 @@ class TimeEventGAN(nn.Module):
         generator_n_units_hidden: int = 250,
         generator_nonlin: str = "leaky_relu",
         generator_nonlin_out: Optional[List[Tuple[str, int]]] = None,
-        generator_n_iter: int = 2000,
+        generator_n_iter: int = 1000,
         generator_batch_norm: bool = False,
         generator_dropout: float = 0,
         generator_loss: Optional[Callable] = None,
@@ -64,11 +63,18 @@ class TimeEventGAN(nn.Module):
         seed: int = 0,
         n_iter_min: int = 100,
         clipping_value: int = 0,
+        lambda_calibration: int = 10,
+        lambda_regression_nc: int = 50,
+        lambda_regression_c: int = 100,
     ) -> None:
-        super(TimeEventGAN, self).__init__()
+        super(RobustTimeEventGAN, self).__init__()
 
         self.n_features = n_features
         self.n_units_latent = n_units_latent
+
+        self.lambda_calibration = lambda_calibration
+        self.lambda_regression_nc = lambda_regression_nc
+        self.lambda_regression_c = lambda_regression_c
 
         self.generator = MLP(
             task_type="regression",
@@ -121,7 +127,7 @@ class TimeEventGAN(nn.Module):
         X: np.ndarray,
         T: np.ndarray,
         E: np.ndarray,
-    ) -> "TimeEventGAN":
+    ) -> "RobustTimeEventGAN":
         Xt = self._check_tensor(X)
         Tt = self._check_tensor(T)
         Et = self._check_tensor(E)
@@ -151,8 +157,11 @@ class TimeEventGAN(nn.Module):
         self, X: torch.Tensor, T: torch.Tensor, E: torch.Tensor
     ) -> DataLoader:
         dataset = TensorDataset(X, T, E)
+        sampler = ImbalancedDatasetSampler(X, T, E)
 
-        return DataLoader(dataset, batch_size=self.batch_size, pin_memory=False)
+        return DataLoader(
+            dataset, batch_size=self.batch_size, sampler=sampler, pin_memory=False
+        )
 
     def _generate_training_outputs(
         self, X: torch.Tensor, T: torch.Tensor, E: torch.Tensor
@@ -184,39 +193,20 @@ class TimeEventGAN(nn.Module):
         # Update the G network
         self.generator.optimizer.zero_grad()
 
-        # Evaluate noncensored error
-        Xnc = X[E == 1].to(DEVICE)
+        # Calculate G's loss based on noncensored data
+        errG_nc = self._loss_regression_nc(
+            X[E == 1], T[E == 1]
+        ) + self._loss_calibration(X[E == 1], T[E == 1])
 
-        batch_size = len(Xnc)
-
-        noise = torch.randn(batch_size, self.n_units_latent, device=DEVICE)
-        noncen_input = torch.hstack([Xnc, noise])
-        fake_T = self.generator(noncen_input)
-
-        errG_noncen = nn.MSELoss()(
-            fake_T, T
-        )  # fake_T should be == T for noncensored data
-
-        # Evaluate censored error
-        Xc = X[E == 0].to(DEVICE)
-        Tc = T[E == 0].to(DEVICE)
-
-        batch_size = len(Xc)
-
-        noise = torch.randn(batch_size, self.n_units_latent, device=DEVICE)
-        cen_input = torch.hstack([Xc, noise])
-        fake_T = self.generator(cen_input)
-
-        errG_cen = torch.mean(
-            nn.ReLU()(Tc - fake_T)
-        )  # fake_T should be >= T for censored data
+        # Calculate G's loss based on censored data
+        errG_c = self._loss_regression_c(X[E == 0], T[E == 0])
 
         # Discriminator loss
         _, real_output, _, fake_output = self._generate_training_outputs(X, T, E)
 
         errG_discr = torch.mean(real_output) - torch.mean(fake_output)
         # Calculate G's loss based on this output
-        errG = errG_noncen + errG_cen + errG_discr
+        errG = errG_nc + errG_c + errG_discr
 
         assert errG.isnan().sum() == 0
 
@@ -298,7 +288,7 @@ class TimeEventGAN(nn.Module):
         X: torch.Tensor,
         T: torch.Tensor,
         E: torch.Tensor,
-    ) -> "TimeEventGAN":
+    ) -> "RobustTimeEventGAN":
         X = self._check_tensor(X).float()
         T = self._check_tensor(T).float()
         E = self._check_tensor(E).long()
@@ -323,8 +313,82 @@ class TimeEventGAN(nn.Module):
         else:
             return torch.from_numpy(np.asarray(X)).to(DEVICE)
 
+    def _loss_calibration(
+        self,
+        X: torch.Tensor,
+        T: torch.Tensor,
+    ) -> torch.Tensor:
+        # Evaluate calibration error
+        X = X.to(DEVICE)
+        T = T.to(DEVICE)
 
-class DATETimeToEvent(TimeToEventPlugin):
+        if len(X) == 0:
+            return 0
+
+        batch_size = len(X)
+        noise = torch.randn(batch_size, self.n_units_latent, device=DEVICE)
+        cen_input = torch.hstack([X, noise])
+        pred_T = self.generator(cen_input)
+
+        def _inner_dist(arr: torch.Tensor) -> torch.Tensor:
+            lhs = arr.view(-1, 1).repeat(1, len(arr))
+
+            return lhs - lhs.T
+
+        inner_T_dist = _inner_dist(T)
+        inner_pred_T_dist = _inner_dist(pred_T)
+
+        return self.lambda_calibration * nn.MSELoss()(inner_T_dist, inner_pred_T_dist)
+
+    def _loss_regression_c(
+        self,
+        X: torch.Tensor,
+        T: torch.Tensor,
+    ) -> torch.Tensor:
+        # Evaluate censored error
+        X = X.to(DEVICE)
+        T = T.to(DEVICE)
+
+        if len(X) == 0:
+            return 0
+
+        batch_size = len(X)
+        noise = torch.randn(batch_size, self.n_units_latent, device=DEVICE)
+        cen_input = torch.hstack([X, noise])
+        fake_T = self.generator(cen_input).squeeze()
+
+        errG_cen = torch.mean(
+            nn.ReLU()(T - fake_T)
+        )  # fake_T should be >= T for censored data
+
+        # Calculate G's loss based on this output
+        return self.lambda_regression_c * errG_cen
+
+    def _loss_regression_nc(
+        self,
+        X: torch.Tensor,
+        T: torch.Tensor,
+    ) -> torch.Tensor:
+        # Evaluate noncensored error
+        X = X.to(DEVICE)
+        T = T.to(DEVICE)
+
+        if len(X) == 0:
+            return 0
+
+        batch_size = len(X)
+        noise = torch.randn(batch_size, self.n_units_latent, device=DEVICE)
+        ncen_input = torch.hstack([X, noise])
+        fake_T = self.generator(ncen_input).squeeze()
+
+        errG_noncen = nn.MSELoss()(
+            fake_T, T
+        )  # fake_T should be == T for noncensored data
+
+        return self.lambda_regression_nc * errG_noncen
+
+
+class RobustDATETimeToEvent(TimeToEventPlugin):
     def __init__(self, **kwargs: Any) -> None:
         super().__init__()
 
@@ -334,7 +398,7 @@ class DATETimeToEvent(TimeToEventPlugin):
     def fit(self, X: pd.DataFrame, T: pd.Series, Y: pd.Series) -> "TimeToEventPlugin":
         "Training logic"
 
-        self.model = TimeEventGAN(
+        self.model = RobustTimeEventGAN(
             n_features=X.shape[1], n_units_latent=X.shape[1], **self.kwargs
         )
 
@@ -361,7 +425,7 @@ class DATETimeToEvent(TimeToEventPlugin):
 
     @staticmethod
     def name() -> str:
-        return "date"
+        return "robust_date"
 
     @staticmethod
     def hyperparameter_space(**kwargs: Any) -> List[Distribution]:
@@ -395,4 +459,13 @@ class DATETimeToEvent(TimeToEventPlugin):
                 name="discriminator_lr", choices=[1e-2, 1e-3, 1e-4]
             ),
             CategoricalDistribution(name="batch_size", choices=[100, 250, 500, 1000]),
+            CategoricalDistribution(
+                name="lambda_calibration", choices=[1, 10, 50, 100]
+            ),
+            CategoricalDistribution(
+                name="lambda_regression_nc", choices=[1, 10, 50, 100]
+            ),
+            CategoricalDistribution(
+                name="lambda_regression_c", choices=[1, 10, 50, 100]
+            ),
         ]
