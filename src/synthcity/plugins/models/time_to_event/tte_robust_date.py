@@ -1,6 +1,5 @@
 """
-PyTorch implementation for "Adversarial Time-to-Event Modeling"
-Paper: https://arxiv.org/pdf/1804.03184.pdf
+GAN version of TENN
 """
 # stdlib
 from typing import Any, Callable, List, Optional, Tuple

@@ -1,3 +1,6 @@
+"""
+TENN: time-to-event prediction using NNs and calibration losses.
+"""
 # stdlib
 from typing import Any, List
 
