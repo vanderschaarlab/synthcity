@@ -173,7 +173,7 @@ class TimeEventGAN(nn.Module):
 
         fake_output = self.discriminator(fake_features_time.detach()).squeeze()
 
-        return true_features_time, true_output, fake_features_time, fake_output
+        return true_output, fake_output
 
     def _train_epoch_generator(
         self,
@@ -212,9 +212,15 @@ class TimeEventGAN(nn.Module):
         )  # fake_T should be >= T for censored data
 
         # Discriminator loss
-        _, real_output, _, fake_output = self._generate_training_outputs(X, T, E)
+        real_output, fake_output = self._generate_training_outputs(X, T, E)
 
-        errG_discr = torch.mean(real_output) - torch.mean(fake_output)
+        errG_discr = 0
+        if len(real_output) > 0:
+            errG_discr += torch.mean(real_output)
+
+        if len(fake_output) > 0:
+            errG_discr -= torch.mean(fake_output)
+
         # Calculate G's loss based on this output
         errG = errG_noncen + errG_cen + errG_discr
 
@@ -246,16 +252,17 @@ class TimeEventGAN(nn.Module):
             self.discriminator.zero_grad()
 
             (
-                true_features_time,
                 true_output,
-                fake_features_time,
                 fake_output,
             ) = self._generate_training_outputs(X, T, E)
 
             act = nn.Sigmoid()
-            errD = -torch.mean(torch.log(act(true_output))) - torch.mean(
-                torch.log(1 - act(fake_output))
-            )
+            errD: torch.Tensor = 0
+            if len(true_output) > 0:
+                errD -= torch.mean(torch.log(act(true_output)))
+
+            if len(fake_output) > 0:
+                errD -= torch.mean(torch.log(1 - act(fake_output)))
 
             assert errD.isnan().sum() == 0
             errD.backward()
@@ -374,21 +381,16 @@ class DATETimeToEvent(TimeToEventPlugin):
                 name="generator_nonlin", choices=["relu", "leaky_relu"]
             ),
             IntegerDistribution(
-                name="generator_n_iter", low=1000, high=5000, step=1000
+                name="generator_n_iter", low=1000, high=3000, step=1000
             ),
-            CategoricalDistribution(name="generator_batch_norm", choices=[False, True]),
             FloatDistribution(name="generator_dropout", low=0, high=0.2),
             CategoricalDistribution(name="generator_lr", choices=[1e-2, 1e-3, 1e-4]),
-            CategoricalDistribution(name="generator_residual", choices=[True, False]),
             IntegerDistribution(name="discriminator_n_layers_hidden", low=1, high=5),
             IntegerDistribution(
                 name="discriminator_n_units_hidden", low=100, high=500, step=50
             ),
             CategoricalDistribution(
                 name="discriminator_nonlin", choices=["relu", "leaky_relu"]
-            ),
-            CategoricalDistribution(
-                name="discriminator_batch_norm", choices=[False, True]
             ),
             FloatDistribution(name="discriminator_dropout", low=0, high=0.2),
             CategoricalDistribution(

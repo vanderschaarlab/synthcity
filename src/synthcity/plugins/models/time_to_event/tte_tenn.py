@@ -36,7 +36,7 @@ class TimeEventNN(nn.Module):
     def __init__(
         self,
         n_features: int,
-        n_layers_hidden: int = 3,
+        n_layers_hidden: int = 2,
         n_units_hidden: int = 300,
         nonlin: str = "leaky_relu",
         n_iter: int = 2000,
@@ -51,9 +51,9 @@ class TimeEventNN(nn.Module):
         seed: int = 0,
         n_iter_min: int = 100,
         clipping_value: int = 0,
-        lambda_calibration: int = 10,
-        lambda_regression_nc: int = 50,
-        lambda_regression_c: int = 100,
+        lambda_calibration: float = 1,
+        lambda_regression_nc: float = 1,
+        lambda_regression_c: float = 1,
     ) -> None:
         super(TimeEventNN, self).__init__()
 
@@ -313,22 +313,25 @@ class TENNTimeToEvent(TimeToEventPlugin):
     @staticmethod
     def hyperparameter_space(**kwargs: Any) -> List[Distribution]:
         return [
-            IntegerDistribution(name="n_layers_hidden", low=1, high=5),
-            IntegerDistribution(name="n_units_hidden", low=100, high=500, step=50),
+            IntegerDistribution(name="n_layers_hidden", low=1, high=4),
+            IntegerDistribution(name="n_units_hidden", low=100, high=300, step=50),
             CategoricalDistribution(name="nonlin", choices=["relu", "leaky_relu"]),
-            IntegerDistribution(name="n_iter", low=1000, high=5000, step=1000),
-            CategoricalDistribution(name="batch_norm", choices=[False, True]),
+            IntegerDistribution(name="n_iter", low=100, high=3000, step=100),
             FloatDistribution(name="dropout", low=0, high=0.2),
             CategoricalDistribution(name="lr", choices=[1e-2, 1e-3, 1e-4]),
-            CategoricalDistribution(name="residual", choices=[True, False]),
-            CategoricalDistribution(name="batch_size", choices=[100, 250, 500, 1000]),
-            CategoricalDistribution(
-                name="lambda_calibration", choices=[1, 10, 50, 100]
+            FloatDistribution(
+                name="lambda_calibration",
+                low=0,
+                high=1,
             ),
-            CategoricalDistribution(
-                name="lambda_regression_nc", choices=[1, 10, 50, 100]
+            FloatDistribution(
+                name="lambda_regression_nc",
+                low=0,
+                high=1,
             ),
-            CategoricalDistribution(
-                name="lambda_regression_c", choices=[1, 10, 50, 100]
+            FloatDistribution(
+                name="lambda_regression_c",
+                low=0,
+                high=1,
             ),
         ]

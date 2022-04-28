@@ -39,7 +39,7 @@ class RobustTimeEventGAN(nn.Module):
         generator_n_units_hidden: int = 250,
         generator_nonlin: str = "leaky_relu",
         generator_nonlin_out: Optional[List[Tuple[str, int]]] = None,
-        generator_n_iter: int = 1000,
+        generator_n_iter: int = 3000,
         generator_batch_norm: bool = False,
         generator_dropout: float = 0,
         generator_loss: Optional[Callable] = None,
@@ -62,9 +62,9 @@ class RobustTimeEventGAN(nn.Module):
         seed: int = 0,
         n_iter_min: int = 100,
         clipping_value: int = 0,
-        lambda_calibration: int = 10,
-        lambda_regression_nc: int = 50,
-        lambda_regression_c: int = 100,
+        lambda_calibration: float = 1,
+        lambda_regression_nc: float = 1,
+        lambda_regression_c: float = 1,
     ) -> None:
         super(RobustTimeEventGAN, self).__init__()
 
@@ -168,8 +168,8 @@ class RobustTimeEventGAN(nn.Module):
         # Train with non-censored true batch
         Xnc = X[E == 1].to(DEVICE)
         Tnc = T[E == 1].to(DEVICE)
-        true_features_time = torch.hstack([Xnc, Tnc.reshape(-1, 1)])
 
+        true_features_time = torch.hstack([Xnc, Tnc.reshape(-1, 1)])
         true_output = self.discriminator(true_features_time).squeeze().float()
 
         # Train with fake batch
@@ -178,10 +178,9 @@ class RobustTimeEventGAN(nn.Module):
         fake_T = self.generator(noise)
 
         fake_features_time = torch.hstack([X, fake_T.reshape(-1, 1)])
-
         fake_output = self.discriminator(fake_features_time.detach()).squeeze()
 
-        return true_features_time, true_output, fake_features_time, fake_output
+        return true_output, fake_output
 
     def _train_epoch_generator(
         self,
@@ -201,9 +200,15 @@ class RobustTimeEventGAN(nn.Module):
         errG_c = self._loss_regression_c(X[E == 0], T[E == 0])
 
         # Discriminator loss
-        _, real_output, _, fake_output = self._generate_training_outputs(X, T, E)
+        real_output, fake_output = self._generate_training_outputs(X, T, E)
 
-        errG_discr = torch.mean(real_output) - torch.mean(fake_output)
+        errG_discr = 0
+        if len(real_output) > 0:
+            errG_discr += torch.mean(real_output)
+
+        if len(fake_output) > 0:
+            errG_discr -= torch.mean(fake_output)
+
         # Calculate G's loss based on this output
         errG = errG_nc + errG_c + errG_discr
 
@@ -235,16 +240,18 @@ class RobustTimeEventGAN(nn.Module):
             self.discriminator.zero_grad()
 
             (
-                true_features_time,
                 true_output,
-                fake_features_time,
                 fake_output,
             ) = self._generate_training_outputs(X, T, E)
 
             act = nn.Sigmoid()
-            errD = -torch.mean(torch.log(act(true_output))) - torch.mean(
-                torch.log(1 - act(fake_output))
-            )
+
+            errD: torch.Tensor = 0
+            if len(true_output) > 0:
+                errD -= torch.mean(torch.log(act(true_output)))
+
+            if len(fake_output) > 0:
+                errD -= torch.mean(torch.log(1 - act(fake_output)))
 
             assert errD.isnan().sum() == 0
             errD.backward()
@@ -437,12 +444,10 @@ class RobustDATETimeToEvent(TimeToEventPlugin):
                 name="generator_nonlin", choices=["relu", "leaky_relu"]
             ),
             IntegerDistribution(
-                name="generator_n_iter", low=1000, high=5000, step=1000
+                name="generator_n_iter", low=1000, high=3000, step=1000
             ),
-            CategoricalDistribution(name="generator_batch_norm", choices=[False, True]),
             FloatDistribution(name="generator_dropout", low=0, high=0.2),
             CategoricalDistribution(name="generator_lr", choices=[1e-2, 1e-3, 1e-4]),
-            CategoricalDistribution(name="generator_residual", choices=[True, False]),
             IntegerDistribution(name="discriminator_n_layers_hidden", low=1, high=5),
             IntegerDistribution(
                 name="discriminator_n_units_hidden", low=100, high=500, step=50
@@ -450,21 +455,24 @@ class RobustDATETimeToEvent(TimeToEventPlugin):
             CategoricalDistribution(
                 name="discriminator_nonlin", choices=["relu", "leaky_relu"]
             ),
-            CategoricalDistribution(
-                name="discriminator_batch_norm", choices=[False, True]
-            ),
             FloatDistribution(name="discriminator_dropout", low=0, high=0.2),
             CategoricalDistribution(
                 name="discriminator_lr", choices=[1e-2, 1e-3, 1e-4]
             ),
             CategoricalDistribution(name="batch_size", choices=[100, 250, 500, 1000]),
-            CategoricalDistribution(
-                name="lambda_calibration", choices=[1, 10, 50, 100]
+            FloatDistribution(
+                name="lambda_calibration",
+                low=0,
+                high=1,
             ),
-            CategoricalDistribution(
-                name="lambda_regression_nc", choices=[1, 10, 50, 100]
+            FloatDistribution(
+                name="lambda_regression_nc",
+                low=0,
+                high=1,
             ),
-            CategoricalDistribution(
-                name="lambda_regression_c", choices=[1, 10, 50, 100]
+            FloatDistribution(
+                name="lambda_regression_c",
+                low=0,
+                high=1,
             ),
         ]

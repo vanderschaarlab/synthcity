@@ -16,7 +16,7 @@ def test_hyperparams() -> None:
 
     params = model.sample_hyperparameters()
 
-    assert len(params.keys()) == 15
+    assert len(params.keys()) == 12
 
 
 def test_train_prediction() -> None:
