@@ -110,6 +110,7 @@ class GAN(nn.Module):
         clipping_value: int = 0,
         lambda_gradient_penalty: float = 10,
         lambda_identifiability_penalty: float = 0.1,
+        dataloader_sampler: Optional[Callable] = None,
     ) -> None:
         super(GAN, self).__init__()
 
@@ -186,6 +187,7 @@ class GAN(nn.Module):
 
         self.fake_labels_generator = gen_fake_labels
         self.true_labels_generator = gen_true_labels
+        self.dataloader_sampler = dataloader_sampler
 
     def fit(
         self,
@@ -216,7 +218,12 @@ class GAN(nn.Module):
 
     def dataloader(self, X: torch.Tensor) -> DataLoader:
         dataset = TensorDataset(X)
-        return DataLoader(dataset, batch_size=self.batch_size, pin_memory=False)
+        return DataLoader(
+            dataset,
+            batch_size=self.batch_size,
+            sampler=self.dataloader_sampler,
+            pin_memory=False,
+        )
 
     def _train_epoch_generator(
         self,

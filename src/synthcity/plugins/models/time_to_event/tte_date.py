@@ -186,15 +186,16 @@ class TimeEventGAN(nn.Module):
 
         # Evaluate noncensored error
         Xnc = X[E == 1].to(DEVICE)
+        Tnc = T[E == 1].to(DEVICE)
 
         batch_size = len(Xnc)
 
         noise = torch.randn(batch_size, self.n_units_latent, device=DEVICE)
         noncen_input = torch.hstack([Xnc, noise])
-        fake_T = self.generator(noncen_input)
+        fake_T = self.generator(noncen_input).squeeze()
 
         errG_noncen = nn.MSELoss()(
-            fake_T, T
+            fake_T, Tnc
         )  # fake_T should be == T for noncensored data
 
         # Evaluate censored error

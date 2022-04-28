@@ -28,7 +28,7 @@ DEVICE = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 class DeephitTimeToEvent(TimeToEventPlugin):
     def __init__(
         self,
-        num_durations: int = 50,
+        num_durations: int = 500,
         batch_size: int = 100,
         epochs: int = 2000,
         lr: float = 1e-2,

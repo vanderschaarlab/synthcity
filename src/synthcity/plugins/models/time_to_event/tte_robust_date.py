@@ -156,7 +156,7 @@ class RobustTimeEventGAN(nn.Module):
         self, X: torch.Tensor, T: torch.Tensor, E: torch.Tensor
     ) -> DataLoader:
         dataset = TensorDataset(X, T, E)
-        sampler = ImbalancedDatasetSampler(X, T, E)
+        sampler = ImbalancedDatasetSampler(E)
 
         return DataLoader(
             dataset, batch_size=self.batch_size, sampler=sampler, pin_memory=False

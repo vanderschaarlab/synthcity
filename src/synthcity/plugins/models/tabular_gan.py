@@ -112,6 +112,7 @@ class TabularGAN(nn.Module):
         lambda_identifiability_penalty: float = 0.1,
         encoder_max_clusters: int = 20,
         encoder: Any = None,
+        dataloader_sampler: Optional[Callable] = None,
     ) -> None:
         super(TabularGAN, self).__init__()
         self.columns = X.columns
@@ -157,6 +158,7 @@ class TabularGAN(nn.Module):
             n_iter_print=n_iter_print,
             seed=seed,
             n_iter_min=n_iter_min,
+            dataloader_sampler=dataloader_sampler,
         )
 
     @validate_arguments(config=dict(arbitrary_types_allowed=True))

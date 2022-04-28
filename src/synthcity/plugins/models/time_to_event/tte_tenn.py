@@ -122,7 +122,7 @@ class TimeEventNN(nn.Module):
         self, X: torch.Tensor, T: torch.Tensor, E: torch.Tensor
     ) -> DataLoader:
         dataset = TensorDataset(X, T, E)
-        sampler = ImbalancedDatasetSampler(X, T, E)
+        sampler = ImbalancedDatasetSampler(E)
 
         return DataLoader(
             dataset, batch_size=self.batch_size, sampler=sampler, pin_memory=False
@@ -211,7 +211,7 @@ class TimeEventNN(nn.Module):
         T: torch.Tensor,
     ) -> torch.Tensor:
         # Evaluate calibration error
-        if len(X) == 0:
+        if len(X) <= 1:
             return 0
 
         X = X.to(DEVICE)
@@ -259,7 +259,7 @@ class TimeEventNN(nn.Module):
 
         X = X.to(DEVICE)
         T = T.to(DEVICE)
-        fake_T = self.generator(X)
+        fake_T = self.generator(X).squeeze()
 
         errG_noncen = nn.MSELoss()(
             fake_T, T
