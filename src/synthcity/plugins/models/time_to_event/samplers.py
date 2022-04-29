@@ -1,16 +1,18 @@
 # stdlib
-from typing import Generator
+from typing import Generator, List
 
 # third party
 import pandas as pd
 import torch
 import torch.utils.data
+from pydantic import validate_arguments
 
 
 class ImbalancedDatasetSampler(torch.utils.data.sampler.Sampler):
     """Samples elements randomly from a given list of indices for imbalanced dataset"""
 
-    def __init__(self, labels: torch.Tensor) -> None:
+    @validate_arguments(config=dict(arbitrary_types_allowed=True))
+    def __init__(self, labels: List) -> None:
         # if indices is not provided, all elements in the dataset will be considered
         self.indices = list(range(len(labels)))
 
@@ -19,7 +21,7 @@ class ImbalancedDatasetSampler(torch.utils.data.sampler.Sampler):
 
         # distribution of classes in the dataset
         df = pd.DataFrame()
-        df["label"] = labels.cpu().numpy()
+        df["label"] = labels
         df.index = self.indices
         df = df.sort_index()
 

@@ -216,10 +216,10 @@ class TimeEventGAN(nn.Module):
         real_output, fake_output = self._generate_training_outputs(X, T, E)
 
         errG_discr = 0
-        if len(real_output) > 0:
+        if real_output.dim() > 0 and len(real_output) > 0:
             errG_discr += torch.mean(real_output)
 
-        if len(fake_output) > 0:
+        if fake_output.dim() > 0 and len(fake_output) > 0:
             errG_discr -= torch.mean(fake_output)
 
         # Calculate G's loss based on this output
@@ -259,10 +259,10 @@ class TimeEventGAN(nn.Module):
 
             act = nn.Sigmoid()
             errD: torch.Tensor = 0
-            if len(true_output) > 0:
+            if true_output.dim() > 0 and len(true_output) > 0:
                 errD -= torch.mean(torch.log(act(true_output)))
 
-            if len(fake_output) > 0:
+            if fake_output.dim() > 0 and len(fake_output) > 0:
                 errD -= torch.mean(torch.log(1 - act(fake_output)))
 
             assert errD.isnan().sum() == 0

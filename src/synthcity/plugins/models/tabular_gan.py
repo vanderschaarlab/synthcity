@@ -5,7 +5,6 @@ from typing import Any, Callable, Optional
 import pandas as pd
 import torch
 from pydantic import validate_arguments
-from torch import nn
 
 # synthcity relative
 from .gan import GAN
@@ -14,7 +13,7 @@ from .tabular_encoder import TabularEncoder
 DEVICE = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
 
-class TabularGAN(nn.Module):
+class TabularGAN(torch.nn.Module):
     """
     Tabular GAN implementation.
 
@@ -77,13 +76,13 @@ class TabularGAN(nn.Module):
         X: pd.DataFrame,
         n_units_latent: int,
         generator_n_layers_hidden: int = 2,
-        generator_n_units_hidden: int = 250,
+        generator_n_units_hidden: int = 150,
         generator_nonlin: str = "leaky_relu",
         generator_nonlin_out_discrete: str = "softmax",
         generator_nonlin_out_continuous: str = "tanh",
-        generator_n_iter: int = 500,
+        generator_n_iter: int = 1000,
         generator_batch_norm: bool = False,
-        generator_dropout: float = 0,
+        generator_dropout: float = 0.01,
         generator_loss: Optional[Callable] = None,
         generator_lr: float = 1e-3,
         generator_weight_decay: float = 1e-3,
@@ -95,7 +94,7 @@ class TabularGAN(nn.Module):
         discriminator_nonlin: str = "leaky_relu",
         discriminator_n_iter: int = 1,
         discriminator_batch_norm: bool = False,
-        discriminator_dropout: float = 0.5,
+        discriminator_dropout: float = 0.1,
         discriminator_loss: Optional[Callable] = None,
         discriminator_lr: float = 1e-3,
         discriminator_weight_decay: float = 1e-3,
@@ -112,7 +111,7 @@ class TabularGAN(nn.Module):
         lambda_identifiability_penalty: float = 0.1,
         encoder_max_clusters: int = 20,
         encoder: Any = None,
-        dataloader_sampler: Optional[Callable] = None,
+        dataloader_sampler: Optional[torch.utils.data.sampler.Sampler] = None,
     ) -> None:
         super(TabularGAN, self).__init__()
         self.columns = X.columns

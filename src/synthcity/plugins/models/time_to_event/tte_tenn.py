@@ -52,6 +52,7 @@ class TimeEventNN(nn.Module):
         n_iter_min: int = 100,
         clipping_value: int = 0,
         lambda_calibration: float = 1,
+        lambda_ordering: float = 1,
         lambda_regression_nc: float = 1,
         lambda_regression_c: float = 1,
     ) -> None:
@@ -59,6 +60,7 @@ class TimeEventNN(nn.Module):
 
         self.n_features = n_features
         self.lambda_calibration = lambda_calibration
+        self.lambda_ordering = lambda_ordering
         self.lambda_regression_nc = lambda_regression_nc
         self.lambda_regression_c = lambda_regression_c
 
@@ -122,7 +124,7 @@ class TimeEventNN(nn.Module):
         self, X: torch.Tensor, T: torch.Tensor, E: torch.Tensor
     ) -> DataLoader:
         dataset = TensorDataset(X, T, E)
-        sampler = ImbalancedDatasetSampler(E)
+        sampler = ImbalancedDatasetSampler(E.cpu().numpy().tolist())
 
         return DataLoader(
             dataset, batch_size=self.batch_size, sampler=sampler, pin_memory=False
@@ -145,8 +147,11 @@ class TimeEventNN(nn.Module):
         # Calculate G's loss based on censored data
         errG_c = self._loss_regression_c(X[E == 0], T[E == 0])
 
+        # Calculate ordering loss
+        errG_order = self._loss_ordering(X, T, E)
+
         # Calculate total loss
-        errG = errG_nc + errG_c
+        errG = errG_nc + errG_c + errG_order
 
         # Calculate gradients for G
         errG.backward()
@@ -214,8 +219,6 @@ class TimeEventNN(nn.Module):
         if len(X) <= 1:
             return 0
 
-        X = X.to(DEVICE)
-        T = T.to(DEVICE)
         pred_T = self.generator(X).squeeze()
 
         def _inner_dist(arr: torch.Tensor) -> torch.Tensor:
@@ -228,6 +231,31 @@ class TimeEventNN(nn.Module):
 
         return self.lambda_calibration * nn.MSELoss()(inner_T_dist, inner_pred_T_dist)
 
+    def _loss_ordering(
+        self,
+        X: torch.Tensor,
+        T: torch.Tensor,
+        E: torch.Tensor,
+    ) -> torch.Tensor:
+        # Evaluate calibration error
+        if len(X) <= 1:
+            return 0
+
+        pred_T = self.generator(X).squeeze()
+
+        def _inner_dist(arr: torch.Tensor) -> torch.Tensor:
+            arr_event = arr[E == 1]
+            lhs = arr.view(-1, 1).repeat(1, len(arr_event))
+
+            return nn.ReLU()(
+                lhs - arr_event
+            )  # we only want the points after each event, not before
+
+        inner_T_dist = _inner_dist(T)
+        inner_pred_T_dist = _inner_dist(pred_T)
+
+        return self.lambda_ordering * nn.MSELoss()(inner_pred_T_dist, inner_T_dist)
+
     def _loss_regression_c(
         self,
         X: torch.Tensor,
@@ -237,8 +265,6 @@ class TimeEventNN(nn.Module):
         if len(X) == 0:
             return 0
 
-        X = X.to(DEVICE)
-        T = T.to(DEVICE)
         fake_T = self.generator(X)
 
         errG_cen = torch.mean(
@@ -257,8 +283,6 @@ class TimeEventNN(nn.Module):
         if len(X) == 0:
             return 0
 
-        X = X.to(DEVICE)
-        T = T.to(DEVICE)
         fake_T = self.generator(X).squeeze()
 
         errG_noncen = nn.MSELoss()(
@@ -331,6 +355,11 @@ class TENNTimeToEvent(TimeToEventPlugin):
             ),
             FloatDistribution(
                 name="lambda_regression_c",
+                low=0,
+                high=1,
+            ),
+            FloatDistribution(
+                name="lambda_ordering",
                 low=0,
                 high=1,
             ),

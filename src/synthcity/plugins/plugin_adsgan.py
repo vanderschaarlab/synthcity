@@ -8,13 +8,14 @@ IEEE Journal of Biomedical and Health Informatics (JBHI), 2019.
 Paper link: https://ieeexplore.ieee.org/document/9034117
 """
 # stdlib
-from typing import Any, List
+from typing import Any, List, Optional
 
 # third party
 import pandas as pd
 
 # Necessary packages
 from pydantic import validate_arguments
+from torch.utils.data import sampler
 
 # synthcity absolute
 from synthcity.plugins.core.distribution import (
@@ -77,9 +78,9 @@ class AdsGANPlugin(Plugin):
     @validate_arguments(config=dict(arbitrary_types_allowed=True))
     def __init__(
         self,
-        n_iter: int = 500,
+        n_iter: int = 1000,
         generator_n_layers_hidden: int = 2,
-        generator_n_units_hidden: int = 100,
+        generator_n_units_hidden: int = 1250,
         generator_nonlin: str = "tanh",
         generator_dropout: float = 0,
         generator_opt_betas: tuple = (0.5, 0.999),
@@ -98,6 +99,7 @@ class AdsGANPlugin(Plugin):
         lambda_identifiability_penalty: float = 0.1,
         encoder_max_clusters: int = 5,
         encoder: Any = None,
+        dataloader_sampler: Optional[sampler.Sampler] = None,
         **kwargs: Any
     ) -> None:
         super().__init__(**kwargs)
@@ -126,6 +128,7 @@ class AdsGANPlugin(Plugin):
 
         self.encoder_max_clusters = encoder_max_clusters
         self.encoder = encoder
+        self.dataloader_sampler = dataloader_sampler
 
     @staticmethod
     def name() -> str:
@@ -197,6 +200,7 @@ class AdsGANPlugin(Plugin):
             lambda_gradient_penalty=self.lambda_gradient_penalty,
             lambda_identifiability_penalty=self.lambda_identifiability_penalty,
             encoder_max_clusters=self.encoder_max_clusters,
+            dataloader_sampler=self.dataloader_sampler,
         )
         self.model.fit(X)
 

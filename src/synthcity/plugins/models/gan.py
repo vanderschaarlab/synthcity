@@ -6,7 +6,7 @@ import numpy as np
 import torch
 from pydantic import validate_arguments
 from torch import nn
-from torch.utils.data import DataLoader, TensorDataset
+from torch.utils.data import DataLoader, TensorDataset, sampler
 
 # synthcity absolute
 import synthcity.logger as log
@@ -110,7 +110,7 @@ class GAN(nn.Module):
         clipping_value: int = 0,
         lambda_gradient_penalty: float = 10,
         lambda_identifiability_penalty: float = 0.1,
-        dataloader_sampler: Optional[Callable] = None,
+        dataloader_sampler: Optional[sampler.Sampler] = None,
     ) -> None:
         super(GAN, self).__init__()
 
