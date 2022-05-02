@@ -11,8 +11,8 @@ def test_encoder_sanity() -> None:
     X, _ = load_digits(return_X_y=True, as_frame=True)
     net = TabularEncoder(max_clusters=4, weight_threshold=0.1)
 
-    assert net._max_clusters == 4
-    assert net._weight_threshold == 0.1
+    assert net.max_clusters == 4
+    assert net.weight_threshold == 0.1
 
 
 @pytest.mark.parametrize("max_clusters", [4, 10])
