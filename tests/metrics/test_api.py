@@ -94,3 +94,27 @@ def test_metric_filter(metric_filter: dict) -> None:
             "direction",
         ]
     )
+
+
+@pytest.mark.parametrize(
+    "target",
+    [
+        None,
+        "target",
+        "sepal width (cm)",
+    ],
+)
+def test_custom_label(target: str) -> None:
+    model = Plugins().get("marginal_distributions")
+
+    X, y = load_iris(return_X_y=True, as_frame=True)
+    X["target"] = y
+
+    model.fit(X)
+    X_gen = model.generate(100)
+
+    out = Metrics.evaluate(
+        X, X_gen, target_column=target, metrics={"performance": "linear_model"}
+    )
+
+    assert "performance.linear_model.syn" in out.index
