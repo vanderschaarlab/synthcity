@@ -1,6 +1,6 @@
 # third party
 import pytest
-from sklearn.datasets import load_diabetes
+from sklearn.datasets import load_diabetes, load_iris
 
 # synthcity absolute
 from synthcity.benchmark import Benchmarks
@@ -52,3 +52,22 @@ def test_benchmark_invalid_metric() -> None:
         metrics={"sanity": ["invalid"]},
     )
     assert len(score["uniform_sampler"]) == 0
+
+
+def test_benchmark_custom_target() -> None:
+    X, y = load_iris(return_X_y=True, as_frame=True)
+    X["target"] = y
+
+    Benchmarks.evaluate(
+        [
+            "uniform_sampler",
+        ],
+        X,
+        sensitive_columns=["sex"],
+        target_column="sepal width (cm)",
+        metrics={
+            "performance": [
+                "linear_model",
+            ]
+        },
+    )

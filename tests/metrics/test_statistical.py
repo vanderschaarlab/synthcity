@@ -228,13 +228,11 @@ def test_evaluate_alpha_precision(test_plugin: Plugin) -> None:
     X_gen = test_plugin.generate(len(X))
 
     syn_score, rnd_score = _eval_plugin(AlphaPrecision, X, X_gen)
+    print(syn_score, rnd_score)
 
-    for key in syn_score:
-        print(key, syn_score, rnd_score)
-        assert syn_score[key] >= 0
-        assert rnd_score[key] >= 0
-        assert syn_score[key] > rnd_score[key]
+    assert syn_score["delta_precision_alpha"] > rnd_score["delta_precision_alpha"]
+    assert syn_score["authenticity"] < rnd_score["authenticity"]
 
-    assert PRDCScore.name() == "alpha_precision"
-    assert PRDCScore.type() == "stats"
-    assert PRDCScore.direction() == "maximize"
+    assert AlphaPrecision.name() == "alpha_precision"
+    assert AlphaPrecision.type() == "stats"
+    assert AlphaPrecision.direction() == "maximize"

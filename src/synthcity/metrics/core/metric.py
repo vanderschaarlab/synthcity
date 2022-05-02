@@ -1,6 +1,6 @@
 # stdlib
 from abc import ABCMeta, abstractmethod
-from typing import Callable, Dict, List
+from typing import Callable, Dict, List, Optional
 
 # third party
 import numpy as np
@@ -17,10 +17,12 @@ class MetricEvaluator(metaclass=ABCMeta):
         sensitive_columns: List[str] = [],
         reduction: str = "mean",
         n_histogram_bins: int = 10,
+        target_column: Optional[str] = None,
     ) -> None:
         self._sensitive_columns = sensitive_columns
         self._reduction = reduction
         self._n_histogram_bins = n_histogram_bins
+        self._target_column = target_column
 
     @validate_arguments(config=dict(arbitrary_types_allowed=True))
     @abstractmethod
