@@ -1,5 +1,5 @@
 # stdlib
-from typing import Type
+from typing import Optional, Type
 
 # third party
 import numpy as np
@@ -29,6 +29,7 @@ def test_evaluate_performance_classifier(
     test_plugin: Plugin, evaluator_t: Type
 ) -> None:
     X, y = load_iris(return_X_y=True, as_frame=True)
+    print(X.columns)
     X["target"] = y
 
     test_plugin.fit(X)
@@ -100,3 +101,43 @@ def test_evaluate_performance_regression(
     assert "syn" in score
 
     assert score["syn"] < good_score["syn"]
+
+
+@pytest.mark.parametrize("test_plugin", [Plugins().get("marginal_distributions")])
+@pytest.mark.parametrize(
+    "evaluator_t",
+    [
+        PerformanceEvaluatorLinear,
+        PerformanceEvaluatorXGB,
+    ],
+)
+@pytest.mark.parametrize("target", [None, "target", "sepal width (cm)"])
+def test_evaluate_performance_custom_labels(
+    test_plugin: Plugin, evaluator_t: Type, target: Optional[str]
+) -> None:
+    X, y = load_iris(return_X_y=True, as_frame=True)
+    X["target"] = y
+
+    test_plugin.fit(X)
+    X_gen = test_plugin.generate(100)
+
+    evaluator = evaluator_t(target_column=target)
+
+    assert evaluator._target_column == target
+
+    good_score = evaluator.evaluate(
+        X,
+        X_gen,
+    )
+
+    assert "gt" in good_score
+    assert "syn" in good_score
+
+    # Test fail
+
+    evaluator = evaluator_t(target_column="invalid_col")
+    with pytest.raises(ValueError):
+        evaluator.evaluate(
+            X,
+            X_gen,
+        )

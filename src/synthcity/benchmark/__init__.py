@@ -23,10 +23,33 @@ class Benchmarks:
         sensitive_columns: List[str] = [],
         metrics: Optional[Dict] = None,
         repeats: int = 3,
+        target_column: Optional[str] = None,
         synthetic_size: Optional[int] = None,
         synthetic_constraints: Optional[Constraints] = None,
         plugin_kwargs: Dict = {},
     ) -> pd.DataFrame:
+        """Benchmark the performance of several algorithms.
+
+        Args:
+            plugins:
+                The list of algorithms to evaluate
+            X:
+                The baseline dataset to learn
+            sensitive_columns:
+                Optional list of sensitive columns, used for the privacy metrics.
+            metrics:
+                List of metrics to test. By default, all metrics are evaluated.
+            repeats:
+                Number of test repeats
+            target_columns:
+                The name of the column to use as target for benchmarking the performance metrics. By default, it uses the last column in the dataframe.
+            synthetic_size: int
+                The size of the synthetic dataset. By default, it is len(X).
+            synthetic_constraints:
+                Optional constraints on the synthetic data. By default, it inherits the constraints from X.
+            plugin_kwargs:
+                Optional kwargs for each algorithm. Example {"adsgan": {"n_iter": 10}},
+        """
         out = {}
         for plugin in plugins:
             log.info(f"Benchmarking plugin : {plugin}")
@@ -56,6 +79,7 @@ class Benchmarks:
                     X_syn,
                     sensitive_columns=sensitive_columns,
                     metrics=metrics,
+                    target_column=target_column,
                 )
 
                 mean_score = evaluation["mean"].to_dict()

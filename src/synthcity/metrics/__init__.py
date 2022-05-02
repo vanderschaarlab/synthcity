@@ -85,6 +85,7 @@ class Metrics:
         reduction: str = "mean",
         n_histogram_bins: int = 10,
         metrics: Optional[Dict] = None,
+        target_column: Optional[str] = None,
     ) -> pd.DataFrame:
         if metrics is None:
             metrics = Metrics.list()
@@ -101,6 +102,7 @@ class Metrics:
                     sensitive_columns=sensitive_columns,
                     reduction=reduction,
                     n_histogram_bins=n_histogram_bins,
+                    target_column=target_column,
                 ),
                 X_gt,
                 X_syn,

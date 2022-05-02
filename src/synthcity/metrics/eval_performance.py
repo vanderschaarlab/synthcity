@@ -59,6 +59,9 @@ class PerformanceEvaluator(MetricEvaluator):
         y_test = np.asarray(y_test_df)
         labels = list(y_train) + list(y_test)
 
+        if len(y_test) == 0:
+            return 0
+
         encoder = LabelEncoder().fit(labels)
         enc_y_train = encoder.transform(y_train)
         if "n_units_out" in model_args:
@@ -117,8 +120,15 @@ class PerformanceEvaluator(MetricEvaluator):
             gt and syn performance scores
         """
 
-        target_col = X_gt.columns[-1]
+        if self._target_column is not None:
+            target_col = self._target_column
+        else:
+            target_col = X_gt.columns[-1]
 
+        if target_col not in X_gt.columns:
+            raise ValueError(
+                f"Target column not found {target_col}. Available: {X_gt.columns}"
+            )
         iter_X_gt = X_gt.drop(columns=[target_col])
         iter_y_gt = X_gt[target_col]
 
