@@ -170,21 +170,22 @@ class Plugin(metaclass=ABCMeta):
         if count is None:
             count = self._original_shape[0]
 
-        if constraints is None:
-            constraints = self.schema().as_constraints()
+        gen_constraints = self.schema().as_constraints()
+        if constraints is not None:
+            gen_constraints = gen_constraints.extend(constraints)
 
-        syn_schema = Schema.from_constraints(constraints)
+        syn_schema = Schema.from_constraints(gen_constraints)
 
         X_syn = pd.DataFrame(
             self._generate(count=count, syn_schema=syn_schema, **kwargs)
         )
 
-        if not constraints.is_valid(X_syn) and self.strict:
+        if not gen_constraints.is_valid(X_syn) and self.strict:
             raise RuntimeError(
                 f"Plugin {self.name()} failed to meet the synthetic constraints."
             )
 
-        return constraints.match(X_syn)
+        return gen_constraints.match(X_syn)
 
     @abstractmethod
     def _generate(

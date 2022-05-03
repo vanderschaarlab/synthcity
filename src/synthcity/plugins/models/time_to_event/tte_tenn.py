@@ -46,7 +46,7 @@ class TimeEventNN(nn.Module):
         weight_decay: float = 1e-3,
         residual: bool = True,
         opt_betas: tuple = (0.9, 0.999),
-        batch_size: int = 250,
+        batch_size: int = 500,
         n_iter_print: int = 500,
         seed: int = 0,
         n_iter_min: int = 100,
@@ -109,16 +109,15 @@ class TimeEventNN(nn.Module):
         return self
 
     def generate(self, X: np.ndarray) -> np.ndarray:
+        self.generator.eval()
         X = self._check_tensor(X).float()
 
-        return self(X).cpu().numpy()
+        with torch.no_grad():
+            return self(X).cpu().numpy()
 
     @validate_arguments(config=dict(arbitrary_types_allowed=True))
     def forward(self, X: torch.Tensor) -> torch.Tensor:
-        self.generator.eval()
-
-        with torch.no_grad():
-            return self.generator(X).detach().cpu()
+        return self.generator(X)
 
     def dataloader(
         self, X: torch.Tensor, T: torch.Tensor, E: torch.Tensor
@@ -174,9 +173,16 @@ class TimeEventNN(nn.Module):
         G_losses = []
 
         for i, data in enumerate(loader):
+            Xmb, Tmb, Emb = data
+            Tmb, idxs = torch.sort(Tmb)
+            Xmb = Xmb[idxs]
+            Emb = Emb[idxs]
+
             G_losses.append(
                 self._train_epoch_generator(
-                    *data,
+                    Xmb,
+                    Tmb,
+                    Emb,
                 )
             )
 
@@ -229,7 +235,11 @@ class TimeEventNN(nn.Module):
         inner_T_dist = _inner_dist(T)
         inner_pred_T_dist = _inner_dist(pred_T)
 
-        return self.lambda_calibration * nn.MSELoss()(inner_T_dist, inner_pred_T_dist)
+        err = self.lambda_calibration * nn.MSELoss()(inner_T_dist, inner_pred_T_dist)
+
+        assert not torch.isnan(err), "Calibration loss fail"
+
+        return err
 
     def _loss_ordering(
         self,
@@ -256,6 +266,32 @@ class TimeEventNN(nn.Module):
 
         return self.lambda_ordering * nn.MSELoss()(inner_pred_T_dist, inner_T_dist)
 
+    def _loss_ordering_v2(
+        self,
+        X: torch.Tensor,
+        T: torch.Tensor,
+        E: torch.Tensor,
+    ) -> torch.Tensor:
+        # Evaluate ranking error.
+        # T is expected to be ordered ascending.
+        if len(X) <= 1:
+            return torch.tensor(0).to(DEVICE)
+        pred_T = self.generator(X).squeeze()
+        err = torch.tensor(0).float().to(DEVICE)
+
+        for idx in range(1, len(pred_T)):
+            prev_T = pred_T[E == 1][:idx]
+            fails = prev_T[prev_T[:idx] > pred_T[idx]]
+
+            if len(fails) == 0:
+                continue
+
+            err += nn.MSELoss()(fails, pred_T[idx])
+
+        assert not torch.isnan(err), "Ranking loss fail"
+
+        return self.lambda_ordering * err
+
     def _loss_regression_c(
         self,
         X: torch.Tensor,
@@ -271,6 +307,7 @@ class TimeEventNN(nn.Module):
             nn.ReLU()(T - fake_T)
         )  # fake_T should be >= T for censored data
 
+        assert not torch.isnan(errG_cen), "Censored regression loss fail"
         # Calculate G's loss based on this output
         return self.lambda_regression_c * errG_cen
 
@@ -289,6 +326,7 @@ class TimeEventNN(nn.Module):
             fake_T, T
         )  # fake_T should be == T for noncensored data
 
+        assert not torch.isnan(errG_noncen), "Observed regression loss fail"
         return self.lambda_regression_nc * errG_noncen
 
 
@@ -325,7 +363,7 @@ class TENNTimeToEvent(TimeToEventPlugin):
 
         enc_X = self.scaler_X.fit_transform(X)
 
-        enc_pred_T = self.model.generate(enc_X)
+        enc_pred_T = self.model.generate(enc_X).reshape(-1, 1)
         nn_time_to_event = self.scaler_T.inverse_transform(enc_pred_T).squeeze()
 
         return pd.Series(nn_time_to_event, index=X.index)
@@ -343,24 +381,44 @@ class TENNTimeToEvent(TimeToEventPlugin):
             IntegerDistribution(name="n_iter", low=100, high=3000, step=100),
             FloatDistribution(name="dropout", low=0, high=0.2),
             CategoricalDistribution(name="lr", choices=[1e-2, 1e-3, 1e-4]),
-            FloatDistribution(
+            CategoricalDistribution(
                 name="lambda_calibration",
-                low=0,
-                high=1,
+                choices=[
+                    0,
+                    1,
+                    10,
+                    50,
+                    100,
+                ],
             ),
-            FloatDistribution(
+            CategoricalDistribution(
                 name="lambda_regression_nc",
-                low=0,
-                high=1,
+                choices=[
+                    0,
+                    1,
+                    10,
+                    50,
+                    100,
+                ],
             ),
-            FloatDistribution(
+            CategoricalDistribution(
                 name="lambda_regression_c",
-                low=0,
-                high=1,
+                choices=[
+                    0,
+                    1,
+                    10,
+                    50,
+                    100,
+                ],
             ),
-            FloatDistribution(
+            CategoricalDistribution(
                 name="lambda_ordering",
-                low=0,
-                high=1,
+                choices=[
+                    0,
+                    1,
+                    10,
+                    50,
+                    100,
+                ],
             ),
         ]
