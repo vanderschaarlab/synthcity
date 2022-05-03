@@ -33,6 +33,10 @@ class SurvivalGANPlugin(Plugin):
     """SurivalGAN plugin.
 
     Args:
+        uncensoring_model: str
+            The model class to use for uncensoring
+        uncensoring_model_args: dict
+            Parameters for the uncensoring model
         generator_n_layers_hidden: int
             Number of hidden layers in the generator
         generator_n_units_hidden: int
@@ -68,9 +72,8 @@ class SurvivalGANPlugin(Plugin):
 
     Example:
         >>> from synthcity.plugins import Plugins
-        >>> plugin = Plugins().get("survival_gan")
-        >>> from sklearn.datasets import load_iris
-        >>> X = load_iris()
+        >>> X = load_rossi()
+        >>> plugin = Plugins().get("survival_gan", event_column = "arrest", time_to_event_column="week")
         >>> plugin.fit(X)
         >>> plugin.generate()
     """
@@ -78,7 +81,7 @@ class SurvivalGANPlugin(Plugin):
     @validate_arguments(config=dict(arbitrary_types_allowed=True))
     def __init__(
         self,
-        uncensoring_model: str = "random_survival_forest",
+        uncensoring_model: str = "tenn",
         uncensoring_model_args: dict = {},
         event_column: str = "event",
         time_to_event_column: str = "duration",
@@ -262,7 +265,9 @@ class SurvivalGANPlugin(Plugin):
     def _generate(self, count: int, syn_schema: Schema, **kwargs: Any) -> pd.DataFrame:
         def _generate(count: int) -> pd.DataFrame:
             generated = self.model.generate(count)
-            generated[self.event_column] = 1
+            generated[
+                self.event_column
+            ] = 1  # everybody is uncensored in the synthetic data
             return generated
 
         return self._safe_generate(_generate, count, syn_schema)

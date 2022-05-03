@@ -17,12 +17,25 @@ from synthcity.plugins.core.distribution import (
 from synthcity.plugins.core.plugin import Plugin
 from synthcity.plugins.core.schema import Schema
 from synthcity.plugins.models import TabularVAE
+from synthcity.plugins.models.time_to_event.tte_aft import WeibullAFTTimeToEvent
+from synthcity.plugins.models.time_to_event.tte_coxph import CoxPHTimeToEvent
+from synthcity.plugins.models.time_to_event.tte_date import DATETimeToEvent
+from synthcity.plugins.models.time_to_event.tte_deephit import DeephitTimeToEvent
+from synthcity.plugins.models.time_to_event.tte_rsf import (
+    RandomSurvivalForestTimeToEvent,
+)
+from synthcity.plugins.models.time_to_event.tte_tenn import TENNTimeToEvent
+from synthcity.plugins.models.time_to_event.tte_xgb import XGBTimeToEvent
 
 
-class RTVAEPlugin(Plugin):
-    """RTVAE plugin.
+class SurVAEPlugin(Plugin):
+    """SurVAE plugin.
 
     Args:
+        uncensoring_model: str
+            The model class to use for uncensoring
+        uncensoring_model_args: dict
+            Parameters for the uncensoring model
         decoder_n_layers_hidden: int
             Number of hidden layers in the decoder
         decoder_n_units_hidden: int
@@ -56,9 +69,9 @@ class RTVAEPlugin(Plugin):
 
     Example:
         >>> from synthcity.plugins import Plugins
-        >>> plugin = Plugins().get("adsgan")
-        >>> from sklearn.datasets import load_iris
-        >>> X = load_iris()
+        >>> from lifelines.datasets import load_rossi
+        >>> X = load_rossi()
+        >>> plugin = Plugins().get("survae", event_column = "arrest", time_to_event_column="week")
         >>> plugin.fit(X)
         >>> plugin.generate()
     """
@@ -66,6 +79,10 @@ class RTVAEPlugin(Plugin):
     @validate_arguments(config=dict(arbitrary_types_allowed=True))
     def __init__(
         self,
+        uncensoring_model: str = "tenn",
+        uncensoring_model_args: dict = {},
+        event_column: str = "event",
+        time_to_event_column: str = "duration",
         n_iter: int = 100,
         lr: float = 1e-4,
         weight_decay: float = 1e-3,
@@ -83,9 +100,17 @@ class RTVAEPlugin(Plugin):
         encoder_dropout: float = 0.1,
         data_encoder_max_clusters: int = 20,
         robust_divergence_beta: int = 2,  # used only for loss_strategy "robust_divergence"
-        **kwargs: Any
+        **kwargs: Any,
     ) -> None:
         super().__init__(**kwargs)
+
+        self.event_column = event_column
+        self.time_to_event_column = time_to_event_column
+
+        self.uncensoring_model = self._get_uncensoring_model_template(
+            uncensoring_model
+        )(**uncensoring_model_args)
+
         self.decoder_n_layers_hidden = decoder_n_layers_hidden
         self.decoder_n_units_hidden = decoder_n_units_hidden
         self.decoder_nonlin = decoder_nonlin
@@ -105,15 +130,27 @@ class RTVAEPlugin(Plugin):
 
     @staticmethod
     def name() -> str:
-        return "rtvae"
+        return "survae"
 
     @staticmethod
     def type() -> str:
-        return "vae"
+        return "survival_analysis"
 
     @staticmethod
     def hyperparameter_space(**kwargs: Any) -> List[Distribution]:
         return [
+            CategoricalDistribution(
+                name="uncensoring_model",
+                choices=[
+                    "tenn",
+                    "date",
+                    "weibull_aft",
+                    "cox_ph",
+                    "random_survival_forest",
+                    "survival_xgboost",
+                    "deephit",
+                ],
+            ),
             IntegerDistribution(name="n_iter", low=100, high=500, step=100),
             CategoricalDistribution(name="lr", choices=[1e-3, 2e-4, 1e-4]),
             IntegerDistribution(name="decoder_n_layers_hidden", low=1, high=5),
@@ -137,10 +174,50 @@ class RTVAEPlugin(Plugin):
             FloatDistribution(name="encoder_dropout", low=0, high=0.2),
         ]
 
-    def _fit(self, X: pd.DataFrame, *args: Any, **kwargs: Any) -> "RTVAEPlugin":
-        features = X.shape[1]
+    def _get_uncensoring_model_template(self, model_name: str) -> Any:
+        defaults = {
+            "tenn": TENNTimeToEvent,
+            "date": DATETimeToEvent,
+            "weibull_aft": WeibullAFTTimeToEvent,
+            "cox_ph": CoxPHTimeToEvent,
+            "random_survival_forest": RandomSurvivalForestTimeToEvent,
+            "survival_xgboost": XGBTimeToEvent,
+            "deephit": DeephitTimeToEvent,
+        }
+
+        if model_name in defaults:
+            return defaults[model_name]
+
+        raise RuntimeError(f"invalid model {model_name}")
+
+    def _fit(self, X: pd.DataFrame, *args: Any, **kwargs: Any) -> "SurVAEPlugin":
+        if self.event_column not in X.columns:
+            raise ValueError(
+                f"Event column {self.event_column} not found in the dataframe"
+            )
+
+        if self.time_to_event_column not in X.columns:
+            raise ValueError(
+                f"Time to event column {self.time_to_event_column} not found in the dataframe"
+            )
+
+        Xcov = X.drop(columns=[self.event_column, self.time_to_event_column])
+        T = X[self.time_to_event_column]
+        E = X[self.event_column]
+
+        # Uncensoring
+        self.uncensoring_model.fit(Xcov, T, E)
+        T_uncensored = pd.Series(self.uncensoring_model.predict(Xcov), index=Xcov.index)
+        T_uncensored[E == 1] = T[E == 1]
+
+        df_uncensored = Xcov
+        df_uncensored[self.time_to_event_column] = T_uncensored
+
+        features = df_uncensored.shape[1]
+
+        # Synthetic data generator
         self.model = TabularVAE(
-            X,
+            df_uncensored,
             n_units_embedding=features,
             batch_size=self.batch_size,
             lr=self.lr,
@@ -163,12 +240,19 @@ class RTVAEPlugin(Plugin):
             clipping_value=self.clipping_value,
             encoder_max_clusters=self.data_encoder_max_clusters,
         )
-        self.model.fit(X)
+        self.model.fit(df_uncensored)
 
         return self
 
     def _generate(self, count: int, syn_schema: Schema, **kwargs: Any) -> pd.DataFrame:
-        return self._safe_generate(self.model.generate, count, syn_schema)
+        def _generate(count: int) -> pd.DataFrame:
+            generated = self.model.generate(count)
+            generated[
+                self.event_column
+            ] = 1  # everybody is uncensored in the synthetic data
+            return generated
+
+        return self._safe_generate(_generate, count, syn_schema)
 
 
-plugin = RTVAEPlugin
+plugin = SurVAEPlugin
