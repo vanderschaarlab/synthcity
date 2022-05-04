@@ -36,13 +36,13 @@ class TimeEventNN(nn.Module):
     def __init__(
         self,
         n_features: int,
-        n_layers_hidden: int = 2,
+        n_layers_hidden: int = 1,
         n_units_hidden: int = 300,
         nonlin: str = "leaky_relu",
-        n_iter: int = 2000,
+        n_iter: int = 1000,
         batch_norm: bool = False,
-        dropout: float = 0,
-        lr: float = 1e-3,
+        dropout: float = 0.1,
+        lr: float = 1e-2,
         weight_decay: float = 1e-3,
         residual: bool = True,
         opt_betas: tuple = (0.9, 0.999),
@@ -51,10 +51,10 @@ class TimeEventNN(nn.Module):
         seed: int = 0,
         n_iter_min: int = 100,
         clipping_value: int = 0,
-        lambda_calibration: float = 1,
+        lambda_calibration: float = 50,
         lambda_ordering: float = 1,
         lambda_regression_nc: float = 1,
-        lambda_regression_c: float = 1,
+        lambda_regression_c: float = 100,
     ) -> None:
         super(TimeEventNN, self).__init__()
 

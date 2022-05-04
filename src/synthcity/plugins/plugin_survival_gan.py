@@ -18,25 +18,13 @@ from synthcity.plugins.core.distribution import (
 from synthcity.plugins.core.plugin import Plugin
 from synthcity.plugins.core.schema import Schema
 from synthcity.plugins.models import TabularGAN
-from synthcity.plugins.models.time_to_event.tte_aft import WeibullAFTTimeToEvent
-from synthcity.plugins.models.time_to_event.tte_coxph import CoxPHTimeToEvent
-from synthcity.plugins.models.time_to_event.tte_date import DATETimeToEvent
-from synthcity.plugins.models.time_to_event.tte_deephit import DeephitTimeToEvent
-from synthcity.plugins.models.time_to_event.tte_rsf import (
-    RandomSurvivalForestTimeToEvent,
-)
-from synthcity.plugins.models.time_to_event.tte_tenn import TENNTimeToEvent
-from synthcity.plugins.models.time_to_event.tte_xgb import XGBTimeToEvent
+from synthcity.plugins.models.time_to_event import select_uncensoring_model
 
 
 class SurvivalGANPlugin(Plugin):
     """SurivalGAN plugin.
 
     Args:
-        uncensoring_model: str
-            The model class to use for uncensoring
-        uncensoring_model_args: dict
-            Parameters for the uncensoring model
         generator_n_layers_hidden: int
             Number of hidden layers in the generator
         generator_n_units_hidden: int
@@ -81,23 +69,21 @@ class SurvivalGANPlugin(Plugin):
     @validate_arguments(config=dict(arbitrary_types_allowed=True))
     def __init__(
         self,
-        uncensoring_model: str = "tenn",
-        uncensoring_model_args: dict = {},
         event_column: str = "event",
         time_to_event_column: str = "duration",
         n_iter: int = 1000,
-        generator_n_layers_hidden: int = 2,
-        generator_n_units_hidden: int = 1250,
+        generator_n_layers_hidden: int = 1,
+        generator_n_units_hidden: int = 150,
         generator_nonlin: str = "tanh",
-        generator_dropout: float = 0,
+        generator_dropout: float = 0.1,
         discriminator_n_layers_hidden: int = 2,
         discriminator_n_units_hidden: int = 100,
         discriminator_nonlin: str = "leaky_relu",
         discriminator_n_iter: int = 1,
-        discriminator_dropout: float = 0,
+        discriminator_dropout: float = 0.1,
         lr: float = 1e-3,
         weight_decay: float = 1e-3,
-        batch_size: int = 500,
+        batch_size: int = 100,
         seed: int = 0,
         clipping_value: int = 0,
         lambda_gradient_penalty: float = 10,
@@ -111,10 +97,6 @@ class SurvivalGANPlugin(Plugin):
 
         self.event_column = event_column
         self.time_to_event_column = time_to_event_column
-
-        self.uncensoring_model = self._get_uncensoring_model_template(
-            uncensoring_model
-        )(**uncensoring_model_args)
 
         self.generator_n_layers_hidden = generator_n_layers_hidden
         self.generator_n_units_hidden = generator_n_units_hidden
@@ -150,18 +132,6 @@ class SurvivalGANPlugin(Plugin):
     @staticmethod
     def hyperparameter_space(**kwargs: Any) -> List[Distribution]:
         return [
-            CategoricalDistribution(
-                name="uncensoring_model",
-                choices=[
-                    "tenn",
-                    "date",
-                    "weibull_aft",
-                    "cox_ph",
-                    "random_survival_forest",
-                    "survival_xgboost",
-                    "deephit",
-                ],
-            ),
             IntegerDistribution(name="generator_n_layers_hidden", low=1, high=4),
             IntegerDistribution(
                 name="generator_n_units_hidden", low=50, high=150, step=50
@@ -187,22 +157,6 @@ class SurvivalGANPlugin(Plugin):
             IntegerDistribution(name="encoder_max_clusters", low=2, high=20),
         ]
 
-    def _get_uncensoring_model_template(self, model_name: str) -> Any:
-        defaults = {
-            "tenn": TENNTimeToEvent,
-            "date": DATETimeToEvent,
-            "weibull_aft": WeibullAFTTimeToEvent,
-            "cox_ph": CoxPHTimeToEvent,
-            "random_survival_forest": RandomSurvivalForestTimeToEvent,
-            "survival_xgboost": XGBTimeToEvent,
-            "deephit": DeephitTimeToEvent,
-        }
-
-        if model_name in defaults:
-            return defaults[model_name]
-
-        raise RuntimeError(f"invalid model {model_name}")
-
     def _fit(self, X: pd.DataFrame, *args: Any, **kwargs: Any) -> "SurvivalGANPlugin":
         if self.event_column not in X.columns:
             raise ValueError(
@@ -219,6 +173,8 @@ class SurvivalGANPlugin(Plugin):
         E = X[self.event_column]
 
         # Uncensoring
+        self.uncensoring_model = select_uncensoring_model(Xcov, T, E)
+
         self.uncensoring_model.fit(Xcov, T, E)
         T_uncensored = pd.Series(self.uncensoring_model.predict(Xcov), index=Xcov.index)
         T_uncensored[E == 1] = T[E == 1]

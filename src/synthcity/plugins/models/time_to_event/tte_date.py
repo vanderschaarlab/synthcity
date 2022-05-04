@@ -41,7 +41,7 @@ class TimeEventGAN(nn.Module):
         generator_n_units_hidden: int = 250,
         generator_nonlin: str = "leaky_relu",
         generator_nonlin_out: Optional[List[Tuple[str, int]]] = None,
-        generator_n_iter: int = 2000,
+        generator_n_iter: int = 1000,
         generator_batch_norm: bool = False,
         generator_dropout: float = 0,
         generator_loss: Optional[Callable] = None,

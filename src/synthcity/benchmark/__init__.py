@@ -23,9 +23,13 @@ class Benchmarks:
         sensitive_columns: List[str] = [],
         metrics: Optional[Dict] = None,
         repeats: int = 3,
-        target_column: Optional[str] = None,
         synthetic_size: Optional[int] = None,
         synthetic_constraints: Optional[Constraints] = None,
+        task_type: str = "classification",  # classification, regression, survival_analysis
+        target_column: Optional[str] = None,
+        time_to_event_column: Optional[
+            str
+        ] = None,  # only for task_type = survival_analysis
         plugin_kwargs: Dict = {},
     ) -> pd.DataFrame:
         """Benchmark the performance of several algorithms.
@@ -41,12 +45,16 @@ class Benchmarks:
                 List of metrics to test. By default, all metrics are evaluated.
             repeats:
                 Number of test repeats
-            target_columns:
-                The name of the column to use as target for benchmarking the performance metrics. By default, it uses the last column in the dataframe.
             synthetic_size: int
                 The size of the synthetic dataset. By default, it is len(X).
             synthetic_constraints:
                 Optional constraints on the synthetic data. By default, it inherits the constraints from X.
+            task_type: str
+                The task type to benchmark for performance. Options: classification, regression, survival_analysis.
+            target_column:
+                The name of the column to use as target for benchmarking the performance metrics. By default, it uses the last column in the dataframe.
+            time_to_event_column: Optional str.
+                Only for survival_analysis: which column to use for time to event.
             plugin_kwargs:
                 Optional kwargs for each algorithm. Example {"adsgan": {"n_iter": 10}},
         """
@@ -79,7 +87,9 @@ class Benchmarks:
                     X_syn,
                     sensitive_columns=sensitive_columns,
                     metrics=metrics,
+                    task_type=task_type,
                     target_column=target_column,
+                    time_to_event_column=time_to_event_column,
                 )
 
                 mean_score = evaluation["mean"].to_dict()

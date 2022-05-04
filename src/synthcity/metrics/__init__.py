@@ -85,8 +85,22 @@ class Metrics:
         reduction: str = "mean",
         n_histogram_bins: int = 10,
         metrics: Optional[Dict] = None,
+        task_type: str = "classification",
         target_column: Optional[str] = None,
+        time_to_event: Optional[str] = None,
     ) -> pd.DataFrame:
+        supported_tasks = ["classification", "regression", "survival_analysis"]
+        if task_type not in supported_tasks:
+            raise ValueError(
+                f"Invalid task type {task_type}. Supported: {supported_tasks}"
+            )
+
+        if task_type == "survival_analysis":
+            if target_column is None:
+                raise ValueError("Invalid target column for survival analysis")
+            if time_to_event is None:
+                raise ValueError("Invalid time to event column for survival analysis")
+
         if metrics is None:
             metrics = Metrics.list()
 
@@ -102,7 +116,9 @@ class Metrics:
                     sensitive_columns=sensitive_columns,
                     reduction=reduction,
                     n_histogram_bins=n_histogram_bins,
+                    task_type=task_type,
                     target_column=target_column,
+                    time_to_event=time_to_event,
                 ),
                 X_gt,
                 X_syn,
