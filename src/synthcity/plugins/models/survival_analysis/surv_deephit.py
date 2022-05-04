@@ -56,6 +56,9 @@ class DeephitSurvivalAnalysis(SurvivalAnalysisPlugin):
     def fit(
         self, X: pd.DataFrame, T: pd.Series, E: pd.Series
     ) -> "SurvivalAnalysisPlugin":
+        if (E.unique() == [0]).all():
+            raise RuntimeError("The input contains only censored data")
+
         labtrans = DeepHitSingle.label_transform(self.num_durations)
 
         X = np.asarray(X).astype("float32")

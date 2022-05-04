@@ -244,7 +244,7 @@ class PerformanceEvaluator(MetricEvaluator):
                 pretrained=True,
             )["clf"]["c_index"][0]
         except BaseException as e:
-            log.error(f"Failed to evaluate synthetic performance. {e}")
+            log.error(f"Failed to evaluate synthetic performance. {model.name()}: {e}")
             score_syn = 0
 
         return {

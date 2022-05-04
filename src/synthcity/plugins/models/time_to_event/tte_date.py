@@ -319,7 +319,7 @@ class TimeEventGAN(nn.Module):
             g_loss, d_loss = self._train_epoch(loader)
             # Check how the generator is doing by saving G's output on fixed_noise
             if (i + 1) % self.n_iter_print == 0:
-                log.info(
+                log.debug(
                     f"[{i}/{self.generator_n_iter}]\tLoss_D: {d_loss}\tLoss_G: {g_loss}"
                 )
 

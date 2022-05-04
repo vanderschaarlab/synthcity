@@ -206,7 +206,7 @@ class TimeEventNN(nn.Module):
             g_loss = self._train_epoch(loader)
             # Check how the generator is doing by saving G's output on fixed_noise
             if (i + 1) % self.n_iter_print == 0:
-                log.info(f"[{i}/{self.n_iter}]\tLoss_G: {g_loss}")
+                log.debug(f"[{i}/{self.n_iter}]\tLoss_G: {g_loss}")
 
         return self
 
