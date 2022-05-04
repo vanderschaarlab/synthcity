@@ -11,7 +11,6 @@ from sklearn.utils.validation import (
 )
 
 # synthcity relative
-# adjutorium relative
 from .util import check_y_survival
 
 __all__ = [

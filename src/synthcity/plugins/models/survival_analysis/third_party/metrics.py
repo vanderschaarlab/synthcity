@@ -6,7 +6,6 @@ import numpy as np
 from sklearn.utils import check_array, check_consistent_length
 
 # synthcity relative
-# adjutorium relative
 from .nonparametric import CensoringDistributionEstimator
 from .util import check_y_survival
 
