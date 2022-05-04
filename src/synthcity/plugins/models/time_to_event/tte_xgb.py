@@ -2,6 +2,7 @@
 from typing import Any, List
 
 # third party
+import numpy as np
 import pandas as pd
 from pydantic import validate_arguments
 from scipy.integrate import trapz
@@ -35,6 +36,7 @@ class XGBTimeToEvent(TimeToEventPlugin):
         random_state: int = 0,
         objective: str = "aft",  # "aft", "cox"
         strategy: str = "weibull",  # "weibull", "debiased_bce"
+        time_points: int = 10,
         **kwargs: Any
     ) -> None:
         super().__init__()
@@ -74,6 +76,7 @@ class XGBTimeToEvent(TimeToEventPlugin):
         }
 
         self.model = XGBSEDebiasedBCE(xgboost_params, lr_params)
+        self.time_points = time_points
 
     @validate_arguments(config=dict(arbitrary_types_allowed=True))
     def fit(self, X: pd.DataFrame, T: pd.Series, Y: pd.Series) -> "TimeToEventPlugin":
@@ -81,7 +84,20 @@ class XGBTimeToEvent(TimeToEventPlugin):
 
         y = convert_to_structured(T, Y)
 
-        self.model.fit(X, y)
+        censored_times = T[Y == 0]
+        obs_times = T[Y == 1]
+
+        lower_bound = max(censored_times.min(), obs_times.min()) + 1
+        if pd.isna(lower_bound):
+            lower_bound = T.min()
+        upper_bound = min(censored_times.max(), obs_times.max()) - 1
+        if pd.isna(upper_bound):
+            upper_bound = T.max()
+
+        time_bins = np.linspace(lower_bound, upper_bound, self.time_points, dtype=int)
+
+        self.model.fit(X, y, time_bins=time_bins)
+
         return self
 
     @validate_arguments(config=dict(arbitrary_types_allowed=True))

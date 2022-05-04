@@ -243,7 +243,8 @@ class PerformanceEvaluator(MetricEvaluator):
                 time_horizons=self._time_horizons,
                 pretrained=True,
             )["clf"]["c_index"][0]
-        except BaseException:
+        except BaseException as e:
+            log.error(f"Failed to evaluate synthetic performance. {e}")
             score_syn = 0
 
         return {

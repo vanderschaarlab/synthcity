@@ -139,6 +139,7 @@ def test_evaluate_performance_survival_analysis(
 
     sz = 100
     X_rnd = pd.DataFrame(np.random.randn(sz, len(X.columns)), columns=X.columns)
+    X_rnd["arrest"] = 1
     score = evaluator.evaluate(
         X,
         X_rnd,

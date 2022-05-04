@@ -52,3 +52,4 @@ MANIFEST
 .venv*/
 .conda*/
 .ipynb_checkpoints
+weight_checkpoint*

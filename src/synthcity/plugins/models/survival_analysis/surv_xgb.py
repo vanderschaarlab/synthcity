@@ -35,6 +35,7 @@ class XGBSurvivalAnalysis(SurvivalAnalysisPlugin):
         random_state: int = 0,
         objective: str = "aft",  # "aft", "cox"
         strategy: str = "weibull",  # "weibull", "debiased_bce"
+        time_points: int = 10,
         **kwargs: Any,
     ) -> None:
         super().__init__()
@@ -81,6 +82,7 @@ class XGBSurvivalAnalysis(SurvivalAnalysisPlugin):
             raise ValueError(f"unknown strategy {strategy}")
 
         self.model = base_model
+        self.time_points = time_points
 
     @validate_arguments(config=dict(arbitrary_types_allowed=True))
     def fit(
@@ -90,7 +92,19 @@ class XGBSurvivalAnalysis(SurvivalAnalysisPlugin):
 
         y = convert_to_structured(T, Y)
 
-        self.model.fit(X, y)
+        censored_times = T[Y == 0]
+        obs_times = T[Y == 1]
+
+        lower_bound = max(censored_times.min(), obs_times.min()) + 1
+        if pd.isna(lower_bound):
+            lower_bound = T.min()
+        upper_bound = min(censored_times.max(), obs_times.max()) - 1
+        if pd.isna(upper_bound):
+            upper_bound = T.max()
+
+        time_bins = np.linspace(lower_bound, upper_bound, self.time_points, dtype=int)
+
+        self.model.fit(X, y, time_bins=time_bins)
         return self
 
     def _find_nearest(self, array: np.ndarray, value: float) -> float:
