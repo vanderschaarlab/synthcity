@@ -22,7 +22,7 @@ from synthcity.plugins.models.time_to_event import select_uncensoring_model
 
 
 class SurvivalGANPlugin(Plugin):
-    """SurivalGAN plugin.
+    """SurvivalGAN plugin.
 
     Args:
         generator_n_layers_hidden: int

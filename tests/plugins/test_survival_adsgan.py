@@ -6,37 +6,47 @@ from lifelines.datasets import load_rossi
 # synthcity absolute
 from synthcity.plugins import Plugin
 from synthcity.plugins.core.constraints import Constraints
-from synthcity.plugins.plugin_survival_gan import plugin
+from synthcity.plugins.plugin_survival_adsgan import plugin
 
-plugin_name = "survival_gan"
+plugin_name = "survival_adsgan"
+plugins_args = {
+    "seeds": ["weibull_aft", "cox_ph"],
+    "generator_n_layers_hidden": 1,
+    "generator_n_units_hidden": 10,
+}
 
 
-@pytest.mark.parametrize("test_plugin", generate_fixtures(plugin_name, plugin))
+@pytest.mark.parametrize(
+    "test_plugin", generate_fixtures(plugin_name, plugin, plugins_args)
+)
 def test_plugin_sanity(test_plugin: Plugin) -> None:
     assert test_plugin is not None
 
 
-@pytest.mark.parametrize("test_plugin", generate_fixtures(plugin_name, plugin))
+@pytest.mark.parametrize(
+    "test_plugin", generate_fixtures(plugin_name, plugin, plugins_args)
+)
 def test_plugin_name(test_plugin: Plugin) -> None:
     assert test_plugin.name() == plugin_name
 
 
-@pytest.mark.parametrize("test_plugin", generate_fixtures(plugin_name, plugin))
+@pytest.mark.parametrize(
+    "test_plugin", generate_fixtures(plugin_name, plugin, plugins_args)
+)
 def test_plugin_type(test_plugin: Plugin) -> None:
     assert test_plugin.type() == "survival_analysis"
 
 
-@pytest.mark.parametrize("test_plugin", generate_fixtures(plugin_name, plugin))
+@pytest.mark.parametrize(
+    "test_plugin", generate_fixtures(plugin_name, plugin, plugins_args)
+)
 def test_plugin_hyperparams(test_plugin: Plugin) -> None:
-    assert len(test_plugin.hyperparameter_space()) == 15
+    assert len(test_plugin.hyperparameter_space()) == 14
 
 
 def test_plugin_fit() -> None:
     test_plugin = plugin(
-        target_column="arrest",
-        time_to_event_column="week",
-        generator_n_layers_hidden=1,
-        generator_n_units_hidden=10,
+        target_column="arrest", time_to_event_column="week", **plugins_args
     )
 
     X = load_rossi()
@@ -45,10 +55,7 @@ def test_plugin_fit() -> None:
 
 def test_plugin_generate() -> None:
     test_plugin = plugin(
-        target_column="arrest",
-        time_to_event_column="week",
-        generator_n_layers_hidden=1,
-        generator_n_units_hidden=10,
+        target_column="arrest", time_to_event_column="week", **plugins_args
     )
 
     X = load_rossi()
@@ -65,10 +72,7 @@ def test_plugin_generate() -> None:
 
 def test_survival_plugin_generate_constraints() -> None:
     test_plugin = plugin(
-        target_column="arrest",
-        time_to_event_column="week",
-        generator_n_layers_hidden=1,
-        generator_n_units_hidden=10,
+        target_column="arrest", time_to_event_column="week", **plugins_args
     )
 
     X = load_rossi()
