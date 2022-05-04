@@ -52,6 +52,10 @@ class Plugin(metaclass=ABCMeta):
         sampling_patience: int = 1000,
         sensitive_columns: list = [],
         strict: bool = True,
+        # survival analysis
+        target_column: Optional[str] = None,
+        time_to_event_column: Optional[str] = None,
+        time_horizons: Optional[List] = None,
     ) -> None:
         """
 

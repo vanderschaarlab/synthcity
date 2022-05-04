@@ -31,6 +31,7 @@ from .eval_sanity import (
     NearestSyntheticNeighborDistance,
 )
 from .eval_statistical import (
+    AlphaPrecision,
     ChiSquaredTest,
     FeatureCorrelation,
     InverseKLDivergence,
@@ -58,6 +59,7 @@ standard_metrics = [
     MaximumMeanDiscrepancy,
     WassersteinDistance,
     PRDCScore,
+    AlphaPrecision,
     # performance tests
     PerformanceEvaluatorLinear,
     PerformanceEvaluatorMLP,
@@ -87,7 +89,8 @@ class Metrics:
         metrics: Optional[Dict] = None,
         task_type: str = "classification",
         target_column: Optional[str] = None,
-        time_to_event: Optional[str] = None,
+        time_to_event_column: Optional[str] = None,
+        time_horizons: Optional[List] = None,
     ) -> pd.DataFrame:
         supported_tasks = ["classification", "regression", "survival_analysis"]
         if task_type not in supported_tasks:
@@ -98,8 +101,10 @@ class Metrics:
         if task_type == "survival_analysis":
             if target_column is None:
                 raise ValueError("Invalid target column for survival analysis")
-            if time_to_event is None:
+            if time_to_event_column is None:
                 raise ValueError("Invalid time to event column for survival analysis")
+            if time_horizons is None:
+                raise ValueError("Invalid time horizons for survival analysis")
 
         if metrics is None:
             metrics = Metrics.list()
@@ -118,7 +123,8 @@ class Metrics:
                     n_histogram_bins=n_histogram_bins,
                     task_type=task_type,
                     target_column=target_column,
-                    time_to_event=time_to_event,
+                    time_to_event_column=time_to_event_column,
+                    time_horizons=time_horizons,
                 ),
                 X_gt,
                 X_syn,

@@ -16,6 +16,12 @@ import synthcity.logger as log
 from synthcity.metrics._utils import evaluate_auc
 from synthcity.metrics.core import MetricEvaluator
 from synthcity.plugins.models.mlp import MLP
+from synthcity.plugins.models.survival_analysis import (
+    CoxPHSurvivalAnalysis,
+    DeephitSurvivalAnalysis,
+    XGBSurvivalAnalysis,
+    evaluate_survival_model,
+)
 
 
 class PerformanceEvaluator(MetricEvaluator):
@@ -72,7 +78,7 @@ class PerformanceEvaluator(MetricEvaluator):
             y_pred = estimator.predict_proba(X_test)
             score, _ = evaluate_auc(enc_y_test, y_pred)
         except BaseException as e:
-            print(f"classifier evaluation failed {e}.")
+            log.error(f"classifier evaluation failed {e}.")
             score = 0
 
         return score
@@ -105,7 +111,7 @@ class PerformanceEvaluator(MetricEvaluator):
         return 1 / (1 + score)
 
     @validate_arguments(config=dict(arbitrary_types_allowed=True))
-    def _evaluate_test_performance(
+    def _evaluate_standard_performance(
         self,
         clf_model: Any,
         clf_args: Dict,
@@ -169,6 +175,103 @@ class PerformanceEvaluator(MetricEvaluator):
             "syn": float(self.reduction()(syn_scores)),
         }
 
+    @validate_arguments(config=dict(arbitrary_types_allowed=True))
+    def _evaluate_survival_model(
+        self,
+        model: Any,
+        args: Dict,
+        X_gt: pd.DataFrame,
+        X_syn: pd.DataFrame,
+    ) -> Dict:
+        """Train a survival model on the synthetic data and evaluate the performance on real test data. Returns the average performance discrepancy between training on real data vs on synthetic data.
+
+        Returns:
+            gt and syn performance scores
+        """
+
+        target_col = self._target_column
+        tte_col = self._time_to_event_column
+
+        if target_col is None:
+            raise ValueError("target_column must not be None for survival analysis")
+
+        if self._time_to_event_column is None:
+            raise ValueError("time to event must not be None for survival analysis")
+
+        if self._time_horizons is None:
+            raise ValueError("time horizons must not be None for survival analysis")
+
+        if target_col not in X_gt.columns:
+            raise ValueError(
+                f"Target column not found {target_col}. Available: {X_gt.columns}"
+            )
+        if tte_col not in X_gt.columns:
+            raise ValueError(
+                f"TimeToEvent column not found {tte_col}. Available: {X_gt.columns}"
+            )
+
+        iter_X_gt = X_gt.drop(columns=[target_col, tte_col])
+        iter_E_gt = X_gt[target_col]
+        iter_T_gt = X_gt[tte_col]
+
+        iter_X_syn = X_syn.drop(columns=[target_col, tte_col])
+        iter_E_syn = X_syn[target_col]
+        iter_T_syn = X_syn[tte_col]
+
+        predictor_gt = model(**args)
+        score_gt = evaluate_survival_model(
+            predictor_gt,
+            iter_X_gt,
+            iter_T_gt,
+            iter_E_gt,
+            metrics=["c_index"],
+            n_folds=self._n_folds,
+            time_horizons=self._time_horizons,
+        )["clf"]["c_index"][0]
+
+        predictor_syn = model(**args)
+
+        try:
+            predictor_syn.fit(iter_X_syn, iter_T_syn, iter_E_syn)
+            score_syn = evaluate_survival_model(
+                [predictor_syn] * self._n_folds,
+                iter_X_gt,
+                iter_T_gt,
+                iter_E_gt,
+                metrics=["c_index"],
+                n_folds=self._n_folds,
+                time_horizons=self._time_horizons,
+                pretrained=True,
+            )["clf"]["c_index"][0]
+        except BaseException:
+            score_syn = 0
+
+        return {
+            "gt": float(score_gt),
+            "syn": float(score_syn),
+        }
+
+    @validate_arguments(config=dict(arbitrary_types_allowed=True))
+    def _evaluate_test_performance(
+        self,
+        clf_model: Any,
+        clf_args: Dict,
+        regression_model: Any,
+        regression_args: Any,
+        surv_model: Any,
+        suv_model_args: Any,
+        X_gt: pd.DataFrame,
+        X_syn: pd.DataFrame,
+    ) -> Dict:
+        if self._task_type == "survival_analysis":
+            return self._evaluate_survival_model(
+                surv_model, suv_model_args, X_gt, X_syn
+            )
+
+        return self._evaluate_standard_performance(
+            clf_model, clf_args, regression_model, regression_args, X_gt, X_syn
+        )
+
 
 class PerformanceEvaluatorXGB(PerformanceEvaluator):
     """Train an XGBoost classifier or regressor on the synthetic data and evaluate the performance on real test data. Returns the average performance discrepancy between training on real data vs on synthetic data.
@@ -204,6 +307,14 @@ class PerformanceEvaluatorXGB(PerformanceEvaluator):
                 "use_label_encoder": False,
                 "depth": 3,
             },
+            XGBSurvivalAnalysis,
+            {
+                "n_jobs": 1,
+                "verbosity": 0,
+                "use_label_encoder": False,
+                "depth": 3,
+                "strategy": "debiased_bce",  # "weibull", "debiased_bce"
+            },
             X_gt,
             X_syn,
         )
@@ -229,7 +340,14 @@ class PerformanceEvaluatorLinear(PerformanceEvaluator):
     ) -> Dict:
 
         return self._evaluate_test_performance(
-            LogisticRegression, {}, LinearRegression, {}, X_gt, X_syn
+            LogisticRegression,
+            {},
+            LinearRegression,
+            {},
+            CoxPHSurvivalAnalysis,
+            {},
+            X_gt,
+            X_syn,
         )
 
 
@@ -265,6 +383,8 @@ class PerformanceEvaluatorMLP(PerformanceEvaluator):
                 "n_units_in": X_gt.shape[1] - 1,
                 "n_units_out": 1,
             },
+            DeephitSurvivalAnalysis,
+            {},
             X_gt,
             X_syn,
         )

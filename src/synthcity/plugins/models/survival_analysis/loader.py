@@ -7,8 +7,8 @@ import pandas as pd
 # synthcity relative
 from .surv_aft import WeibullAFTSurvivalAnalysis
 from .surv_coxph import CoxPHSurvivalAnalysis
-from .tte_deephit import DeephitSurvivalAnalysis
-from .tte_xgb import XGBSurvivalAnalysis
+from .surv_deephit import DeephitSurvivalAnalysis
+from .surv_xgb import XGBSurvivalAnalysis
 
 
 def generate_dataset_for_horizon(

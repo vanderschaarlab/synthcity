@@ -5,6 +5,7 @@ from typing import Optional, Type
 import numpy as np
 import pandas as pd
 import pytest
+from lifelines.datasets import load_rossi
 from sklearn.datasets import load_diabetes, load_iris
 
 # synthcity absolute
@@ -101,6 +102,53 @@ def test_evaluate_performance_regression(
     assert "syn" in score
 
     assert score["syn"] < good_score["syn"]
+
+
+@pytest.mark.parametrize("test_plugin", [Plugins().get("marginal_distributions")])
+@pytest.mark.parametrize(
+    "evaluator_t",
+    [
+        PerformanceEvaluatorLinear,
+        PerformanceEvaluatorMLP,
+        PerformanceEvaluatorXGB,
+    ],
+)
+def test_evaluate_performance_survival_analysis(
+    test_plugin: Plugin, evaluator_t: Type
+) -> None:
+    X = load_rossi()
+    T = X["week"]
+
+    test_plugin.fit(X)
+    X_gen = test_plugin.generate(100)
+    time_horizons = np.linspace(T.min(), T.max(), num=4)[1:-1].tolist()
+
+    evaluator = evaluator_t(
+        task_type="survival_analysis",
+        target_column="arrest",
+        time_to_event_column="week",
+        time_horizons=time_horizons,
+    )
+    good_score = evaluator.evaluate(
+        X,
+        X_gen,
+    )
+
+    assert "gt" in good_score
+    assert "syn" in good_score
+
+    sz = 100
+    X_rnd = pd.DataFrame(np.random.randn(sz, len(X.columns)), columns=X.columns)
+    score = evaluator.evaluate(
+        X,
+        X_rnd,
+    )
+
+    assert "gt" in score
+    assert "syn" in score
+
+    assert score["syn"] < 1
+    assert good_score["syn"] < 1
 
 
 @pytest.mark.parametrize("test_plugin", [Plugins().get("marginal_distributions")])

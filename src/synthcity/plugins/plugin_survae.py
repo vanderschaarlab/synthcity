@@ -1,5 +1,5 @@
 # stdlib
-from typing import Any, List
+from typing import Any, List, Optional
 
 # third party
 import pandas as pd
@@ -59,7 +59,7 @@ class SurVAEPlugin(Plugin):
         >>> from synthcity.plugins import Plugins
         >>> from lifelines.datasets import load_rossi
         >>> X = load_rossi()
-        >>> plugin = Plugins().get("survae", event_column = "arrest", time_to_event_column="week")
+        >>> plugin = Plugins().get("survae", target_column = "arrest", time_to_event_column="week")
         >>> plugin.fit(X)
         >>> plugin.generate()
     """
@@ -67,8 +67,9 @@ class SurVAEPlugin(Plugin):
     @validate_arguments(config=dict(arbitrary_types_allowed=True))
     def __init__(
         self,
-        event_column: str = "event",
+        target_column: str = "event",
         time_to_event_column: str = "duration",
+        time_horizons: Optional[List] = None,
         n_iter: int = 1000,
         lr: float = 1e-3,
         weight_decay: float = 1e-3,
@@ -88,7 +89,7 @@ class SurVAEPlugin(Plugin):
     ) -> None:
         super().__init__(**kwargs)
 
-        self.event_column = event_column
+        self.target_column = target_column
         self.time_to_event_column = time_to_event_column
 
         self.decoder_n_layers_hidden = decoder_n_layers_hidden
@@ -142,9 +143,9 @@ class SurVAEPlugin(Plugin):
         ]
 
     def _fit(self, X: pd.DataFrame, *args: Any, **kwargs: Any) -> "SurVAEPlugin":
-        if self.event_column not in X.columns:
+        if self.target_column not in X.columns:
             raise ValueError(
-                f"Event column {self.event_column} not found in the dataframe"
+                f"Event column {self.target_column} not found in the dataframe"
             )
 
         if self.time_to_event_column not in X.columns:
@@ -152,9 +153,9 @@ class SurVAEPlugin(Plugin):
                 f"Time to event column {self.time_to_event_column} not found in the dataframe"
             )
 
-        Xcov = X.drop(columns=[self.event_column, self.time_to_event_column])
+        Xcov = X.drop(columns=[self.target_column, self.time_to_event_column])
         T = X[self.time_to_event_column]
-        E = X[self.event_column]
+        E = X[self.target_column]
 
         # Uncensoring
         self.uncensoring_model = select_uncensoring_model(Xcov, T, E)
@@ -200,7 +201,7 @@ class SurVAEPlugin(Plugin):
         def _generate(count: int) -> pd.DataFrame:
             generated = self.model.generate(count)
             generated[
-                self.event_column
+                self.target_column
             ] = 1  # everybody is uncensored in the synthetic data
             return generated
 

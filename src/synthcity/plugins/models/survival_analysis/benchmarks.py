@@ -20,7 +20,7 @@ from synthcity.plugins.models.survival_analysis.metrics import (
 )
 
 
-def evaluate_survival_estimator(
+def evaluate_survival_model(
     estimator: Any,
     X: pd.DataFrame,
     T: pd.DataFrame,

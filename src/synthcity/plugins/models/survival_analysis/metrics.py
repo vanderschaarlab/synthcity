@@ -6,7 +6,7 @@ import numpy as np
 import pandas as pd
 
 # synthcity absolute
-from synthcity.plugins.models.survival_analysis.thid_party.metrics import (
+from synthcity.plugins.models.survival_analysis.third_party.metrics import (
     brier_score,
     concordance_index_ipcw,
 )

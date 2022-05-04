@@ -61,7 +61,7 @@ class SurvivalGANPlugin(Plugin):
     Example:
         >>> from synthcity.plugins import Plugins
         >>> X = load_rossi()
-        >>> plugin = Plugins().get("survival_gan", event_column = "arrest", time_to_event_column="week")
+        >>> plugin = Plugins().get("survival_gan", target_column = "arrest", time_to_event_column="week")
         >>> plugin.fit(X)
         >>> plugin.generate()
     """
@@ -69,8 +69,9 @@ class SurvivalGANPlugin(Plugin):
     @validate_arguments(config=dict(arbitrary_types_allowed=True))
     def __init__(
         self,
-        event_column: str = "event",
+        target_column: str = "event",
         time_to_event_column: str = "duration",
+        time_horizons: Optional[List] = None,
         n_iter: int = 1000,
         generator_n_layers_hidden: int = 1,
         generator_n_units_hidden: int = 150,
@@ -95,8 +96,9 @@ class SurvivalGANPlugin(Plugin):
     ) -> None:
         super().__init__(**kwargs)
 
-        self.event_column = event_column
+        self.target_column = target_column
         self.time_to_event_column = time_to_event_column
+        self.time_horizons = time_horizons
 
         self.generator_n_layers_hidden = generator_n_layers_hidden
         self.generator_n_units_hidden = generator_n_units_hidden
@@ -158,9 +160,9 @@ class SurvivalGANPlugin(Plugin):
         ]
 
     def _fit(self, X: pd.DataFrame, *args: Any, **kwargs: Any) -> "SurvivalGANPlugin":
-        if self.event_column not in X.columns:
+        if self.target_column not in X.columns:
             raise ValueError(
-                f"Event column {self.event_column} not found in the dataframe"
+                f"Event column {self.target_column} not found in the dataframe"
             )
 
         if self.time_to_event_column not in X.columns:
@@ -168,9 +170,9 @@ class SurvivalGANPlugin(Plugin):
                 f"Time to event column {self.time_to_event_column} not found in the dataframe"
             )
 
-        Xcov = X.drop(columns=[self.event_column, self.time_to_event_column])
+        Xcov = X.drop(columns=[self.target_column, self.time_to_event_column])
         T = X[self.time_to_event_column]
-        E = X[self.event_column]
+        E = X[self.target_column]
 
         # Uncensoring
         self.uncensoring_model = select_uncensoring_model(Xcov, T, E)
@@ -222,7 +224,7 @@ class SurvivalGANPlugin(Plugin):
         def _generate(count: int) -> pd.DataFrame:
             generated = self.model.generate(count)
             generated[
-                self.event_column
+                self.target_column
             ] = 1  # everybody is uncensored in the synthetic data
             return generated
 

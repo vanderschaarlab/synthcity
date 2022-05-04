@@ -30,6 +30,7 @@ class Benchmarks:
         time_to_event_column: Optional[
             str
         ] = None,  # only for task_type = survival_analysis
+        time_horizons: Optional[List] = None,  # only for task_type = survival_analysis
         plugin_kwargs: Dict = {},
     ) -> pd.DataFrame:
         """Benchmark the performance of several algorithms.
@@ -55,6 +56,8 @@ class Benchmarks:
                 The name of the column to use as target for benchmarking the performance metrics. By default, it uses the last column in the dataframe.
             time_to_event_column: Optional str.
                 Only for survival_analysis: which column to use for time to event.
+            time_horizons: Optional list
+                Only for survival_analysis: which time horizons to use for performance evaluation.
             plugin_kwargs:
                 Optional kwargs for each algorithm. Example {"adsgan": {"n_iter": 10}},
         """
@@ -69,7 +72,13 @@ class Benchmarks:
 
             for repeat in range(repeats):
                 log.info(f" Experiment repeat: {repeat}")
-                generator = Plugins().get(plugin, **kwargs)
+                generator = Plugins().get(
+                    plugin,
+                    **kwargs,
+                    target_column=target_column,
+                    time_to_event_column=time_to_event_column,
+                    time_horizons=time_horizons,
+                )
 
                 try:
                     generator.fit(X)
@@ -90,6 +99,7 @@ class Benchmarks:
                     task_type=task_type,
                     target_column=target_column,
                     time_to_event_column=time_to_event_column,
+                    time_horizons=time_horizons,
                 )
 
                 mean_score = evaluation["mean"].to_dict()
