@@ -137,7 +137,6 @@ def objective_meta(
 
         score = full_score[metric][0]
         pruner.report_score(score)
-        print("score", full_score)
 
         return score
 

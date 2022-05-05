@@ -6,7 +6,6 @@ import pandas as pd
 
 # Necessary packages
 from pydantic import validate_arguments
-from torch.utils.data import sampler
 
 # synthcity absolute
 from synthcity.plugins.core.distribution import (
@@ -19,6 +18,7 @@ from synthcity.plugins.core.plugin import Plugin
 from synthcity.plugins.core.schema import Schema
 from synthcity.plugins.models import TabularGAN
 from synthcity.plugins.models.time_to_event import select_uncensoring_model
+from synthcity.plugins.models.time_to_event.samplers import ImbalancedDatasetSampler
 
 
 class SurvivalGANPlugin(Plugin):
@@ -90,7 +90,6 @@ class SurvivalGANPlugin(Plugin):
         lambda_gradient_penalty: float = 10,
         encoder_max_clusters: int = 10,
         encoder: Any = None,
-        dataloader_sampler: Optional[sampler.Sampler] = None,
         seeds: List[str] = [
             "weibull_aft",
             "cox_ph",
@@ -130,7 +129,6 @@ class SurvivalGANPlugin(Plugin):
 
         self.encoder_max_clusters = encoder_max_clusters
         self.encoder = encoder
-        self.dataloader_sampler = dataloader_sampler
 
     @staticmethod
     def name() -> str:
@@ -223,7 +221,7 @@ class SurvivalGANPlugin(Plugin):
             clipping_value=self.clipping_value,
             lambda_gradient_penalty=self.lambda_gradient_penalty,
             encoder_max_clusters=self.encoder_max_clusters,
-            dataloader_sampler=self.dataloader_sampler,
+            dataloader_sampler=ImbalancedDatasetSampler(E.values.tolist()),
         )
         self.model.fit(df_uncensored)
 
