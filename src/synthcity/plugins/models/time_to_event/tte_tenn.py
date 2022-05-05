@@ -128,11 +128,19 @@ class TimeEventNN(nn.Module):
         self, X: torch.Tensor, T: torch.Tensor, E: torch.Tensor
     ) -> Tuple[DataLoader, TensorDataset]:
         X_train, X_val, T_train, T_val, E_train, E_val = train_test_split(
-            X, T, E, stratify=E
+            X.cpu(), T.cpu(), E.cpu(), stratify=E.cpu()
         )
 
-        train_dataset = TensorDataset(X_train, T_train, E_train)
-        val_dataset = TensorDataset(X_val, T_val, E_val)
+        train_dataset = TensorDataset(
+            self._check_tensor(X_train),
+            self._check_tensor(T_train),
+            self._check_tensor(E_train),
+        )
+        val_dataset = TensorDataset(
+            self._check_tensor(X_val),
+            self._check_tensor(T_val),
+            self._check_tensor(E_val),
+        )
 
         sampler = ImbalancedDatasetSampler(E_train.cpu().numpy().tolist())
 

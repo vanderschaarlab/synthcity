@@ -69,8 +69,8 @@ def evaluate_model(
             model.fit(X_train, T_train, E_train)
             ood_preds = model.predict(X_test)
             id_preds = model.predict(X_train)
-
-        except BaseException:
+        except BaseException as e:
+            log.error(f"fold failed {e}")
             continue
 
         local_results["te_err_l1_ood"].append(
@@ -185,12 +185,16 @@ def select_uncensoring_model(
                 n_trials=n_trials,
                 timeout=timeout,
             )
+            if study.best_trial is None or study.best_trial.value is None:
+                continue
+
         except EarlyStoppingExceeded:
             pass
+        except BaseException as e:
+            print(f"model {model} failed: {e}")
+            continue
 
         score = study.best_trial.value
-        if score is None:
-            continue
 
         log.info(
             f"[select_uncensoring_model] model = {model} {metric} = {score} duration = {round(time() - start, 4)} s"
