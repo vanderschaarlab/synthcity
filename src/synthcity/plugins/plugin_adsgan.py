@@ -80,7 +80,7 @@ class AdsGANPlugin(Plugin):
         self,
         n_iter: int = 1000,
         generator_n_layers_hidden: int = 2,
-        generator_n_units_hidden: int = 1250,
+        generator_n_units_hidden: int = 250,
         generator_nonlin: str = "tanh",
         generator_dropout: float = 0,
         generator_opt_betas: tuple = (0.5, 0.999),

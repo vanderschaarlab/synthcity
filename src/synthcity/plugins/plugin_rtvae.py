@@ -66,10 +66,10 @@ class RTVAEPlugin(Plugin):
     @validate_arguments(config=dict(arbitrary_types_allowed=True))
     def __init__(
         self,
-        n_iter: int = 100,
+        n_iter: int = 1000,
         lr: float = 1e-4,
         weight_decay: float = 1e-3,
-        batch_size: int = 500,
+        batch_size: int = 100,
         seed: int = 0,
         clipping_value: int = 1,
         loss_strategy: str = "robust_divergence",

@@ -123,6 +123,7 @@ class Benchmarks:
     @validate_arguments(config=dict(arbitrary_types_allowed=True))
     def print(
         results: Dict,
+        only_comparatives: bool = True,
     ) -> None:
         pd.set_option("display.max_rows", None, "display.max_columns", None)
 
@@ -138,6 +139,9 @@ class Benchmarks:
             print()
             print("\033[4m" + "\033[1m" + "Comparatives" + "\033[0m" + "\033[0m")
             display(avg)
+
+            if only_comparatives:
+                return
 
         for plugin in results:
             print()
