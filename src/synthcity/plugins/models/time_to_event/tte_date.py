@@ -37,6 +37,7 @@ class TimeEventGAN(nn.Module):
         self,
         n_features: int,
         n_units_latent: int,
+        model_search_n_iter: Optional[int] = None,
         generator_n_layers_hidden: int = 2,
         generator_n_units_hidden: int = 250,
         generator_nonlin: str = "leaky_relu",
@@ -69,6 +70,9 @@ class TimeEventGAN(nn.Module):
 
         self.n_features = n_features
         self.n_units_latent = n_units_latent
+
+        if model_search_n_iter is not None:
+            generator_n_iter = model_search_n_iter
 
         self.generator = MLP(
             task_type="regression",

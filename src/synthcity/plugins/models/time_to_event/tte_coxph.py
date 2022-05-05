@@ -1,5 +1,5 @@
 # stdlib
-from typing import Any, List
+from typing import Any, List, Optional
 
 # third party
 import pandas as pd
@@ -15,7 +15,9 @@ from ._base import TimeToEventPlugin
 
 
 class CoxPHTimeToEvent(TimeToEventPlugin):
-    def __init__(self, **kwargs: Any) -> None:
+    def __init__(
+        self, model_search_n_iter: Optional[int] = None, **kwargs: Any
+    ) -> None:
         super().__init__()
         self.model = CoxPHFitter(**kwargs)
 

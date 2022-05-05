@@ -2,13 +2,14 @@
 TENN: time-to-event prediction using NNs and calibration losses.
 """
 # stdlib
-from typing import Any, List
+from typing import Any, List, Optional, Tuple
 
 # third party
 import numpy as np
 import pandas as pd
 import torch
 from pydantic import validate_arguments
+from sklearn.model_selection import train_test_split
 from sklearn.preprocessing import MinMaxScaler
 from torch import nn
 from torch.utils.data import DataLoader, TensorDataset
@@ -22,6 +23,7 @@ from synthcity.plugins.core.distribution import (
     IntegerDistribution,
 )
 from synthcity.plugins.models.mlp import MLP
+from synthcity.plugins.models.time_to_event.metrics import c_index, expected_time_error
 from synthcity.utils.reproducibility import enable_reproducible_results
 
 # synthcity relative
@@ -47,7 +49,7 @@ class TimeEventNN(nn.Module):
         residual: bool = True,
         opt_betas: tuple = (0.9, 0.999),
         batch_size: int = 500,
-        n_iter_print: int = 500,
+        n_iter_print: int = 50,
         seed: int = 0,
         n_iter_min: int = 100,
         clipping_value: int = 0,
@@ -121,13 +123,19 @@ class TimeEventNN(nn.Module):
 
     def dataloader(
         self, X: torch.Tensor, T: torch.Tensor, E: torch.Tensor
-    ) -> DataLoader:
-        dataset = TensorDataset(X, T, E)
-        sampler = ImbalancedDatasetSampler(E.cpu().numpy().tolist())
+    ) -> Tuple[DataLoader, TensorDataset]:
+        X_train, X_val, T_train, T_val, E_train, E_val = train_test_split(
+            X, T, E, stratify=E
+        )
+
+        train_dataset = TensorDataset(X_train, T_train, E_train)
+        val_dataset = TensorDataset(X_val, T_val, E_val)
+
+        sampler = ImbalancedDatasetSampler(E_train.cpu().numpy().tolist())
 
         return DataLoader(
-            dataset, batch_size=self.batch_size, sampler=sampler, pin_memory=False
-        )
+            train_dataset, batch_size=self.batch_size, sampler=sampler, pin_memory=False
+        ), DataLoader(val_dataset, batch_size=len(val_dataset), pin_memory=False)
 
     def _train_epoch_generator(
         self,
@@ -199,14 +207,29 @@ class TimeEventNN(nn.Module):
         E = self._check_tensor(E).long()
 
         # Load Dataset
-        loader = self.dataloader(X, T, E)
+        loader, val_loader = self.dataloader(X, T, E)
 
         # Train loop
         for i in range(self.n_iter):
             g_loss = self._train_epoch(loader)
             # Check how the generator is doing by saving G's output on fixed_noise
             if (i + 1) % self.n_iter_print == 0:
-                log.debug(f"[{i}/{self.n_iter}]\tLoss_G: {g_loss}")
+                with torch.no_grad():
+                    Xval, Tval, Eval = next(iter(val_loader))
+                    Tdf = pd.Series(Tval.cpu().numpy())
+                    Edf = pd.Series(Eval.cpu().numpy(), index=Tdf.index)
+
+                    Tpred = pd.Series(
+                        self.generator(Xval).detach().cpu().numpy().squeeze(),
+                        index=Tdf.index,
+                    )
+
+                    c_index_val = c_index(Tdf, Edf, Tpred)
+                    exp_err_val = expected_time_error(Tdf, Edf, Tpred)
+
+                log.info(
+                    f"[{i}/{self.n_iter}]\tTrain loss: {g_loss} C-Index val: {c_index_val} Expected time err: {exp_err_val}"
+                )
 
         return self
 
@@ -331,8 +354,13 @@ class TimeEventNN(nn.Module):
 
 
 class TENNTimeToEvent(TimeToEventPlugin):
-    def __init__(self, **kwargs: Any) -> None:
+    def __init__(
+        self, model_search_n_iter: Optional[int] = None, **kwargs: Any
+    ) -> None:
         super().__init__()
+
+        if model_search_n_iter is not None:
+            kwargs["n_iter"] = model_search_n_iter
 
         self.kwargs = kwargs
 

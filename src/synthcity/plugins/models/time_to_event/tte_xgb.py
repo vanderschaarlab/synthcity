@@ -1,5 +1,5 @@
 # stdlib
-from typing import Any, List
+from typing import Any, List, Optional
 
 # third party
 import numpy as np
@@ -25,6 +25,7 @@ class XGBTimeToEvent(TimeToEventPlugin):
 
     def __init__(
         self,
+        model_search_n_iter: Optional[int] = None,
         n_estimators: int = 100,
         colsample_bynode: float = 0.5,
         max_depth: int = 8,
@@ -40,6 +41,10 @@ class XGBTimeToEvent(TimeToEventPlugin):
         **kwargs: Any
     ) -> None:
         super().__init__()
+
+        if model_search_n_iter is not None:
+            n_estimators = 10 * model_search_n_iter
+
         surv_params = {}
         if objective == "aft":
             surv_params = {
@@ -68,7 +73,7 @@ class XGBTimeToEvent(TimeToEventPlugin):
             "tree_method": tree_method,
             "booster": XGBTimeToEvent.booster[booster],
             "random_state": random_state,
-            "n_jobs": 4,
+            "n_jobs": 2,
         }
         lr_params = {
             "C": 1e-3,
@@ -114,7 +119,8 @@ class XGBTimeToEvent(TimeToEventPlugin):
     @staticmethod
     def hyperparameter_space(**kwargs: Any) -> List[Distribution]:
         return [
-            IntegerDistribution(name="max_depth", low=2, high=6),
+            IntegerDistribution(name="max_depth", low=2, high=4),
+            IntegerDistribution(name="n_estimators", low=5, high=100),
             IntegerDistribution(name="min_child_weight", low=0, high=50),
             CategoricalDistribution(name="objective", choices=["aft", "cox"]),
             CategoricalDistribution(

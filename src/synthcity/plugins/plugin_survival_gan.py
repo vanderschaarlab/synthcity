@@ -91,6 +91,15 @@ class SurvivalGANPlugin(Plugin):
         encoder_max_clusters: int = 10,
         encoder: Any = None,
         dataloader_sampler: Optional[sampler.Sampler] = None,
+        seeds: List[str] = [
+            "weibull_aft",
+            "cox_ph",
+            "random_survival_forest",
+            "survival_xgboost",
+            "deephit",
+            "tenn",
+            "date",
+        ],
         **kwargs: Any,
     ) -> None:
         super().__init__(**kwargs)
@@ -98,6 +107,7 @@ class SurvivalGANPlugin(Plugin):
         self.target_column = target_column
         self.time_to_event_column = time_to_event_column
         self.time_horizons = time_horizons
+        self.seeds = seeds
 
         self.generator_n_layers_hidden = generator_n_layers_hidden
         self.generator_n_units_hidden = generator_n_units_hidden
@@ -174,7 +184,7 @@ class SurvivalGANPlugin(Plugin):
         E = X[self.target_column]
 
         # Uncensoring
-        self.uncensoring_model = select_uncensoring_model(Xcov, T, E)
+        self.uncensoring_model = select_uncensoring_model(Xcov, T, E, seeds=self.seeds)
 
         self.uncensoring_model.fit(Xcov, T, E)
         T_uncensored = pd.Series(self.uncensoring_model.predict(Xcov), index=Xcov.index)

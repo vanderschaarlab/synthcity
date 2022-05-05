@@ -1,14 +1,23 @@
 # stdlib
-from typing import Any, List
+from time import time
+from typing import Any, Callable, Dict, List
 
 # third party
 import numpy as np
+import optuna
 import pandas as pd
 from sklearn.model_selection import StratifiedKFold
 
 # synthcity absolute
+import synthcity.logger as log
 from synthcity.plugins.models.time_to_event.loader import get_model_template
 from synthcity.plugins.models.time_to_event.metrics import c_index, expected_time_error
+from synthcity.utils.optimizer import (
+    EarlyStoppingExceeded,
+    ParamRepeatPruner,
+    create_study,
+)
+from synthcity.utils.serialization import dataframe_hash
 
 
 def generate_score(metric: np.ndarray) -> tuple:
@@ -89,6 +98,51 @@ def evaluate_model(
     return output, output_str
 
 
+def _trial_params(trial: optuna.Trial, param_space: List) -> Dict:
+    out = {}
+
+    for param in param_space:
+        if hasattr(param, "choices"):
+            out[param.name] = trial.suggest_categorical(
+                param.name, choices=param.choices
+            )
+        elif hasattr(param, "step"):
+            out[param.name] = trial.suggest_int(
+                param.name, param.low, param.high, param.step
+            )
+        else:
+            out[param.name] = trial.suggest_float(param.name, param.low, param.high)
+
+    return out
+
+
+def objective_meta(
+    model_name: str,
+    X: pd.DataFrame,
+    T: pd.DataFrame,
+    E: pd.DataFrame,
+    metric: str,
+    pruner: ParamRepeatPruner,
+    n_folds: int = 3,
+) -> Callable:
+    def objective(trial: optuna.Trial) -> float:
+        template = get_model_template(model_name)
+        args = _trial_params(trial, template.hyperparameter_space())
+        pruner.check_trial(trial)
+        try:
+            full_score, _ = evaluate_model(model_name, args, X, T, E, n_folds=n_folds)
+        except BaseException as e:
+            log.error("model search failed", template, e)
+            return 0
+
+        score = full_score[metric][0]
+        pruner.report_score(score)
+
+        return score
+
+    return objective
+
+
 def select_uncensoring_model(
     X: pd.DataFrame,
     T: pd.DataFrame,
@@ -102,25 +156,49 @@ def select_uncensoring_model(
         "tenn",
         "date",
     ],
-    n_folds: int = 3,
+    n_folds: int = 2,
+    n_trials: int = 5,
+    timeout: int = 60,
     seed: int = 0,
 ) -> Any:
     metric = "c_index_ood"
+
+    df_hash = dataframe_hash(pd.concat([X, T, E], axis=1))
+
+    log.info(f"Evaluate uncensoring for {df_hash}")
+
     candidate = {
         "model": "tenn",
         "args": {},
         "score": 0,
     }
     for model in seeds:
-        full_score, _ = evaluate_model(model, {}, X, T, E)
-        if metric not in full_score:
-            raise RuntimeError(f"Metric {metric} not found")
-        score = full_score[metric][0]
+        start = time()
+        study, pruner = create_study(
+            study_name=f"uncensoring_{df_hash}_{model}_{metric}",
+            direction="maximize",
+        )
 
+        try:
+            study.optimize(
+                objective_meta(model, X, T, E, metric, pruner, n_folds=n_folds),
+                n_trials=n_trials,
+                timeout=timeout,
+            )
+        except EarlyStoppingExceeded:
+            pass
+
+        score = study.best_trial.value
+        if score is None:
+            continue
+
+        log.info(
+            f"[select_uncensoring_model] model = {model} {metric} = {score} duration = {round(time() - start, 4)} s"
+        )
         if score > candidate["score"]:
             candidate = {
                 "model": model,
-                "args": {},
+                "args": study.best_trial.params,
                 "score": score,
             }
 

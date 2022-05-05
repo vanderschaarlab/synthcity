@@ -4,6 +4,7 @@ from typing import Any, Union
 
 # third party
 import cloudpickle
+import pandas as pd
 
 
 def save(model: Any) -> bytes:
@@ -22,3 +23,7 @@ def save_to_file(path: Union[str, Path], model: Any) -> Any:
 def load_from_file(path: Union[str, Path]) -> Any:
     with open(path, "rb") as f:
         return cloudpickle.load(f)
+
+
+def dataframe_hash(df: pd.DataFrame) -> str:
+    return str(abs(pd.util.hash_pandas_object(df).sum()))

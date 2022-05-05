@@ -1,5 +1,5 @@
 # stdlib
-from typing import Any, List
+from typing import Any, List, Optional
 
 # third party
 import pandas as pd
@@ -15,8 +15,11 @@ from ._base import TimeToEventPlugin
 
 
 class WeibullAFTTimeToEvent(TimeToEventPlugin):
-    def __init__(self, **kwargs: Any) -> None:
+    def __init__(
+        self, model_search_n_iter: Optional[int] = None, **kwargs: Any
+    ) -> None:
         super().__init__()
+
         self.model = WeibullAFTFitter(**kwargs)
 
     @validate_arguments(config=dict(arbitrary_types_allowed=True))

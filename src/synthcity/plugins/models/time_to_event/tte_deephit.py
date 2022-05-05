@@ -1,5 +1,5 @@
 # stdlib
-from typing import Any, List, Tuple
+from typing import Any, List, Optional, Tuple
 
 # third party
 import numpy as np
@@ -28,6 +28,7 @@ DEVICE = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 class DeephitTimeToEvent(TimeToEventPlugin):
     def __init__(
         self,
+        model_search_n_iter: Optional[int] = None,
         num_durations: int = 500,
         batch_size: int = 100,
         epochs: int = 2000,
@@ -41,6 +42,9 @@ class DeephitTimeToEvent(TimeToEventPlugin):
         **kwargs: Any
     ) -> None:
         super().__init__()
+
+        if model_search_n_iter is not None:
+            epochs = model_search_n_iter
 
         self.num_durations = num_durations
         self.batch_size = batch_size

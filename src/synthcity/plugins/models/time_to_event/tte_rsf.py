@@ -1,5 +1,5 @@
 # stdlib
-from typing import Any, List
+from typing import Any, List, Optional
 
 # third party
 import numpy as np
@@ -9,15 +9,21 @@ from scipy.integrate import trapz
 from sksurv.ensemble import RandomSurvivalForest
 
 # synthcity absolute
-from synthcity.plugins.core.distribution import Distribution
+from synthcity.plugins.core.distribution import Distribution, IntegerDistribution
 
 # synthcity relative
 from ._base import TimeToEventPlugin
 
 
 class RandomSurvivalForestTimeToEvent(TimeToEventPlugin):
-    def __init__(self, **kwargs: Any) -> None:
+    def __init__(
+        self, model_search_n_iter: Optional[int] = None, **kwargs: Any
+    ) -> None:
         super().__init__()
+
+        if model_search_n_iter is not None:
+            kwargs["n_estimators"] = 10 * model_search_n_iter
+
         self.model = RandomSurvivalForest(**kwargs)
 
     @validate_arguments(config=dict(arbitrary_types_allowed=True))
@@ -47,4 +53,6 @@ class RandomSurvivalForestTimeToEvent(TimeToEventPlugin):
 
     @staticmethod
     def hyperparameter_space(**kwargs: Any) -> List[Distribution]:
-        return []
+        return [
+            IntegerDistribution(name="n_estimators", low=10, high=100),
+        ]
