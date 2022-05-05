@@ -10,6 +10,7 @@ import numpy as np
 import pandas as pd
 import torch
 from pydantic import validate_arguments
+from sklearn.model_selection import train_test_split
 from sklearn.preprocessing import MinMaxScaler
 from torch import nn
 from torch.utils.data import DataLoader, TensorDataset
@@ -23,6 +24,7 @@ from synthcity.plugins.core.distribution import (
     IntegerDistribution,
 )
 from synthcity.plugins.models.mlp import MLP
+from synthcity.plugins.models.time_to_event.metrics import c_index, expected_time_error
 from synthcity.utils.reproducibility import enable_reproducible_results
 
 # synthcity relative
@@ -60,6 +62,7 @@ class TimeEventGAN(nn.Module):
         discriminator_lr: float = 2e-4,
         discriminator_weight_decay: float = 1e-3,
         discriminator_opt_betas: tuple = (0.9, 0.999),
+        patience: int = 10,
         batch_size: int = 100,
         n_iter_print: int = 50,
         seed: int = 0,
@@ -116,6 +119,7 @@ class TimeEventGAN(nn.Module):
         self.n_iter_min = n_iter_min
         self.batch_size = batch_size
         self.clipping_value = clipping_value
+        self.patience = patience
 
         self.seed = seed
         enable_reproducible_results(seed)
@@ -153,10 +157,16 @@ class TimeEventGAN(nn.Module):
 
     def dataloader(
         self, X: torch.Tensor, T: torch.Tensor, E: torch.Tensor
-    ) -> DataLoader:
-        dataset = TensorDataset(X, T, E)
+    ) -> Tuple[DataLoader, TensorDataset]:
+        X_train, X_val, T_train, T_val, E_train, E_val = train_test_split(
+            X, T, E, stratify=E
+        )
+        train_dataset = TensorDataset(X_train, T_train, E_train)
+        val_dataset = TensorDataset(X_val, T_val, E_val)
 
-        return DataLoader(dataset, batch_size=self.batch_size, pin_memory=False)
+        return DataLoader(
+            train_dataset, batch_size=self.batch_size, pin_memory=False
+        ), DataLoader(val_dataset, batch_size=len(val_dataset), pin_memory=False)
 
     def _generate_training_outputs(
         self, X: torch.Tensor, T: torch.Tensor, E: torch.Tensor
@@ -316,15 +326,44 @@ class TimeEventGAN(nn.Module):
         E = self._check_tensor(E).long()
 
         # Load Dataset
-        loader = self.dataloader(X, T, E)
+        loader, val_loader = self.dataloader(X, T, E)
+
+        best_exp_tte_err = 9999
+        patience = 0
 
         # Train loop
         for i in range(self.generator_n_iter):
             g_loss, d_loss = self._train_epoch(loader)
             # Check how the generator is doing by saving G's output on fixed_noise
             if (i + 1) % self.n_iter_print == 0:
-                log.debug(
-                    f"[{i}/{self.generator_n_iter}]\tLoss_D: {d_loss}\tLoss_G: {g_loss}"
+                with torch.no_grad():
+                    Xval, Tval, Eval = next(iter(val_loader))
+                    Xdf = Xval.cpu().numpy()
+                    Tdf = pd.Series(Tval.cpu().numpy())
+                    Edf = pd.Series(Eval.cpu().numpy(), index=Tdf.index)
+
+                    Tpred = pd.Series(
+                        self.generate(Xdf).squeeze(),
+                        index=Tdf.index,
+                    )
+
+                    c_index_val = c_index(Tdf, Edf, Tpred)
+                    exp_err_val = expected_time_error(Tdf, Edf, Tpred)
+
+                    if best_exp_tte_err > exp_err_val:
+                        patience = 0
+                        best_exp_tte_err = exp_err_val
+                    else:
+                        patience += 1
+
+                    if patience > self.patience:
+                        log.info(
+                            f"No improvement for {patience} iterations. stopping..."
+                        )
+                        break
+
+                log.info(
+                    f"[{i}/{self.generator_n_iter}]\tLoss_D: {d_loss}\tLoss_G: {g_loss}\tC-Index val: {c_index_val} Expected time err: {exp_err_val}"
                 )
 
         return self

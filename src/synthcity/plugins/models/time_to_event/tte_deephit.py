@@ -29,14 +29,14 @@ class DeephitTimeToEvent(TimeToEventPlugin):
     def __init__(
         self,
         model_search_n_iter: Optional[int] = None,
-        num_durations: int = 500,
+        num_durations: int = 1000,
         batch_size: int = 100,
         epochs: int = 2000,
-        lr: float = 1e-2,
+        lr: float = 1e-3,
         dim_hidden: int = 300,
         alpha: float = 0.28,
         sigma: float = 0.38,
-        dropout: float = 0.2,
+        dropout: float = 0.02,
         patience: int = 20,
         batch_norm: bool = False,
         **kwargs: Any

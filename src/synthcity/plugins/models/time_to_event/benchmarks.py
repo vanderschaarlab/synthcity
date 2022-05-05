@@ -137,6 +137,7 @@ def objective_meta(
 
         score = full_score[metric][0]
         pruner.report_score(score)
+        print("score", full_score)
 
         return score
 
@@ -157,8 +158,8 @@ def select_uncensoring_model(
         "date",
     ],
     n_folds: int = 2,
-    n_trials: int = 5,
-    timeout: int = 60,
+    n_trials: int = 10,
+    timeout: int = 120,
     seed: int = 0,
 ) -> Any:
     metric = "c_index_ood"

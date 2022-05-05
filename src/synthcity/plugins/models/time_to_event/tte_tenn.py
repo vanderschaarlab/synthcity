@@ -39,12 +39,12 @@ class TimeEventNN(nn.Module):
         self,
         n_features: int,
         n_layers_hidden: int = 1,
-        n_units_hidden: int = 300,
+        n_units_hidden: int = 350,
         nonlin: str = "leaky_relu",
         n_iter: int = 1000,
         batch_norm: bool = False,
-        dropout: float = 0.1,
-        lr: float = 1e-2,
+        dropout: float = 0.02,
+        lr: float = 1e-3,
         weight_decay: float = 1e-3,
         residual: bool = True,
         opt_betas: tuple = (0.9, 0.999),
@@ -53,10 +53,11 @@ class TimeEventNN(nn.Module):
         seed: int = 0,
         n_iter_min: int = 100,
         clipping_value: int = 0,
-        lambda_calibration: float = 50,
+        patience: int = 5,
+        lambda_calibration: float = 1,
         lambda_ordering: float = 1,
         lambda_regression_nc: float = 1,
-        lambda_regression_c: float = 100,
+        lambda_regression_c: float = 1,
     ) -> None:
         super(TimeEventNN, self).__init__()
 
@@ -65,6 +66,7 @@ class TimeEventNN(nn.Module):
         self.lambda_ordering = lambda_ordering
         self.lambda_regression_nc = lambda_regression_nc
         self.lambda_regression_c = lambda_regression_c
+        self.patience = patience
 
         self.generator = MLP(
             task_type="regression",
@@ -73,6 +75,7 @@ class TimeEventNN(nn.Module):
             n_layers_hidden=n_layers_hidden,
             n_units_hidden=n_units_hidden,
             nonlin=nonlin,
+            nonlin_out=[("relu", 1)],
             n_iter=n_iter,
             batch_norm=batch_norm,
             dropout=dropout,
@@ -209,6 +212,9 @@ class TimeEventNN(nn.Module):
         # Load Dataset
         loader, val_loader = self.dataloader(X, T, E)
 
+        best_exp_tte_err = 9999
+        patience = 0
+
         # Train loop
         for i in range(self.n_iter):
             g_loss = self._train_epoch(loader)
@@ -226,6 +232,18 @@ class TimeEventNN(nn.Module):
 
                     c_index_val = c_index(Tdf, Edf, Tpred)
                     exp_err_val = expected_time_error(Tdf, Edf, Tpred)
+
+                    if best_exp_tte_err > exp_err_val:
+                        patience = 0
+                        best_exp_tte_err = exp_err_val
+                    else:
+                        patience += 1
+
+                    if patience > self.patience:
+                        log.info(
+                            f"No improvement for {patience} iterations. stopping..."
+                        )
+                        break
 
                 log.info(
                     f"[{i}/{self.n_iter}]\tTrain loss: {g_loss} C-Index val: {c_index_val} Expected time err: {exp_err_val}"
