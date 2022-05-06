@@ -48,18 +48,22 @@ class DataMismatchScore(BasicMetricEvaluator):
         return "minimize"
 
     @validate_arguments(config=dict(arbitrary_types_allowed=True))
-    def evaluate(self, X_gt: pd.DataFrame, X_synth: pd.DataFrame) -> Dict:
-        if len(X_gt.columns) != len(X_synth.columns):
-            raise ValueError(f"Incompatible dataframe {X_gt.shape} and {X_synth.shape}")
+    def evaluate(
+        self, X_gt_train: pd.DataFrame, X_gt_test: pd.DataFrame, X_synth: pd.DataFrame
+    ) -> Dict:
+        if len(X_gt_train.columns) != len(X_synth.columns):
+            raise ValueError(
+                f"Incompatible dataframe {X_gt_train.shape} and {X_synth.shape}"
+            )
 
         def _eval_score(lhs: pd.Series, rhs: pd.Series) -> int:
             return int(lhs.dtype != rhs.dtype)
 
         diffs = 0
-        for col in X_gt.columns:
-            diffs += _eval_score(X_gt[col], X_synth[col])
+        for col in X_gt_train.columns:
+            diffs += _eval_score(X_gt_train[col], X_synth[col])
 
-        return {"score": diffs / (len(X_gt.columns) + 1)}
+        return {"score": diffs / (len(X_gt_train.columns) + 1)}
 
 
 class CommonRowsProportion(BasicMetricEvaluator):
@@ -79,14 +83,18 @@ class CommonRowsProportion(BasicMetricEvaluator):
         return "minimize"
 
     @validate_arguments(config=dict(arbitrary_types_allowed=True))
-    def evaluate(self, X_gt: pd.DataFrame, X_synth: pd.DataFrame) -> Dict:
-        if len(X_gt.columns) != len(X_synth.columns):
-            raise ValueError(f"Incompatible dataframe {X_gt.shape} and {X_synth.shape}")
+    def evaluate(
+        self, X_gt_train: pd.DataFrame, X_gt_test: pd.DataFrame, X_synth: pd.DataFrame
+    ) -> Dict:
+        if len(X_gt_train.columns) != len(X_synth.columns):
+            raise ValueError(
+                f"Incompatible dataframe {X_gt_train.shape} and {X_synth.shape}"
+            )
 
-        intersection = X_gt.merge(
+        intersection = X_gt_train.merge(
             X_synth, how="inner", indicator=False
         ).drop_duplicates()
-        return {"score": len(intersection) / (len(X_gt) + 1e-8)}
+        return {"score": len(intersection) / (len(X_gt_train) + 1e-8)}
 
 
 class NearestSyntheticNeighborDistance(BasicMetricEvaluator):
@@ -101,11 +109,15 @@ class NearestSyntheticNeighborDistance(BasicMetricEvaluator):
         return "minimize"
 
     @validate_arguments(config=dict(arbitrary_types_allowed=True))
-    def evaluate(self, X_gt: pd.DataFrame, X_synth: pd.DataFrame) -> Dict:
-        if len(X_gt.columns) != len(X_synth.columns):
-            raise ValueError(f"Incompatible dataframe {X_gt.shape} and {X_synth.shape}")
+    def evaluate(
+        self, X_gt_train: pd.DataFrame, X_gt_test: pd.DataFrame, X_synth: pd.DataFrame
+    ) -> Dict:
+        if len(X_gt_train.columns) != len(X_synth.columns):
+            raise ValueError(
+                f"Incompatible dataframe {X_gt_train.shape} and {X_synth.shape}"
+            )
 
-        dist = BasicMetricEvaluator._helper_nearest_neighbor(X_gt, X_synth)
+        dist = BasicMetricEvaluator._helper_nearest_neighbor(X_gt_train, X_synth)
 
         dist = (dist - np.min(dist)) / (np.max(dist) - np.min(dist) + 1e-8)
         return {self._reduction: float(self.reduction()(dist))}
@@ -128,11 +140,15 @@ class CloseValuesProbability(BasicMetricEvaluator):
         return "maximize"
 
     @validate_arguments(config=dict(arbitrary_types_allowed=True))
-    def evaluate(self, X_gt: pd.DataFrame, X_synth: pd.DataFrame) -> Dict:
-        if len(X_gt.columns) != len(X_synth.columns):
-            raise ValueError(f"Incompatible dataframe {X_gt.shape} and {X_synth.shape}")
+    def evaluate(
+        self, X_gt_train: pd.DataFrame, X_gt_test: pd.DataFrame, X_synth: pd.DataFrame
+    ) -> Dict:
+        if len(X_gt_train.columns) != len(X_synth.columns):
+            raise ValueError(
+                f"Incompatible dataframe {X_gt_train.shape} and {X_synth.shape}"
+            )
 
-        dist = BasicMetricEvaluator._helper_nearest_neighbor(X_gt, X_synth)
+        dist = BasicMetricEvaluator._helper_nearest_neighbor(X_gt_train, X_synth)
         dist = (dist - np.min(dist)) / (np.max(dist) - np.min(dist) + 1e-8)
 
         threshold = 0.2
@@ -157,11 +173,15 @@ class DistantValuesProbability(BasicMetricEvaluator):
         return "minimize"
 
     @validate_arguments(config=dict(arbitrary_types_allowed=True))
-    def evaluate(self, X_gt: pd.DataFrame, X_synth: pd.DataFrame) -> Dict:
-        if len(X_gt.columns) != len(X_synth.columns):
-            raise ValueError(f"Incompatible dataframe {X_gt.shape} and {X_synth.shape}")
+    def evaluate(
+        self, X_gt_train: pd.DataFrame, X_gt_test: pd.DataFrame, X_synth: pd.DataFrame
+    ) -> Dict:
+        if len(X_gt_train.columns) != len(X_synth.columns):
+            raise ValueError(
+                f"Incompatible dataframe {X_gt_train.shape} and {X_synth.shape}"
+            )
 
-        dist = BasicMetricEvaluator._helper_nearest_neighbor(X_gt, X_synth)
+        dist = BasicMetricEvaluator._helper_nearest_neighbor(X_gt_train, X_synth)
         dist = (dist - np.min(dist)) / (np.max(dist) - np.min(dist) + 1e-8)
 
         threshold = 0.8

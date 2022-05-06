@@ -39,26 +39,32 @@ def test_evaluate_performance_classifier(
     evaluator = evaluator_t()
     good_score = evaluator.evaluate(
         X,
+        X,
         X_gen,
     )
 
     assert "gt" in good_score
-    assert "syn" in good_score
+    assert "syn_id" in good_score
+    assert "syn_ood" in good_score
 
     assert good_score["gt"] > 0
-    assert good_score["syn"] > 0
+    assert good_score["syn_id"] > 0
+    assert good_score["syn_ood"] > 0
 
     sz = 100
     X_rnd = pd.DataFrame(np.random.randn(sz, len(X.columns)), columns=X.columns)
     score = evaluator.evaluate(
         X,
+        X,
         X_rnd,
     )
 
     assert "gt" in score
-    assert "syn" in score
+    assert "syn_id" in score
+    assert "syn_ood" in score
 
-    assert score["syn"] < good_score["syn"]
+    assert score["syn_id"] < good_score["syn_id"]
+    assert score["syn_ood"] < good_score["syn_ood"]
 
     assert evaluator.type() == "performance"
     assert evaluator.direction() == "maximize"
@@ -85,23 +91,29 @@ def test_evaluate_performance_regression(
     evaluator = evaluator_t()
     good_score = evaluator.evaluate(
         X,
+        X,
         X_gen,
     )
 
     assert "gt" in good_score
-    assert "syn" in good_score
+    assert "syn_id" in good_score
+    assert "syn_ood" in good_score
 
-    sz = 100
+    sz = 1000
     X_rnd = pd.DataFrame(np.random.randn(sz, len(X.columns)), columns=X.columns)
     score = evaluator.evaluate(
         X,
+        X,
         X_rnd,
     )
+    print(good_score, score)
 
     assert "gt" in score
-    assert "syn" in score
+    assert "syn_id" in score
+    assert "syn_ood" in score
 
-    assert score["syn"] < good_score["syn"]
+    assert score["syn_id"] <= good_score["syn_id"]
+    assert score["syn_ood"] <= good_score["syn_ood"]
 
 
 @pytest.mark.parametrize("test_plugin", [Plugins().get("marginal_distributions")])
@@ -131,25 +143,30 @@ def test_evaluate_performance_survival_analysis(
     )
     good_score = evaluator.evaluate(
         X,
+        X,
         X_gen,
     )
 
     assert "gt" in good_score
-    assert "syn" in good_score
+    assert "syn_id" in good_score
+    assert "syn_ood" in good_score
 
     sz = 100
     X_rnd = pd.DataFrame(np.random.randn(sz, len(X.columns)), columns=X.columns)
     X_rnd["arrest"] = 1
     score = evaluator.evaluate(
         X,
+        X,
         X_rnd,
     )
 
     assert "gt" in score
-    assert "syn" in score
+    assert "syn_id" in score
+    assert "syn_ood" in score
 
-    assert score["syn"] < 1
-    assert good_score["syn"] < 1
+    assert score["syn_id"] < 1
+    assert score["syn_ood"] < 1
+    assert good_score["gt"] < 1
 
 
 @pytest.mark.parametrize("test_plugin", [Plugins().get("marginal_distributions")])
@@ -176,17 +193,20 @@ def test_evaluate_performance_custom_labels(
 
     good_score = evaluator.evaluate(
         X,
+        X,
         X_gen,
     )
 
     assert "gt" in good_score
-    assert "syn" in good_score
+    assert "syn_id" in good_score
+    assert "syn_ood" in good_score
 
     # Test fail
 
     evaluator = evaluator_t(target_column="invalid_col")
     with pytest.raises(ValueError):
         evaluator.evaluate(
+            X,
             X,
             X_gen,
         )

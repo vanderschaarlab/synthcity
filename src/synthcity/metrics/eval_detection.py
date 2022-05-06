@@ -91,7 +91,9 @@ class SyntheticDetectionXGB(DetectionEvaluator):
         return "detection_xgb"
 
     @validate_arguments(config=dict(arbitrary_types_allowed=True))
-    def evaluate(self, X_gt: pd.DataFrame, X_syn: pd.DataFrame) -> Dict:
+    def evaluate(
+        self, X_gt_train: pd.DataFrame, X_gt_test: pd.DataFrame, X_syn: pd.DataFrame
+    ) -> Dict:
         model_template = XGBClassifier
         model_args = {
             "n_jobs": 1,
@@ -100,7 +102,7 @@ class SyntheticDetectionXGB(DetectionEvaluator):
             "depth": 3,
         }
 
-        return self._evaluate_detection(model_template, X_gt, X_syn, **model_args)
+        return self._evaluate_detection(model_template, X_gt_train, X_syn, **model_args)
 
 
 class SyntheticDetectionMLP(DetectionEvaluator):
@@ -119,15 +121,17 @@ class SyntheticDetectionMLP(DetectionEvaluator):
         return "detection_mlp"
 
     @validate_arguments(config=dict(arbitrary_types_allowed=True))
-    def evaluate(self, X_gt: pd.DataFrame, X_syn: pd.DataFrame) -> Dict:
+    def evaluate(
+        self, X_gt_train: pd.DataFrame, X_gt_test: pd.DataFrame, X_syn: pd.DataFrame
+    ) -> Dict:
         model_args = {
             "task_type": "classification",
-            "n_units_in": X_gt.shape[1],
+            "n_units_in": X_gt_train.shape[1],
             "n_units_out": 2,
         }
         return self._evaluate_detection(
             MLP,
-            X_gt,
+            X_gt_train,
             X_syn,
             **model_args,
         )
@@ -151,7 +155,8 @@ class SyntheticDetectionGMM(DetectionEvaluator):
     @validate_arguments(config=dict(arbitrary_types_allowed=True))
     def evaluate(
         self,
-        X_gt: pd.DataFrame,
+        X_gt_train: pd.DataFrame,
+        X_gt_test: pd.DataFrame,
         X_syn: pd.DataFrame,
     ) -> Dict:
 
@@ -159,7 +164,7 @@ class SyntheticDetectionGMM(DetectionEvaluator):
 
         for component in [1, 5, 10]:
             gmm = GaussianMixture(n_components=component, covariance_type="diag")
-            gmm.fit(X_gt)
+            gmm.fit(X_gt_train)
 
             scores.append(gmm.score(X_syn))  # Higher is better
 

@@ -36,6 +36,7 @@ def test_reduction(reduction: str, evaluator_t: Type) -> None:
 
     score = evaluator.evaluate(
         X,
+        X,
         X_gen,
     )
 
@@ -63,6 +64,7 @@ def test_evaluate_sensitive_data_leakage(evaluator_t: Type) -> None:
 
     score = evaluator.evaluate(
         X,
+        X,
         X_gen,
     )["mean"]
     assert score > 0.5
@@ -75,6 +77,7 @@ def test_evaluate_sensitive_data_leakage(evaluator_t: Type) -> None:
     X_gen = test_plugin.generate(2 * len(X))
 
     score = evaluator.evaluate(
+        X,
         X,
         X_gen,
     )["mean"]

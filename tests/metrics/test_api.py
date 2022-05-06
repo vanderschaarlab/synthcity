@@ -20,6 +20,7 @@ def test_basic(test_plugin: str) -> None:
 
     out = Metrics.evaluate(
         X,
+        X,
         X_gen,
     )
 
@@ -69,6 +70,7 @@ def test_metric_filter(metric_filter: dict) -> None:
 
     out = Metrics.evaluate(
         X,
+        X,
         X_gen,
         metrics=metric_filter,
     )
@@ -114,7 +116,8 @@ def test_custom_label(target: str) -> None:
     X_gen = model.generate(100)
 
     out = Metrics.evaluate(
-        X, X_gen, target_column=target, metrics={"performance": "linear_model"}
+        X, X, X_gen, target_column=target, metrics={"performance": "linear_model"}
     )
 
-    assert "performance.linear_model.syn" in out.index
+    assert "performance.linear_model.syn_id" in out.index
+    assert "performance.linear_model.syn_ood" in out.index

@@ -44,10 +44,14 @@ class InverseKLDivergence(MetricEvaluator):
         return "maximize"
 
     @validate_arguments(config=dict(arbitrary_types_allowed=True))
-    def evaluate(self, X_gt: pd.DataFrame, X_syn: pd.DataFrame) -> Dict:
-        freqs = get_frequency(X_gt, X_syn, n_histogram_bins=self._n_histogram_bins)
+    def evaluate(
+        self, X_gt_train: pd.DataFrame, X_gt_test: pd.DataFrame, X_syn: pd.DataFrame
+    ) -> Dict:
+        freqs = get_frequency(
+            X_gt_train, X_syn, n_histogram_bins=self._n_histogram_bins
+        )
         res = []
-        for col in X_gt.columns:
+        for col in X_gt_train.columns:
             gt_freq, synth_freq = freqs[col]
             res.append(1 / (1 + np.sum(kl_div(gt_freq, synth_freq))))
 
@@ -78,10 +82,12 @@ class KolmogorovSmirnovTest(MetricEvaluator):
         return "maximize"
 
     @validate_arguments(config=dict(arbitrary_types_allowed=True))
-    def evaluate(self, X_gt: pd.DataFrame, X_syn: pd.DataFrame) -> Dict:
+    def evaluate(
+        self, X_gt_train: pd.DataFrame, X_gt_test: pd.DataFrame, X_syn: pd.DataFrame
+    ) -> Dict:
         res = []
-        for col in X_gt.columns:
-            statistic, _ = ks_2samp(X_gt[col], X_syn[col])
+        for col in X_gt_train.columns:
+            statistic, _ = ks_2samp(X_gt_train[col], X_syn[col])
             res.append(1 - statistic)
 
         return {"marginal": float(self.reduction()(res))}
@@ -114,11 +120,15 @@ class ChiSquaredTest(MetricEvaluator):
         return "maximize"
 
     @validate_arguments(config=dict(arbitrary_types_allowed=True))
-    def evaluate(self, X_gt: pd.DataFrame, X_syn: pd.DataFrame) -> Dict:
+    def evaluate(
+        self, X_gt_train: pd.DataFrame, X_gt_test: pd.DataFrame, X_syn: pd.DataFrame
+    ) -> Dict:
         res = []
-        freqs = get_frequency(X_gt, X_syn, n_histogram_bins=self._n_histogram_bins)
+        freqs = get_frequency(
+            X_gt_train, X_syn, n_histogram_bins=self._n_histogram_bins
+        )
 
-        for col in X_gt.columns:
+        for col in X_gt_train.columns:
             gt_freq, synth_freq = freqs[col]
             try:
                 _, pvalue = chisquare(gt_freq, synth_freq)
@@ -162,14 +172,15 @@ class MaximumMeanDiscrepancy(MetricEvaluator):
     @validate_arguments(config=dict(arbitrary_types_allowed=True))
     def evaluate(
         self,
-        X_gt: pd.DataFrame,
+        X_gt_train: pd.DataFrame,
+        X_gt_test: pd.DataFrame,
         X_syn: pd.DataFrame,
     ) -> Dict:
         if self.kernel == "linear":
             """
             MMD using linear kernel (i.e., k(x,y) = <x,y>)
             """
-            delta_df = X_gt.mean(axis=0) - X_syn.mean(axis=0)
+            delta_df = X_gt_train.mean(axis=0) - X_syn.mean(axis=0)
             delta = delta_df.values
 
             score = delta.dot(delta.T)
@@ -178,9 +189,9 @@ class MaximumMeanDiscrepancy(MetricEvaluator):
             MMD using rbf (gaussian) kernel (i.e., k(x,y) = exp(-gamma * ||x-y||^2 / 2))
             """
             gamma = 1.0
-            XX = metrics.pairwise.rbf_kernel(X_gt, X_gt, gamma)
+            XX = metrics.pairwise.rbf_kernel(X_gt_train, X_gt_train, gamma)
             YY = metrics.pairwise.rbf_kernel(X_syn, X_syn, gamma)
-            XY = metrics.pairwise.rbf_kernel(X_gt, X_syn, gamma)
+            XY = metrics.pairwise.rbf_kernel(X_gt_train, X_syn, gamma)
             score = XX.mean() + YY.mean() - 2 * XY.mean()
         elif self.kernel == "polynomial":
             """
@@ -189,9 +200,13 @@ class MaximumMeanDiscrepancy(MetricEvaluator):
             degree = 2
             gamma = 1
             coef0 = 0
-            XX = metrics.pairwise.polynomial_kernel(X_gt, X_gt, degree, gamma, coef0)
+            XX = metrics.pairwise.polynomial_kernel(
+                X_gt_train, X_gt_train, degree, gamma, coef0
+            )
             YY = metrics.pairwise.polynomial_kernel(X_syn, X_syn, degree, gamma, coef0)
-            XY = metrics.pairwise.polynomial_kernel(X_gt, X_syn, degree, gamma, coef0)
+            XY = metrics.pairwise.polynomial_kernel(
+                X_gt_train, X_syn, degree, gamma, coef0
+            )
             score = XX.mean() + YY.mean() - 2 * XY.mean()
         else:
             raise ValueError(f"Unsupported kernel {self.kernel}")
@@ -223,7 +238,8 @@ class InverseCDFDistance(MetricEvaluator):
     @validate_arguments(config=dict(arbitrary_types_allowed=True))
     def evaluate(
         self,
-        X_gt: pd.DataFrame,
+        X_gt_train: pd.DataFrame,
+        X_gt_test: pd.DataFrame,
         X_syn: pd.DataFrame,
     ) -> Dict:
         distances = []
@@ -231,7 +247,7 @@ class InverseCDFDistance(MetricEvaluator):
             if len(X_syn[col].unique()) < 15:
                 continue
             syn_col = X_syn[col]
-            gt_col = X_gt[col]
+            gt_col = X_gt_train[col]
 
             predictor = Univariate()
             predictor.fit(syn_col)
@@ -296,11 +312,12 @@ class JensenShannonDistance(MetricEvaluator):
     @validate_arguments(config=dict(arbitrary_types_allowed=True))
     def evaluate(
         self,
-        X_gt: pd.DataFrame,
+        X_gt_train: pd.DataFrame,
+        X_gt_test: pd.DataFrame,
         X_syn: pd.DataFrame,
         normalizdde: bool = True,
     ) -> Dict:
-        stats_, _, _ = self._evaluate_stats(X_gt, X_syn)
+        stats_, _, _ = self._evaluate_stats(X_gt_train, X_syn)
 
         return {"marginal": sum(stats_.values()) / len(stats_.keys())}
 
@@ -354,10 +371,11 @@ class FeatureCorrelation(MetricEvaluator):
     @validate_arguments(config=dict(arbitrary_types_allowed=True))
     def evaluate(
         self,
-        X_gt: pd.DataFrame,
+        X_gt_train: pd.DataFrame,
+        X_gt_test: pd.DataFrame,
         X_syn: pd.DataFrame,
     ) -> Dict:
-        stats_gt, stats_syn = self._evaluate_stats(X_gt, X_syn)
+        stats_gt, stats_syn = self._evaluate_stats(X_gt_train, X_syn)
 
         return {"joint": np.linalg.norm(stats_gt - stats_syn, "fro")}
 
@@ -391,10 +409,11 @@ class WassersteinDistance(MetricEvaluator):
     @validate_arguments(config=dict(arbitrary_types_allowed=True))
     def evaluate(
         self,
-        X: pd.DataFrame,
+        X_train: pd.DataFrame,
+        X_test: pd.DataFrame,
         X_syn: pd.DataFrame,
     ) -> Dict:
-        X_ten = torch.from_numpy(X.values)
+        X_ten = torch.from_numpy(X_train.values)
         Xsyn_ten = torch.from_numpy(X_syn.values)
         OT_solver = SamplesLoss(loss="sinkhorn")
 
@@ -429,10 +448,11 @@ class PRDCScore(MetricEvaluator):
     @validate_arguments(config=dict(arbitrary_types_allowed=True))
     def evaluate(
         self,
-        X: pd.DataFrame,
+        X_train: pd.DataFrame,
+        X_test: pd.DataFrame,
         X_syn: pd.DataFrame,
     ) -> Dict:
-        return self._compute_prdc(np.asarray(X), np.asarray(X_syn))
+        return self._compute_prdc(np.asarray(X_train), np.asarray(X_syn))
 
     def _compute_pairwise_distance(
         self, data_x: np.ndarray, data_y: Optional[np.ndarray] = None
@@ -629,7 +649,8 @@ class AlphaPrecision(MetricEvaluator):
     @validate_arguments(config=dict(arbitrary_types_allowed=True))
     def evaluate(
         self,
-        X_df: pd.DataFrame,
+        X_train_df: pd.DataFrame,
+        X_test_df: pd.DataFrame,
         X_syn_df: pd.DataFrame,
     ) -> Dict:
 
@@ -640,7 +661,7 @@ class AlphaPrecision(MetricEvaluator):
             Delta_precision_alpha,
             Delta_coverage_beta,
             authenticity,
-        ) = self.metrics(X_df, X_syn_df)
+        ) = self.metrics(X_train_df, X_syn_df)
 
         return {
             "delta_precision_alpha": Delta_precision_alpha,

@@ -91,7 +91,7 @@ def plot_associations_comparison(
         nom_nom_assoc=nom_nom_assoc, nominal_columns=nominal_columns
     )
     stats_gt, stats_syn = evaluator._evaluate_stats(X_gt, X_syn)
-    pcd = evaluator.evaluate(X_gt, X_syn)["joint"]
+    pcd = evaluator.evaluate(X_gt, X_gt, X_syn)["joint"]
 
     fig, ax = plt.subplots(1, 2, figsize=(12, 10))
     cbar_ax = fig.add_axes([0.91, 0.3, 0.01, 0.4])

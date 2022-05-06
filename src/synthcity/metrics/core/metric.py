@@ -35,7 +35,9 @@ class MetricEvaluator(metaclass=ABCMeta):
 
     @validate_arguments(config=dict(arbitrary_types_allowed=True))
     @abstractmethod
-    def evaluate(self, X_gt: pd.DataFrame, X_syn: pd.DataFrame) -> Dict:
+    def evaluate(
+        self, X_gt_train: pd.DataFrame, X_gt_test: pd.DataFrame, X_syn: pd.DataFrame
+    ) -> Dict:
         ...
 
     @staticmethod

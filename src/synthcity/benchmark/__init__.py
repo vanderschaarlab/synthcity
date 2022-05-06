@@ -5,6 +5,7 @@ from typing import Dict, List, Optional
 import pandas as pd
 from IPython.display import display
 from pydantic import validate_arguments
+from sklearn.model_selection import train_test_split
 
 # synthcity absolute
 import synthcity.logger as log
@@ -32,6 +33,7 @@ class Benchmarks:
         ] = None,  # only for task_type = survival_analysis
         time_horizons: Optional[List] = None,  # only for task_type = survival_analysis
         plugin_kwargs: Dict = {},
+        train_size: float = 0.8,
     ) -> pd.DataFrame:
         """Benchmark the performance of several algorithms.
 
@@ -80,8 +82,10 @@ class Benchmarks:
                     time_horizons=time_horizons,
                 )
 
+                X_train, X_test = train_test_split(X, train_size=train_size)
+
                 try:
-                    generator.fit(X)
+                    generator.fit(X_train)
                     X_syn = generator.generate(
                         count=synthetic_size, constraints=synthetic_constraints
                     )
@@ -92,7 +96,8 @@ class Benchmarks:
                     continue
 
                 evaluation = Metrics.evaluate(
-                    X,
+                    X_train,
+                    X_test,
                     X_syn,
                     sensitive_columns=sensitive_columns,
                     metrics=metrics,

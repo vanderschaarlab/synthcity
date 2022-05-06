@@ -81,7 +81,8 @@ class Metrics:
     @staticmethod
     @validate_arguments(config=dict(arbitrary_types_allowed=True))
     def evaluate(
-        X_gt: pd.DataFrame,
+        X_gt_train: pd.DataFrame,
+        X_gt_test: pd.DataFrame,
         X_syn: pd.DataFrame,
         sensitive_columns: List[str] = [],
         reduction: str = "mean",
@@ -126,7 +127,8 @@ class Metrics:
                     time_to_event_column=time_to_event_column,
                     time_horizons=time_horizons,
                 ),
-                X_gt,
+                X_gt_train,
+                X_gt_test,
                 X_syn,
             )
 

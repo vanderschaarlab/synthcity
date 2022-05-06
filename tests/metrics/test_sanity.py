@@ -21,6 +21,7 @@ from synthcity.plugins import Plugin, Plugins
 def _eval_plugin(cbk: Callable, X: pd.DataFrame, X_syn: pd.DataFrame) -> Tuple:
     syn_score = cbk(
         X,
+        X,
         X_syn,
     )
     print(syn_score)
@@ -28,6 +29,7 @@ def _eval_plugin(cbk: Callable, X: pd.DataFrame, X_syn: pd.DataFrame) -> Tuple:
     sz = len(X_syn)
     X_rnd = pd.DataFrame(np.random.randn(sz, len(X.columns)), columns=X.columns)
     rnd_score = cbk(
+        X,
         X,
         X_rnd,
     )
@@ -47,6 +49,7 @@ def test_evaluate_data_mismatch_score(test_plugin: Plugin) -> None:
 
     score = evaluator.evaluate(
         X,
+        X,
         X_gen,
     )
 
@@ -57,6 +60,7 @@ def test_evaluate_data_mismatch_score(test_plugin: Plugin) -> None:
     X["target"] = "a"
 
     score = evaluator.evaluate(
+        X,
         X,
         X_fail,
     )
