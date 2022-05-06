@@ -248,12 +248,12 @@ class TimeEventNN(nn.Module):
                         patience += 1
 
                     if patience > self.patience:
-                        log.info(
+                        log.debug(
                             f"No improvement for {patience} iterations. stopping..."
                         )
                         break
 
-                log.info(
+                log.debug(
                     f"[{i}/{self.n_iter}]\tTrain loss: {g_loss} C-Index val: {c_index_val} Expected time err: {exp_err_val}"
                 )
 

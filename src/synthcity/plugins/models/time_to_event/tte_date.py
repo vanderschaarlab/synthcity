@@ -365,12 +365,12 @@ class TimeEventGAN(nn.Module):
                         patience += 1
 
                     if patience > self.patience:
-                        log.info(
+                        log.debug(
                             f"No improvement for {patience} iterations. stopping..."
                         )
                         break
 
-                log.info(
+                log.debug(
                     f"[{i}/{self.generator_n_iter}]\tLoss_D: {d_loss}\tLoss_G: {g_loss}\tC-Index val: {c_index_val} Expected time err: {exp_err_val}"
                 )
 
