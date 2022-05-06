@@ -64,10 +64,10 @@ class DetectionEvaluator(MetricEvaluator):
             test_labels = labels.loc[test_idx]
 
             model = model_template(**model_args).fit(
-                train_data.values, train_labels.values
+                train_data.values.astype(float), train_labels.values
             )
 
-            test_pred = model.predict(test_data.values)
+            test_pred = model.predict(test_data.values.astype(float))
 
             score = roc_auc_score(np.asarray(test_labels), np.asarray(test_pred))
             res.append(score)

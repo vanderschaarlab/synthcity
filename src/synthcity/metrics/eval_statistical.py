@@ -414,7 +414,7 @@ class WassersteinDistance(MetricEvaluator):
         X_syn: pd.DataFrame,
     ) -> Dict:
         X_ten = torch.from_numpy(X_train.values)
-        Xsyn_ten = torch.from_numpy(X_syn.values)
+        Xsyn_ten = torch.from_numpy(X_syn.values.astype(float))
         OT_solver = SamplesLoss(loss="sinkhorn")
 
         return {"joint": OT_solver(X_ten, Xsyn_ten).cpu().numpy()}
@@ -573,8 +573,8 @@ class AlphaPrecision(MetricEvaluator):
         X_df: pd.DataFrame,
         X_syn_df: pd.DataFrame,
     ) -> Tuple:
-        X = X_df.values
-        X_syn = X_syn_df.values
+        X = X_df.values.astype(float)
+        X_syn = X_syn_df.values.astype(float)
         assert len(X) == len(
             X_syn
         ), "The real and synthetic data mush have the same length"

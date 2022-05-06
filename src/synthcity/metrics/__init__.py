@@ -112,6 +112,8 @@ class Metrics:
 
         scores = ScoreEvaluator()
 
+        eval_cnt = min(len(X_gt_train), len(X_syn))
+
         for metric in standard_metrics:
             if metric.type() not in metrics:
                 continue
@@ -127,9 +129,9 @@ class Metrics:
                     time_to_event_column=time_to_event_column,
                     time_horizons=time_horizons,
                 ),
-                X_gt_train,
+                X_gt_train.sample(eval_cnt),
                 X_gt_test,
-                X_syn,
+                X_syn.sample(eval_cnt),
             )
 
         scores.compute()

@@ -136,14 +136,14 @@ class PerformanceEvaluator(MetricEvaluator):
             raise ValueError(
                 f"Target column not found {target_col}. Available: {X_gt_train.columns}"
             )
-        iter_X_gt = X_gt_train.drop(columns=[target_col])
-        iter_y_gt = X_gt_train[target_col]
+        iter_X_gt = X_gt_train.drop(columns=[target_col]).reset_index(drop=True)
+        iter_y_gt = X_gt_train[target_col].reset_index(drop=True)
 
-        ood_X_gt = X_gt_test.drop(columns=[target_col])
-        ood_y_gt = X_gt_test[target_col]
+        ood_X_gt = X_gt_test.drop(columns=[target_col]).reset_index(drop=True)
+        ood_y_gt = X_gt_test[target_col].reset_index(drop=True)
 
-        iter_X_syn = X_syn.drop(columns=[target_col])
-        iter_y_syn = X_syn[target_col]
+        iter_X_syn = X_syn.drop(columns=[target_col]).reset_index(drop=True)
+        iter_y_syn = X_syn[target_col].reset_index(drop=True)
 
         if len(iter_y_gt.unique()) < 5:
             eval_cbk = self._evaluate_performance_classification
@@ -222,17 +222,19 @@ class PerformanceEvaluator(MetricEvaluator):
                 f"TimeToEvent column not found {tte_col}. Available: {X_gt_train.columns}"
             )
 
-        iter_X_gt = X_gt_train.drop(columns=[target_col, tte_col])
-        iter_E_gt = X_gt_train[target_col]
-        iter_T_gt = X_gt_train[tte_col]
+        iter_X_gt = X_gt_train.drop(columns=[target_col, tte_col]).reset_index(
+            drop=True
+        )
+        iter_E_gt = X_gt_train[target_col].reset_index(drop=True)
+        iter_T_gt = X_gt_train[tte_col].reset_index(drop=True)
 
-        ood_X_gt = X_gt_test.drop(columns=[target_col, tte_col])
-        ood_E_gt = X_gt_test[target_col]
-        ood_T_gt = X_gt_test[tte_col]
+        ood_X_gt = X_gt_test.drop(columns=[target_col, tte_col]).reset_index(drop=True)
+        ood_E_gt = X_gt_test[target_col].reset_index(drop=True)
+        ood_T_gt = X_gt_test[tte_col].reset_index(drop=True)
 
-        iter_X_syn = X_syn.drop(columns=[target_col, tte_col])
-        iter_E_syn = X_syn[target_col]
-        iter_T_syn = X_syn[tte_col]
+        iter_X_syn = X_syn.drop(columns=[target_col, tte_col]).reset_index(drop=True)
+        iter_E_syn = X_syn[target_col].reset_index(drop=True)
+        iter_T_syn = X_syn[tte_col].reset_index(drop=True)
 
         predictor_gt = model(**args)
         score_gt = evaluate_survival_model(
