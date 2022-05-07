@@ -82,7 +82,9 @@ class Benchmarks:
                     time_horizons=time_horizons,
                 )
 
-                X_train, X_test = train_test_split(X, train_size=train_size)
+                X_train, X_test = train_test_split(
+                    X, train_size=train_size, random_state=repeat
+                )
 
                 try:
                     generator.fit(X_train)

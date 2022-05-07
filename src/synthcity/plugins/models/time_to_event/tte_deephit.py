@@ -62,6 +62,7 @@ class DeephitTimeToEvent(TimeToEventPlugin):
         labtrans = DeepHitSingle.label_transform(self.num_durations)
 
         X = np.asarray(X).astype("float32")
+        T = np.asarray(T).astype(int)
 
         X_train, X_val, E_train, E_val, T_train, T_val = train_test_split(
             X, E, T, random_state=42
