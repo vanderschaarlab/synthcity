@@ -147,14 +147,16 @@ class PerformanceEvaluator(MetricEvaluator):
 
         if len(iter_y_gt.unique()) < 5:
             eval_cbk = self._evaluate_performance_classification
-            skf = StratifiedKFold(n_splits=3)
+            skf = StratifiedKFold(
+                n_splits=self._n_folds, random_state=self._random_seed
+            )
             model = clf_model
             model_args = clf_args
         else:
             eval_cbk = self._evaluate_performance_regression
             model = regression_model
             model_args = regression_args
-            skf = KFold(n_splits=3)
+            skf = KFold(n_splits=self._n_folds, random_state=self._random_seed)
 
         real_scores = []
         syn_scores_id = []
@@ -347,6 +349,7 @@ class PerformanceEvaluatorXGB(PerformanceEvaluator):
                 "verbosity": 0,
                 "use_label_encoder": True,
                 "depth": 3,
+                "random_state": self._random_seed,
             },
             XGBRegressor,
             {
@@ -354,6 +357,7 @@ class PerformanceEvaluatorXGB(PerformanceEvaluator):
                 "verbosity": 0,
                 "use_label_encoder": False,
                 "depth": 3,
+                "random_state": self._random_seed,
             },
             XGBSurvivalAnalysis,
             {
@@ -362,6 +366,7 @@ class PerformanceEvaluatorXGB(PerformanceEvaluator):
                 "use_label_encoder": False,
                 "depth": 3,
                 "strategy": "debiased_bce",  # "weibull", "debiased_bce"
+                "random_state": self._random_seed,
             },
             X_gt_train,
             X_gt_test,
@@ -391,7 +396,7 @@ class PerformanceEvaluatorLinear(PerformanceEvaluator):
 
         return self._evaluate_test_performance(
             LogisticRegression,
-            {},
+            {"random_state": self._random_seed},
             LinearRegression,
             {},
             CoxPHSurvivalAnalysis,
@@ -428,12 +433,14 @@ class PerformanceEvaluatorMLP(PerformanceEvaluator):
                 "task_type": "classification",
                 "n_units_in": X_gt_train.shape[1] - 1,
                 "n_units_out": 0,
+                "seed": self._random_seed,
             },
             MLP,
             {
                 "task_type": "regression",
                 "n_units_in": X_gt_train.shape[1] - 1,
                 "n_units_out": 1,
+                "seed": self._random_seed,
             },
             DeephitSurvivalAnalysis,
             {},

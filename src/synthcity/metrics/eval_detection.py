@@ -56,7 +56,7 @@ class DetectionEvaluator(MetricEvaluator):
 
         res = []
 
-        skf = StratifiedKFold(n_splits=3)
+        skf = StratifiedKFold(n_splits=self._n_folds, random_state=self._random_seed)
         for train_idx, test_idx in skf.split(data, labels):
             train_data = data.loc[train_idx]
             train_labels = labels.loc[train_idx]
@@ -100,6 +100,7 @@ class SyntheticDetectionXGB(DetectionEvaluator):
             "verbosity": 0,
             "use_label_encoder": False,
             "depth": 3,
+            "random_state": self._random_seed,
         }
 
         return self._evaluate_detection(model_template, X_gt_train, X_syn, **model_args)
@@ -128,6 +129,7 @@ class SyntheticDetectionMLP(DetectionEvaluator):
             "task_type": "classification",
             "n_units_in": X_gt_train.shape[1],
             "n_units_out": 2,
+            "seed": self._random_seed,
         }
         return self._evaluate_detection(
             MLP,

@@ -128,7 +128,11 @@ class TimeEventNN(nn.Module):
         self, X: torch.Tensor, T: torch.Tensor, E: torch.Tensor
     ) -> Tuple[DataLoader, TensorDataset]:
         X_train, X_val, T_train, T_val, E_train, E_val = train_test_split(
-            X.cpu(), T.cpu(), E.cpu(), stratify=E.cpu()
+            X.cpu(),
+            T.cpu(),
+            E.cpu(),
+            stratify=E.cpu(),
+            random_state=self.seed,
         )
 
         train_dataset = TensorDataset(

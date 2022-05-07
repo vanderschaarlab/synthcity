@@ -22,6 +22,7 @@ class MetricEvaluator(metaclass=ABCMeta):
         target_column: Optional[str] = None,
         time_to_event_column: Optional[str] = None,
         time_horizons: Optional[List] = None,
+        random_seed: int = 0,
     ) -> None:
         self._sensitive_columns = sensitive_columns
         self._reduction = reduction
@@ -32,6 +33,7 @@ class MetricEvaluator(metaclass=ABCMeta):
         self._target_column = target_column
         self._time_to_event_column = time_to_event_column
         self._time_horizons = time_horizons
+        self._random_seed = random_seed
 
     @validate_arguments(config=dict(arbitrary_types_allowed=True))
     @abstractmethod

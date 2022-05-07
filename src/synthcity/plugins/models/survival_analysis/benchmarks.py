@@ -152,7 +152,9 @@ def evaluate_survival_model(
 
     if n_folds == 1:
         cv_idx = 0
-        X_train, X_test, T_train, T_test, Y_train, Y_test = train_test_split(X, T, Y)
+        X_train, X_test, T_train, T_test, Y_train, Y_test = train_test_split(
+            X, T, Y, random_state=seed
+        )
         local_time_horizons = [t for t in time_horizons if t > np.min(T_test)]
 
         c_index, brier_score = _get_surv_metrics(
@@ -179,7 +181,7 @@ def evaluate_survival_model(
                     X, T, Y, time_horizons[k]
                 )
                 X_train, X_test, T_train, T_test, Y_train, Y_test = train_test_split(
-                    X_horizon, T_horizon, Y_horizon
+                    X_horizon, T_horizon, Y_horizon, random_state=seed
                 )
 
                 metric = "aucroc"

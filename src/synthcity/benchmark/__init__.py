@@ -13,6 +13,7 @@ from synthcity.metrics import Metrics
 from synthcity.metrics.scores import ScoreEvaluator
 from synthcity.plugins import Plugins
 from synthcity.plugins.core.constraints import Constraints
+from synthcity.utils.reproducibility import enable_reproducible_results
 
 
 class Benchmarks:
@@ -73,6 +74,7 @@ class Benchmarks:
                 kwargs = plugin_kwargs[plugin]
 
             for repeat in range(repeats):
+                enable_reproducible_results(repeat)
                 log.info(f" Experiment repeat: {repeat}")
                 generator = Plugins().get(
                     plugin,
