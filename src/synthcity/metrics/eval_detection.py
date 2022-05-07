@@ -56,7 +56,9 @@ class DetectionEvaluator(MetricEvaluator):
 
         res = []
 
-        skf = StratifiedKFold(n_splits=self._n_folds, random_state=self._random_seed)
+        skf = StratifiedKFold(
+            n_splits=self._n_folds, shuffle=True, random_state=self._random_seed
+        )
         for train_idx, test_idx in skf.split(data, labels):
             train_data = data.loc[train_idx]
             train_labels = labels.loc[train_idx]

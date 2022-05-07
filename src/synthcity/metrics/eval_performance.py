@@ -148,7 +148,7 @@ class PerformanceEvaluator(MetricEvaluator):
         if len(iter_y_gt.unique()) < 5:
             eval_cbk = self._evaluate_performance_classification
             skf = StratifiedKFold(
-                n_splits=self._n_folds, random_state=self._random_seed
+                n_splits=self._n_folds, shuffle=True, random_state=self._random_seed
             )
             model = clf_model
             model_args = clf_args
@@ -156,7 +156,9 @@ class PerformanceEvaluator(MetricEvaluator):
             eval_cbk = self._evaluate_performance_regression
             model = regression_model
             model_args = regression_args
-            skf = KFold(n_splits=self._n_folds, random_state=self._random_seed)
+            skf = KFold(
+                n_splits=self._n_folds, shuffle=True, random_state=self._random_seed
+            )
 
         real_scores = []
         syn_scores_id = []

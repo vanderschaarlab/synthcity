@@ -128,9 +128,10 @@ def test_benchmark_survival_analysis() -> None:
             },
         )
 
-    Benchmarks.evaluate(
+    score = Benchmarks.evaluate(
         [
             "uniform_sampler",
+            "marginal_distributions",
         ],
         df,
         task_type="survival_analysis",
@@ -143,3 +144,4 @@ def test_benchmark_survival_analysis() -> None:
             ]
         },
     )
+    print(score)
