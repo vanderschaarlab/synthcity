@@ -80,7 +80,7 @@ class TVAEPlugin(Plugin):
 
     @staticmethod
     def type() -> str:
-        return "vae"
+        return "generic"
 
     @staticmethod
     def hyperparameter_space(**kwargs: Any) -> List[Distribution]:

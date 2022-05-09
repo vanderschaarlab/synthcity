@@ -28,7 +28,7 @@ def test_plugin_type(test_plugin: Plugin) -> None:
 
 @pytest.mark.parametrize("test_plugin", generate_fixtures(plugin_name, plugin))
 def test_plugin_hyperparams(test_plugin: Plugin) -> None:
-    assert len(test_plugin.hyperparameter_space()) == 15
+    assert len(test_plugin.hyperparameter_space()) == 14
 
 
 def test_plugin_fit() -> None:
@@ -37,6 +37,7 @@ def test_plugin_fit() -> None:
         time_to_event_column="week",
         generator_n_layers_hidden=1,
         generator_n_units_hidden=10,
+        seeds=["cox_ph"],
     )
 
     X = load_rossi()
@@ -49,6 +50,8 @@ def test_plugin_generate() -> None:
         time_to_event_column="week",
         generator_n_layers_hidden=1,
         generator_n_units_hidden=10,
+        n_iter=100,
+        seeds=["cox_ph"],
     )
 
     X = load_rossi()
@@ -69,6 +72,8 @@ def test_survival_plugin_generate_constraints() -> None:
         time_to_event_column="week",
         generator_n_layers_hidden=1,
         generator_n_units_hidden=10,
+        n_iter=100,
+        seeds=["cox_ph"],
     )
 
     X = load_rossi()
