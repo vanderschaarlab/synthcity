@@ -104,6 +104,6 @@ def test_eval_performance() -> None:
         test_plugin.fit(X)
         X_syn = test_plugin.generate()
 
-        results.append(evaluator.evaluate(X, X, X_syn)["syn"])
+        results.append(evaluator.evaluate(X, X, X_syn)["syn_id"])
 
     assert np.mean(results) > 0.5
