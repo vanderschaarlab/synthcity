@@ -31,7 +31,7 @@ def test_plugin_name(test_plugin: Plugin) -> None:
     "test_plugin", generate_fixtures(plugin_name, plugin, plugin_args)
 )
 def test_plugin_type(test_plugin: Plugin) -> None:
-    assert test_plugin.type() == "flows"
+    assert test_plugin.type() == "generic"
 
 
 @pytest.mark.parametrize(

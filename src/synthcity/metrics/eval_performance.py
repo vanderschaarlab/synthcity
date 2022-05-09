@@ -16,6 +16,12 @@ import synthcity.logger as log
 from synthcity.metrics._utils import evaluate_auc
 from synthcity.metrics.core import MetricEvaluator
 from synthcity.plugins.models.mlp import MLP
+from synthcity.plugins.models.survival_analysis import (
+    CoxPHSurvivalAnalysis,
+    DeephitSurvivalAnalysis,
+    XGBSurvivalAnalysis,
+    evaluate_survival_model,
+)
 
 
 class PerformanceEvaluator(MetricEvaluator):
@@ -72,7 +78,7 @@ class PerformanceEvaluator(MetricEvaluator):
             y_pred = estimator.predict_proba(X_test)
             score, _ = evaluate_auc(enc_y_test, y_pred)
         except BaseException as e:
-            print(f"classifier evaluation failed {e}.")
+            log.error(f"classifier evaluation failed {e}.")
             score = 0
 
         return score
@@ -105,13 +111,14 @@ class PerformanceEvaluator(MetricEvaluator):
         return 1 / (1 + score)
 
     @validate_arguments(config=dict(arbitrary_types_allowed=True))
-    def _evaluate_test_performance(
+    def _evaluate_standard_performance(
         self,
         clf_model: Any,
         clf_args: Dict,
         regression_model: Any,
         regression_args: Any,
-        X_gt: pd.DataFrame,
+        X_gt_train: pd.DataFrame,
+        X_gt_test: pd.DataFrame,
         X_syn: pd.DataFrame,
     ) -> Dict:
         """Train a classifier or regressor on the synthetic data and evaluate the performance on real test data. Returns the average performance discrepancy between training on real data vs on synthetic data.
@@ -123,31 +130,40 @@ class PerformanceEvaluator(MetricEvaluator):
         if self._target_column is not None:
             target_col = self._target_column
         else:
-            target_col = X_gt.columns[-1]
+            target_col = X_gt_train.columns[-1]
 
-        if target_col not in X_gt.columns:
+        if target_col not in X_gt_train.columns:
             raise ValueError(
-                f"Target column not found {target_col}. Available: {X_gt.columns}"
+                f"Target column not found {target_col}. Available: {X_gt_train.columns}"
             )
-        iter_X_gt = X_gt.drop(columns=[target_col])
-        iter_y_gt = X_gt[target_col]
+        iter_X_gt = X_gt_train.drop(columns=[target_col]).reset_index(drop=True)
+        iter_y_gt = X_gt_train[target_col].reset_index(drop=True)
 
-        iter_X_syn = X_syn.drop(columns=[target_col])
-        iter_y_syn = X_syn[target_col]
+        ood_X_gt = X_gt_test.drop(columns=[target_col]).reset_index(drop=True)
+        ood_y_gt = X_gt_test[target_col].reset_index(drop=True)
+
+        iter_X_syn = X_syn.drop(columns=[target_col]).reset_index(drop=True)
+        iter_y_syn = X_syn[target_col].reset_index(drop=True)
 
         if len(iter_y_gt.unique()) < 5:
             eval_cbk = self._evaluate_performance_classification
-            skf = StratifiedKFold(n_splits=3)
+            skf = StratifiedKFold(
+                n_splits=self._n_folds, shuffle=True, random_state=self._random_seed
+            )
             model = clf_model
             model_args = clf_args
         else:
             eval_cbk = self._evaluate_performance_regression
             model = regression_model
             model_args = regression_args
-            skf = KFold(n_splits=3)
+            skf = KFold(
+                n_splits=self._n_folds, shuffle=True, random_state=self._random_seed
+            )
 
         real_scores = []
-        syn_scores = []
+        syn_scores_id = []
+        syn_scores_ood = []
+
         for train_idx, test_idx in skf.split(iter_X_gt, iter_y_gt):
             train_data = np.asarray(iter_X_gt.loc[train_idx])
             test_data = np.asarray(iter_X_gt.loc[test_idx])
@@ -157,17 +173,155 @@ class PerformanceEvaluator(MetricEvaluator):
             real_score = eval_cbk(
                 model, model_args, train_data, train_labels, test_data, test_labels
             )
-            synth_score = eval_cbk(
+            synth_score_id = eval_cbk(
                 model, model_args, iter_X_syn, iter_y_syn, test_data, test_labels
+            )
+            synth_score_ood = eval_cbk(
+                model, model_args, iter_X_syn, iter_y_syn, ood_X_gt, ood_y_gt
             )
 
             real_scores.append(real_score)
-            syn_scores.append(synth_score)
+            syn_scores_id.append(synth_score_id)
+            syn_scores_ood.append(synth_score_ood)
 
         return {
             "gt": float(self.reduction()(real_scores)),
-            "syn": float(self.reduction()(syn_scores)),
+            "syn_id": float(self.reduction()(syn_scores_id)),
+            "syn_ood": float(self.reduction()(syn_scores_ood)),
         }
+
+    @validate_arguments(config=dict(arbitrary_types_allowed=True))
+    def _evaluate_survival_model(
+        self,
+        model: Any,
+        args: Dict,
+        X_gt_train: pd.DataFrame,
+        X_gt_test: pd.DataFrame,
+        X_syn: pd.DataFrame,
+    ) -> Dict:
+        """Train a survival model on the synthetic data and evaluate the performance on real test data. Returns the average performance discrepancy between training on real data vs on synthetic data.
+
+        Returns:
+            gt and syn performance scores
+        """
+
+        target_col = self._target_column
+        tte_col = self._time_to_event_column
+
+        if target_col is None:
+            raise ValueError("target_column must not be None for survival analysis")
+
+        if self._time_to_event_column is None:
+            raise ValueError("time to event must not be None for survival analysis")
+
+        if self._time_horizons is None:
+            raise ValueError("time horizons must not be None for survival analysis")
+
+        if target_col not in X_gt_train.columns:
+            raise ValueError(
+                f"Target column not found {target_col}. Available: {X_gt_train.columns}"
+            )
+        if tte_col not in X_gt_train.columns:
+            raise ValueError(
+                f"TimeToEvent column not found {tte_col}. Available: {X_gt_train.columns}"
+            )
+
+        iter_X_gt = X_gt_train.drop(columns=[target_col, tte_col]).reset_index(
+            drop=True
+        )
+        iter_E_gt = X_gt_train[target_col].reset_index(drop=True)
+        iter_T_gt = X_gt_train[tte_col].reset_index(drop=True)
+
+        ood_X_gt = X_gt_test.drop(columns=[target_col, tte_col]).reset_index(drop=True)
+        ood_E_gt = X_gt_test[target_col].reset_index(drop=True)
+        ood_T_gt = X_gt_test[tte_col].reset_index(drop=True)
+
+        iter_X_syn = X_syn.drop(columns=[target_col, tte_col]).reset_index(drop=True)
+        iter_E_syn = X_syn[target_col].reset_index(drop=True)
+        iter_T_syn = X_syn[tte_col].reset_index(drop=True)
+
+        predictor_gt = model(**args)
+        score_gt = evaluate_survival_model(
+            predictor_gt,
+            iter_X_gt,
+            iter_T_gt,
+            iter_E_gt,
+            metrics=["c_index"],
+            n_folds=self._n_folds,
+            time_horizons=self._time_horizons,
+        )["clf"]["c_index"][0]
+
+        predictor_syn = model(**args)
+
+        try:
+            predictor_syn.fit(iter_X_syn, iter_T_syn, iter_E_syn)
+            score_syn_id = evaluate_survival_model(
+                [predictor_syn] * self._n_folds,
+                iter_X_gt,
+                iter_T_gt,
+                iter_E_gt,
+                metrics=["c_index"],
+                n_folds=self._n_folds,
+                time_horizons=self._time_horizons,
+                pretrained=True,
+            )["clf"]["c_index"][0]
+        except BaseException as e:
+            log.error(
+                f"Failed to evaluate synthetic ID performance. {model.name()}: {e}"
+            )
+            score_syn_id = 0
+
+        try:
+            predictor_syn.fit(iter_X_syn, iter_T_syn, iter_E_syn)
+            score_syn_ood = evaluate_survival_model(
+                [predictor_syn] * self._n_folds,
+                ood_X_gt,
+                ood_T_gt,
+                ood_E_gt,
+                metrics=["c_index"],
+                n_folds=self._n_folds,
+                time_horizons=self._time_horizons,
+                pretrained=True,
+            )["clf"]["c_index"][0]
+        except BaseException as e:
+            log.error(
+                f"Failed to evaluate synthetic OOD performance. {model.name()}: {e}"
+            )
+            score_syn_ood = 0
+
+        return {
+            "gt": float(score_gt),
+            "syn_id": float(score_syn_id),
+            "syn_ood": float(score_syn_ood),
+        }
+
+    @validate_arguments(config=dict(arbitrary_types_allowed=True))
+    def _evaluate_test_performance(
+        self,
+        clf_model: Any,
+        clf_args: Dict,
+        regression_model: Any,
+        regression_args: Any,
+        surv_model: Any,
+        suv_model_args: Any,
+        X_gt_train: pd.DataFrame,
+        X_gt_test: pd.DataFrame,
+        X_syn: pd.DataFrame,
+    ) -> Dict:
+        if self._task_type == "survival_analysis":
+            return self._evaluate_survival_model(
+                surv_model, suv_model_args, X_gt_train, X_gt_test, X_syn
+            )
+
+        return self._evaluate_standard_performance(
+            clf_model,
+            clf_args,
+            regression_model,
+            regression_args,
+            X_gt_train,
+            X_gt_test,
+            X_syn,
+        )
 
 
 class PerformanceEvaluatorXGB(PerformanceEvaluator):
@@ -185,7 +339,8 @@ class PerformanceEvaluatorXGB(PerformanceEvaluator):
     @validate_arguments(config=dict(arbitrary_types_allowed=True))
     def evaluate(
         self,
-        X_gt: pd.DataFrame,
+        X_gt_train: pd.DataFrame,
+        X_gt_test: pd.DataFrame,
         X_syn: pd.DataFrame,
     ) -> Dict:
 
@@ -196,6 +351,7 @@ class PerformanceEvaluatorXGB(PerformanceEvaluator):
                 "verbosity": 0,
                 "use_label_encoder": True,
                 "depth": 3,
+                "random_state": self._random_seed,
             },
             XGBRegressor,
             {
@@ -203,8 +359,19 @@ class PerformanceEvaluatorXGB(PerformanceEvaluator):
                 "verbosity": 0,
                 "use_label_encoder": False,
                 "depth": 3,
+                "random_state": self._random_seed,
             },
-            X_gt,
+            XGBSurvivalAnalysis,
+            {
+                "n_jobs": 1,
+                "verbosity": 0,
+                "use_label_encoder": False,
+                "depth": 3,
+                "strategy": "debiased_bce",  # "weibull", "debiased_bce"
+                "random_state": self._random_seed,
+            },
+            X_gt_train,
+            X_gt_test,
             X_syn,
         )
 
@@ -224,12 +391,21 @@ class PerformanceEvaluatorLinear(PerformanceEvaluator):
     @validate_arguments(config=dict(arbitrary_types_allowed=True))
     def evaluate(
         self,
-        X_gt: pd.DataFrame,
+        X_gt_train: pd.DataFrame,
+        X_gt_test: pd.DataFrame,
         X_syn: pd.DataFrame,
     ) -> Dict:
 
         return self._evaluate_test_performance(
-            LogisticRegression, {}, LinearRegression, {}, X_gt, X_syn
+            LogisticRegression,
+            {"random_state": self._random_seed},
+            LinearRegression,
+            {},
+            CoxPHSurvivalAnalysis,
+            {},
+            X_gt_train,
+            X_gt_test,
+            X_syn,
         )
 
 
@@ -248,7 +424,8 @@ class PerformanceEvaluatorMLP(PerformanceEvaluator):
     @validate_arguments(config=dict(arbitrary_types_allowed=True))
     def evaluate(
         self,
-        X_gt: pd.DataFrame,
+        X_gt_train: pd.DataFrame,
+        X_gt_test: pd.DataFrame,
         X_syn: pd.DataFrame,
     ) -> Dict:
 
@@ -256,15 +433,20 @@ class PerformanceEvaluatorMLP(PerformanceEvaluator):
             MLP,
             {
                 "task_type": "classification",
-                "n_units_in": X_gt.shape[1] - 1,
+                "n_units_in": X_gt_train.shape[1] - 1,
                 "n_units_out": 0,
+                "seed": self._random_seed,
             },
             MLP,
             {
                 "task_type": "regression",
-                "n_units_in": X_gt.shape[1] - 1,
+                "n_units_in": X_gt_train.shape[1] - 1,
                 "n_units_out": 1,
+                "seed": self._random_seed,
             },
-            X_gt,
+            DeephitSurvivalAnalysis,
+            {},
+            X_gt_train,
+            X_gt_test,
             X_syn,
         )

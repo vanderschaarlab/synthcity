@@ -35,6 +35,7 @@ def test_detect_reduction(reduction: str, evaluator_t: Type) -> None:
 
     score = evaluator.evaluate(
         X,
+        X,
         X_gen,
     )
 
@@ -61,6 +62,7 @@ def test_detect_synth(test_plugin: Plugin, evaluator_t: Type) -> None:
 
     good_score = evaluator.evaluate(
         X,
+        X,
         X_gen,
     )["mean"]
 
@@ -70,6 +72,7 @@ def test_detect_synth(test_plugin: Plugin, evaluator_t: Type) -> None:
     sz = 100
     X_rnd = pd.DataFrame(np.random.randn(sz, len(X.columns)), columns=X.columns)
     score = evaluator.evaluate(
+        X,
         X,
         X_rnd,
     )["mean"]

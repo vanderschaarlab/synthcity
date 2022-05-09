@@ -49,9 +49,13 @@ class Plugin(metaclass=ABCMeta):
         dp_epsilon: float = 1.0,
         dp_delta: float = 0,
         sampling_strategy: str = "marginal",  # uniform, marginal
-        sampling_patience: int = 1000,
+        sampling_patience: int = 500,
         sensitive_columns: list = [],
         strict: bool = True,
+        # survival analysis
+        target_column: Optional[str] = None,
+        time_to_event_column: Optional[str] = None,
+        time_horizons: Optional[List] = None,
     ) -> None:
         """
 
@@ -170,21 +174,22 @@ class Plugin(metaclass=ABCMeta):
         if count is None:
             count = self._original_shape[0]
 
-        if constraints is None:
-            constraints = self.schema().as_constraints()
+        gen_constraints = self.schema().as_constraints()
+        if constraints is not None:
+            gen_constraints = gen_constraints.extend(constraints)
 
-        syn_schema = Schema.from_constraints(constraints)
+        syn_schema = Schema.from_constraints(gen_constraints)
 
         X_syn = pd.DataFrame(
             self._generate(count=count, syn_schema=syn_schema, **kwargs)
         )
 
-        if not constraints.is_valid(X_syn) and self.strict:
+        if not gen_constraints.is_valid(X_syn) and self.strict:
             raise RuntimeError(
                 f"Plugin {self.name()} failed to meet the synthetic constraints."
             )
 
-        return constraints.match(X_syn)
+        return gen_constraints.match(X_syn)
 
     @abstractmethod
     def _generate(
@@ -315,15 +320,15 @@ class PluginLoader:
         log.debug(f"Loaded plugin {cls.type()} - {cls.name()}")
         self.add(cls.name(), cls)
 
-    def list(self, skip_debug: bool = True) -> List[str]:
+    def list(self, category: str = "generic") -> List[str]:
         """Get all the available plugins."""
         all_plugins = list(self._plugins.keys()) + list(self._available_plugins.keys())
-        debug_plugins = []
+        plugins = []
         for plugin in all_plugins:
-            if self.get_type(plugin).type() == "debug":
-                debug_plugins.append(plugin)
+            if self.get_type(plugin).type() == category:
+                plugins.append(plugin)
 
-        return list(set(all_plugins) - set(debug_plugins))
+        return list(set(plugins))
 
     def types(self) -> List[Type]:
         """Get the loaded plugins types"""

@@ -26,11 +26,12 @@ from synthcity.plugins import Plugin, Plugins
 def _eval_plugin(evaluator_t: Type, X: pd.DataFrame, X_syn: pd.DataFrame) -> Tuple:
     evaluator = evaluator_t()
 
-    syn_score = evaluator.evaluate(X, X_syn)
+    syn_score = evaluator.evaluate(X, X, X_syn)
 
     sz = len(X_syn)
     X_rnd = pd.DataFrame(np.random.randn(sz, len(X.columns)), columns=X.columns)
     rnd_score = evaluator.evaluate(
+        X,
         X,
         X_rnd,
     )

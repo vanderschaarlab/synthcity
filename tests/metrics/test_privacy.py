@@ -62,7 +62,7 @@ def test_evaluator(evaluator_t: Type, test_plugin: Plugin) -> None:
 
     evaluator = evaluator_t(sensitive_columns=["sex", "bmi"])
 
-    score = evaluator.evaluate(X, X_gen)
+    score = evaluator.evaluate(X, X, X_gen)
 
     for submetric in score:
         assert score[submetric] > 0

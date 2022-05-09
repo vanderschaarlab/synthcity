@@ -34,7 +34,7 @@ class GaussianCopulaPlugin(Plugin):
 
     @staticmethod
     def type() -> str:
-        return "copula"
+        return "generic"
 
     @staticmethod
     def hyperparameter_space(**kwargs: Any) -> List[Distribution]:

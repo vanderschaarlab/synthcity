@@ -1,12 +1,3 @@
-"""Anonymization through Data Synthesis using Generative Adversarial Networks:
-A harmonizing advancement for AI in medicine (ADS-GAN) Codebase.
-
-Reference: Jinsung Yoon, Lydia N. Drumright, Mihaela van der Schaar,
-"Anonymization through Data Synthesis using Generative Adversarial Networks (ADS-GAN):
-A harmonizing advancement for AI in medicine,"
-IEEE Journal of Biomedical and Health Informatics (JBHI), 2019.
-Paper link: https://ieeexplore.ieee.org/document/9034117
-"""
 # stdlib
 from typing import Any, List
 
@@ -75,10 +66,10 @@ class RTVAEPlugin(Plugin):
     @validate_arguments(config=dict(arbitrary_types_allowed=True))
     def __init__(
         self,
-        n_iter: int = 100,
+        n_iter: int = 1000,
         lr: float = 1e-4,
         weight_decay: float = 1e-3,
-        batch_size: int = 500,
+        batch_size: int = 100,
         seed: int = 0,
         clipping_value: int = 1,
         loss_strategy: str = "robust_divergence",
@@ -118,7 +109,7 @@ class RTVAEPlugin(Plugin):
 
     @staticmethod
     def type() -> str:
-        return "vae"
+        return "generic"
 
     @staticmethod
     def hyperparameter_space(**kwargs: Any) -> List[Distribution]:

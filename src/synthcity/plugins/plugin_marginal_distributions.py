@@ -44,7 +44,7 @@ class MarginalDistributionPlugin(Plugin):
 
     @staticmethod
     def type() -> str:
-        return "sampling"
+        return "debug"
 
     @staticmethod
     def hyperparameter_space(**kwargs: Any) -> List[Distribution]:

@@ -1,5 +1,6 @@
 # third party
 import pytest
+from lifelines.datasets import load_rossi
 from sklearn.datasets import load_diabetes, load_iris
 
 # synthcity absolute
@@ -71,3 +72,76 @@ def test_benchmark_custom_target() -> None:
             ]
         },
     )
+
+
+def test_benchmark_survival_analysis() -> None:
+    df = load_rossi()
+
+    with pytest.raises(ValueError):
+        Benchmarks.evaluate(
+            [
+                "uniform_sampler",
+            ],
+            df,
+            task_type="survival_analysis",
+            target_column=None,
+            time_to_event_column="week",
+            time_horizons=[30],
+            metrics={
+                "performance": [
+                    "linear_model",
+                ]
+            },
+        )
+
+    with pytest.raises(ValueError):
+        Benchmarks.evaluate(
+            [
+                "uniform_sampler",
+            ],
+            df,
+            task_type="survival_analysis",
+            target_column="arrest",
+            time_to_event_column=None,
+            time_horizons=[30],
+            metrics={
+                "performance": [
+                    "linear_model",
+                ]
+            },
+        )
+
+    with pytest.raises(ValueError):
+        Benchmarks.evaluate(
+            [
+                "uniform_sampler",
+            ],
+            df,
+            task_type="survival_analysis",
+            target_column="arrest",
+            time_to_event_column="week",
+            time_horizons=None,
+            metrics={
+                "performance": [
+                    "linear_model",
+                ]
+            },
+        )
+
+    score = Benchmarks.evaluate(
+        [
+            "uniform_sampler",
+            "marginal_distributions",
+        ],
+        df,
+        task_type="survival_analysis",
+        target_column="arrest",
+        time_to_event_column="week",
+        time_horizons=[30],
+        metrics={
+            "performance": [
+                "linear_model",
+            ]
+        },
+    )
+    print(score)

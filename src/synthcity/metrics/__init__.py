@@ -31,6 +31,7 @@ from .eval_sanity import (
     NearestSyntheticNeighborDistance,
 )
 from .eval_statistical import (
+    AlphaPrecision,
     ChiSquaredTest,
     FeatureCorrelation,
     InverseKLDivergence,
@@ -58,6 +59,7 @@ standard_metrics = [
     MaximumMeanDiscrepancy,
     WassersteinDistance,
     PRDCScore,
+    AlphaPrecision,
     # performance tests
     PerformanceEvaluatorLinear,
     PerformanceEvaluatorMLP,
@@ -79,18 +81,38 @@ class Metrics:
     @staticmethod
     @validate_arguments(config=dict(arbitrary_types_allowed=True))
     def evaluate(
-        X_gt: pd.DataFrame,
+        X_gt_train: pd.DataFrame,
+        X_gt_test: pd.DataFrame,
         X_syn: pd.DataFrame,
         sensitive_columns: List[str] = [],
         reduction: str = "mean",
         n_histogram_bins: int = 10,
         metrics: Optional[Dict] = None,
+        task_type: str = "classification",
         target_column: Optional[str] = None,
+        time_to_event_column: Optional[str] = None,
+        time_horizons: Optional[List] = None,
     ) -> pd.DataFrame:
+        supported_tasks = ["classification", "regression", "survival_analysis"]
+        if task_type not in supported_tasks:
+            raise ValueError(
+                f"Invalid task type {task_type}. Supported: {supported_tasks}"
+            )
+
+        if task_type == "survival_analysis":
+            if target_column is None:
+                raise ValueError("Invalid target column for survival analysis")
+            if time_to_event_column is None:
+                raise ValueError("Invalid time to event column for survival analysis")
+            if time_horizons is None:
+                raise ValueError("Invalid time horizons for survival analysis")
+
         if metrics is None:
             metrics = Metrics.list()
 
         scores = ScoreEvaluator()
+
+        eval_cnt = min(len(X_gt_train), len(X_syn))
 
         for metric in standard_metrics:
             if metric.type() not in metrics:
@@ -102,10 +124,14 @@ class Metrics:
                     sensitive_columns=sensitive_columns,
                     reduction=reduction,
                     n_histogram_bins=n_histogram_bins,
+                    task_type=task_type,
                     target_column=target_column,
+                    time_to_event_column=time_to_event_column,
+                    time_horizons=time_horizons,
                 ),
-                X_gt,
-                X_syn,
+                X_gt_train.sample(eval_cnt),
+                X_gt_test,
+                X_syn.sample(eval_cnt),
             )
 
         scores.compute()

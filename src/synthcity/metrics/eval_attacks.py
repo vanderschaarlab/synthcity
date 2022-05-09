@@ -86,23 +86,26 @@ class DataLeakageMLP(AttackEvaluator):
     @validate_arguments(config=dict(arbitrary_types_allowed=True))
     def evaluate(
         self,
-        X_gt: pd.DataFrame,
+        X_gt_train: pd.DataFrame,
+        X_gt_test: pd.DataFrame,
         X_syn: pd.DataFrame,
     ) -> Dict:
         return self._evaluate_leakage(
             MLP,
             {
                 "task_type": "classification",
-                "n_units_in": X_gt.shape[1] - 1,
+                "n_units_in": X_gt_train.shape[1] - 1,
                 "n_units_out": 0,
+                "seed": self._random_seed,
             },
             MLP,
             {
                 "task_type": "regression",
-                "n_units_in": X_gt.shape[1] - 1,
+                "n_units_in": X_gt_train.shape[1] - 1,
                 "n_units_out": 1,
+                "seed": self._random_seed,
             },
-            X_gt,
+            X_gt_train,
             X_syn,
         )
 
@@ -119,7 +122,8 @@ class DataLeakageXGB(AttackEvaluator):
     @validate_arguments(config=dict(arbitrary_types_allowed=True))
     def evaluate(
         self,
-        X_gt: pd.DataFrame,
+        X_gt_train: pd.DataFrame,
+        X_gt_test: pd.DataFrame,
         X_syn: pd.DataFrame,
     ) -> Dict:
         return self._evaluate_leakage(
@@ -130,7 +134,7 @@ class DataLeakageXGB(AttackEvaluator):
             },
             XGBRegressor,
             {"n_jobs": 1},
-            X_gt,
+            X_gt_train,
             X_syn,
         )
 
@@ -147,14 +151,15 @@ class DataLeakageLinear(AttackEvaluator):
     @validate_arguments(config=dict(arbitrary_types_allowed=True))
     def evaluate(
         self,
-        X_gt: pd.DataFrame,
+        X_gt_train: pd.DataFrame,
+        X_gt_test: pd.DataFrame,
         X_syn: pd.DataFrame,
     ) -> Dict:
         return self._evaluate_leakage(
             LogisticRegression,
-            {},
+            {"random_state": self._random_seed},
             LinearRegression,
             {},
-            X_gt,
+            X_gt_train,
             X_syn,
         )

@@ -59,8 +59,13 @@ class kAnonymization(PrivacyEvaluator):
         return int(np.min(values))
 
     @validate_arguments(config=dict(arbitrary_types_allowed=True))
-    def evaluate(self, X: pd.DataFrame, X_syn: pd.DataFrame) -> Dict:
-        return {"gt": self.evaluate_data(X), "syn": (self.evaluate_data(X_syn) + 1e-8)}
+    def evaluate(
+        self, X_gt_train: pd.DataFrame, X_gt_test: pd.DataFrame, X_syn: pd.DataFrame
+    ) -> Dict:
+        return {
+            "gt": self.evaluate_data(X_gt_train),
+            "syn": (self.evaluate_data(X_syn) + 1e-8),
+        }
 
 
 class lDiversityDistinct(PrivacyEvaluator):
@@ -99,8 +104,13 @@ class lDiversityDistinct(PrivacyEvaluator):
         return int(np.min(values))
 
     @validate_arguments(config=dict(arbitrary_types_allowed=True))
-    def evaluate(self, X: pd.DataFrame, X_syn: pd.DataFrame) -> Dict:
-        return {"gt": self.evaluate_data(X), "syn": (self.evaluate_data(X_syn) + 1e-8)}
+    def evaluate(
+        self, X_gt_train: pd.DataFrame, X_gt_test: pd.DataFrame, X_syn: pd.DataFrame
+    ) -> Dict:
+        return {
+            "gt": self.evaluate_data(X_gt_train),
+            "syn": (self.evaluate_data(X_syn) + 1e-8),
+        }
 
 
 class kMap(PrivacyEvaluator):
@@ -118,15 +128,17 @@ class kMap(PrivacyEvaluator):
         return "maximize"
 
     @validate_arguments(config=dict(arbitrary_types_allowed=True))
-    def evaluate(self, X: pd.DataFrame, X_syn: pd.DataFrame) -> Dict:
-        features = get_features(X, self._sensitive_columns)
+    def evaluate(
+        self, X_gt_train: pd.DataFrame, X_gt_test: pd.DataFrame, X_syn: pd.DataFrame
+    ) -> Dict:
+        features = get_features(X_gt_train, self._sensitive_columns)
 
         values = []
         for n_clusters in [2, 5, 10, 15]:
-            if len(X) / n_clusters < 10:
+            if len(X_gt_train) / n_clusters < 10:
                 continue
             model = KMeans(n_clusters=n_clusters, init="k-means++", random_state=0).fit(
-                X[features]
+                X_gt_train[features]
             )
             clusters = model.predict(X_syn[features])
             counts: dict = Counter(clusters)
@@ -153,15 +165,17 @@ class DeltaPresence(PrivacyEvaluator):
         return "maximize"
 
     @validate_arguments(config=dict(arbitrary_types_allowed=True))
-    def evaluate(self, X: pd.DataFrame, X_syn: pd.DataFrame) -> Dict:
-        features = get_features(X, self._sensitive_columns)
+    def evaluate(
+        self, X_gt_train: pd.DataFrame, X_gt_test: pd.DataFrame, X_syn: pd.DataFrame
+    ) -> Dict:
+        features = get_features(X_gt_train, self._sensitive_columns)
 
         values = []
         for n_clusters in [2, 5, 10, 15]:
-            if len(X) / n_clusters < 10:
+            if len(X_gt_train) / n_clusters < 10:
                 continue
             model = KMeans(n_clusters=n_clusters, init="k-means++", random_state=0).fit(
-                X[features]
+                X_gt_train[features]
             )
             clusters = model.predict(X_syn[features])
             synth_counts: dict = Counter(clusters)
@@ -195,7 +209,12 @@ class IdentifiabilityScore(PrivacyEvaluator):
         return "minimize"
 
     @validate_arguments(config=dict(arbitrary_types_allowed=True))
-    def evaluate(self, X_df: pd.DataFrame, X_syn_df: pd.DataFrame) -> Dict:
+    def evaluate(
+        self,
+        X_gt_train_df: pd.DataFrame,
+        X_gt_test_df: pd.DataFrame,
+        X_syn_df: pd.DataFrame,
+    ) -> Dict:
         """Compare Wasserstein distance between original data and synthetic data.
 
         Args:
@@ -206,7 +225,7 @@ class IdentifiabilityScore(PrivacyEvaluator):
             WD_value: Wasserstein distance
         """
 
-        X = np.asarray(X_df)
+        X = np.asarray(X_gt_train_df)
         X_syn = np.asarray(X_syn_df)
 
         # Entropy computation

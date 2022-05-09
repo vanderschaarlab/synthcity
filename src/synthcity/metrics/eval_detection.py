@@ -56,7 +56,9 @@ class DetectionEvaluator(MetricEvaluator):
 
         res = []
 
-        skf = StratifiedKFold(n_splits=3)
+        skf = StratifiedKFold(
+            n_splits=self._n_folds, shuffle=True, random_state=self._random_seed
+        )
         for train_idx, test_idx in skf.split(data, labels):
             train_data = data.loc[train_idx]
             train_labels = labels.loc[train_idx]
@@ -64,10 +66,10 @@ class DetectionEvaluator(MetricEvaluator):
             test_labels = labels.loc[test_idx]
 
             model = model_template(**model_args).fit(
-                train_data.values, train_labels.values
+                train_data.values.astype(float), train_labels.values
             )
 
-            test_pred = model.predict(test_data.values)
+            test_pred = model.predict(test_data.values.astype(float))
 
             score = roc_auc_score(np.asarray(test_labels), np.asarray(test_pred))
             res.append(score)
@@ -91,16 +93,19 @@ class SyntheticDetectionXGB(DetectionEvaluator):
         return "detection_xgb"
 
     @validate_arguments(config=dict(arbitrary_types_allowed=True))
-    def evaluate(self, X_gt: pd.DataFrame, X_syn: pd.DataFrame) -> Dict:
+    def evaluate(
+        self, X_gt_train: pd.DataFrame, X_gt_test: pd.DataFrame, X_syn: pd.DataFrame
+    ) -> Dict:
         model_template = XGBClassifier
         model_args = {
             "n_jobs": 1,
             "verbosity": 0,
             "use_label_encoder": False,
             "depth": 3,
+            "random_state": self._random_seed,
         }
 
-        return self._evaluate_detection(model_template, X_gt, X_syn, **model_args)
+        return self._evaluate_detection(model_template, X_gt_train, X_syn, **model_args)
 
 
 class SyntheticDetectionMLP(DetectionEvaluator):
@@ -119,15 +124,18 @@ class SyntheticDetectionMLP(DetectionEvaluator):
         return "detection_mlp"
 
     @validate_arguments(config=dict(arbitrary_types_allowed=True))
-    def evaluate(self, X_gt: pd.DataFrame, X_syn: pd.DataFrame) -> Dict:
+    def evaluate(
+        self, X_gt_train: pd.DataFrame, X_gt_test: pd.DataFrame, X_syn: pd.DataFrame
+    ) -> Dict:
         model_args = {
             "task_type": "classification",
-            "n_units_in": X_gt.shape[1],
+            "n_units_in": X_gt_train.shape[1],
             "n_units_out": 2,
+            "seed": self._random_seed,
         }
         return self._evaluate_detection(
             MLP,
-            X_gt,
+            X_gt_train,
             X_syn,
             **model_args,
         )
@@ -151,7 +159,8 @@ class SyntheticDetectionGMM(DetectionEvaluator):
     @validate_arguments(config=dict(arbitrary_types_allowed=True))
     def evaluate(
         self,
-        X_gt: pd.DataFrame,
+        X_gt_train: pd.DataFrame,
+        X_gt_test: pd.DataFrame,
         X_syn: pd.DataFrame,
     ) -> Dict:
 
@@ -159,7 +168,7 @@ class SyntheticDetectionGMM(DetectionEvaluator):
 
         for component in [1, 5, 10]:
             gmm = GaussianMixture(n_components=component, covariance_type="diag")
-            gmm.fit(X_gt)
+            gmm.fit(X_gt_train)
 
             scores.append(gmm.score(X_syn))  # Higher is better
 
