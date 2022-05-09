@@ -136,7 +136,7 @@ class AdsGANPlugin(Plugin):
 
     @staticmethod
     def type() -> str:
-        return "gan"
+        return "generic"
 
     @staticmethod
     def hyperparameter_space(**kwargs: Any) -> List[Distribution]:

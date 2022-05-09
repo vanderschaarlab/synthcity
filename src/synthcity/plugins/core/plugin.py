@@ -320,15 +320,15 @@ class PluginLoader:
         log.debug(f"Loaded plugin {cls.type()} - {cls.name()}")
         self.add(cls.name(), cls)
 
-    def list(self, skip_debug: bool = True) -> List[str]:
+    def list(self, category: str = "generic") -> List[str]:
         """Get all the available plugins."""
         all_plugins = list(self._plugins.keys()) + list(self._available_plugins.keys())
-        debug_plugins = []
+        plugins = []
         for plugin in all_plugins:
-            if self.get_type(plugin).type() == "debug":
-                debug_plugins.append(plugin)
+            if self.get_type(plugin).type() == category:
+                plugins.append(plugin)
 
-        return list(set(all_plugins) - set(debug_plugins))
+        return list(set(plugins))
 
     def types(self) -> List[Type]:
         """Get the loaded plugins types"""

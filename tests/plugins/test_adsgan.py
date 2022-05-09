@@ -26,7 +26,7 @@ def test_plugin_name(test_plugin: Plugin) -> None:
 
 @pytest.mark.parametrize("test_plugin", generate_fixtures(plugin_name, plugin))
 def test_plugin_type(test_plugin: Plugin) -> None:
-    assert test_plugin.type() == "gan"
+    assert test_plugin.type() == "generic"
 
 
 @pytest.mark.parametrize("test_plugin", generate_fixtures(plugin_name, plugin))
@@ -104,6 +104,6 @@ def test_eval_performance() -> None:
         test_plugin.fit(X)
         X_syn = test_plugin.generate()
 
-        results.append(evaluator.evaluate(X, X_syn)["syn"])
+        results.append(evaluator.evaluate(X, X, X_syn)["syn"])
 
     assert np.mean(results) > 0.7

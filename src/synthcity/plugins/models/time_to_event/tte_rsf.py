@@ -24,7 +24,7 @@ class RandomSurvivalForestTimeToEvent(TimeToEventPlugin):
         if model_search_n_iter is not None:
             kwargs["n_estimators"] = 10 * model_search_n_iter
 
-        self.model = RandomSurvivalForest(**kwargs)
+        self.model = RandomSurvivalForest(max_depth=3, **kwargs)
 
     @validate_arguments(config=dict(arbitrary_types_allowed=True))
     def fit(self, X: pd.DataFrame, T: pd.Series, Y: pd.Series) -> "TimeToEventPlugin":

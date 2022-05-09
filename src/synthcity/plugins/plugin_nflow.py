@@ -116,7 +116,7 @@ class NormalizingFlowsPlugin(Plugin):
 
     @staticmethod
     def type() -> str:
-        return "flows"
+        return "generic"
 
     @staticmethod
     def hyperparameter_space(**kwargs: Any) -> List[Distribution]:

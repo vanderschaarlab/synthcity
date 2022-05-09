@@ -309,7 +309,7 @@ class PrivBayesPlugin(Plugin):
 
     @staticmethod
     def type() -> str:
-        return "bayesian"
+        return "generic"
 
     @staticmethod
     def hyperparameter_space(**kwargs: Any) -> List[Distribution]:
