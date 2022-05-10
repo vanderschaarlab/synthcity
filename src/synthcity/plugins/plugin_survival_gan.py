@@ -68,11 +68,6 @@ class SurvivalGANPlugin(Plugin):
 
     def _fit(self, X: pd.DataFrame, *args: Any, **kwargs: Any) -> "SurvivalGANPlugin":
         E = X[self.target_column]
-        T = X[self.time_to_event_column]
-        n_bins = 10
-        Tbins = pd.cut(T, bins=n_bins, duplicates="drop", labels=list(range(n_bins)))
-
-        labels = [(e, t) for e, t in zip(E.values, Tbins.values)]
 
         self.model = SurvivalPipeline(
             "adsgan",
@@ -81,7 +76,7 @@ class SurvivalGANPlugin(Plugin):
             time_to_event_column=self.time_to_event_column,
             time_horizons=self.time_horizons,
             uncensoring_seeds=self.uncensoring_seeds,
-            dataloader_sampler=ImbalancedDatasetSampler(labels),
+            dataloader_sampler=ImbalancedDatasetSampler(E.values.tolist()),
             **self.kwargs,
         )
         self.model.fit(X, *args, **kwargs)
