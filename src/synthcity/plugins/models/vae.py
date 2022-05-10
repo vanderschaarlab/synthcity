@@ -7,7 +7,7 @@ import torch
 from pydantic import validate_arguments
 from torch import Tensor, nn
 from torch.optim import Adam
-from torch.utils.data import DataLoader, TensorDataset
+from torch.utils.data import DataLoader, TensorDataset, sampler
 
 # synthcity absolute
 import synthcity.logger as log
@@ -175,6 +175,7 @@ class VAE(nn.Module):
         loss_strategy: str = "standard",  # standard, robust_divergence
         loss_factor: int = 2,
         robust_divergence_beta: int = 2,  # used for loss_strategy = robust_divergence
+        dataloader_sampler: Optional[sampler.Sampler] = None,
     ) -> None:
         super(VAE, self).__init__()
 
@@ -191,6 +192,7 @@ class VAE(nn.Module):
         self.n_units_embedding = n_units_embedding
         self.loss_strategy = loss_strategy
         self.robust_divergence_beta = robust_divergence_beta
+        self.dataloader_sampler = dataloader_sampler
 
         self.seed = seed
         torch.manual_seed(self.seed)
@@ -295,7 +297,12 @@ class VAE(nn.Module):
 
     def _dataloader(self, X: Tensor) -> DataLoader:
         dataset = TensorDataset(X)
-        return DataLoader(dataset, batch_size=self.batch_size, pin_memory=False)
+        return DataLoader(
+            dataset,
+            sampler=self.dataloader_sampler,
+            batch_size=self.batch_size,
+            pin_memory=False,
+        )
 
     def _loss_function(
         self,

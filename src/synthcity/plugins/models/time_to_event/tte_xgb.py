@@ -6,7 +6,7 @@ import numpy as np
 import pandas as pd
 from pydantic import validate_arguments
 from scipy.integrate import trapz
-from xgbse import XGBSEDebiasedBCE
+from xgbse import XGBSEDebiasedBCE, XGBSEKaplanNeighbors, XGBSEStackedWeibull
 from xgbse.converters import convert_to_structured
 
 # synthcity absolute
@@ -36,8 +36,8 @@ class XGBTimeToEvent(TimeToEventPlugin):
         booster: int = 2,
         random_state: int = 0,
         objective: str = "aft",  # "aft", "cox"
-        strategy: str = "weibull",  # "weibull", "debiased_bce"
-        time_points: int = 10,
+        strategy: str = "km",  # "weibull", "debiased_bce", "km"
+        time_points: int = 100,
         **kwargs: Any
     ) -> None:
         super().__init__()
@@ -80,7 +80,13 @@ class XGBTimeToEvent(TimeToEventPlugin):
             "max_iter": 10000,
         }
 
-        self.model = XGBSEDebiasedBCE(xgboost_params, lr_params)
+        if strategy == "debiased_bce":
+            self.model = XGBSEDebiasedBCE(xgboost_params, lr_params)
+        elif strategy == "weibull":
+            self.model = XGBSEStackedWeibull(xgboost_params)
+        elif strategy == "km":
+            self.model = XGBSEKaplanNeighbors(xgboost_params)
+
         self.time_points = time_points
 
     @validate_arguments(config=dict(arbitrary_types_allowed=True))
@@ -95,13 +101,12 @@ class XGBTimeToEvent(TimeToEventPlugin):
         lower_bound = max(censored_times.min(), obs_times.min()) + 1
         if pd.isna(lower_bound):
             lower_bound = T.min()
-        upper_bound = min(censored_times.max(), obs_times.max()) - 1
-        if pd.isna(upper_bound):
-            upper_bound = T.max()
+        upper_bound = T.max()
 
         time_bins = np.linspace(lower_bound, upper_bound, self.time_points, dtype=int)
 
         self.model.fit(X, y, time_bins=time_bins)
+        self.te_max = T.max()
 
         return self
 
@@ -124,6 +129,6 @@ class XGBTimeToEvent(TimeToEventPlugin):
             IntegerDistribution(name="min_child_weight", low=0, high=50),
             CategoricalDistribution(name="objective", choices=["aft", "cox"]),
             CategoricalDistribution(
-                name="strategy", choices=["weibull", "debiased_bce"]
+                name="strategy", choices=["weibull", "debiased_bce", "km"]
             ),
         ]

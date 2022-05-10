@@ -171,8 +171,11 @@ class Constraints(BaseModel):
         for op, value in rules:
             if op == "in":
                 dist_template = "categorical"
-                dist_args = {"choices": value}
-                break
+                if "choices" not in dist_args:
+                    dist_args["choices"] = value
+                    continue
+                dist_args["choices"] = [v for v in value if v in dist_args["choices"]]
+
             elif op == "dtype" and value == "int":
                 dist_template = "integer"
             elif (op == "le" or op == "<=") and value < dist_args["high"]:

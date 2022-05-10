@@ -1,11 +1,12 @@
 # stdlib
-from typing import Any, List
+from typing import Any, List, Optional
 
 # third party
 import pandas as pd
 
 # Necessary packages
 from pydantic import validate_arguments
+from torch.utils.data import sampler
 
 # synthcity absolute
 from synthcity.plugins.core.distribution import (
@@ -83,6 +84,7 @@ class RTVAEPlugin(Plugin):
         encoder_dropout: float = 0.1,
         data_encoder_max_clusters: int = 20,
         robust_divergence_beta: int = 2,  # used only for loss_strategy "robust_divergence"
+        dataloader_sampler: Optional[sampler.Sampler] = None,
         **kwargs: Any
     ) -> None:
         super().__init__(**kwargs)
@@ -102,6 +104,7 @@ class RTVAEPlugin(Plugin):
         self.clipping_value = clipping_value
         self.data_encoder_max_clusters = data_encoder_max_clusters
         self.loss_strategy = loss_strategy
+        self.dataloader_sampler = dataloader_sampler
 
     @staticmethod
     def name() -> str:
@@ -162,6 +165,7 @@ class RTVAEPlugin(Plugin):
             encoder_dropout=self.encoder_dropout,
             clipping_value=self.clipping_value,
             encoder_max_clusters=self.data_encoder_max_clusters,
+            dataloader_sampler=self.dataloader_sampler,
         )
         self.model.fit(X)
 

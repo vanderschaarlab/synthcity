@@ -122,7 +122,7 @@ class DeephitTimeToEvent(TimeToEventPlugin):
 
         surv_f = self.model.predict_surv_df(X_np)
 
-        return pd.Series(trapz(surv_f.T.values, surv_f.index), index=X.index)
+        return pd.Series(trapz(surv_f.T.values, surv_f.index.values), index=X.index)
 
     @staticmethod
     def name() -> str:

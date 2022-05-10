@@ -35,7 +35,7 @@ class XGBSurvivalAnalysis(SurvivalAnalysisPlugin):
         random_state: int = 0,
         objective: str = "aft",  # "aft", "cox"
         strategy: str = "weibull",  # "weibull", "debiased_bce"
-        time_points: int = 10,
+        time_points: int = 100,
         **kwargs: Any,
     ) -> None:
         super().__init__()
@@ -67,7 +67,7 @@ class XGBSurvivalAnalysis(SurvivalAnalysisPlugin):
             "tree_method": tree_method,
             "booster": XGBSurvivalAnalysis.booster[booster],
             "random_state": random_state,
-            "n_jobs": 4,
+            "n_jobs": 1,
         }
         lr_params = {
             "C": 1e-3,

@@ -1,11 +1,12 @@
 # stdlib
-from typing import Any
+from typing import Any, Optional
 
 # third party
 import pandas as pd
 import torch
 from pydantic import validate_arguments
 from torch import nn
+from torch.utils.data import sampler
 
 # synthcity relative
 from .tabular_encoder import TabularEncoder
@@ -92,6 +93,7 @@ class TabularVAE(nn.Module):
         encoder_nonlin: str = "leaky_relu",
         encoder_batch_norm: bool = False,
         encoder_dropout: float = 0.1,
+        dataloader_sampler: Optional[sampler.Sampler] = None,
     ) -> None:
         super(TabularVAE, self).__init__()
         self.columns = X.columns
@@ -123,6 +125,7 @@ class TabularVAE(nn.Module):
             encoder_nonlin=encoder_nonlin,
             encoder_batch_norm=encoder_batch_norm,
             encoder_dropout=encoder_dropout,
+            dataloader_sampler=dataloader_sampler,
         )
 
     @validate_arguments(config=dict(arbitrary_types_allowed=True))

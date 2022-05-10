@@ -9,10 +9,11 @@ from pydantic import validate_arguments
 
 # synthcity absolute
 import synthcity.plugins as plugins
-from synthcity.plugins._survival_uncensoring_pipeline import SurvivalUncensoringPipeline
+from synthcity.plugins._survival_pipeline import SurvivalPipeline
 from synthcity.plugins.core.distribution import Distribution
 from synthcity.plugins.core.plugin import Plugin
 from synthcity.plugins.core.schema import Schema
+from synthcity.plugins.models.time_to_event.samplers import ImbalancedDatasetSampler
 
 
 class SurvivalAdsGANPlugin(Plugin):
@@ -29,10 +30,11 @@ class SurvivalAdsGANPlugin(Plugin):
     @validate_arguments(config=dict(arbitrary_types_allowed=True))
     def __init__(
         self,
+        strategy: str = "survival_function",
         target_column: str = "event",
         time_to_event_column: str = "duration",
         time_horizons: Optional[List] = None,
-        seeds: List[str] = [
+        uncensoring_seeds: List[str] = [
             "weibull_aft",
             "cox_ph",
             "random_survival_forest",
@@ -48,7 +50,8 @@ class SurvivalAdsGANPlugin(Plugin):
         self.target_column = target_column
         self.time_to_event_column = time_to_event_column
         self.time_horizons = time_horizons
-        self.seeds = seeds
+        self.strategy = strategy
+        self.uncensoring_seeds = uncensoring_seeds
         self.kwargs = kwargs
 
     @staticmethod
@@ -66,12 +69,16 @@ class SurvivalAdsGANPlugin(Plugin):
     def _fit(
         self, X: pd.DataFrame, *args: Any, **kwargs: Any
     ) -> "SurvivalAdsGANPlugin":
-        self.model = SurvivalUncensoringPipeline(
+        E = X[self.target_column]
+
+        self.model = SurvivalPipeline(
             "adsgan",
+            strategy=self.strategy,
             target_column=self.target_column,
             time_to_event_column=self.time_to_event_column,
             time_horizons=self.time_horizons,
-            seeds=self.seeds,
+            uncensoring_seeds=self.uncensoring_seeds,
+            dataloader_sampler=ImbalancedDatasetSampler(E.values.tolist()),
             **self.kwargs,
         )
         self.model.fit(X, *args, **kwargs)

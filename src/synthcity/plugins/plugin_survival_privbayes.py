@@ -15,13 +15,13 @@ from synthcity.plugins.core.plugin import Plugin
 from synthcity.plugins.core.schema import Schema
 
 
-class SurvivalCTGANPlugin(Plugin):
-    """Survival CTGAN plugin.
+class SurvivalPrivBayesPlugin(Plugin):
+    """Survival PrivBayes plugin.
 
     Example:
         >>> from synthcity.plugins import Plugins
         >>> X = load_rossi()
-        >>> plugin = Plugins().get("survival_ctgan", target_column = "arrest", time_to_event_column="week")
+        >>> plugin = Plugins().get("survival_privbayes", target_column = "arrest", time_to_event_column="week")
         >>> plugin.fit(X)
         >>> plugin.generate()
     """
@@ -55,7 +55,7 @@ class SurvivalCTGANPlugin(Plugin):
 
     @staticmethod
     def name() -> str:
-        return "survival_ctgan"
+        return "survival_privbayes"
 
     @staticmethod
     def type() -> str:
@@ -63,11 +63,13 @@ class SurvivalCTGANPlugin(Plugin):
 
     @staticmethod
     def hyperparameter_space(**kwargs: Any) -> List[Distribution]:
-        return plugins.Plugins().get_type("ctgan").hyperparameter_space()
+        return plugins.Plugins().get_type("privbayes").hyperparameter_space()
 
-    def _fit(self, X: pd.DataFrame, *args: Any, **kwargs: Any) -> "SurvivalCTGANPlugin":
+    def _fit(
+        self, X: pd.DataFrame, *args: Any, **kwargs: Any
+    ) -> "SurvivalPrivBayesPlugin":
         self.model = SurvivalPipeline(
-            "ctgan",
+            "privbayes",
             strategy=self.strategy,
             target_column=self.target_column,
             time_to_event_column=self.time_to_event_column,
@@ -83,4 +85,4 @@ class SurvivalCTGANPlugin(Plugin):
         return self.model._generate(count, syn_schema=syn_schema, **kwargs)
 
 
-plugin = SurvivalCTGANPlugin
+plugin = SurvivalPrivBayesPlugin

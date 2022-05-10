@@ -187,7 +187,7 @@ class MLP(nn.Module):
         n_iter_min: int = 100,
         dropout: float = 0.1,
         clipping_value: int = 1,
-        batch_norm: bool = True,
+        batch_norm: bool = False,
         early_stopping: bool = True,
         residual: bool = False,
         loss: Optional[Callable] = None,

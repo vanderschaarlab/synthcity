@@ -6,9 +6,9 @@ from lifelines.datasets import load_rossi
 # synthcity absolute
 from synthcity.plugins import Plugin
 from synthcity.plugins.core.constraints import Constraints
-from synthcity.plugins.plugin_survival_ctgan import plugin
+from synthcity.plugins.plugin_survival_privbayes import plugin
 
-plugin_name = "survival_ctgan"
+plugin_name = "survival_privbayes"
 plugins_args = {
     "uncensoring_seeds": ["weibull_aft", "cox_ph"],
 }
@@ -39,7 +39,7 @@ def test_plugin_type(test_plugin: Plugin) -> None:
     "test_plugin", generate_fixtures(plugin_name, plugin, plugins_args)
 )
 def test_plugin_hyperparams(test_plugin: Plugin) -> None:
-    assert len(test_plugin.hyperparameter_space()) == 12
+    assert len(test_plugin.hyperparameter_space()) == 0
 
 
 @pytest.mark.parametrize("strategy", ["uncensoring", "survival_function"])
