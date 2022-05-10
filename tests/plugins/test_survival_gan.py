@@ -6,9 +6,9 @@ from lifelines.datasets import load_rossi
 # synthcity absolute
 from synthcity.plugins import Plugin
 from synthcity.plugins.core.constraints import Constraints
-from synthcity.plugins.plugin_survival_adsgan import plugin
+from synthcity.plugins.plugin_survival_gan import plugin
 
-plugin_name = "survival_adsgan"
+plugin_name = "survival_gan"
 plugins_args = {
     "uncensoring_seeds": ["weibull_aft", "cox_ph"],
     "generator_n_layers_hidden": 1,

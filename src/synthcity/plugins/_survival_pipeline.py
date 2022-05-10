@@ -116,11 +116,8 @@ class SurvivalPipeline(Plugin):
 
             self.tte_regressor = XGBRegressor(**xgb_params).fit(surv_fn, T)
 
-            df_train = Xcov.copy()
-            df_train[self.target_column] = E
-
             # Synthetic data generator
-            self.generator.fit(df_train)
+            self.generator.fit(X)
         else:
             raise ValueError(f"unsupported strategy {self.strategy}")
 
@@ -143,6 +140,11 @@ class SurvivalPipeline(Plugin):
                     generated = self.generator.generate(count, constraints=constraints)
                     if len(generated) == 0:
                         return generated
+
+                    generated = generated.drop(
+                        columns=[self.time_to_event_column]
+                    )  # remove the generated column
+
                     surv_f = self.surv_model.predict(
                         generated.drop(columns=[self.target_column]),
                         time_horizons=self.time_horizons,
@@ -156,11 +158,11 @@ class SurvivalPipeline(Plugin):
                     return generated
 
                 # Censored
-                cens_count = int(0.5 * count)
+                cens_count = int(self.censoring_ratio * count)
                 cens_generated = _prepare(0, cens_count)
 
                 # Non-censored
-                noncens_count = count - cens_count
+                noncens_count = max(int(0.5 * count), count - cens_count)
                 noncens_generated = _prepare(1, noncens_count)
 
                 # Output

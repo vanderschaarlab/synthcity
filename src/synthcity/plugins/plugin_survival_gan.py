@@ -16,13 +16,13 @@ from synthcity.plugins.core.schema import Schema
 from synthcity.plugins.models.time_to_event.samplers import ImbalancedDatasetSampler
 
 
-class SurvivalAdsGANPlugin(Plugin):
-    """Survival AdsGAN plugin.
+class SurvivalGANPlugin(Plugin):
+    """Survival GAN plugin.
 
     Example:
         >>> from synthcity.plugins import Plugins
         >>> X = load_rossi()
-        >>> plugin = Plugins().get("survival_adsgan", target_column = "arrest", time_to_event_column="week")
+        >>> plugin = Plugins().get("survival_gan", target_column = "arrest", time_to_event_column="week")
         >>> plugin.fit(X)
         >>> plugin.generate()
     """
@@ -56,7 +56,7 @@ class SurvivalAdsGANPlugin(Plugin):
 
     @staticmethod
     def name() -> str:
-        return "survival_adsgan"
+        return "survival_gan"
 
     @staticmethod
     def type() -> str:
@@ -66,10 +66,13 @@ class SurvivalAdsGANPlugin(Plugin):
     def hyperparameter_space(**kwargs: Any) -> List[Distribution]:
         return plugins.Plugins().get_type("adsgan").hyperparameter_space()
 
-    def _fit(
-        self, X: pd.DataFrame, *args: Any, **kwargs: Any
-    ) -> "SurvivalAdsGANPlugin":
+    def _fit(self, X: pd.DataFrame, *args: Any, **kwargs: Any) -> "SurvivalGANPlugin":
         E = X[self.target_column]
+        T = X[self.time_to_event_column]
+        n_bins = 10
+        Tbins = pd.cut(T, bins=n_bins, duplicates="drop", labels=list(range(n_bins)))
+
+        labels = [(e, t) for e, t in zip(E.values, Tbins.values)]
 
         self.model = SurvivalPipeline(
             "adsgan",
@@ -78,7 +81,7 @@ class SurvivalAdsGANPlugin(Plugin):
             time_to_event_column=self.time_to_event_column,
             time_horizons=self.time_horizons,
             uncensoring_seeds=self.uncensoring_seeds,
-            dataloader_sampler=ImbalancedDatasetSampler(E.values.tolist()),
+            dataloader_sampler=ImbalancedDatasetSampler(labels),
             **self.kwargs,
         )
         self.model.fit(X, *args, **kwargs)
@@ -89,4 +92,4 @@ class SurvivalAdsGANPlugin(Plugin):
         return self.model._generate(count, syn_schema=syn_schema, **kwargs)
 
 
-plugin = SurvivalAdsGANPlugin
+plugin = SurvivalGANPlugin
