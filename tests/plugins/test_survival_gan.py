@@ -10,9 +10,9 @@ from synthcity.plugins.plugin_survival_gan import plugin
 
 plugin_name = "survival_gan"
 plugins_args = {
-    "uncensoring_seeds": ["weibull_aft", "cox_ph"],
     "generator_n_layers_hidden": 1,
     "generator_n_units_hidden": 10,
+    "uncensoring_model": "cox_ph",
 }
 
 

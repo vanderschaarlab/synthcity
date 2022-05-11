@@ -9,9 +9,7 @@ from synthcity.plugins.core.constraints import Constraints
 from synthcity.plugins.plugin_survival_bayesian_network import plugin
 
 plugin_name = "survival_bayesian_network"
-plugins_args = {
-    "uncensoring_seeds": ["weibull_aft", "cox_ph"],
-}
+plugins_args = {"uncensoring_model": "cox_ph"}
 
 
 @pytest.mark.parametrize(

@@ -33,15 +33,7 @@ class SurvivalNFlowPlugin(Plugin):
         target_column: str = "event",
         time_to_event_column: str = "duration",
         time_horizons: Optional[List] = None,
-        uncensoring_seeds: List[str] = [
-            "weibull_aft",
-            "cox_ph",
-            "random_survival_forest",
-            "survival_xgboost",
-            "deephit",
-            "tenn",
-            "date",
-        ],
+        uncensoring_model: str = "survival_function_regression",
         **kwargs: Any,
     ) -> None:
         super().__init__()
@@ -49,7 +41,7 @@ class SurvivalNFlowPlugin(Plugin):
         self.target_column = target_column
         self.time_to_event_column = time_to_event_column
         self.time_horizons = time_horizons
-        self.uncensoring_seeds = uncensoring_seeds
+        self.uncensoring_model = uncensoring_model
         self.strategy = strategy
         self.kwargs = kwargs
 
@@ -72,7 +64,7 @@ class SurvivalNFlowPlugin(Plugin):
             target_column=self.target_column,
             time_to_event_column=self.time_to_event_column,
             time_horizons=self.time_horizons,
-            uncensoring_seeds=self.uncensoring_seeds,
+            uncensoring_model=self.uncensoring_model,
             **self.kwargs,
         )
         self.model.fit(X, *args, **kwargs)

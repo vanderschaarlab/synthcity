@@ -19,7 +19,7 @@ class SurvivalFunctionTimeToEvent(TimeToEventPlugin):
     def __init__(
         self,
         survival_model: str = "survival_xgboost",
-        time_points: int = 100,
+        time_points: int = 10,
         model_search_n_iter: Optional[int] = None,
         **kwargs: Any
     ) -> None:
@@ -44,9 +44,9 @@ class SurvivalFunctionTimeToEvent(TimeToEventPlugin):
         surv_fn[self.target_column] = Y
 
         xgb_params = {
-            "n_jobs": 1,
+            "n_jobs": 2,
             "verbosity": 0,
-            "depth": 3,
+            "depth": 5,
             "random_state": 0,
         }
 
@@ -57,17 +57,22 @@ class SurvivalFunctionTimeToEvent(TimeToEventPlugin):
     @validate_arguments(config=dict(arbitrary_types_allowed=True))
     def predict(self, X: pd.DataFrame) -> pd.Series:
         "Predict time-to-event"
+        return self.predict_any(X, pd.Series([1] * len(X), index=X.index))
+
+    @validate_arguments(config=dict(arbitrary_types_allowed=True))
+    def predict_any(self, X: pd.DataFrame, E: pd.Series) -> pd.Series:
+        "Predict time-to-event or censoring"
 
         surv_fn = self.model.predict(X, time_horizons=self.time_horizons)
         surv_fn = surv_fn.loc[:, ~surv_fn.columns.duplicated()]
 
-        surv_fn[self.target_column] = 1
+        surv_fn[self.target_column] = E
 
         return self.tte_regressor.predict(surv_fn)
 
     @staticmethod
     def name() -> str:
-        return "survival_function"
+        return "survival_function_regression"
 
     @staticmethod
     def hyperparameter_space(**kwargs: Any) -> List[Distribution]:

@@ -92,6 +92,7 @@ class XGBTimeToEvent(TimeToEventPlugin):
     @validate_arguments(config=dict(arbitrary_types_allowed=True))
     def fit(self, X: pd.DataFrame, T: pd.Series, Y: pd.Series) -> "TimeToEventPlugin":
         "Training logic"
+        self._fit_censoring_model(X, T, Y)
 
         y = convert_to_structured(T, Y)
 
@@ -116,6 +117,19 @@ class XGBTimeToEvent(TimeToEventPlugin):
 
         surv_f = self.model.predict(X)
         return pd.Series(trapz(surv_f.values, surv_f.T.index), index=X.index)
+
+    @validate_arguments(config=dict(arbitrary_types_allowed=True))
+    def predict_any(self, X: pd.DataFrame, E: pd.Series) -> pd.Series:
+        "Predict time-to-event"
+
+        result = pd.Series([0] * len(X), index=E.index)
+
+        if (E == 1).sum() > 0:
+            result[E == 1] = self.predict(X[E == 1])
+        if (E == 0).sum() > 0:
+            result[E == 0] = self._predict_censoring(X[E == 0])
+
+        return result
 
     @staticmethod
     def name() -> str:

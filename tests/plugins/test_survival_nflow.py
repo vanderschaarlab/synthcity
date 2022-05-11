@@ -10,8 +10,8 @@ from synthcity.plugins.plugin_survival_nflow import plugin
 
 plugin_name = "survival_nflow"
 plugins_args = {
-    "uncensoring_seeds": ["weibull_aft", "cox_ph"],
     "n_iter": 10,
+    "uncensoring_model": "cox_ph",
 }
 
 

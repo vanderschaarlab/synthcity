@@ -26,7 +26,7 @@ class XGBSurvivalAnalysis(SurvivalAnalysisPlugin):
         self,
         n_estimators: int = 100,
         colsample_bynode: float = 0.5,
-        max_depth: int = 8,
+        max_depth: int = 5,
         subsample: float = 0.5,
         learning_rate: float = 5e-2,
         min_child_weight: int = 50,
@@ -35,7 +35,7 @@ class XGBSurvivalAnalysis(SurvivalAnalysisPlugin):
         random_state: int = 0,
         objective: str = "aft",  # "aft", "cox"
         strategy: str = "weibull",  # "weibull", "debiased_bce"
-        time_points: int = 100,
+        time_points: int = 10,
         **kwargs: Any,
     ) -> None:
         super().__init__()
@@ -67,7 +67,7 @@ class XGBSurvivalAnalysis(SurvivalAnalysisPlugin):
             "tree_method": tree_method,
             "booster": XGBSurvivalAnalysis.booster[booster],
             "random_state": random_state,
-            "n_jobs": 1,
+            "n_jobs": 2,
         }
         lr_params = {
             "C": 1e-3,

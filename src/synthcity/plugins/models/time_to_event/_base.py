@@ -5,6 +5,7 @@ from typing import Any, Dict, List
 # third party
 import pandas as pd
 from pydantic import validate_arguments
+from xgboost import XGBRegressor
 
 # synthcity absolute
 from synthcity.plugins.core.distribution import Distribution
@@ -21,6 +22,12 @@ class TimeToEventPlugin(metaclass=ABCMeta):
     @validate_arguments(config=dict(arbitrary_types_allowed=True))
     def predict(self, X: pd.DataFrame) -> pd.Series:
         "Predict time-to-event"
+        ...
+
+    @abstractmethod
+    @validate_arguments(config=dict(arbitrary_types_allowed=True))
+    def predict_any(self, X: pd.DataFrame, E: pd.Series) -> pd.Series:
+        "Predict time-to-event or censoring"
         ...
 
     @staticmethod
@@ -46,3 +53,20 @@ class TimeToEventPlugin(metaclass=ABCMeta):
             results[hp.name] = hp.sample()[0]
 
         return results
+
+    @validate_arguments(config=dict(arbitrary_types_allowed=True))
+    def _fit_censoring_model(self, X: pd.DataFrame, T: pd.Series, E: pd.Series) -> Any:
+        xgb_params = {
+            "n_jobs": 2,
+            "verbosity": 0,
+            "depth": 5,
+            "random_state": 0,
+        }
+
+        self.tte_regressor = XGBRegressor(**xgb_params).fit(X[E == 0], T[E == 0])
+
+        return self
+
+    @validate_arguments(config=dict(arbitrary_types_allowed=True))
+    def _predict_censoring(self, X: pd.DataFrame) -> Any:
+        return self.tte_regressor.predict(X)

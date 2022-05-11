@@ -2,12 +2,10 @@
 from typing import Any, List, Optional
 
 # third party
-import numpy as np
 import pandas as pd
 
 # Necessary packages
 from pydantic import validate_arguments
-from xgboost import XGBRegressor
 
 # synthcity absolute
 import synthcity.plugins as plugins
@@ -15,8 +13,9 @@ from synthcity.plugins.core.constraints import Constraints
 from synthcity.plugins.core.distribution import Distribution
 from synthcity.plugins.core.plugin import Plugin
 from synthcity.plugins.core.schema import Schema
-from synthcity.plugins.models.survival_analysis.loader import get_model_template
-from synthcity.plugins.models.time_to_event import select_uncensoring_model
+from synthcity.plugins.models.time_to_event import (
+    get_model_template as get_tte_model_template,
+)
 
 
 class SurvivalPipeline(Plugin):
@@ -30,16 +29,7 @@ class SurvivalPipeline(Plugin):
         target_column: str = "event",
         time_to_event_column: str = "duration",
         time_horizons: Optional[List] = None,
-        uncensoring_seeds: List[str] = [
-            "weibull_aft",
-            "cox_ph",
-            "random_survival_forest",
-            "survival_xgboost",
-            "deephit",
-            "tenn",
-            "date",
-        ],
-        survival_model: str = "cox_ph",
+        uncensoring_model: str = "survival_function_regression",
         **kwargs: Any,
     ) -> None:
         super().__init__()
@@ -49,8 +39,7 @@ class SurvivalPipeline(Plugin):
         self.target_column = target_column
         self.time_to_event_column = time_to_event_column
 
-        self.uncensoring_seeds = uncensoring_seeds
-        self.survival_model = survival_model
+        self.uncensoring_model = get_tte_model_template(uncensoring_model)()
 
         self.generator = plugins.Plugins().get(method, **kwargs)
 
@@ -83,13 +72,10 @@ class SurvivalPipeline(Plugin):
 
         self.last_te = T[E == 1].max()
         self.censoring_ratio = (E == 0).sum() / len(E)
+        self.uncensoring_model.fit(Xcov, T, E)
 
         if self.strategy == "uncensoring":
             # Uncensoring
-            self.uncensoring_model = select_uncensoring_model(
-                Xcov, T, E, seeds=self.uncensoring_seeds
-            )
-            self.uncensoring_model.fit(Xcov, T, E)
             T_uncensored = pd.Series(
                 self.uncensoring_model.predict(Xcov), index=Xcov.index
             )
@@ -100,22 +86,6 @@ class SurvivalPipeline(Plugin):
 
             self.generator.fit(df_train)
         elif self.strategy == "survival_function":
-            # Survival function driven
-            self.surv_model = get_model_template(self.survival_model)().fit(Xcov, T, E)
-            self.time_horizons = np.linspace(T.min(), T.max(), 10, dtype=int).tolist()
-            surv_fn = self.surv_model.predict(Xcov, time_horizons=self.time_horizons)
-            surv_fn[self.target_column] = E
-
-            # Censoring proba
-            xgb_params = {
-                "n_jobs": 1,
-                "verbosity": 0,
-                "depth": 3,
-                "random_state": 0,
-            }
-
-            self.tte_regressor = XGBRegressor(**xgb_params).fit(surv_fn, T)
-
             # Synthetic data generator
             self.generator.fit(X)
         else:
@@ -145,14 +115,12 @@ class SurvivalPipeline(Plugin):
                         columns=[self.time_to_event_column]
                     )  # remove the generated column
 
-                    surv_f = self.surv_model.predict(
+                    print(label, generated)
+                    generated[
+                        self.time_to_event_column
+                    ] = self.uncensoring_model.predict_any(
                         generated.drop(columns=[self.target_column]),
-                        time_horizons=self.time_horizons,
-                    )
-                    surv_f[self.target_column] = label
-
-                    generated[self.time_to_event_column] = self.tte_regressor.predict(
-                        surv_f
+                        generated[self.target_column],
                     )
 
                     return generated

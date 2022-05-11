@@ -10,7 +10,7 @@ from synthcity.plugins.plugin_survival_tvae import plugin
 
 plugin_name = "survival_tvae"
 plugins_args = {
-    "uncensoring_seeds": ["weibull_aft", "cox_ph"],
+    "uncensoring_model": "cox_ph",
 }
 
 

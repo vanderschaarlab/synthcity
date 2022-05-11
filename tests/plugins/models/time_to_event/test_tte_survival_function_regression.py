@@ -2,7 +2,7 @@
 from lifelines.datasets import load_rossi
 
 # synthcity absolute
-from synthcity.plugins.models.time_to_event.tte_survival_function import (
+from synthcity.plugins.models.time_to_event.tte_survival_function_regression import (
     SurvivalFunctionTimeToEvent,
 )
 
@@ -10,7 +10,7 @@ from synthcity.plugins.models.time_to_event.tte_survival_function import (
 def test_sanity() -> None:
     model = SurvivalFunctionTimeToEvent()
 
-    assert model.name() == "survival_function"
+    assert model.name() == "survival_function_regression"
 
 
 def test_hyperparams() -> None:

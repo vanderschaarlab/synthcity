@@ -29,6 +29,7 @@ class RandomSurvivalForestTimeToEvent(TimeToEventPlugin):
     @validate_arguments(config=dict(arbitrary_types_allowed=True))
     def fit(self, X: pd.DataFrame, T: pd.Series, Y: pd.Series) -> "TimeToEventPlugin":
         "Training logic"
+        self._fit_censoring_model(X, T, Y)
 
         y = [(Y.iloc[i], T.iloc[i]) for i in range(len(X))]
         y = np.array(y, dtype=[("status", "bool"), ("time", "<f8")])
@@ -46,6 +47,19 @@ class RandomSurvivalForestTimeToEvent(TimeToEventPlugin):
             expectations.append(trapz(surv_f.y, surv_f.x))
 
         return pd.Series(expectations, index=X.index)
+
+    @validate_arguments(config=dict(arbitrary_types_allowed=True))
+    def predict_any(self, X: pd.DataFrame, E: pd.Series) -> pd.Series:
+        "Predict time-to-event"
+
+        result = pd.Series([0] * len(X), index=E.index)
+
+        if (E == 1).sum() > 0:
+            result[E == 1] = self.predict(X[E == 1])
+        if (E == 0).sum() > 0:
+            result[E == 0] = self._predict_censoring(X[E == 0])
+
+        return result
 
     @staticmethod
     def name() -> str:
