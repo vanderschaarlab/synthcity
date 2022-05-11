@@ -72,6 +72,8 @@ class SurvivalPipeline(Plugin):
 
         self.last_te = T[E == 1].max()
         self.censoring_ratio = (E == 0).sum() / len(E)
+        self.features = X.columns
+
         self.uncensoring_model.fit(Xcov, T, E)
 
         if self.strategy == "uncensoring":
@@ -107,7 +109,19 @@ class SurvivalPipeline(Plugin):
                             (self.target_column, "in", [label]),
                         ]
                     )
+
                     generated = self.generator.generate(count, constraints=constraints)
+                    for retries in range(10):
+                        if len(generated) >= count:
+                            break
+
+                        local_generated = self.generator.generate(
+                            count - len(generated), constraints=constraints
+                        )
+                        generated = pd.concat(
+                            [generated, local_generated], ignore_index=True
+                        )
+
                     if len(generated) == 0:
                         return generated
 
@@ -115,7 +129,6 @@ class SurvivalPipeline(Plugin):
                         columns=[self.time_to_event_column]
                     )  # remove the generated column
 
-                    print(label, generated)
                     generated[
                         self.time_to_event_column
                     ] = self.uncensoring_model.predict_any(
@@ -130,7 +143,7 @@ class SurvivalPipeline(Plugin):
                 cens_generated = _prepare(0, cens_count)
 
                 # Non-censored
-                noncens_count = max(int(0.5 * count), count - cens_count)
+                noncens_count = count - cens_count
                 noncens_generated = _prepare(1, noncens_count)
 
                 # Output
