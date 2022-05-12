@@ -250,6 +250,7 @@ class PerformanceEvaluator(MetricEvaluator):
             n_folds=self._n_folds,
             time_horizons=self._time_horizons,
         )["clf"]["c_index"][0]
+        log.info(f"Baseline performance score: {score_gt}")
 
         predictor_syn = model(**args)
 
@@ -270,6 +271,7 @@ class PerformanceEvaluator(MetricEvaluator):
                 f"Failed to evaluate synthetic ID performance. {model.name()}: {e}"
             )
             score_syn_id = 0
+        log.info(f"Synthetic ID performance score: {score_syn_id}")
 
         try:
             predictor_syn.fit(iter_X_syn, iter_T_syn, iter_E_syn)
@@ -288,6 +290,8 @@ class PerformanceEvaluator(MetricEvaluator):
                 f"Failed to evaluate synthetic OOD performance. {model.name()}: {e}"
             )
             score_syn_ood = 0
+
+        log.info(f"Synthetic OOD performance score: {score_syn_ood}")
 
         return {
             "gt": float(score_gt),

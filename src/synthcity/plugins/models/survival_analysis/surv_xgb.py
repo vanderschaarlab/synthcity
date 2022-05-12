@@ -14,6 +14,7 @@ from synthcity.plugins.core.distribution import (
     Distribution,
     IntegerDistribution,
 )
+from synthcity.utils.reproducibility import enable_reproducible_results
 
 # synthcity relative
 from ._base import SurvivalAnalysisPlugin
@@ -34,11 +35,14 @@ class XGBSurvivalAnalysis(SurvivalAnalysisPlugin):
         booster: int = 2,
         random_state: int = 0,
         objective: str = "aft",  # "aft", "cox"
-        strategy: str = "weibull",  # "weibull", "debiased_bce"
-        time_points: int = 10,
+        strategy: str = "debiased_bce",  # "weibull", "debiased_bce", "km"
+        time_points: int = 100,
+        seed: int = 0,
         **kwargs: Any,
     ) -> None:
         super().__init__()
+        enable_reproducible_results(seed)
+
         surv_params = {}
         if objective == "aft":
             surv_params = {

@@ -17,6 +17,7 @@ from synthcity.plugins.core.distribution import (
     FloatDistribution,
     IntegerDistribution,
 )
+from synthcity.utils.reproducibility import enable_reproducible_results
 
 # synthcity relative
 from ._base import SurvivalAnalysisPlugin
@@ -37,9 +38,11 @@ class DeephitSurvivalAnalysis(SurvivalAnalysisPlugin):
         dropout: float = 0.2,
         patience: int = 20,
         batch_norm: bool = False,
+        seed: int = 0,
         **kwargs: Any
     ) -> None:
         super().__init__()
+        enable_reproducible_results(seed)
 
         self.num_durations = num_durations
         self.batch_size = batch_size

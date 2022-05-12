@@ -92,7 +92,7 @@ class AdsGANPlugin(Plugin):
         discriminator_opt_betas: tuple = (0.5, 0.999),
         lr: float = 1e-3,
         weight_decay: float = 1e-3,
-        batch_size: int = 200,
+        batch_size: int = 500,
         seed: int = 0,
         clipping_value: int = 0,
         lambda_gradient_penalty: float = 10,

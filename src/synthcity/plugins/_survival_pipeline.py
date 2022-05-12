@@ -1,5 +1,5 @@
 # stdlib
-from typing import Any, List, Optional
+from typing import Any, List, Optional, Tuple
 
 # third party
 import pandas as pd
@@ -8,6 +8,7 @@ import pandas as pd
 from pydantic import validate_arguments
 
 # synthcity absolute
+import synthcity.logger as log
 import synthcity.plugins as plugins
 from synthcity.plugins.core.constraints import Constraints
 from synthcity.plugins.core.distribution import Distribution
@@ -55,6 +56,15 @@ class SurvivalPipeline(Plugin):
     def hyperparameter_space(**kwargs: Any) -> List[Distribution]:
         return []
 
+    def _preprocess(
+        self, df: pd.DataFrame
+    ) -> Tuple[pd.DataFrame, pd.Series, pd.Series]:
+        X = df.drop(columns=[self.target_column, self.time_to_event_column])
+        T = df[self.time_to_event_column]
+        E = df[self.target_column]
+
+        return X, T, E
+
     def _fit(self, X: pd.DataFrame, *args: Any, **kwargs: Any) -> "SurvivalPipeline":
         if self.target_column not in X.columns:
             raise ValueError(
@@ -66,16 +76,19 @@ class SurvivalPipeline(Plugin):
                 f"Time to event column {self.time_to_event_column} not found in the dataframe"
             )
 
-        Xcov = X.drop(columns=[self.target_column, self.time_to_event_column])
-        T = X[self.time_to_event_column]
-        E = X[self.target_column]
+        Xcov, T, E = self._preprocess(X)
 
         self.last_te = T[E == 1].max()
         self.censoring_ratio = (E == 0).sum() / len(E)
         self.features = X.columns
 
+        log.info("Train the uncensoring model")
         self.uncensoring_model.fit(Xcov, T, E)
 
+        log.info(
+            f"max T = {T.max()}, max syn T = {self.uncensoring_model.predict_any(Xcov, E).max()}"
+        )
+        log.info("Train the synthetic generator")
         if self.strategy == "uncensoring":
             # Uncensoring
             T_uncensored = pd.Series(

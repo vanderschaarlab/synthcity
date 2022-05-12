@@ -75,7 +75,7 @@ class Benchmarks:
 
             for repeat in range(repeats):
                 enable_reproducible_results(repeat)
-                log.info(f" Experiment repeat: {repeat}")
+                log.info(f" Experiment repeat: {repeat} task type: {task_type}")
                 generator = Plugins().get(
                     plugin,
                     **kwargs,

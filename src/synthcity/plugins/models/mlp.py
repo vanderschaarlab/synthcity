@@ -10,6 +10,7 @@ from torch.utils.data import DataLoader, TensorDataset
 
 # synthcity absolute
 import synthcity.logger as log
+from synthcity.utils.reproducibility import enable_reproducible_results
 
 DEVICE = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
@@ -194,9 +195,9 @@ class MLP(nn.Module):
     ) -> None:
         super(MLP, self).__init__()
 
+        enable_reproducible_results(seed)
         self.task_type = task_type
         self.seed = seed
-        torch.manual_seed(seed)
 
         if residual:
             block = ResidualLayer
@@ -273,8 +274,6 @@ class MLP(nn.Module):
                 self.loss = nn.CrossEntropyLoss()
             else:
                 self.loss = nn.MSELoss()
-
-        torch.manual_seed(seed)
 
     def fit(self, X: np.ndarray, y: np.ndarray) -> "MLP":
         Xt = self._check_tensor(X)
