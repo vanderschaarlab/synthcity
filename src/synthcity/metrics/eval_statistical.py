@@ -630,12 +630,19 @@ class AlphaPrecision(MetricEvaluator):
         authen = real_to_real[real_to_synth_args] < real_to_synth
         authenticity = np.mean(authen)
 
-        Delta_precision_alpha = 1 - 2 * np.sum(
+        Delta_precision_alpha = 1 - np.sum(
             np.abs(np.array(alphas) - np.array(alpha_precision_curve))
-        ) * (alphas[1] - alphas[0])
-        Delta_coverage_beta = 1 - 2 * np.sum(
+        ) / np.sum(alphas)
+
+        if Delta_precision_alpha < 0:
+            raise RuntimeError("negative value detected for Delta_precision_alpha")
+
+        Delta_coverage_beta = 1 - np.sum(
             np.abs(np.array(alphas) - np.array(beta_coverage_curve))
-        ) * (alphas[1] - alphas[0])
+        ) / np.sum(alphas)
+
+        if Delta_coverage_beta < 0:
+            raise RuntimeError("negative value detected for Delta_coverage_beta")
 
         return (
             alphas,
