@@ -35,6 +35,7 @@ class SurvivalGANPlugin(Plugin):
         time_to_event_column: str = "duration",
         time_horizons: Optional[List] = None,
         uncensoring_model: str = "survival_function_regression",
+        imbalanced_sampling: bool = True,
         **kwargs: Any,
     ) -> None:
         super().__init__()
@@ -44,6 +45,8 @@ class SurvivalGANPlugin(Plugin):
         self.time_horizons = time_horizons
         self.strategy = strategy
         self.uncensoring_model = uncensoring_model
+        self.imbalanced_sampling = imbalanced_sampling
+
         self.kwargs = kwargs
 
     @staticmethod
@@ -73,7 +76,9 @@ class SurvivalGANPlugin(Plugin):
             time_to_event_column=self.time_to_event_column,
             time_horizons=self.time_horizons,
             uncensoring_model=self.uncensoring_model,
-            dataloader_sampler=ImbalancedDatasetSampler(labels),
+            dataloader_sampler=ImbalancedDatasetSampler(labels)
+            if self.imbalanced_sampling
+            else None,
             **self.kwargs,
         )
         self.model.fit(X, *args, **kwargs)
