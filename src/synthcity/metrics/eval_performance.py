@@ -22,6 +22,7 @@ from synthcity.plugins.models.survival_analysis import (
     XGBSurvivalAnalysis,
     evaluate_survival_model,
 )
+from synthcity.utils.serialization import dataframe_hash
 
 
 class PerformanceEvaluator(MetricEvaluator):
@@ -79,7 +80,7 @@ class PerformanceEvaluator(MetricEvaluator):
             score, _ = evaluate_auc(enc_y_test, y_pred)
         except BaseException as e:
             log.error(f"classifier evaluation failed {e}.")
-            score = 0
+            score = 0.5
 
         return score
 
@@ -226,6 +227,10 @@ class PerformanceEvaluator(MetricEvaluator):
                 f"TimeToEvent column not found {tte_col}. Available: {X_gt_train.columns}"
             )
 
+        X_gt_train = X_gt_train.copy()
+        X_gt_test = X_gt_test.copy()
+        X_syn = X_syn.copy()
+
         iter_X_gt = X_gt_train.drop(columns=[target_col, tte_col]).reset_index(
             drop=True
         )
@@ -241,6 +246,9 @@ class PerformanceEvaluator(MetricEvaluator):
         iter_T_syn = X_syn[tte_col].reset_index(drop=True)
 
         predictor_gt = model(**args)
+        log.info(
+            f" Performance eval for df hash = {dataframe_hash(iter_X_gt)} ood hash = {dataframe_hash(ood_X_gt)}"
+        )
         score_gt = evaluate_survival_model(
             predictor_gt,
             iter_X_gt,
@@ -270,7 +278,8 @@ class PerformanceEvaluator(MetricEvaluator):
             log.error(
                 f"Failed to evaluate synthetic ID performance. {model.name()}: {e}"
             )
-            score_syn_id = 0
+            score_syn_id = 0.5
+
         log.info(f"Synthetic ID performance score: {score_syn_id}")
 
         try:
@@ -289,7 +298,7 @@ class PerformanceEvaluator(MetricEvaluator):
             log.error(
                 f"Failed to evaluate synthetic OOD performance. {model.name()}: {e}"
             )
-            score_syn_ood = 0
+            score_syn_ood = 0.5
 
         log.info(f"Synthetic OOD performance score: {score_syn_ood}")
 

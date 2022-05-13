@@ -14,6 +14,7 @@ from synthcity.metrics.scores import ScoreEvaluator
 from synthcity.plugins import Plugins
 from synthcity.plugins.core.constraints import Constraints
 from synthcity.utils.reproducibility import enable_reproducible_results
+from synthcity.utils.serialization import dataframe_hash
 
 
 class Benchmarks:
@@ -75,7 +76,6 @@ class Benchmarks:
 
             for repeat in range(repeats):
                 enable_reproducible_results(repeat)
-                log.info(f" Experiment repeat: {repeat} task type: {task_type}")
                 generator = Plugins().get(
                     plugin,
                     **kwargs,
@@ -86,6 +86,9 @@ class Benchmarks:
 
                 X_train, X_test = train_test_split(
                     X, train_size=train_size, random_state=repeat
+                )
+                log.info(
+                    f" Experiment repeat: {repeat} task type: {task_type} Train df hash = {dataframe_hash(X_train)}"
                 )
 
                 try:
