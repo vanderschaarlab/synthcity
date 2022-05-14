@@ -18,6 +18,7 @@ from sklearn.neighbors import NearestNeighbors
 # synthcity absolute
 from synthcity.metrics._utils import get_frequency
 from synthcity.metrics.core import MetricEvaluator
+from synthcity.plugins.models.survival_analysis.metrics import nonparametric_distance
 
 
 class InverseKLDivergence(MetricEvaluator):
@@ -674,4 +675,54 @@ class AlphaPrecision(MetricEvaluator):
             "delta_precision_alpha": Delta_precision_alpha,
             "delta_coverage_beta": Delta_coverage_beta,
             "authenticity": authenticity,
+        }
+
+
+class SurvivalKMDistance(MetricEvaluator):
+    def __init__(self, **kwargs: Any) -> None:
+        super().__init__(**kwargs)
+
+    @staticmethod
+    def type() -> str:
+        return "stats"
+
+    @staticmethod
+    def name() -> str:
+        return "survival_km_distance"
+
+    @staticmethod
+    def direction() -> str:
+        return "minimize"
+
+    @validate_arguments(config=dict(arbitrary_types_allowed=True))
+    def evaluate(
+        self,
+        X_train_df: pd.DataFrame,
+        X_test_df: pd.DataFrame,
+        X_syn_df: pd.DataFrame,
+    ) -> Dict:
+        if self._task_type != "survival_analysis":
+            raise RuntimeError(
+                f"The metric is valid only for survival analysis tasks, but got {self._task_type}"
+            )
+
+        target_col = self._target_column
+        tte_col = self._time_to_event_column
+
+        X = X_train_df.append(X_test_df).reset_index(drop=True)
+
+        real_T = X[tte_col]
+        real_E = X[target_col]
+
+        syn_T = X_syn_df[tte_col]
+        syn_E = X_syn_df[target_col]
+
+        optimism, abs_optimism, sightedness = nonparametric_distance(
+            (real_T, real_E), (syn_T, syn_E)
+        )
+
+        return {
+            "optimism": optimism,
+            "abs_optimism": abs_optimism,
+            "sightedness": sightedness,
         }

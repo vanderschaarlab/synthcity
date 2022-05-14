@@ -15,11 +15,9 @@ def test_km_surv_function() -> None:
     E = df["arrest"]
     T = df["week"]
 
-    surv_fn, ext_surv_fn, hazards, constant_hazard = km_survival_function(T, E)
+    surv_fn, hazards, constant_hazard = km_survival_function(T, E)
 
-    assert len(surv_fn.columns) < len(ext_surv_fn.columns)
     assert surv_fn.shape == hazards.shape
-    assert ext_surv_fn[ext_surv_fn.columns[-1]].values[0] < 0.1
     assert constant_hazard < 1
 
 
