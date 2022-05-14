@@ -19,7 +19,7 @@ def plot_survival_individual(
     preds: list,
     ci_show: bool = True,
     ci_alpha: float = 0.2,
-    show_censors: bool = True,
+    show_censors: bool = False,
 ) -> None:
     gt_kmf = KaplanMeierFitter()
     gt_kmf.fit(T, E, label="Real data")  # t = Timepoints, Rx: 0=censored, 1=event
@@ -52,7 +52,7 @@ def plot_survival_grouped(
     preds: list,
     ci_show: bool = True,
     ci_alpha: float = 0.2,
-    show_censors: bool = True,
+    show_censors: bool = False,
 ) -> None:
     fig, axs = plt.subplots(
         1, len(preds), figsize=(4 * len(preds), 3), constrained_layout=True

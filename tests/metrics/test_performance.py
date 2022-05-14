@@ -147,9 +147,12 @@ def test_evaluate_performance_survival_analysis(
         X_gen,
     )
 
-    assert "gt" in good_score
-    assert "syn_id" in good_score
-    assert "syn_ood" in good_score
+    assert "gt.c_index" in good_score
+    assert "gt.brier_score" in good_score
+    assert "syn_id.c_index" in good_score
+    assert "syn_id.brier_score" in good_score
+    assert "syn_ood.c_index" in good_score
+    assert "syn_ood.brier_score" in good_score
 
     sz = 100
     X_rnd = pd.DataFrame(np.random.randn(sz, len(X.columns)), columns=X.columns)
@@ -160,13 +163,19 @@ def test_evaluate_performance_survival_analysis(
         X_rnd,
     )
 
-    assert "gt" in score
-    assert "syn_id" in score
-    assert "syn_ood" in score
+    assert "gt.c_index" in score
+    assert "gt.brier_score" in score
+    assert "syn_id.c_index" in score
+    assert "syn_id.brier_score" in score
+    assert "syn_ood.c_index" in score
+    assert "syn_ood.brier_score" in score
 
-    assert score["syn_id"] < 1
-    assert score["syn_ood"] < 1
-    assert good_score["gt"] < 1
+    assert score["syn_id.c_index"] < 1
+    assert score["syn_id.brier_score"] < 1
+    assert score["syn_ood.c_index"] < 1
+    assert score["syn_ood.brier_score"] < 1
+    assert good_score["gt.c_index"] < 1
+    assert good_score["gt.brier_score"] < 1
 
 
 @pytest.mark.parametrize("test_plugin", [Plugins().get("marginal_distributions")])

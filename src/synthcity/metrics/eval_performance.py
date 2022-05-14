@@ -254,14 +254,19 @@ class PerformanceEvaluator(MetricEvaluator):
             iter_X_gt,
             iter_T_gt,
             iter_E_gt,
-            metrics=["c_index"],
+            metrics=["c_index", "brier_score"],
             n_folds=self._n_folds,
             time_horizons=self._time_horizons,
-        )["clf"]["c_index"][0]
+        )["clf"]
+
         log.info(f"Baseline performance score: {score_gt}")
 
         predictor_syn = model(**args)
 
+        fail_score = {
+            "c_index": (0.5, 0),
+            "brier_score": (1, 0),
+        }
         try:
             predictor_syn.fit(iter_X_syn, iter_T_syn, iter_E_syn)
             score_syn_id = evaluate_survival_model(
@@ -269,16 +274,16 @@ class PerformanceEvaluator(MetricEvaluator):
                 iter_X_gt,
                 iter_T_gt,
                 iter_E_gt,
-                metrics=["c_index"],
+                metrics=["c_index", "brier_score"],
                 n_folds=self._n_folds,
                 time_horizons=self._time_horizons,
                 pretrained=True,
-            )["clf"]["c_index"][0]
+            )["clf"]
         except BaseException as e:
             log.error(
                 f"Failed to evaluate synthetic ID performance. {model.name()}: {e}"
             )
-            score_syn_id = 0.5
+            score_syn_id = fail_score
 
         log.info(f"Synthetic ID performance score: {score_syn_id}")
 
@@ -289,23 +294,26 @@ class PerformanceEvaluator(MetricEvaluator):
                 ood_X_gt,
                 ood_T_gt,
                 ood_E_gt,
-                metrics=["c_index"],
+                metrics=["c_index", "brier_score"],
                 n_folds=self._n_folds,
                 time_horizons=self._time_horizons,
                 pretrained=True,
-            )["clf"]["c_index"][0]
+            )["clf"]
         except BaseException as e:
             log.error(
                 f"Failed to evaluate synthetic OOD performance. {model.name()}: {e}"
             )
-            score_syn_ood = 0.5
+            score_syn_ood = fail_score
 
         log.info(f"Synthetic OOD performance score: {score_syn_ood}")
 
         return {
-            "gt": float(score_gt),
-            "syn_id": float(score_syn_id),
-            "syn_ood": float(score_syn_ood),
+            "gt.c_index": float(score_gt["c_index"][0]),
+            "gt.brier_score": float(score_gt["brier_score"][0]),
+            "syn_id.c_index": float(score_syn_id["c_index"][0]),
+            "syn_id.brier_score": float(score_syn_id["brier_score"][0]),
+            "syn_ood.c_index": float(score_syn_ood["c_index"][0]),
+            "syn_ood.brier_score": float(score_syn_ood["brier_score"][0]),
         }
 
     @validate_arguments(config=dict(arbitrary_types_allowed=True))
