@@ -39,6 +39,7 @@ from .eval_statistical import (
     KolmogorovSmirnovTest,
     MaximumMeanDiscrepancy,
     PRDCScore,
+    SurvivalKMDistance,
     WassersteinDistance,
 )
 from .scores import ScoreEvaluator
@@ -60,6 +61,7 @@ standard_metrics = [
     WassersteinDistance,
     PRDCScore,
     AlphaPrecision,
+    SurvivalKMDistance,
     # performance tests
     PerformanceEvaluatorLinear,
     PerformanceEvaluatorMLP,

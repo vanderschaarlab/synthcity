@@ -98,7 +98,7 @@ class SyntheticDetectionXGB(DetectionEvaluator):
     ) -> Dict:
         model_template = XGBClassifier
         model_args = {
-            "n_jobs": 1,
+            "n_jobs": -1,
             "verbosity": 0,
             "use_label_encoder": False,
             "depth": 3,
