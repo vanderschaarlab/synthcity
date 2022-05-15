@@ -79,7 +79,7 @@ def test_plugin_generate(strategy: str) -> None:
     test_plugin = plugin(
         target_column="arrest",
         time_to_event_column="week",
-        strategy=strategy,
+        tte_strategy=strategy,
         **plugins_args
     )
 
@@ -100,7 +100,7 @@ def test_survival_plugin_generate_constraints(strategy: str) -> None:
     test_plugin = plugin(
         target_column="arrest",
         time_to_event_column="week",
-        strategy=strategy,
+        tte_strategy=strategy,
         **plugins_args
     )
 
