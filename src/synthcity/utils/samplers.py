@@ -28,7 +28,6 @@ class ImbalancedDatasetSampler(torch.utils.data.sampler.Sampler):
         label_to_count = df["label"].value_counts()
 
         weights = 1.0 / label_to_count[df["label"]]
-        print("using sampling weights", weights)
 
         self.weights = torch.DoubleTensor(weights.to_list())
 
