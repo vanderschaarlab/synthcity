@@ -71,7 +71,7 @@ class XGBSurvivalAnalysis(SurvivalAnalysisPlugin):
             "tree_method": tree_method,
             "booster": XGBSurvivalAnalysis.booster[booster],
             "random_state": random_state,
-            "n_jobs": 2,
+            "n_jobs": -1,
         }
         lr_params = {
             "C": 1e-3,

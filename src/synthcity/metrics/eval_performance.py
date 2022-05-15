@@ -368,7 +368,7 @@ class PerformanceEvaluatorXGB(PerformanceEvaluator):
         return self._evaluate_test_performance(
             XGBClassifier,
             {
-                "n_jobs": 1,
+                "n_jobs": -1,
                 "verbosity": 0,
                 "use_label_encoder": True,
                 "depth": 3,
@@ -376,7 +376,7 @@ class PerformanceEvaluatorXGB(PerformanceEvaluator):
             },
             XGBRegressor,
             {
-                "n_jobs": 1,
+                "n_jobs": -1,
                 "verbosity": 0,
                 "use_label_encoder": False,
                 "depth": 3,
@@ -384,7 +384,7 @@ class PerformanceEvaluatorXGB(PerformanceEvaluator):
             },
             XGBSurvivalAnalysis,
             {
-                "n_jobs": 1,
+                "n_jobs": -1,
                 "verbosity": 0,
                 "use_label_encoder": False,
                 "depth": 3,
