@@ -77,6 +77,7 @@ class GAN(nn.Module):
         self,
         n_features: int,
         n_units_latent: int,
+        n_units_conditional: int = 0,
         generator_n_layers_hidden: int = 2,
         generator_n_units_hidden: int = 250,
         generator_nonlin: str = "leaky_relu",
@@ -129,10 +130,11 @@ class GAN(nn.Module):
 
         self.n_features = n_features
         self.n_units_latent = n_units_latent
+        self.n_units_conditional = n_units_conditional
 
         self.generator = MLP(
             task_type="regression",
-            n_units_in=n_units_latent,
+            n_units_in=n_units_latent + n_units_conditional,
             n_units_out=n_features,
             n_layers_hidden=generator_n_layers_hidden,
             n_units_hidden=generator_n_units_hidden,
@@ -150,7 +152,7 @@ class GAN(nn.Module):
 
         self.discriminator = MLP(
             task_type="regression",
-            n_units_in=n_features,
+            n_units_in=n_features + n_units_conditional,
             n_units_out=1,
             n_layers_hidden=discriminator_n_layers_hidden,
             n_units_hidden=discriminator_n_units_hidden,
@@ -192,32 +194,77 @@ class GAN(nn.Module):
     def fit(
         self,
         X: np.ndarray,
+        cond: Optional[np.ndarray] = None,
         fake_labels_generator: Optional[Callable] = None,
         true_labels_generator: Optional[Callable] = None,
     ) -> "GAN":
         Xt = self._check_tensor(X)
+        condt: Optional[torch.Tensor] = None
+
+        if self.n_units_conditional > 0:
+            if cond is None:
+                raise ValueError("Expecting valid conditional for training")
+            if len(cond.shape) == 1:
+                cond = cond.reshape(-1, 1)
+            if cond.shape[1] != self.n_units_conditional:
+                raise ValueError(
+                    "Expecting conditional with n_units = {self.n_units_conditional}"
+                )
+            if cond.shape[0] != X.shape[0]:
+                raise ValueError(
+                    "Expecting conditional with the same length as the dataset"
+                )
+
+            condt = self._check_tensor(cond)
 
         self._train(
             Xt,
+            condt,
             fake_labels_generator=fake_labels_generator,
             true_labels_generator=true_labels_generator,
         )
 
         return self
 
-    def generate(self, count: int) -> np.ndarray:
-        return self(count).cpu().numpy()
+    def generate(self, count: int, cond: Optional[np.ndarray] = None) -> np.ndarray:
+        condt: Optional[torch.Tensor] = None
+        if cond is not None:
+            condt = self._check_tensor(cond)
+        return self(count, condt).cpu().numpy()
 
     @validate_arguments(config=dict(arbitrary_types_allowed=True))
-    def forward(self, count: int) -> torch.Tensor:
+    def forward(
+        self,
+        count: int,
+        cond: Optional[torch.Tensor] = None,
+    ) -> torch.Tensor:
         self.generator.eval()
 
+        if cond is None and self.n_units_conditional > 0:
+            # sample from the original conditional
+            if self._original_cond is None:
+                raise ValueError("Invalid original conditional. Provide a valid value.")
+            cond_idxs = torch.randint(len(self._original_cond), (count,))
+            cond = self._original_cond[cond_idxs]
+
+        if cond is not None and len(cond.shape) == 1:
+            cond = cond.reshape(-1, 1)
+
+        if cond is not None and len(cond) != count:
+            raise ValueError("cond length must match count")
+
         fixed_noise = torch.randn(count, self.n_units_latent, device=DEVICE)
+        fixed_noise = self._append_optional_cond(fixed_noise, cond)
         with torch.no_grad():
             return self.generator(fixed_noise).detach().cpu()
 
-    def dataloader(self, X: torch.Tensor) -> DataLoader:
-        dataset = TensorDataset(X)
+    def dataloader(
+        self, X: torch.Tensor, cond: Optional[torch.Tensor] = None
+    ) -> DataLoader:
+        if cond is None:
+            dataset = TensorDataset(X)
+        else:
+            dataset = TensorDataset(X, cond)
         return DataLoader(
             dataset,
             batch_size=self.batch_size,
@@ -228,6 +275,7 @@ class GAN(nn.Module):
     def _train_epoch_generator(
         self,
         X: torch.Tensor,
+        cond: Optional[torch.Tensor],
         fake_labels_generator: Callable,
         true_labels_generator: Callable,
     ) -> float:
@@ -235,10 +283,14 @@ class GAN(nn.Module):
         self.generator.optimizer.zero_grad()
 
         real_X = X.to(DEVICE)
+        real_X = self._append_optional_cond(real_X, cond)
         batch_size = len(real_X)
 
         noise = torch.randn(batch_size, self.n_units_latent, device=DEVICE)
+        noise = self._append_optional_cond(noise, cond)
+
         fake = self.generator(noise)
+        fake = self._append_optional_cond(fake, cond)
 
         output = self.discriminator(fake).squeeze().float()
         # Calculate G's loss based on this output
@@ -268,6 +320,7 @@ class GAN(nn.Module):
     def _train_epoch_discriminator(
         self,
         X: torch.Tensor,
+        cond: Optional[torch.Tensor],
         fake_labels_generator: Callable,
         true_labels_generator: Callable,
     ) -> float:
@@ -281,12 +334,18 @@ class GAN(nn.Module):
 
             # Train with all-real batch
             real_X = X.to(DEVICE)
+            real_X = self._append_optional_cond(real_X, cond)
+
             real_labels = true_labels_generator(X).to(DEVICE).squeeze()
             real_output = self.discriminator(real_X).squeeze().float()
 
             # Train with all-fake batch
             noise = torch.randn(batch_size, self.n_units_latent, device=DEVICE)
+            noise = self._append_optional_cond(noise, cond)
+
             fake = self.generator(noise)
+            fake = self._append_optional_cond(fake, cond)
+
             fake_labels = fake_labels_generator(fake).to(DEVICE).squeeze().float()
             fake_output = self.discriminator(fake.detach()).squeeze()
 
@@ -337,16 +396,24 @@ class GAN(nn.Module):
         D_losses = []
 
         for i, data in enumerate(loader):
+            cond: Optional[torch.Tensor] = None
+            if self.n_units_conditional > 0:
+                X, cond = data
+            else:
+                X = data[0]
+
             D_losses.append(
                 self._train_epoch_discriminator(
-                    data[0],
+                    X,
+                    cond,
                     fake_labels_generator=fake_labels_generator,
                     true_labels_generator=true_labels_generator,
                 )
             )
             G_losses.append(
                 self._train_epoch_generator(
-                    data[0],
+                    X,
+                    cond,
                     fake_labels_generator=fake_labels_generator,
                     true_labels_generator=true_labels_generator,
                 )
@@ -357,13 +424,15 @@ class GAN(nn.Module):
     def _train(
         self,
         X: torch.Tensor,
+        cond: Optional[torch.Tensor] = None,
         fake_labels_generator: Optional[Callable] = None,
         true_labels_generator: Optional[Callable] = None,
     ) -> "GAN":
+        self._original_cond = cond
         X = self._check_tensor(X).float()
 
         # Load Dataset
-        loader = self.dataloader(X)
+        loader = self.dataloader(X, cond)
 
         # Train loop
         for i in range(self.generator_n_iter):
@@ -452,3 +521,11 @@ class GAN(nn.Module):
         return self.lambda_identifiability_penalty * torch.sqrt(
             nn.MSELoss()(real_samples, fake_samples)
         )
+
+    def _append_optional_cond(
+        self, X: torch.Tensor, cond: Optional[torch.Tensor]
+    ) -> torch.Tensor:
+        if cond is None:
+            return X
+
+        return torch.cat([X, cond], dim=1)

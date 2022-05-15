@@ -49,8 +49,6 @@ def test_plugin_hyperparams(test_plugin: Plugin) -> None:
     [
         "imbalanced_censoring",
         "imbalanced_time_censoring",
-        "imbalanced_cov_censoring",
-        "imbalanced_full",
         "none",
     ],
 )

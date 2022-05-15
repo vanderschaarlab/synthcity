@@ -212,14 +212,14 @@ class Plugin(metaclass=ABCMeta):
         ...
 
     def _safe_generate(
-        self, gen_cbk: Callable, count: int, syn_schema: Schema
+        self, gen_cbk: Callable, count: int, syn_schema: Schema, **kwargs: Any
     ) -> pd.DataFrame:
         constraints = syn_schema.as_constraints()
 
         data_synth = pd.DataFrame([], columns=self.schema().features())
         for it in range(self.sampling_patience):
             # sample
-            iter_samples = gen_cbk(count)
+            iter_samples = gen_cbk(count, **kwargs)
             iter_samples_df = pd.DataFrame(
                 iter_samples, columns=self.schema().features()
             )

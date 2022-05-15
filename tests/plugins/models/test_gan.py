@@ -1,6 +1,7 @@
 # third party
+import numpy as np
 import pytest
-from sklearn.datasets import load_digits
+from sklearn.datasets import load_digits, load_iris
 from sklearn.preprocessing import MinMaxScaler
 
 # synthcity absolute
@@ -103,3 +104,22 @@ def test_gan_classification(discriminator_extra_loss: list) -> None:
     generated = model.generate(10)
 
     assert generated.shape == (10, X.shape[1])
+
+
+def test_gan_conditional() -> None:
+    X, y = load_iris(return_X_y=True)
+    X = MinMaxScaler().fit_transform(X)
+
+    model = GAN(
+        n_features=X.shape[1],
+        n_units_latent=50,
+        n_units_conditional=1,
+        generator_n_iter=10,
+    )
+    model.fit(X, cond=y)
+
+    generated = model.generate(10)
+    assert generated.shape == (10, X.shape[1])
+
+    generated = model.generate(5, np.ones(5))
+    assert generated.shape == (5, X.shape[1])

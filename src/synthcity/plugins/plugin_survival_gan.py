@@ -36,7 +36,7 @@ class SurvivalGANPlugin(Plugin):
         time_to_event_column: str = "duration",
         time_horizons: Optional[List] = None,
         uncensoring_model: str = "survival_function_regression",
-        dataloader_sampling_strategy: str = "imbalanced_full",  # none, imbalanced_censoring, imbalanced_time_censoring, imbalanced_full, imbalanced_cov_censoring
+        dataloader_sampling_strategy: str = "imbalanced_time_censoring",  # none, imbalanced_censoring, imbalanced_time_censoring
         tte_strategy: str = "survival_function",
         **kwargs: Any,
     ) -> None:
@@ -46,8 +46,6 @@ class SurvivalGANPlugin(Plugin):
             "none",
             "imbalanced_censoring",
             "imbalanced_time_censoring",
-            "imbalanced_cov_censoring",
-            "imbalanced_full",
         ]
         if dataloader_sampling_strategy not in valid_sampling_strategies:
             raise ValueError(
@@ -87,25 +85,11 @@ class SurvivalGANPlugin(Plugin):
             log.info("Using imbalanced time and censoring sampling")
             Tbins = BinEncoder().fit_transform(T.to_frame()).values.squeeze().tolist()
             sampling_labels = list(zip(E, Tbins))
-        elif self.dataloader_sampling_strategy == "imbalanced_cov_censoring":
-            log.info("Using imbalanced covariates and censoring sampling")
-            bins = BinEncoder().fit_transform(X)
-            bins = bins.drop(columns=[self.time_to_event_column])
-            bins_arr = []
-            for col in bins.columns:
-                bins_arr.append(bins[col].values.tolist())
-            sampling_labels = list(zip(*bins_arr))
-        elif self.dataloader_sampling_strategy == "imbalanced_full":
-            log.info("Using full imbalanced sampling")
-            bins = BinEncoder().fit_transform(X)
-            bins_arr = []
-            for col in bins.columns:
-                bins_arr.append(bins[col].values.tolist())
-            sampling_labels = list(zip(*bins_arr))
 
         if sampling_labels is not None:
             sampler = ImbalancedDatasetSampler(sampling_labels)
 
+        self.conditional = BinEncoder().fit_transform(X)
         self.model = SurvivalPipeline(
             "adsgan",
             strategy=self.tte_strategy,
@@ -114,14 +98,21 @@ class SurvivalGANPlugin(Plugin):
             time_horizons=self.time_horizons,
             uncensoring_model=self.uncensoring_model,
             dataloader_sampler=sampler,
+            generator_extra_penalties=[],
+            n_units_conditional=self.conditional.shape[1],
             **self.kwargs,
         )
-        self.model.fit(X, *args, **kwargs)
+        self.model.fit(X, cond=self.conditional, *args, **kwargs)
 
         return self
 
     def _generate(self, count: int, syn_schema: Schema, **kwargs: Any) -> pd.DataFrame:
-        return self.model._generate(count, syn_schema=syn_schema, **kwargs)
+        return self.model._generate(
+            count,
+            syn_schema=syn_schema,
+            cond=self.conditional.sample(count, replace=True),
+            **kwargs,
+        )
 
 
 plugin = SurvivalGANPlugin

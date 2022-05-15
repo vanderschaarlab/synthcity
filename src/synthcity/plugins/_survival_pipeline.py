@@ -10,7 +10,6 @@ from pydantic import validate_arguments
 # synthcity absolute
 import synthcity.logger as log
 import synthcity.plugins as plugins
-from synthcity.plugins.core.constraints import Constraints
 from synthcity.plugins.core.distribution import Distribution
 from synthcity.plugins.core.plugin import Plugin
 from synthcity.plugins.core.schema import Schema
@@ -99,10 +98,10 @@ class SurvivalPipeline(Plugin):
             df_train = Xcov.copy()
             df_train[self.time_to_event_column] = T_uncensored
 
-            self.generator.fit(df_train)
+            self.generator.fit(df_train, **kwargs)
         elif self.strategy == "survival_function":
             # Synthetic data generator
-            self.generator.fit(X)
+            self.generator.fit(X, **kwargs)
         else:
             raise ValueError(f"unsupported strategy {self.strategy}")
 
@@ -111,57 +110,19 @@ class SurvivalPipeline(Plugin):
     def _generate(self, count: int, syn_schema: Schema, **kwargs: Any) -> pd.DataFrame:
         def _generate(count: int) -> pd.DataFrame:
 
+            generated = self.generator.generate(count, **kwargs)
             if self.strategy == "uncensoring":
-                generated = self.generator.generate(count)
                 generated[self.target_column] = 1
             elif self.strategy == "survival_function":
+                generated = generated.drop(
+                    columns=[self.time_to_event_column]
+                )  # remove the generated column
 
-                def _prepare(label: int, count: int) -> pd.DataFrame:
-                    constraints = Constraints(
-                        rules=[
-                            (self.target_column, "in", [label]),
-                        ]
-                    )
-
-                    generated = self.generator.generate(count, constraints=constraints)
-                    for retries in range(10):
-                        if len(generated) >= count:
-                            break
-
-                        local_generated = self.generator.generate(
-                            count - len(generated), constraints=constraints
-                        )
-                        generated = pd.concat(
-                            [generated, local_generated], ignore_index=True
-                        )
-
-                    if len(generated) == 0:
-                        return generated
-
-                    generated = generated.drop(
-                        columns=[self.time_to_event_column]
-                    )  # remove the generated column
-
-                    generated[
-                        self.time_to_event_column
-                    ] = self.uncensoring_model.predict_any(
-                        generated.drop(columns=[self.target_column]),
-                        generated[self.target_column],
-                    )
-
-                    return generated
-
-                # Censored
-                cens_count = int(self.censoring_ratio * count)
-                cens_generated = _prepare(0, cens_count)
-
-                # Non-censored
-                noncens_count = count - cens_count
-                noncens_generated = _prepare(1, noncens_count)
-
-                # Output
-                generated = pd.concat(
-                    [cens_generated, noncens_generated], ignore_index=True
+                generated[
+                    self.time_to_event_column
+                ] = self.uncensoring_model.predict_any(
+                    generated.drop(columns=[self.target_column]),
+                    generated[self.target_column],
                 )
             else:
                 raise ValueError(f"unsupported strategy {self.strategy}")
