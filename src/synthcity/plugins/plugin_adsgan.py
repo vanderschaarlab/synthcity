@@ -109,7 +109,7 @@ class AdsGANPlugin(Plugin):
         self.n_iter = n_iter
         self.generator_dropout = generator_dropout
         self.generator_opt_betas = generator_opt_betas
-        self.generator_extra_penalties = ["identifiability_penalty"]
+        self.generator_extra_penalties: list = []
         self.discriminator_n_layers_hidden = discriminator_n_layers_hidden
         self.discriminator_n_units_hidden = discriminator_n_units_hidden
         self.discriminator_nonlin = discriminator_nonlin

@@ -114,6 +114,10 @@ class BinEncoder(TransformerMixin, BaseEstimator):
 
         return output
 
+    @validate_arguments(config=dict(arbitrary_types_allowed=True))
+    def fit_transform(self, raw_data: pd.DataFrame) -> pd.DataFrame:
+        return self.fit(raw_data).transform(raw_data)
+
 
 class TabularEncoder(TransformerMixin, BaseEstimator):
     """Tabular encoder.

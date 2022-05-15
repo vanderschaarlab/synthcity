@@ -25,10 +25,10 @@ from synthcity.plugins.core.distribution import (
 from synthcity.plugins.models.mlp import MLP
 from synthcity.plugins.models.time_to_event.metrics import c_index, expected_time_error
 from synthcity.utils.reproducibility import enable_reproducible_results
+from synthcity.utils.samplers import ImbalancedDatasetSampler
 
 # synthcity relative
 from ._base import TimeToEventPlugin
-from .samplers import ImbalancedDatasetSampler
 
 DEVICE = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 

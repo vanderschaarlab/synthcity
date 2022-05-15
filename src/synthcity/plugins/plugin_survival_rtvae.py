@@ -13,7 +13,7 @@ from synthcity.plugins._survival_pipeline import SurvivalPipeline
 from synthcity.plugins.core.distribution import Distribution
 from synthcity.plugins.core.plugin import Plugin
 from synthcity.plugins.core.schema import Schema
-from synthcity.plugins.models.time_to_event.samplers import ImbalancedDatasetSampler
+from synthcity.utils.samplers import ImbalancedDatasetSampler
 
 
 class SurvivalRTVAEPlugin(Plugin):

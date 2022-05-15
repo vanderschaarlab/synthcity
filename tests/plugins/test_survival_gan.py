@@ -44,12 +44,29 @@ def test_plugin_hyperparams(test_plugin: Plugin) -> None:
     assert len(test_plugin.hyperparameter_space()) == 14
 
 
-@pytest.mark.parametrize("strategy", ["uncensoring", "survival_function"])
-def test_plugin_fit(strategy: str) -> None:
+@pytest.mark.parametrize(
+    "dataloader_sampling_strategy",
+    [
+        "imbalanced_censoring",
+        "imbalanced_time_censoring",
+        "imbalanced_cov_censoring",
+        "imbalanced_full",
+        "none",
+    ],
+)
+@pytest.mark.parametrize(
+    "tte_strategy",
+    [
+        "survival_function",
+        "uncensoring",
+    ],
+)
+def test_plugin_fit(dataloader_sampling_strategy: str, tte_strategy: str) -> None:
     test_plugin = plugin(
         target_column="arrest",
         time_to_event_column="week",
-        strategy=strategy,
+        tte_strategy=tte_strategy,
+        dataloader_sampling_strategy=dataloader_sampling_strategy,
         **plugins_args
     )
 
