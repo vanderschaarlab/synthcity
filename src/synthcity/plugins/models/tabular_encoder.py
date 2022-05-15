@@ -21,6 +21,100 @@ ColumnTransformInfo = namedtuple(
 )
 
 
+class BinEncoder(TransformerMixin, BaseEstimator):
+    """Bin encoder.
+
+    Model continuous columns with a BayesianGMM and normalized to a scalar [0, 1] and a vector.
+    Discrete columns are encoded using a scikit-learn OneHotEncoder.
+    """
+
+    @validate_arguments(config=dict(arbitrary_types_allowed=True))
+    def __init__(self, max_clusters: int = 10, weight_threshold: float = 0.001) -> None:
+        """Create a data transformer.
+
+        Args:
+            max_clusters (int):
+                Maximum number of Gaussian distributions in Bayesian GMM.
+            weight_threshold (float):
+                Weight threshold for a Gaussian distribution to be kept.
+        """
+        self.max_clusters = max_clusters
+        self.weight_threshold = weight_threshold
+
+    @validate_arguments(config=dict(arbitrary_types_allowed=True))
+    def _fit_continuous(self, data: pd.DataFrame) -> ColumnTransformInfo:
+        """Train Bayesian GMM for continuous columns.
+
+        Args:
+            data (pd.DataFrame):
+                A dataframe containing a column.
+
+        Returns:
+            namedtuple:
+                A ``ColumnTransformInfo`` object.
+        """
+        column_name = data.columns[0]
+        gm = BayesGMMTransformer(
+            max_clusters=self.max_clusters, weight_threshold=self.weight_threshold
+        )
+        gm.fit(data, [column_name])
+        num_components = sum(gm.valid_component_indicator)
+
+        return ColumnTransformInfo(
+            column_name=column_name,
+            column_type="continuous",
+            transform=gm,
+            output_dimensions=1 + num_components,
+        )
+
+    def fit(
+        self, raw_data: pd.DataFrame, discrete_columns: Optional[List] = None
+    ) -> "BinEncoder":
+        """Fit the ``BinEncoder``.
+
+        Fits a ``BayesGMMTransformer`` for continuous columns
+        """
+        if discrete_columns is None:
+            discrete_columns = []
+
+            for col in raw_data.columns:
+                if len(raw_data[col].unique()) < 15:
+                    discrete_columns.append(col)
+
+        self.output_dimensions = 0
+
+        self._column_transform_info = {}
+        for column_name in raw_data.columns:
+            if column_name not in discrete_columns:
+                column_transform_info = self._fit_continuous(raw_data[[column_name]])
+                self._column_transform_info[column_name] = column_transform_info
+
+        return self
+
+    def _transform_continuous(
+        self, column_transform_info: ColumnTransformInfo, data: pd.DataFrame
+    ) -> pd.DataFrame:
+        column_name = data.columns[0]
+        gm = column_transform_info.transform
+        transformed = gm.transform(data, [column_name])
+
+        return transformed[f"{column_name}.component"].to_numpy().astype(int)
+
+    @validate_arguments(config=dict(arbitrary_types_allowed=True))
+    def transform(self, raw_data: pd.DataFrame) -> pd.DataFrame:
+        """Take raw data and output a matrix data."""
+        output = raw_data.copy()
+
+        for column_name in self._column_transform_info:
+            column_transform_info = self._column_transform_info[column_name]
+
+            output[column_name] = self._transform_continuous(
+                column_transform_info, raw_data[[column_name]]
+            )
+
+        return output
+
+
 class TabularEncoder(TransformerMixin, BaseEstimator):
     """Tabular encoder.
 
@@ -94,7 +188,7 @@ class TabularEncoder(TransformerMixin, BaseEstimator):
     def fit(
         self, raw_data: pd.DataFrame, discrete_columns: Optional[List] = None
     ) -> "TabularEncoder":
-        """Fit the ``DataTransformer``.
+        """Fit the ``TabularEncoder``.
 
         Fits a ``BayesGMMTransformer`` for continuous columns and a
         ``OneHotEncoder`` for discrete columns.

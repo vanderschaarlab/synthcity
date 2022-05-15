@@ -1,10 +1,10 @@
 # third party
 import numpy as np
 import pytest
-from sklearn.datasets import load_diabetes, load_digits
+from sklearn.datasets import load_diabetes, load_digits, load_iris
 
 # synthcity absolute
-from synthcity.plugins.models import TabularEncoder
+from synthcity.plugins.models import BinEncoder, TabularEncoder
 
 
 def test_encoder_sanity() -> None:
@@ -118,3 +118,15 @@ def test_encoder_activation_layout() -> None:
         else:
             assert act_layout[act_step] == ("softmax", col_info.output_dimensions)
             act_step += 1
+
+
+def test_bin_encoder() -> None:
+    X, y = load_iris(return_X_y=True, as_frame=True)
+    X["target"] = y
+    net = BinEncoder(max_clusters=10)
+
+    net.fit(X)
+    binned = net.transform(X)
+
+    for col in X.columns:
+        assert len(binned[col].unique()) <= 10
