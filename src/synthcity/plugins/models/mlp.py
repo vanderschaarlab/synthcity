@@ -44,7 +44,7 @@ class LinearLayer(nn.Module):
         dropout: float = 0,
         batch_norm: bool = False,
         nonlin: Optional[str] = "relu",
-        device: str = DEVICE,
+        device: torch.device = DEVICE,
     ) -> None:
         super(LinearLayer, self).__init__()
 
@@ -77,7 +77,7 @@ class ResidualLayer(LinearLayer):
         dropout: float = 0,
         batch_norm: bool = False,
         nonlin: Optional[str] = "relu",
-        device: str = DEVICE,
+        device: torch.device = DEVICE,
     ) -> None:
         super(ResidualLayer, self).__init__(
             n_units_in,
@@ -101,7 +101,7 @@ class MultiActivationHead(nn.Module):
     def __init__(
         self,
         activations: List[Tuple[nn.Module, int]],
-        device: str = DEVICE,
+        device: torch.device = DEVICE,
     ) -> None:
         super(MultiActivationHead, self).__init__()
         self.activations = []
@@ -200,7 +200,7 @@ class MLP(nn.Module):
         early_stopping: bool = True,
         residual: bool = False,
         loss: Optional[Callable] = None,
-        device: str = DEVICE,
+        device: torch.device = DEVICE,
     ) -> None:
         super(MLP, self).__init__()
 

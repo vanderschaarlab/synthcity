@@ -39,7 +39,7 @@ class XGBSurvivalAnalysis(SurvivalAnalysisPlugin):
         strategy: str = "debiased_bce",  # "weibull", "debiased_bce", "km"
         time_points: int = 100,
         seed: int = 0,
-        device: str = DEVICE,
+        device: Any = DEVICE,
         **kwargs: Any,
     ) -> None:
         super().__init__()

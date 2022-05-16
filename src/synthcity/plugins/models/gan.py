@@ -111,7 +111,7 @@ class GAN(nn.Module):
         lambda_gradient_penalty: float = 10,
         lambda_identifiability_penalty: float = 0.1,
         dataloader_sampler: Optional[sampler.Sampler] = None,
-        device: str = DEVICE,
+        device: torch.device = DEVICE,
     ) -> None:
         super(GAN, self).__init__()
 

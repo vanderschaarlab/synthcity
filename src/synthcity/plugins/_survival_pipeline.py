@@ -32,7 +32,7 @@ class SurvivalPipeline(Plugin):
         time_to_event_column: str = "duration",
         time_horizons: Optional[List] = None,
         uncensoring_model: str = "survival_function_regression",
-        device: str = DEVICE,
+        device: Any = DEVICE,
         **kwargs: Any,
     ) -> None:
         super().__init__()

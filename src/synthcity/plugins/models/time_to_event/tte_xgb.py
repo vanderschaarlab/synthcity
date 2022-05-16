@@ -39,7 +39,7 @@ class XGBTimeToEvent(TimeToEventPlugin):
         objective: str = "aft",  # "aft", "cox"
         strategy: str = "km",  # "weibull", "debiased_bce", "km"
         time_points: int = 100,
-        device: str = DEVICE,
+        device: Any = DEVICE,
         **kwargs: Any
     ) -> None:
         super().__init__()

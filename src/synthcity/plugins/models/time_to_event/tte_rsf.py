@@ -20,7 +20,7 @@ class RandomSurvivalForestTimeToEvent(TimeToEventPlugin):
     def __init__(
         self,
         model_search_n_iter: Optional[int] = None,
-        device: str = DEVICE,
+        device: Any = DEVICE,
         **kwargs: Any
     ) -> None:
         super().__init__()

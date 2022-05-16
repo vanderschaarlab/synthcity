@@ -57,7 +57,7 @@ class Plugin(metaclass=ABCMeta):
         target_column: Optional[str] = None,
         time_to_event_column: Optional[str] = None,
         time_horizons: Optional[List] = None,
-        device: str = DEVICE,
+        device: Any = DEVICE,
     ) -> None:
         """
 

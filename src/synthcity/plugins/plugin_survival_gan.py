@@ -39,7 +39,8 @@ class SurvivalGANPlugin(Plugin):
         uncensoring_model: str = "survival_function_regression",
         dataloader_sampling_strategy: str = "imbalanced_time_censoring",  # none, imbalanced_censoring, imbalanced_time_censoring
         tte_strategy: str = "survival_function",
-        device: str = DEVICE,
+        device: Any = DEVICE,
+        identifiability_penalty: bool = False,
         **kwargs: Any,
     ) -> None:
         super().__init__()
@@ -60,6 +61,11 @@ class SurvivalGANPlugin(Plugin):
         self.dataloader_sampling_strategy = dataloader_sampling_strategy
         self.uncensoring_model = uncensoring_model
         self.device = device
+
+        if identifiability_penalty:
+            self.generator_extra_penalties = ["identifiability_penalty"]
+        else:
+            self.generator_extra_penalties = []
 
         self.kwargs = kwargs
 
@@ -111,7 +117,7 @@ class SurvivalGANPlugin(Plugin):
             time_horizons=self.time_horizons,
             uncensoring_model=self.uncensoring_model,
             dataloader_sampler=sampler,
-            generator_extra_penalties=[],
+            generator_extra_penalties=self.generator_extra_penalties,
             n_units_conditional=self.conditional.shape[1],
             device=self.device,
             **self.kwargs,

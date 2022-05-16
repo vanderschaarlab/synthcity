@@ -17,7 +17,7 @@ from ._base import SurvivalAnalysisPlugin
 
 
 class CoxPHSurvivalAnalysis(SurvivalAnalysisPlugin):
-    def __init__(self, device: str = DEVICE, **kwargs: Any) -> None:
+    def __init__(self, device: Any = DEVICE, **kwargs: Any) -> None:
         super().__init__()
         self.model = CoxPHFitter(**kwargs)
 

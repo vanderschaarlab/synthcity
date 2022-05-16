@@ -21,7 +21,7 @@ class SurvivalFunctionTimeToEvent(TimeToEventPlugin):
         self,
         time_points: int = 100,
         model_search_n_iter: Optional[int] = None,
-        device: str = DEVICE,
+        device: Any = DEVICE,
         **kwargs: Any
     ) -> None:
         super().__init__()

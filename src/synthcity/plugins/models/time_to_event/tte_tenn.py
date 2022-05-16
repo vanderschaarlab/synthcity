@@ -57,7 +57,7 @@ class TimeEventNN(nn.Module):
         lambda_ordering: float = 1,
         lambda_regression_nc: float = 1,
         lambda_regression_c: float = 1,
-        device: str = DEVICE,
+        device: Any = DEVICE,
     ) -> None:
         super(TimeEventNN, self).__init__()
 

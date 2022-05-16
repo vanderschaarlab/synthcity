@@ -38,7 +38,7 @@ class DeephitTimeToEvent(TimeToEventPlugin):
         dropout: float = 0.02,
         patience: int = 20,
         batch_norm: bool = False,
-        device: str = DEVICE,
+        device: Any = DEVICE,
         **kwargs: Any
     ) -> None:
         super().__init__()

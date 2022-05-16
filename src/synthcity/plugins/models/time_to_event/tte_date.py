@@ -67,7 +67,7 @@ class TimeEventGAN(nn.Module):
         seed: int = 0,
         n_iter_min: int = 100,
         clipping_value: int = 0,
-        device: str = DEVICE,
+        device: Any = DEVICE,
     ) -> None:
         super(TimeEventGAN, self).__init__()
 
