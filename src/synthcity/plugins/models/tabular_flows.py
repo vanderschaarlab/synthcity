@@ -85,7 +85,7 @@ class TabularFlows(nn.Module):
         linear_transform_type: str = "permutation",  # "lu", "permutation", "svd"
         base_transform_type: str = "rq-autoregressive",  # "affine-coupling", "quadratic-coupling", "rq-coupling", "affine-autoregressive", "quadratic-autoregressive", "rq-autoregressive"
         encoder_max_clusters: int = 20,
-        device: torch.device = DEVICE,
+        device: Any = DEVICE,
     ) -> None:
         super(TabularFlows, self).__init__()
         self.columns = X.columns

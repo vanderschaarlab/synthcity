@@ -38,7 +38,7 @@ class DeephitSurvivalAnalysis(SurvivalAnalysisPlugin):
         patience: int = 20,
         batch_norm: bool = False,
         seed: int = 0,
-        device: torch.device = DEVICE,
+        device: Any = DEVICE,
         **kwargs: Any
     ) -> None:
         super().__init__()

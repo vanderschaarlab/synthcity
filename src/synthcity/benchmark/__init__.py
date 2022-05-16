@@ -1,4 +1,5 @@
 # stdlib
+import json
 from pathlib import Path
 from typing import Dict, List, Optional
 
@@ -85,12 +86,17 @@ class Benchmarks:
             scores = ScoreEvaluator()
 
             kwargs = {}
+            kwargs_hash = ""
             if plugin in plugin_kwargs:
                 kwargs = plugin_kwargs[plugin]
+            if len(kwargs) > 0:
+                kwargs_hash = json.dumps(kwargs, sort_keys=True)
 
             for repeat in range(repeats):
                 enable_reproducible_results(repeat)
-                cache_file = workspace / f"{experiment_name}_{plugin}_{repeat}.bkp"
+                cache_file = (
+                    workspace / f"{experiment_name}_{plugin}{kwargs_hash}_{repeat}.bkp"
+                )
 
                 X_train, X_test = train_test_split(
                     X, train_size=train_size, random_state=repeat

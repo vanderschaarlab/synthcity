@@ -108,7 +108,7 @@ class NormalizingFlows(nn.Module):
         base_distribution: str = "standard_normal",  # "standard_normal"
         linear_transform_type: str = "permutation",  # "lu", "permutation", "svd"
         base_transform_type: str = "rq-autoregressive",  # "affine-coupling", "quadratic-coupling", "rq-coupling", "affine-autoregressive", "quadratic-autoregressive", "rq-autoregressive"
-        device: torch.device = DEVICE,
+        device: Any = DEVICE,
     ) -> None:
         super(NormalizingFlows, self).__init__()
         self.device = device

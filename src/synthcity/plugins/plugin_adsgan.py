@@ -12,7 +12,6 @@ from typing import Any, List, Optional, Union
 
 # third party
 import pandas as pd
-import torch
 
 # Necessary packages
 from pydantic import validate_arguments
@@ -104,7 +103,7 @@ class AdsGANPlugin(Plugin):
         encoder_max_clusters: int = 10,
         encoder: Any = None,
         dataloader_sampler: Optional[sampler.Sampler] = None,
-        device: torch.device = DEVICE,
+        device: Any = DEVICE,
         **kwargs: Any
     ) -> None:
         super().__init__(**kwargs)

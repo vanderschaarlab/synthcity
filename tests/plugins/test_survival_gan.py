@@ -65,6 +65,7 @@ def test_plugin_fit(dataloader_sampling_strategy: str, tte_strategy: str) -> Non
         time_to_event_column="week",
         tte_strategy=tte_strategy,
         dataloader_sampling_strategy=dataloader_sampling_strategy,
+        device="cpu",
         **plugins_args
     )
 

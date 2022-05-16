@@ -94,7 +94,7 @@ class TabularVAE(nn.Module):
         encoder_nonlin: str = "leaky_relu",
         encoder_batch_norm: bool = False,
         encoder_dropout: float = 0.1,
-        device: torch.device = DEVICE,
+        device: Any = DEVICE,
         dataloader_sampler: Optional[sampler.Sampler] = None,
     ) -> None:
         super(TabularVAE, self).__init__()

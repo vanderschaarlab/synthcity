@@ -115,7 +115,7 @@ class TabularGAN(torch.nn.Module):
         encoder_max_clusters: int = 20,
         encoder: Any = None,
         dataloader_sampler: Optional[torch.utils.data.sampler.Sampler] = None,
-        device: torch.device = DEVICE,
+        device: Any = DEVICE,
     ) -> None:
         super(TabularGAN, self).__init__()
         self.columns = X.columns

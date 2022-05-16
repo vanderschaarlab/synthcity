@@ -1,5 +1,5 @@
 # stdlib
-from typing import Callable, List, Optional, Tuple
+from typing import Any, Callable, List, Optional, Tuple
 
 # third party
 import numpy as np
@@ -111,7 +111,7 @@ class GAN(nn.Module):
         lambda_gradient_penalty: float = 10,
         lambda_identifiability_penalty: float = 0.1,
         dataloader_sampler: Optional[sampler.Sampler] = None,
-        device: torch.device = DEVICE,
+        device: Any = DEVICE,
     ) -> None:
         super(GAN, self).__init__()
 
@@ -150,6 +150,7 @@ class GAN(nn.Module):
             lr=generator_lr,
             residual=generator_residual,
             opt_betas=generator_opt_betas,
+            device=device,
         ).to(self.device)
 
         self.discriminator = MLP(
@@ -167,6 +168,7 @@ class GAN(nn.Module):
             seed=seed,
             lr=discriminator_lr,
             opt_betas=discriminator_opt_betas,
+            device=device,
         ).to(self.device)
 
         # training
