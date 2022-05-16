@@ -80,7 +80,7 @@ class PerformanceEvaluator(MetricEvaluator):
             score, _ = evaluate_auc(enc_y_test, y_pred)
         except BaseException as e:
             log.error(f"classifier evaluation failed {e}.")
-            score = 0.5
+            score = 0
 
         return score
 
@@ -264,7 +264,7 @@ class PerformanceEvaluator(MetricEvaluator):
         predictor_syn = model(**args)
 
         fail_score = {
-            "c_index": (0.5, 0),
+            "c_index": (0, 0),
             "brier_score": (1, 0),
         }
         try:
