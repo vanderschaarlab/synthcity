@@ -9,6 +9,7 @@ from scipy.integrate import trapz
 
 # synthcity absolute
 from synthcity.plugins.core.distribution import Distribution, FloatDistribution
+from synthcity.utils.constants import DEVICE
 
 # synthcity relative
 from ._base import TimeToEventPlugin
@@ -16,7 +17,10 @@ from ._base import TimeToEventPlugin
 
 class CoxPHTimeToEvent(TimeToEventPlugin):
     def __init__(
-        self, model_search_n_iter: Optional[int] = None, **kwargs: Any
+        self,
+        model_search_n_iter: Optional[int] = None,
+        device: str = DEVICE,
+        **kwargs: Any
     ) -> None:
         super().__init__()
         self.model = CoxPHFitter(**kwargs)

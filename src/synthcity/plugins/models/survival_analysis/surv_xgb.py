@@ -14,6 +14,7 @@ from synthcity.plugins.core.distribution import (
     Distribution,
     IntegerDistribution,
 )
+from synthcity.utils.constants import DEVICE
 from synthcity.utils.reproducibility import enable_reproducible_results
 
 # synthcity relative
@@ -38,6 +39,7 @@ class XGBSurvivalAnalysis(SurvivalAnalysisPlugin):
         strategy: str = "debiased_bce",  # "weibull", "debiased_bce", "km"
         time_points: int = 100,
         seed: int = 0,
+        device: str = DEVICE,
         **kwargs: Any,
     ) -> None:
         super().__init__()

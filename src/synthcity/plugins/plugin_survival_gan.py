@@ -3,7 +3,6 @@ from typing import Any, List, Optional
 
 # third party
 import pandas as pd
-import torch
 
 # Necessary packages
 from pydantic import validate_arguments
@@ -16,6 +15,7 @@ from synthcity.plugins.core.distribution import Distribution
 from synthcity.plugins.core.plugin import Plugin
 from synthcity.plugins.core.schema import Schema
 from synthcity.plugins.models import BinEncoder
+from synthcity.utils.constants import DEVICE
 from synthcity.utils.samplers import ImbalancedDatasetSampler
 
 
@@ -39,7 +39,7 @@ class SurvivalGANPlugin(Plugin):
         uncensoring_model: str = "survival_function_regression",
         dataloader_sampling_strategy: str = "imbalanced_time_censoring",  # none, imbalanced_censoring, imbalanced_time_censoring
         tte_strategy: str = "survival_function",
-        device: str = torch.device("cuda" if torch.cuda.is_available() else "cpu"),
+        device: str = DEVICE,
         **kwargs: Any,
     ) -> None:
         super().__init__()

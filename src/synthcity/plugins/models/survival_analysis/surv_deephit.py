@@ -17,6 +17,7 @@ from synthcity.plugins.core.distribution import (
     FloatDistribution,
     IntegerDistribution,
 )
+from synthcity.utils.constants import DEVICE
 from synthcity.utils.reproducibility import enable_reproducible_results
 
 # synthcity relative
@@ -37,7 +38,7 @@ class DeephitSurvivalAnalysis(SurvivalAnalysisPlugin):
         patience: int = 20,
         batch_norm: bool = False,
         seed: int = 0,
-        device: str = torch.device("cuda" if torch.cuda.is_available() else "cpu"),
+        device: str = DEVICE,
         **kwargs: Any
     ) -> None:
         super().__init__()

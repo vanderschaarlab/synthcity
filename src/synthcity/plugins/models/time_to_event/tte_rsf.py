@@ -10,6 +10,7 @@ from sksurv.ensemble import RandomSurvivalForest
 
 # synthcity absolute
 from synthcity.plugins.core.distribution import Distribution, IntegerDistribution
+from synthcity.utils.constants import DEVICE
 
 # synthcity relative
 from ._base import TimeToEventPlugin
@@ -17,7 +18,10 @@ from ._base import TimeToEventPlugin
 
 class RandomSurvivalForestTimeToEvent(TimeToEventPlugin):
     def __init__(
-        self, model_search_n_iter: Optional[int] = None, **kwargs: Any
+        self,
+        model_search_n_iter: Optional[int] = None,
+        device: str = DEVICE,
+        **kwargs: Any
     ) -> None:
         super().__init__()
 

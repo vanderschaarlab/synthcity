@@ -10,6 +10,7 @@ from xgboost import XGBRegressor
 # synthcity absolute
 from synthcity.plugins.core.distribution import CategoricalDistribution, Distribution
 from synthcity.plugins.models.survival_analysis import get_model_template
+from synthcity.utils.constants import DEVICE
 
 # synthcity relative
 from ._base import TimeToEventPlugin
@@ -20,12 +21,13 @@ class SurvivalFunctionTimeToEvent(TimeToEventPlugin):
         self,
         time_points: int = 100,
         model_search_n_iter: Optional[int] = None,
+        device: str = DEVICE,
         **kwargs: Any
     ) -> None:
         super().__init__()
 
         survival_model = "deephit"
-        self.model = get_model_template(survival_model)()
+        self.model = get_model_template(survival_model)(device=device)
         self.time_points = time_points
         self.target_column = "target_column"
         self.tte_column = "tte_column"

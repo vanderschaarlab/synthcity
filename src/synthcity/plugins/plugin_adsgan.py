@@ -12,7 +12,6 @@ from typing import Any, List, Optional, Union
 
 # third party
 import pandas as pd
-import torch
 
 # Necessary packages
 from pydantic import validate_arguments
@@ -28,6 +27,7 @@ from synthcity.plugins.core.distribution import (
 from synthcity.plugins.core.plugin import Plugin
 from synthcity.plugins.core.schema import Schema
 from synthcity.plugins.models import TabularGAN
+from synthcity.utils.constants import DEVICE
 
 
 class AdsGANPlugin(Plugin):
@@ -103,7 +103,7 @@ class AdsGANPlugin(Plugin):
         encoder_max_clusters: int = 10,
         encoder: Any = None,
         dataloader_sampler: Optional[sampler.Sampler] = None,
-        device: str = torch.device("cuda" if torch.cuda.is_available() else "cpu"),
+        device: str = DEVICE,
         **kwargs: Any
     ) -> None:
         super().__init__(**kwargs)

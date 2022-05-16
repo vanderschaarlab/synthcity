@@ -9,13 +9,14 @@ from pydantic import validate_arguments
 
 # synthcity absolute
 from synthcity.plugins.core.distribution import Distribution, FloatDistribution
+from synthcity.utils.constants import DEVICE
 
 # synthcity relative
 from ._base import SurvivalAnalysisPlugin
 
 
 class WeibullAFTSurvivalAnalysis(SurvivalAnalysisPlugin):
-    def __init__(self, **kwargs: Any) -> None:
+    def __init__(self, device: str = DEVICE, **kwargs: Any) -> None:
         super().__init__()
         self.model = WeibullAFTFitter(**kwargs)
 

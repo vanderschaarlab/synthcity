@@ -25,6 +25,7 @@ from synthcity.plugins.core.distribution import (
 )
 from synthcity.plugins.models.mlp import MLP
 from synthcity.plugins.models.time_to_event.metrics import c_index, expected_time_error
+from synthcity.utils.constants import DEVICE
 from synthcity.utils.reproducibility import enable_reproducible_results
 
 # synthcity relative
@@ -66,7 +67,7 @@ class TimeEventGAN(nn.Module):
         seed: int = 0,
         n_iter_min: int = 100,
         clipping_value: int = 0,
-        device: str = torch.device("cuda" if torch.cuda.is_available() else "cpu"),
+        device: str = DEVICE,
     ) -> None:
         super(TimeEventGAN, self).__init__()
 

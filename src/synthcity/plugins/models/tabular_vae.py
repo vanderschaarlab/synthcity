@@ -8,11 +8,12 @@ from pydantic import validate_arguments
 from torch import nn
 from torch.utils.data import sampler
 
+# synthcity absolute
+from synthcity.utils.constants import DEVICE
+
 # synthcity relative
 from .tabular_encoder import TabularEncoder
 from .vae import VAE
-
-DEVICE = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
 
 class TabularVAE(nn.Module):
@@ -93,6 +94,7 @@ class TabularVAE(nn.Module):
         encoder_nonlin: str = "leaky_relu",
         encoder_batch_norm: bool = False,
         encoder_dropout: float = 0.1,
+        device: str = DEVICE,
         dataloader_sampler: Optional[sampler.Sampler] = None,
     ) -> None:
         super(TabularVAE, self).__init__()
@@ -126,6 +128,7 @@ class TabularVAE(nn.Module):
             encoder_batch_norm=encoder_batch_norm,
             encoder_dropout=encoder_dropout,
             dataloader_sampler=dataloader_sampler,
+            device=device,
         )
 
     @validate_arguments(config=dict(arbitrary_types_allowed=True))

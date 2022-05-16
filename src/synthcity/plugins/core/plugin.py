@@ -8,7 +8,6 @@ from typing import Any, Callable, Dict, Generator, List, Optional, Type
 
 # third party
 import pandas as pd
-import torch
 from pydantic import validate_arguments
 
 # synthcity absolute
@@ -20,6 +19,7 @@ from synthcity.metrics.plots import (
 from synthcity.plugins.core.constraints import Constraints
 from synthcity.plugins.core.distribution import Distribution
 from synthcity.plugins.core.schema import Schema
+from synthcity.utils.constants import DEVICE
 
 
 class Plugin(metaclass=ABCMeta):
@@ -57,7 +57,7 @@ class Plugin(metaclass=ABCMeta):
         target_column: Optional[str] = None,
         time_to_event_column: Optional[str] = None,
         time_horizons: Optional[List] = None,
-        device: str = torch.device("cuda" if torch.cuda.is_available() else "cpu"),
+        device: str = DEVICE,
     ) -> None:
         """
 

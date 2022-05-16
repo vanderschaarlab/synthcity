@@ -15,6 +15,7 @@ from synthcity.plugins.core.distribution import (
     Distribution,
     IntegerDistribution,
 )
+from synthcity.utils.constants import DEVICE
 
 # synthcity relative
 from ._base import TimeToEventPlugin
@@ -38,6 +39,7 @@ class XGBTimeToEvent(TimeToEventPlugin):
         objective: str = "aft",  # "aft", "cox"
         strategy: str = "km",  # "weibull", "debiased_bce", "km"
         time_points: int = 100,
+        device: str = DEVICE,
         **kwargs: Any
     ) -> None:
         super().__init__()

@@ -10,6 +10,7 @@ from torch.utils.data import DataLoader, TensorDataset, sampler
 
 # synthcity absolute
 import synthcity.logger as log
+from synthcity.utils.constants import DEVICE
 from synthcity.utils.reproducibility import enable_reproducible_results
 
 # synthcity relative
@@ -110,7 +111,7 @@ class GAN(nn.Module):
         lambda_gradient_penalty: float = 10,
         lambda_identifiability_penalty: float = 0.1,
         dataloader_sampler: Optional[sampler.Sampler] = None,
-        device: str = torch.device("cuda" if torch.cuda.is_available() else "cpu"),
+        device: str = DEVICE,
     ) -> None:
         super(GAN, self).__init__()
 

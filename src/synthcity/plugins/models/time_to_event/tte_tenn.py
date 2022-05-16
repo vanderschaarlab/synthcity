@@ -24,6 +24,7 @@ from synthcity.plugins.core.distribution import (
 )
 from synthcity.plugins.models.mlp import MLP
 from synthcity.plugins.models.time_to_event.metrics import c_index, expected_time_error
+from synthcity.utils.constants import DEVICE
 from synthcity.utils.reproducibility import enable_reproducible_results
 from synthcity.utils.samplers import ImbalancedDatasetSampler
 
@@ -56,7 +57,7 @@ class TimeEventNN(nn.Module):
         lambda_ordering: float = 1,
         lambda_regression_nc: float = 1,
         lambda_regression_c: float = 1,
-        device: str = torch.device("cuda" if torch.cuda.is_available() else "cpu"),
+        device: str = DEVICE,
     ) -> None:
         super(TimeEventNN, self).__init__()
 

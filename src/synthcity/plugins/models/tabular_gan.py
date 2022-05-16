@@ -7,6 +7,9 @@ import pandas as pd
 import torch
 from pydantic import validate_arguments
 
+# synthcity absolute
+from synthcity.utils.constants import DEVICE
+
 # synthcity relative
 from .gan import GAN
 from .tabular_encoder import TabularEncoder
@@ -112,7 +115,7 @@ class TabularGAN(torch.nn.Module):
         encoder_max_clusters: int = 20,
         encoder: Any = None,
         dataloader_sampler: Optional[torch.utils.data.sampler.Sampler] = None,
-        device: str = torch.device("cuda" if torch.cuda.is_available() else "cpu"),
+        device: str = DEVICE,
     ) -> None:
         super(TabularGAN, self).__init__()
         self.columns = X.columns

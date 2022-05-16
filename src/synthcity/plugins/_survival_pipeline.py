@@ -3,7 +3,6 @@ from typing import Any, List, Optional, Tuple
 
 # third party
 import pandas as pd
-import torch
 
 # Necessary packages
 from pydantic import validate_arguments
@@ -18,6 +17,7 @@ from synthcity.plugins.models.time_to_event import TimeToEventPlugin
 from synthcity.plugins.models.time_to_event import (
     get_model_template as get_tte_model_template,
 )
+from synthcity.utils.constants import DEVICE
 
 
 class SurvivalPipeline(Plugin):
@@ -32,7 +32,7 @@ class SurvivalPipeline(Plugin):
         time_to_event_column: str = "duration",
         time_horizons: Optional[List] = None,
         uncensoring_model: str = "survival_function_regression",
-        device: str = torch.device("cuda" if torch.cuda.is_available() else "cpu"),
+        device: str = DEVICE,
         **kwargs: Any,
     ) -> None:
         super().__init__()

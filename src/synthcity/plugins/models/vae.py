@@ -11,6 +11,7 @@ from torch.utils.data import DataLoader, TensorDataset, sampler
 
 # synthcity absolute
 import synthcity.logger as log
+from synthcity.utils.constants import DEVICE
 
 # synthcity relative
 from .mlp import MLP
@@ -29,7 +30,7 @@ class Encoder(nn.Module):
         dropout: float = 0.1,
         batch_norm: bool = True,
         residual: bool = False,
-        device: str = torch.device("cuda" if torch.cuda.is_available() else "cpu"),
+        device: str = DEVICE,
     ) -> None:
         super(Encoder, self).__init__()
         self.device = device
@@ -72,7 +73,7 @@ class Decoder(nn.Module):
         dropout: float = 0.1,
         batch_norm: bool = True,
         residual: bool = False,
-        device: str = torch.device("cuda" if torch.cuda.is_available() else "cpu"),
+        device: str = DEVICE,
     ) -> None:
         super(Decoder, self).__init__()
         self.device = device
@@ -180,7 +181,7 @@ class VAE(nn.Module):
         loss_factor: int = 2,
         robust_divergence_beta: int = 2,  # used for loss_strategy = robust_divergence
         dataloader_sampler: Optional[sampler.Sampler] = None,
-        device: str = torch.device("cuda" if torch.cuda.is_available() else "cpu"),
+        device: str = DEVICE,
     ) -> None:
         super(VAE, self).__init__()
 
