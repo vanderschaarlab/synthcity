@@ -78,7 +78,7 @@ class AdsGANPlugin(Plugin):
     @validate_arguments(config=dict(arbitrary_types_allowed=True))
     def __init__(
         self,
-        n_iter: int = 1000,
+        n_iter: int = 1500,
         n_units_conditional: int = 0,
         generator_n_layers_hidden: int = 3,
         generator_n_units_hidden: int = 250,

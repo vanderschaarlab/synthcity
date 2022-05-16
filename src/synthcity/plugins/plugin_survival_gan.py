@@ -60,6 +60,10 @@ class SurvivalGANPlugin(Plugin):
 
         self.kwargs = kwargs
 
+        log.info(
+            f"Training SurvivalGAN using dataloader_sampling_strategy = {self.dataloader_sampling_strategy}; tte_strategy = {self.tte_strategy}; uncensoring_model={self.uncensoring_model}"
+        )
+
     @staticmethod
     def name() -> str:
         return "survival_gan"

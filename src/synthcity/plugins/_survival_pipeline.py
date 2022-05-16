@@ -13,6 +13,7 @@ import synthcity.plugins as plugins
 from synthcity.plugins.core.distribution import Distribution
 from synthcity.plugins.core.plugin import Plugin
 from synthcity.plugins.core.schema import Schema
+from synthcity.plugins.models.time_to_event import TimeToEventPlugin
 from synthcity.plugins.models.time_to_event import (
     get_model_template as get_tte_model_template,
 )
@@ -39,7 +40,9 @@ class SurvivalPipeline(Plugin):
         self.target_column = target_column
         self.time_to_event_column = time_to_event_column
 
-        self.uncensoring_model = get_tte_model_template(uncensoring_model)()
+        self.uncensoring_model: Optional[TimeToEventPlugin] = None
+        if uncensoring_model != "none":
+            self.uncensoring_model = get_tte_model_template(uncensoring_model)()
 
         self.generator = plugins.Plugins().get(method, **kwargs)
 
@@ -81,14 +84,14 @@ class SurvivalPipeline(Plugin):
         self.censoring_ratio = (E == 0).sum() / len(E)
         self.features = X.columns
 
-        log.info("Train the uncensoring model")
-        self.uncensoring_model.fit(Xcov, T, E)
+        if self.uncensoring_model is not None:
+            log.info("Train the uncensoring model")
+            self.uncensoring_model.fit(Xcov, T, E)
 
-        log.info(
-            f"max T = {T.max()}, max syn T = {self.uncensoring_model.predict_any(Xcov, E).max()}"
-        )
         log.info("Train the synthetic generator")
         if self.strategy == "uncensoring":
+            if self.uncensoring_model is None:
+                raise RuntimeError("Uncensoring strategies needs a TTE model")
             # Uncensoring
             T_uncensored = pd.Series(
                 self.uncensoring_model.predict(Xcov), index=Xcov.index
@@ -114,16 +117,17 @@ class SurvivalPipeline(Plugin):
             if self.strategy == "uncensoring":
                 generated[self.target_column] = 1
             elif self.strategy == "survival_function":
-                generated = generated.drop(
-                    columns=[self.time_to_event_column]
-                )  # remove the generated column
+                if self.uncensoring_model is not None:
+                    generated = generated.drop(
+                        columns=[self.time_to_event_column]
+                    )  # remove the generated column
 
-                generated[
-                    self.time_to_event_column
-                ] = self.uncensoring_model.predict_any(
-                    generated.drop(columns=[self.target_column]),
-                    generated[self.target_column],
-                )
+                    generated[
+                        self.time_to_event_column
+                    ] = self.uncensoring_model.predict_any(
+                        generated.drop(columns=[self.target_column]),
+                        generated[self.target_column],
+                    )
             else:
                 raise ValueError(f"unsupported strategy {self.strategy}")
 

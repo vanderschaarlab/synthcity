@@ -96,6 +96,10 @@ class Benchmarks:
                     X, train_size=train_size, random_state=repeat
                 )
 
+                log.info(
+                    f" Experiment repeat: {repeat} task type: {task_type} Train df hash = {dataframe_hash(X_train)}"
+                )
+
                 if cache_file.exists() and synthetic_reuse_is_exists:
                     X_syn = load_from_file(cache_file)
                 else:
@@ -105,10 +109,6 @@ class Benchmarks:
                         target_column=target_column,
                         time_to_event_column=time_to_event_column,
                         time_horizons=time_horizons,
-                    )
-
-                    log.info(
-                        f" Experiment repeat: {repeat} task type: {task_type} Train df hash = {dataframe_hash(X_train)}"
                     )
 
                     try:
