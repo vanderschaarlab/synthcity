@@ -3,6 +3,7 @@ from typing import Any, List, Optional
 
 # third party
 import pandas as pd
+import torch
 
 # Necessary packages
 from pydantic import validate_arguments
@@ -38,6 +39,7 @@ class SurvivalGANPlugin(Plugin):
         uncensoring_model: str = "survival_function_regression",
         dataloader_sampling_strategy: str = "imbalanced_time_censoring",  # none, imbalanced_censoring, imbalanced_time_censoring
         tte_strategy: str = "survival_function",
+        device: str = torch.device("cuda" if torch.cuda.is_available() else "cpu"),
         **kwargs: Any,
     ) -> None:
         super().__init__()
@@ -57,11 +59,18 @@ class SurvivalGANPlugin(Plugin):
         self.tte_strategy = tte_strategy
         self.dataloader_sampling_strategy = dataloader_sampling_strategy
         self.uncensoring_model = uncensoring_model
+        self.device = device
 
         self.kwargs = kwargs
 
         log.info(
-            f"Training SurvivalGAN using dataloader_sampling_strategy = {self.dataloader_sampling_strategy}; tte_strategy = {self.tte_strategy}; uncensoring_model={self.uncensoring_model}"
+            f"""
+            Training SurvivalGAN using
+                dataloader_sampling_strategy = {self.dataloader_sampling_strategy};
+                tte_strategy = {self.tte_strategy};
+                uncensoring_model={self.uncensoring_model}
+                device={self.device}
+            """
         )
 
     @staticmethod
@@ -104,6 +113,7 @@ class SurvivalGANPlugin(Plugin):
             dataloader_sampler=sampler,
             generator_extra_penalties=[],
             n_units_conditional=self.conditional.shape[1],
+            device=self.device,
             **self.kwargs,
         )
         self.model.fit(X, cond=self.conditional, *args, **kwargs)

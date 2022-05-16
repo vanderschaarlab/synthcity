@@ -3,6 +3,7 @@ from typing import Any, List, Optional, Tuple
 
 # third party
 import pandas as pd
+import torch
 
 # Necessary packages
 from pydantic import validate_arguments
@@ -31,10 +32,12 @@ class SurvivalPipeline(Plugin):
         time_to_event_column: str = "duration",
         time_horizons: Optional[List] = None,
         uncensoring_model: str = "survival_function_regression",
+        device: str = torch.device("cuda" if torch.cuda.is_available() else "cpu"),
         **kwargs: Any,
     ) -> None:
         super().__init__()
 
+        self.device = device
         self.strategy = strategy
 
         self.target_column = target_column
@@ -42,9 +45,11 @@ class SurvivalPipeline(Plugin):
 
         self.uncensoring_model: Optional[TimeToEventPlugin] = None
         if uncensoring_model != "none":
-            self.uncensoring_model = get_tte_model_template(uncensoring_model)()
+            self.uncensoring_model = get_tte_model_template(uncensoring_model)(
+                device=device
+            )
 
-        self.generator = plugins.Plugins().get(method, **kwargs)
+        self.generator = plugins.Plugins().get(method, device=device, **kwargs)
 
     @staticmethod
     def name() -> str:

@@ -11,8 +11,6 @@ from pydantic import validate_arguments
 from .gan import GAN
 from .tabular_encoder import TabularEncoder
 
-DEVICE = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-
 
 class TabularGAN(torch.nn.Module):
     """
@@ -114,6 +112,7 @@ class TabularGAN(torch.nn.Module):
         encoder_max_clusters: int = 20,
         encoder: Any = None,
         dataloader_sampler: Optional[torch.utils.data.sampler.Sampler] = None,
+        device: str = torch.device("cuda" if torch.cuda.is_available() else "cpu"),
     ) -> None:
         super(TabularGAN, self).__init__()
         self.columns = X.columns
@@ -161,6 +160,7 @@ class TabularGAN(torch.nn.Module):
             seed=seed,
             n_iter_min=n_iter_min,
             dataloader_sampler=dataloader_sampler,
+            device=device,
         )
 
     @validate_arguments(config=dict(arbitrary_types_allowed=True))

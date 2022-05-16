@@ -8,6 +8,7 @@ from typing import Any, Callable, Dict, Generator, List, Optional, Type
 
 # third party
 import pandas as pd
+import torch
 from pydantic import validate_arguments
 
 # synthcity absolute
@@ -56,6 +57,7 @@ class Plugin(metaclass=ABCMeta):
         target_column: Optional[str] = None,
         time_to_event_column: Optional[str] = None,
         time_horizons: Optional[List] = None,
+        device: str = torch.device("cuda" if torch.cuda.is_available() else "cpu"),
     ) -> None:
         """
 
@@ -78,6 +80,7 @@ class Plugin(metaclass=ABCMeta):
         self.sampling_patience = sampling_patience
         self.sensitive_columns = sensitive_columns
         self.strict = strict
+        self.device = device
 
     @staticmethod
     @abstractmethod

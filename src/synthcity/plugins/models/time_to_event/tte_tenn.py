@@ -30,8 +30,6 @@ from synthcity.utils.samplers import ImbalancedDatasetSampler
 # synthcity relative
 from ._base import TimeToEventPlugin
 
-DEVICE = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-
 
 class TimeEventNN(nn.Module):
     @validate_arguments(config=dict(arbitrary_types_allowed=True))
@@ -58,9 +56,11 @@ class TimeEventNN(nn.Module):
         lambda_ordering: float = 1,
         lambda_regression_nc: float = 1,
         lambda_regression_c: float = 1,
+        device: str = torch.device("cuda" if torch.cuda.is_available() else "cpu"),
     ) -> None:
         super(TimeEventNN, self).__init__()
 
+        self.device = device
         self.n_features = n_features
         self.lambda_calibration = lambda_calibration
         self.lambda_ordering = lambda_ordering
@@ -83,7 +83,8 @@ class TimeEventNN(nn.Module):
             lr=lr,
             residual=residual,
             opt_betas=opt_betas,
-        ).to(DEVICE)
+            device=device,
+        ).to(self.device)
 
         # training
         self.n_iter = n_iter
@@ -265,9 +266,9 @@ class TimeEventNN(nn.Module):
 
     def _check_tensor(self, X: torch.Tensor) -> torch.Tensor:
         if isinstance(X, torch.Tensor):
-            return X.to(DEVICE)
+            return X.to(self.device)
         else:
-            return torch.from_numpy(np.asarray(X)).to(DEVICE)
+            return torch.from_numpy(np.asarray(X)).to(self.device)
 
     def _loss_calibration(
         self,
@@ -328,9 +329,9 @@ class TimeEventNN(nn.Module):
         # Evaluate ranking error.
         # T is expected to be ordered ascending.
         if len(X) <= 1:
-            return torch.tensor(0).to(DEVICE)
+            return torch.tensor(0).to(self.device)
         pred_T = self.generator(X).squeeze()
-        err = torch.tensor(0).float().to(DEVICE)
+        err = torch.tensor(0).float().to(self.device)
 
         for idx in range(1, len(pred_T)):
             prev_T = pred_T[E == 1][:idx]

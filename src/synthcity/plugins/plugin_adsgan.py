@@ -12,6 +12,7 @@ from typing import Any, List, Optional, Union
 
 # third party
 import pandas as pd
+import torch
 
 # Necessary packages
 from pydantic import validate_arguments
@@ -102,6 +103,7 @@ class AdsGANPlugin(Plugin):
         encoder_max_clusters: int = 10,
         encoder: Any = None,
         dataloader_sampler: Optional[sampler.Sampler] = None,
+        device: str = torch.device("cuda" if torch.cuda.is_available() else "cpu"),
         **kwargs: Any
     ) -> None:
         super().__init__(**kwargs)
@@ -132,6 +134,8 @@ class AdsGANPlugin(Plugin):
         self.encoder_max_clusters = encoder_max_clusters
         self.encoder = encoder
         self.dataloader_sampler = dataloader_sampler
+
+        self.device = device
 
     @staticmethod
     def name() -> str:
@@ -211,6 +215,7 @@ class AdsGANPlugin(Plugin):
             lambda_identifiability_penalty=self.lambda_identifiability_penalty,
             encoder_max_clusters=self.encoder_max_clusters,
             dataloader_sampler=self.dataloader_sampler,
+            device=self.device,
         )
         self.model.fit(X, cond=cond)
 

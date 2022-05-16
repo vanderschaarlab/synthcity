@@ -22,8 +22,6 @@ from synthcity.utils.reproducibility import enable_reproducible_results
 # synthcity relative
 from ._base import SurvivalAnalysisPlugin
 
-DEVICE = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-
 
 class DeephitSurvivalAnalysis(SurvivalAnalysisPlugin):
     def __init__(
@@ -39,11 +37,13 @@ class DeephitSurvivalAnalysis(SurvivalAnalysisPlugin):
         patience: int = 20,
         batch_norm: bool = False,
         seed: int = 0,
+        device: str = torch.device("cuda" if torch.cuda.is_available() else "cpu"),
         **kwargs: Any
     ) -> None:
         super().__init__()
         enable_reproducible_results(seed)
 
+        self.device = device
         self.num_durations = num_durations
         self.batch_size = batch_size
         self.epochs = epochs
@@ -90,7 +90,7 @@ class DeephitSurvivalAnalysis(SurvivalAnalysisPlugin):
             torch.nn.ReLU(),
             torch.nn.Dropout(self.dropout),
             torch.nn.Linear(self.dim_hidden, out_features),
-        ).to(DEVICE)
+        ).to(self.device)
 
         self.model = DeepHitSingle(
             net,

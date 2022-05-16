@@ -15,8 +15,6 @@ from synthcity.utils.reproducibility import enable_reproducible_results
 # synthcity relative
 from .mlp import MLP
 
-DEVICE = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-
 
 class GAN(nn.Module):
     """
@@ -112,6 +110,7 @@ class GAN(nn.Module):
         lambda_gradient_penalty: float = 10,
         lambda_identifiability_penalty: float = 0.1,
         dataloader_sampler: Optional[sampler.Sampler] = None,
+        device: str = torch.device("cuda" if torch.cuda.is_available() else "cpu"),
     ) -> None:
         super(GAN, self).__init__()
 
@@ -125,6 +124,8 @@ class GAN(nn.Module):
                 penalty in extra_penalty_list
             ), f"Unsupported generator penalty {penalty}"
 
+        log.debug(f"Training GAN on device {device}")
+        self.device = device
         self.discriminator_extra_penalties = discriminator_extra_penalties
         self.generator_extra_penalties = generator_extra_penalties
 
@@ -148,7 +149,7 @@ class GAN(nn.Module):
             lr=generator_lr,
             residual=generator_residual,
             opt_betas=generator_opt_betas,
-        ).to(DEVICE)
+        ).to(self.device)
 
         self.discriminator = MLP(
             task_type="regression",
@@ -165,7 +166,7 @@ class GAN(nn.Module):
             seed=seed,
             lr=discriminator_lr,
             opt_betas=discriminator_opt_betas,
-        ).to(DEVICE)
+        ).to(self.device)
 
         # training
         self.generator_n_iter = generator_n_iter
@@ -182,10 +183,10 @@ class GAN(nn.Module):
         enable_reproducible_results(seed)
 
         def gen_fake_labels(X: torch.Tensor) -> torch.Tensor:
-            return torch.zeros((len(X),), device=DEVICE)
+            return torch.zeros((len(X),), device=self.device)
 
         def gen_true_labels(X: torch.Tensor) -> torch.Tensor:
-            return torch.ones((len(X),), device=DEVICE)
+            return torch.ones((len(X),), device=self.device)
 
         self.fake_labels_generator = gen_fake_labels
         self.true_labels_generator = gen_true_labels
@@ -253,7 +254,7 @@ class GAN(nn.Module):
         if cond is not None and len(cond) != count:
             raise ValueError("cond length must match count")
 
-        fixed_noise = torch.randn(count, self.n_units_latent, device=DEVICE)
+        fixed_noise = torch.randn(count, self.n_units_latent, device=self.device)
         fixed_noise = self._append_optional_cond(fixed_noise, cond)
         with torch.no_grad():
             return self.generator(fixed_noise).detach().cpu()
@@ -282,11 +283,11 @@ class GAN(nn.Module):
         # Update the G network
         self.generator.optimizer.zero_grad()
 
-        real_X = X.to(DEVICE)
+        real_X = X.to(self.device)
         real_X = self._append_optional_cond(real_X, cond)
         batch_size = len(real_X)
 
-        noise = torch.randn(batch_size, self.n_units_latent, device=DEVICE)
+        noise = torch.randn(batch_size, self.n_units_latent, device=self.device)
         noise = self._append_optional_cond(noise, cond)
 
         fake = self.generator(noise)
@@ -333,20 +334,20 @@ class GAN(nn.Module):
             self.discriminator.zero_grad()
 
             # Train with all-real batch
-            real_X = X.to(DEVICE)
+            real_X = X.to(self.device)
             real_X = self._append_optional_cond(real_X, cond)
 
-            real_labels = true_labels_generator(X).to(DEVICE).squeeze()
+            real_labels = true_labels_generator(X).to(self.device).squeeze()
             real_output = self.discriminator(real_X).squeeze().float()
 
             # Train with all-fake batch
-            noise = torch.randn(batch_size, self.n_units_latent, device=DEVICE)
+            noise = torch.randn(batch_size, self.n_units_latent, device=self.device)
             noise = self._append_optional_cond(noise, cond)
 
             fake = self.generator(noise)
             fake = self._append_optional_cond(fake, cond)
 
-            fake_labels = fake_labels_generator(fake).to(DEVICE).squeeze().float()
+            fake_labels = fake_labels_generator(fake).to(self.device).squeeze().float()
             fake_output = self.discriminator(fake.detach()).squeeze()
 
             # Compute errors. Some fake inputs might be marked as real for privacy guarantees.
@@ -451,9 +452,9 @@ class GAN(nn.Module):
 
     def _check_tensor(self, X: torch.Tensor) -> torch.Tensor:
         if isinstance(X, torch.Tensor):
-            return X.to(DEVICE)
+            return X.to(self.device)
         else:
-            return torch.from_numpy(np.asarray(X)).to(DEVICE)
+            return torch.from_numpy(np.asarray(X)).to(self.device)
 
     def _extra_penalties(
         self,
@@ -492,13 +493,13 @@ class GAN(nn.Module):
     ) -> torch.Tensor:
         """Calculates the gradient penalty loss for WGAN GP"""
         # Random weight term for interpolation between real and fake samples
-        alpha = torch.rand([batch_size, 1]).to(DEVICE)
+        alpha = torch.rand([batch_size, 1]).to(self.device)
         # Get random interpolation between real and fake samples
         interpolated = (
             alpha * real_samples + ((1 - alpha) * fake_samples)
         ).requires_grad_(True)
         d_interpolated = self.discriminator(interpolated).squeeze()
-        labels = true_labels_generator(interpolated).to(DEVICE).squeeze()
+        labels = true_labels_generator(interpolated).to(self.device).squeeze()
         # Get gradient w.r.t. interpolates
         gradients = torch.autograd.grad(
             outputs=d_interpolated,
