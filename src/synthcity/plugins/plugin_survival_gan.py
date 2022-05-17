@@ -134,10 +134,16 @@ class SurvivalGANPlugin(Plugin):
         return self
 
     def _generate(self, count: int, syn_schema: Schema, **kwargs: Any) -> pd.DataFrame:
+        cond = (
+            self.conditional.sample(count, replace=True)
+            if self.use_conditional
+            else None
+        )
+
         return self.model._generate(
             count,
             syn_schema=syn_schema,
-            cond=self.conditional.sample(count, replace=True),
+            cond=cond,
             **kwargs,
         )
 
