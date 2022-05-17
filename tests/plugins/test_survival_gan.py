@@ -45,6 +45,10 @@ def test_plugin_hyperparams(test_plugin: Plugin) -> None:
 
 
 @pytest.mark.parametrize(
+    "use_conditional",
+    [True, False],
+)
+@pytest.mark.parametrize(
     "dataloader_sampling_strategy",
     [
         "imbalanced_censoring",
@@ -59,13 +63,16 @@ def test_plugin_hyperparams(test_plugin: Plugin) -> None:
         "uncensoring",
     ],
 )
-def test_plugin_fit(dataloader_sampling_strategy: str, tte_strategy: str) -> None:
+def test_plugin_fit(
+    use_conditional: bool, dataloader_sampling_strategy: str, tte_strategy: str
+) -> None:
     test_plugin = plugin(
         target_column="arrest",
         time_to_event_column="week",
         tte_strategy=tte_strategy,
         dataloader_sampling_strategy=dataloader_sampling_strategy,
         device="cpu",
+        use_conditional=use_conditional,
         **plugins_args
     )
 

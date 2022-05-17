@@ -41,6 +41,7 @@ class SurvivalGANPlugin(Plugin):
         tte_strategy: str = "survival_function",
         device: Any = DEVICE,
         identifiability_penalty: bool = False,
+        use_conditional: bool = True,
         **kwargs: Any,
     ) -> None:
         super().__init__()
@@ -61,6 +62,7 @@ class SurvivalGANPlugin(Plugin):
         self.dataloader_sampling_strategy = dataloader_sampling_strategy
         self.uncensoring_model = uncensoring_model
         self.device = device
+        self.use_conditional = use_conditional
 
         if identifiability_penalty:
             self.generator_extra_penalties = ["identifiability_penalty"]
@@ -108,7 +110,12 @@ class SurvivalGANPlugin(Plugin):
         if sampling_labels is not None:
             sampler = ImbalancedDatasetSampler(sampling_labels)
 
-        self.conditional = BinEncoder().fit_transform(X)
+        if self.use_conditional:
+            self.conditional = BinEncoder().fit_transform(X)
+            n_units_conditional = self.conditional.shape[1]
+        else:
+            self.conditional = None
+            n_units_conditional = 0
         self.model = SurvivalPipeline(
             "adsgan",
             strategy=self.tte_strategy,
@@ -118,7 +125,7 @@ class SurvivalGANPlugin(Plugin):
             uncensoring_model=self.uncensoring_model,
             dataloader_sampler=sampler,
             generator_extra_penalties=self.generator_extra_penalties,
-            n_units_conditional=self.conditional.shape[1],
+            n_units_conditional=n_units_conditional,
             device=self.device,
             **self.kwargs,
         )
