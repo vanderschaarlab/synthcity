@@ -6,7 +6,6 @@ import numpy as np
 import pandas as pd
 from lifelines import KaplanMeierFitter
 from scipy.integrate import trapz
-from xgbse.converters import hazard_to_survival
 from xgbse.non_parametric import _get_conditional_probs_from_survival
 
 # synthcity absolute
@@ -83,7 +82,7 @@ def evaluate_brier_score(
 
 def km_survival_function(
     T: np.ndarray, E: np.ndarray
-) -> Tuple[np.ndarray, np.ndarray, np.ndarray]:
+) -> Tuple[KaplanMeierFitter, np.ndarray, np.ndarray, np.ndarray]:
     kmf = KaplanMeierFitter().fit(T, E)
     surv_fn = kmf.survival_function_.T.reset_index(drop=True)
     if len(surv_fn.columns) < 2:
@@ -92,7 +91,7 @@ def km_survival_function(
     hazards = _get_conditional_probs_from_survival(surv_fn)
     constant_hazard = hazards.values[:, -1:].mean(axis=1)[0]
 
-    return surv_fn, hazards, constant_hazard
+    return kmf, surv_fn, hazards, constant_hazard
 
 
 def nonparametric_distance(
@@ -102,34 +101,31 @@ def nonparametric_distance(
     real_T, real_E = real
     syn_T, syn_E = syn
 
-    time_points = real_T.append(syn_T).unique()
-    time_points.sort()
-
     Tmax = max(real_T.max(), syn_T.max())
-    opt = []
+    Tmin = min(real_T.min(), syn_T.min())
+
+    time_points = np.linspace(Tmin, Tmax, 1000)
+
+    opt: list = []
+    abs_opt: list = []
+
+    real_kmf, real_surv, real_hazards, real_constant_hazard = km_survival_function(
+        real_T, real_E
+    )
+    syn_kmf, syn_surv, syn_hazards, syn_constant_hazard = km_survival_function(
+        syn_T, syn_E
+    )
+
     abs_opt = []
-
-    real_surv, real_hazards, real_constant_hazard = km_survival_function(real_T, real_E)
-    syn_surv, syn_hazards, syn_constant_hazard = km_survival_function(syn_T, syn_E)
-
+    opt = []
     for t in time_points:
-        if t not in real_hazards:
-            real_hazards[t] = real_constant_hazard
-        if t not in syn_hazards:
-            syn_hazards[t] = syn_constant_hazard
+        syn_local_pred = syn_kmf.predict(t)
+        real_local_pred = real_kmf.predict(t)
+        abs_opt.append(abs(syn_local_pred - real_local_pred))
+        opt.append(syn_local_pred - real_local_pred)
 
-    real_surv = hazard_to_survival(real_hazards)
-    syn_surv = hazard_to_survival(syn_hazards)
-
-    for idx, t in enumerate(time_points):
-        t_real = real_surv.values[0][idx]
-        t_syn = syn_surv.values[0][idx]
-
-        opt.append(t_syn - t_real)
-        abs_opt.append(np.abs(t_syn - t_real))
-
-    auc_opt = trapz(opt, time_points) / Tmax
     auc_abs_opt = trapz(abs_opt, time_points) / Tmax
+    auc_opt = trapz(opt, time_points) / Tmax
     sightedness = (real_T.max() - syn_T.max()) / Tmax
 
     return auc_opt, auc_abs_opt, sightedness
