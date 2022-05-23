@@ -15,8 +15,9 @@ def test_km_surv_function() -> None:
     E = df["arrest"]
     T = df["week"]
 
-    surv_fn, hazards, constant_hazard = km_survival_function(T, E)
+    kmf, surv_fn, hazards, constant_hazard = km_survival_function(T, E)
 
+    assert kmf.predict(T).shape == E.shape
     assert surv_fn.shape == hazards.shape
     assert constant_hazard < 1
 
@@ -35,4 +36,5 @@ def test_nonparametric_distance() -> None:
 
     assert -1 < auc_opt < 1
     assert 0 < auc_abs_opt < 1
+
     assert sightedness < 1

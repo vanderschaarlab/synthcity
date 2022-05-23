@@ -1,4 +1,5 @@
 # stdlib
+import traceback
 from typing import Any, Dict
 
 # third party
@@ -100,12 +101,19 @@ class PerformanceEvaluator(MetricEvaluator):
             0 means perfect predictions.
             The lower the negative value, the bigger the error in the predictions.
         """
+
+        X_train = np.asarray(X_test)
+        X_test = np.asarray(X_test)
+        y_train = np.asarray(y_test)
+        y_test = np.asarray(y_test)
+
         try:
             estimator = model(**model_args).fit(X_train, y_train)
             y_pred = estimator.predict(X_test)
 
             score = mean_squared_error(y_test, y_pred)
         except BaseException as e:
+            traceback.print_stack()
             log.error(f"regression evaluation failed {e}")
             score = 100
 
