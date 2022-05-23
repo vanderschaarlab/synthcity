@@ -37,7 +37,7 @@ class XGBTimeToEvent(TimeToEventPlugin):
         booster: int = 2,
         random_state: int = 0,
         objective: str = "aft",  # "aft", "cox"
-        strategy: str = "km",  # "weibull", "debiased_bce", "km"
+        strategy: str = "debiased_bce",  # "weibull", "debiased_bce", "km"
         time_points: int = 100,
         device: Any = DEVICE,
         **kwargs: Any
@@ -75,7 +75,7 @@ class XGBTimeToEvent(TimeToEventPlugin):
             "tree_method": tree_method,
             "booster": XGBTimeToEvent.booster[booster],
             "random_state": random_state,
-            "n_jobs": 2,
+            "n_jobs": -1,
         }
         lr_params = {
             "C": 1e-3,
