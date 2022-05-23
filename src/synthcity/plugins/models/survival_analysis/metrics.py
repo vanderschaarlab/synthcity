@@ -97,14 +97,16 @@ def km_survival_function(
 def nonparametric_distance(
     real: Tuple[np.ndarray, np.ndarray],
     syn: Tuple[np.ndarray, np.ndarray],
+    n_points: int = 1000,
 ) -> Tuple:
     real_T, real_E = real
     syn_T, syn_E = syn
 
     Tmax = max(real_T.max(), syn_T.max())
     Tmin = min(real_T.min(), syn_T.min())
+    Tmin = max(0, Tmin)
 
-    time_points = np.linspace(Tmin, Tmax, 10000)
+    time_points = np.linspace(Tmin, Tmax, n_points)
 
     opt: list = []
     abs_opt: list = []
@@ -121,6 +123,10 @@ def nonparametric_distance(
     for t in time_points:
         syn_local_pred = syn_kmf.predict(t)
         real_local_pred = real_kmf.predict(t)
+
+        assert not np.isnan(syn_local_pred), t
+        assert not np.isnan(real_local_pred), t
+
         abs_opt.append(abs(syn_local_pred - real_local_pred))
         opt.append(syn_local_pred - real_local_pred)
 

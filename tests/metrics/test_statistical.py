@@ -264,7 +264,7 @@ def test_evaluate_survival_km_distance(test_plugin: Plugin) -> None:
     )
     print(syn_score, rnd_score)
 
-    assert syn_score["optimism"] < rnd_score["optimism"]
+    assert np.abs(syn_score["optimism"]) < np.abs(rnd_score["optimism"])
     assert syn_score["abs_optimism"] < rnd_score["abs_optimism"]
     assert syn_score["sightedness"] < rnd_score["sightedness"]
 
