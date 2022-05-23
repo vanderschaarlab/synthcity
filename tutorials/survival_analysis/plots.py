@@ -9,6 +9,8 @@ from lifelines import KaplanMeierFitter
 output = Path("diagrams")
 output.mkdir(parents=True, exist_ok=True)
 
+plt.style.use("seaborn-whitegrid")
+
 
 def plot_survival_individual(
     scenario: str,
