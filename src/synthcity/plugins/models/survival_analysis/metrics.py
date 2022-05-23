@@ -104,7 +104,7 @@ def nonparametric_distance(
     Tmax = max(real_T.max(), syn_T.max())
     Tmin = min(real_T.min(), syn_T.min())
 
-    time_points = np.linspace(Tmin, Tmax, 1000)
+    time_points = np.linspace(Tmin, Tmax, 10000)
 
     opt: list = []
     abs_opt: list = []
