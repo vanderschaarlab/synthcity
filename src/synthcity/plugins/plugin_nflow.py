@@ -85,7 +85,7 @@ class NormalizingFlowsPlugin(Plugin):
         base_distribution: str = "standard_normal",  # "standard_normal"
         linear_transform_type: str = "permutation",  # "lu", "permutation", "svd"
         base_transform_type: str = "affine-coupling",  # "affine-coupling", "quadratic-coupling", "rq-coupling", "affine-autoregressive", "quadratic-autoregressive", "rq-autoregressive"
-        encoder_max_clusters: int = 5,
+        encoder_max_clusters: int = 10,
         tabular: bool = True,
         **kwargs: Any,
     ) -> None:
