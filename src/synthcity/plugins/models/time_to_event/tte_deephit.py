@@ -18,11 +18,10 @@ from synthcity.plugins.core.distribution import (
     FloatDistribution,
     IntegerDistribution,
 )
+from synthcity.utils.constants import DEVICE
 
 # synthcity relative
 from ._base import TimeToEventPlugin
-
-DEVICE = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
 
 class DeephitTimeToEvent(TimeToEventPlugin):
@@ -39,10 +38,12 @@ class DeephitTimeToEvent(TimeToEventPlugin):
         dropout: float = 0.02,
         patience: int = 20,
         batch_norm: bool = False,
+        device: Any = DEVICE,
         **kwargs: Any
     ) -> None:
         super().__init__()
 
+        self.device = device
         if model_search_n_iter is not None:
             epochs = model_search_n_iter
 
@@ -59,8 +60,9 @@ class DeephitTimeToEvent(TimeToEventPlugin):
 
     @validate_arguments(config=dict(arbitrary_types_allowed=True))
     def fit(self, X: pd.DataFrame, T: pd.Series, E: pd.Series) -> "TimeToEventPlugin":
-        labtrans = DeepHitSingle.label_transform(self.num_durations)
+        self._fit_censoring_model(X, T, E)
 
+        labtrans = DeepHitSingle.label_transform(self.num_durations)
         X = np.asarray(X).astype("float32")
         T = np.asarray(T).astype(int)
 
@@ -88,7 +90,7 @@ class DeephitTimeToEvent(TimeToEventPlugin):
             torch.nn.ReLU(),
             torch.nn.Dropout(self.dropout),
             torch.nn.Linear(self.dim_hidden, out_features),
-        ).to(DEVICE)
+        ).to(self.device)
 
         self.model = DeepHitSingle(
             net,
@@ -122,7 +124,20 @@ class DeephitTimeToEvent(TimeToEventPlugin):
 
         surv_f = self.model.predict_surv_df(X_np)
 
-        return pd.Series(trapz(surv_f.T.values, surv_f.index), index=X.index)
+        return pd.Series(trapz(surv_f.T.values, surv_f.index.values), index=X.index)
+
+    @validate_arguments(config=dict(arbitrary_types_allowed=True))
+    def predict_any(self, X: pd.DataFrame, E: pd.Series) -> pd.Series:
+        "Predict time-to-event"
+
+        result = pd.Series([0] * len(X), index=E.index)
+
+        if (E == 1).sum() > 0:
+            result[E == 1] = self.predict(X[E == 1])
+        if (E == 0).sum() > 0:
+            result[E == 0] = self._predict_censoring(X[E == 0])
+
+        return result
 
     @staticmethod
     def name() -> str:

@@ -191,7 +191,7 @@ def select_uncensoring_model(
         except EarlyStoppingExceeded:
             pass
         except BaseException as e:
-            print(f"model {model} failed: {e}")
+            log.error(f"model {model} failed: {e}")
             continue
 
         score = study.best_trial.value

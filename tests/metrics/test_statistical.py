@@ -1,10 +1,11 @@
 # stdlib
-from typing import Tuple, Type
+from typing import Any, Tuple, Type
 
 # third party
 import numpy as np
 import pandas as pd
 import pytest
+from lifelines.datasets import load_rossi
 from sklearn.datasets import load_iris
 
 # synthcity absolute
@@ -18,13 +19,16 @@ from synthcity.metrics.eval_statistical import (
     KolmogorovSmirnovTest,
     MaximumMeanDiscrepancy,
     PRDCScore,
+    SurvivalKMDistance,
     WassersteinDistance,
 )
 from synthcity.plugins import Plugin, Plugins
 
 
-def _eval_plugin(evaluator_t: Type, X: pd.DataFrame, X_syn: pd.DataFrame) -> Tuple:
-    evaluator = evaluator_t()
+def _eval_plugin(
+    evaluator_t: Type, X: pd.DataFrame, X_syn: pd.DataFrame, **kwargs: Any
+) -> Tuple:
+    evaluator = evaluator_t(**kwargs)
 
     syn_score = evaluator.evaluate(X, X, X_syn)
 
@@ -237,3 +241,33 @@ def test_evaluate_alpha_precision(test_plugin: Plugin) -> None:
     assert AlphaPrecision.name() == "alpha_precision"
     assert AlphaPrecision.type() == "stats"
     assert AlphaPrecision.direction() == "maximize"
+
+
+@pytest.mark.parametrize("test_plugin", [Plugins().get("dummy_sampler")])
+def test_evaluate_survival_km_distance(test_plugin: Plugin) -> None:
+    X = load_rossi()
+
+    test_plugin.fit(X)
+    X_gen = test_plugin.generate(len(X))
+
+    with pytest.raises(RuntimeError):
+        _eval_plugin(SurvivalKMDistance, X, X_gen)
+
+    syn_score, rnd_score = _eval_plugin(
+        SurvivalKMDistance,
+        X,
+        X_gen,
+        task_type="survival_analysis",
+        target_column="arrest",
+        time_to_event_column="week",
+        time_horizons=[25],
+    )
+    print(syn_score, rnd_score)
+
+    assert np.abs(syn_score["optimism"]) < np.abs(rnd_score["optimism"])
+    assert syn_score["abs_optimism"] < rnd_score["abs_optimism"]
+    assert syn_score["sightedness"] < rnd_score["sightedness"]
+
+    assert SurvivalKMDistance.name() == "survival_km_distance"
+    assert SurvivalKMDistance.type() == "stats"
+    assert SurvivalKMDistance.direction() == "minimize"

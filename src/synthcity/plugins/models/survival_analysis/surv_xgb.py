@@ -5,7 +5,7 @@ from typing import Any, List
 import numpy as np
 import pandas as pd
 from pydantic import validate_arguments
-from xgbse import XGBSEDebiasedBCE, XGBSEStackedWeibull
+from xgbse import XGBSEDebiasedBCE, XGBSEKaplanNeighbors, XGBSEStackedWeibull
 from xgbse.converters import convert_to_structured
 
 # synthcity absolute
@@ -14,6 +14,8 @@ from synthcity.plugins.core.distribution import (
     Distribution,
     IntegerDistribution,
 )
+from synthcity.utils.constants import DEVICE
+from synthcity.utils.reproducibility import enable_reproducible_results
 
 # synthcity relative
 from ._base import SurvivalAnalysisPlugin
@@ -26,7 +28,7 @@ class XGBSurvivalAnalysis(SurvivalAnalysisPlugin):
         self,
         n_estimators: int = 100,
         colsample_bynode: float = 0.5,
-        max_depth: int = 8,
+        max_depth: int = 5,
         subsample: float = 0.5,
         learning_rate: float = 5e-2,
         min_child_weight: int = 50,
@@ -34,11 +36,15 @@ class XGBSurvivalAnalysis(SurvivalAnalysisPlugin):
         booster: int = 2,
         random_state: int = 0,
         objective: str = "aft",  # "aft", "cox"
-        strategy: str = "weibull",  # "weibull", "debiased_bce"
-        time_points: int = 10,
+        strategy: str = "debiased_bce",  # "weibull", "debiased_bce", "km"
+        time_points: int = 100,
+        seed: int = 0,
+        device: Any = DEVICE,
         **kwargs: Any,
     ) -> None:
         super().__init__()
+        enable_reproducible_results(seed)
+
         surv_params = {}
         if objective == "aft":
             surv_params = {
@@ -67,7 +73,7 @@ class XGBSurvivalAnalysis(SurvivalAnalysisPlugin):
             "tree_method": tree_method,
             "booster": XGBSurvivalAnalysis.booster[booster],
             "random_state": random_state,
-            "n_jobs": 4,
+            "n_jobs": -1,
         }
         lr_params = {
             "C": 1e-3,
@@ -75,13 +81,12 @@ class XGBSurvivalAnalysis(SurvivalAnalysisPlugin):
         }
 
         if strategy == "debiased_bce":
-            base_model = XGBSEDebiasedBCE(xgboost_params, lr_params)
+            self.model = XGBSEDebiasedBCE(xgboost_params, lr_params)
         elif strategy == "weibull":
-            base_model = XGBSEStackedWeibull(xgboost_params)
-        else:
-            raise ValueError(f"unknown strategy {strategy}")
+            self.model = XGBSEStackedWeibull(xgboost_params)
+        elif strategy == "km":
+            self.model = XGBSEKaplanNeighbors(xgboost_params)
 
-        self.model = base_model
         self.time_points = time_points
 
     @validate_arguments(config=dict(arbitrary_types_allowed=True))
@@ -98,9 +103,7 @@ class XGBSurvivalAnalysis(SurvivalAnalysisPlugin):
         lower_bound = max(censored_times.min(), obs_times.min()) + 1
         if pd.isna(lower_bound):
             lower_bound = T.min()
-        upper_bound = min(censored_times.max(), obs_times.max()) - 1
-        if pd.isna(upper_bound):
-            upper_bound = T.max()
+        upper_bound = T.max()
 
         time_bins = np.linspace(lower_bound, upper_bound, self.time_points, dtype=int)
 
@@ -143,5 +146,8 @@ class XGBSurvivalAnalysis(SurvivalAnalysisPlugin):
             CategoricalDistribution(name="objective", choices=["aft", "cox"]),
             CategoricalDistribution(
                 name="strategy", choices=["weibull", "debiased_bce"]
+            ),
+            CategoricalDistribution(
+                name="strategy", choices=["weibull", "debiased_bce", "km"]
             ),
         ]

@@ -7,11 +7,12 @@ import torch
 from pydantic import validate_arguments
 from torch import nn
 
+# synthcity absolute
+from synthcity.utils.constants import DEVICE
+
 # synthcity relative
 from .flows import NormalizingFlows
 from .tabular_encoder import TabularEncoder
-
-DEVICE = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
 
 class TabularFlows(nn.Module):
@@ -84,6 +85,7 @@ class TabularFlows(nn.Module):
         linear_transform_type: str = "permutation",  # "lu", "permutation", "svd"
         base_transform_type: str = "rq-autoregressive",  # "affine-coupling", "quadratic-coupling", "rq-coupling", "affine-autoregressive", "quadratic-autoregressive", "rq-autoregressive"
         encoder_max_clusters: int = 20,
+        device: Any = DEVICE,
     ) -> None:
         super(TabularFlows, self).__init__()
         self.columns = X.columns
@@ -104,6 +106,7 @@ class TabularFlows(nn.Module):
             base_distribution=base_distribution,
             linear_transform_type=linear_transform_type,
             base_transform_type=base_transform_type,
+            device=device,
         )
 
     @validate_arguments(config=dict(arbitrary_types_allowed=True))

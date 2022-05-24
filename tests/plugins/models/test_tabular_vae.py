@@ -78,7 +78,7 @@ def test_basic_network(
 
 
 @pytest.mark.parametrize("loss_strategy", ["standard", "robust_divergence"])
-def test_gan_classification(loss_strategy: str) -> None:
+def test_vae_classification(loss_strategy: str) -> None:
     X, _ = load_iris(return_X_y=True, as_frame=True)
 
     model = TabularVAE(

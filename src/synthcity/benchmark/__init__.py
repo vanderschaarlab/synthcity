@@ -1,4 +1,6 @@
 # stdlib
+import json
+from pathlib import Path
 from typing import Dict, List, Optional
 
 # third party
@@ -14,6 +16,7 @@ from synthcity.metrics.scores import ScoreEvaluator
 from synthcity.plugins import Plugins
 from synthcity.plugins.core.constraints import Constraints
 from synthcity.utils.reproducibility import enable_reproducible_results
+from synthcity.utils.serialization import dataframe_hash, load_from_file, save_to_file
 
 
 class Benchmarks:
@@ -27,14 +30,17 @@ class Benchmarks:
         repeats: int = 3,
         synthetic_size: Optional[int] = None,
         synthetic_constraints: Optional[Constraints] = None,
+        synthetic_cache: bool = True,
+        synthetic_reuse_is_exists: bool = True,
         task_type: str = "classification",  # classification, regression, survival_analysis
         target_column: Optional[str] = None,
         time_to_event_column: Optional[
             str
         ] = None,  # only for task_type = survival_analysis
         time_horizons: Optional[List] = None,  # only for task_type = survival_analysis
-        plugin_kwargs: Dict = {},
         train_size: float = 0.8,
+        workspace: Path = Path("workspace"),
+        plugin_kwargs: Dict = {},
     ) -> pd.DataFrame:
         """Benchmark the performance of several algorithms.
 
@@ -53,6 +59,10 @@ class Benchmarks:
                 The size of the synthetic dataset. By default, it is len(X).
             synthetic_constraints:
                 Optional constraints on the synthetic data. By default, it inherits the constraints from X.
+            synthetic_cache: bool
+                Enable experiment caching
+            synthetic_reuse_is_exists: bool
+                If the current synthetic dataset is cached, it will be reused for the experiments.
             task_type: str
                 The task type to benchmark for performance. Options: classification, regression, survival_analysis.
             target_column:
@@ -61,43 +71,65 @@ class Benchmarks:
                 Only for survival_analysis: which column to use for time to event.
             time_horizons: Optional list
                 Only for survival_analysis: which time horizons to use for performance evaluation.
+            workspace: Path
+                Path for caching experiments
             plugin_kwargs:
                 Optional kwargs for each algorithm. Example {"adsgan": {"n_iter": 10}},
         """
         out = {}
+
+        experiment_name = dataframe_hash(X)
+        workspace.mkdir(parents=True, exist_ok=True)
+
         for plugin in plugins:
             log.info(f"Benchmarking plugin : {plugin}")
             scores = ScoreEvaluator()
 
             kwargs = {}
+            kwargs_hash = ""
             if plugin in plugin_kwargs:
                 kwargs = plugin_kwargs[plugin]
+            if len(kwargs) > 0:
+                kwargs_hash = json.dumps(kwargs, sort_keys=True)
 
             for repeat in range(repeats):
                 enable_reproducible_results(repeat)
-                log.info(f" Experiment repeat: {repeat}")
-                generator = Plugins().get(
-                    plugin,
-                    **kwargs,
-                    target_column=target_column,
-                    time_to_event_column=time_to_event_column,
-                    time_horizons=time_horizons,
+                cache_file = (
+                    workspace / f"{experiment_name}_{plugin}{kwargs_hash}_{repeat}.bkp"
                 )
 
                 X_train, X_test = train_test_split(
                     X, train_size=train_size, random_state=repeat
                 )
 
-                try:
-                    generator.fit(X_train)
-                    X_syn = generator.generate(
-                        count=synthetic_size, constraints=synthetic_constraints
+                log.info(
+                    f" Experiment repeat: {repeat} task type: {task_type} Train df hash = {dataframe_hash(X_train)}"
+                )
+
+                if cache_file.exists() and synthetic_reuse_is_exists:
+                    X_syn = load_from_file(cache_file)
+                else:
+                    generator = Plugins().get(
+                        plugin,
+                        **kwargs,
+                        target_column=target_column,
+                        time_to_event_column=time_to_event_column,
+                        time_horizons=time_horizons,
                     )
-                    if len(X_syn) == 0:
-                        raise RuntimeError("Plugin failed to generate data")
-                except BaseException as e:
-                    log.critical(f"[{plugin}][take {repeat}] failed: {e}")
-                    continue
+
+                    try:
+                        generator.fit(X_train)
+                        X_syn = generator.generate(
+                            count=synthetic_size, constraints=synthetic_constraints
+                        )
+                        if len(X_syn) == 0:
+                            raise RuntimeError("Plugin failed to generate data")
+                    except BaseException as e:
+                        log.critical(f"[{plugin}][take {repeat}] failed: {e}")
+                        continue
+
+                    if synthetic_cache:
+                        save_to_file(cache_file, X_syn)
 
                 evaluation = Metrics.evaluate(
                     X_train,

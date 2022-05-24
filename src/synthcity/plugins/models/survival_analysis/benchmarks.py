@@ -18,6 +18,7 @@ from synthcity.plugins.models.survival_analysis.metrics import (
     generate_score,
     print_score,
 )
+from synthcity.utils.dataframe import constant_columns
 
 
 def evaluate_survival_model(
@@ -271,14 +272,3 @@ def evaluate_survival_model(
         output["str"][metric] = print_score(output["clf"][metric])
 
     return output
-
-
-def constant_columns(dataframe: pd.DataFrame) -> list:
-    """
-    Drops constant value columns of pandas dataframe.
-    """
-    result = []
-    for column in dataframe.columns:
-        if len(dataframe[column].unique()) == 1:
-            result.append(column)
-    return result

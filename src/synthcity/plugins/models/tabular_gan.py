@@ -1,16 +1,18 @@
 # stdlib
-from typing import Any, Callable, Optional
+from typing import Any, Callable, Optional, Union
 
 # third party
+import numpy as np
 import pandas as pd
 import torch
 from pydantic import validate_arguments
 
+# synthcity absolute
+from synthcity.utils.constants import DEVICE
+
 # synthcity relative
 from .gan import GAN
 from .tabular_encoder import TabularEncoder
-
-DEVICE = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
 
 class TabularGAN(torch.nn.Module):
@@ -75,6 +77,7 @@ class TabularGAN(torch.nn.Module):
         self,
         X: pd.DataFrame,
         n_units_latent: int,
+        n_units_conditional: int = 0,
         generator_n_layers_hidden: int = 2,
         generator_n_units_hidden: int = 150,
         generator_nonlin: str = "leaky_relu",
@@ -112,6 +115,7 @@ class TabularGAN(torch.nn.Module):
         encoder_max_clusters: int = 20,
         encoder: Any = None,
         dataloader_sampler: Optional[torch.utils.data.sampler.Sampler] = None,
+        device: Any = DEVICE,
     ) -> None:
         super(TabularGAN, self).__init__()
         self.columns = X.columns
@@ -123,6 +127,7 @@ class TabularGAN(torch.nn.Module):
         self.model = GAN(
             self.encoder.n_features(),
             n_units_latent=n_units_latent,
+            n_units_conditional=n_units_conditional,
             batch_size=batch_size,
             generator_n_layers_hidden=generator_n_layers_hidden,
             generator_n_units_hidden=generator_n_units_hidden,
@@ -158,6 +163,7 @@ class TabularGAN(torch.nn.Module):
             seed=seed,
             n_iter_min=n_iter_min,
             dataloader_sampler=dataloader_sampler,
+            device=device,
         )
 
     @validate_arguments(config=dict(arbitrary_types_allowed=True))
@@ -172,6 +178,7 @@ class TabularGAN(torch.nn.Module):
     def fit(
         self,
         X: pd.DataFrame,
+        cond: Optional[Union[pd.DataFrame, pd.Series]] = None,
         fake_labels_generator: Optional[Callable] = None,
         true_labels_generator: Optional[Callable] = None,
         encoded: bool = False,
@@ -181,16 +188,17 @@ class TabularGAN(torch.nn.Module):
         else:
             X_enc = self.encode(X)
         self.model.fit(
-            X_enc,
+            np.asarray(X_enc),
+            np.asarray(cond),
             fake_labels_generator=fake_labels_generator,
             true_labels_generator=true_labels_generator,
         )
         return self
 
-    def generate(self, count: int) -> pd.DataFrame:
-        samples = self.model.generate(count)
+    def generate(self, count: int, cond: Optional[pd.DataFrame] = None) -> pd.DataFrame:
+        samples = self.model.generate(count, cond)
         return self.decode(pd.DataFrame(samples))
 
     @validate_arguments(config=dict(arbitrary_types_allowed=True))
-    def forward(self, count: int) -> torch.Tensor:
-        return self.model.forward(count)
+    def forward(self, count: int, cond: Optional[pd.DataFrame] = None) -> torch.Tensor:
+        return self.model.forward(count, cond)

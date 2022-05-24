@@ -1,4 +1,5 @@
 # stdlib
+import traceback
 from typing import Any, Dict
 
 # third party
@@ -22,6 +23,7 @@ from synthcity.plugins.models.survival_analysis import (
     XGBSurvivalAnalysis,
     evaluate_survival_model,
 )
+from synthcity.utils.serialization import dataframe_hash
 
 
 class PerformanceEvaluator(MetricEvaluator):
@@ -99,12 +101,19 @@ class PerformanceEvaluator(MetricEvaluator):
             0 means perfect predictions.
             The lower the negative value, the bigger the error in the predictions.
         """
+
+        X_train = np.asarray(X_test)
+        X_test = np.asarray(X_test)
+        y_train = np.asarray(y_test)
+        y_test = np.asarray(y_test)
+
         try:
             estimator = model(**model_args).fit(X_train, y_train)
             y_pred = estimator.predict(X_test)
 
             score = mean_squared_error(y_test, y_pred)
         except BaseException as e:
+            traceback.print_stack()
             log.error(f"regression evaluation failed {e}")
             score = 100
 
@@ -226,6 +235,10 @@ class PerformanceEvaluator(MetricEvaluator):
                 f"TimeToEvent column not found {tte_col}. Available: {X_gt_train.columns}"
             )
 
+        X_gt_train = X_gt_train.copy()
+        X_gt_test = X_gt_test.copy()
+        X_syn = X_syn.copy()
+
         iter_X_gt = X_gt_train.drop(columns=[target_col, tte_col]).reset_index(
             drop=True
         )
@@ -241,18 +254,27 @@ class PerformanceEvaluator(MetricEvaluator):
         iter_T_syn = X_syn[tte_col].reset_index(drop=True)
 
         predictor_gt = model(**args)
+        log.info(
+            f" Performance eval for df hash = {dataframe_hash(iter_X_gt)} ood hash = {dataframe_hash(ood_X_gt)}"
+        )
         score_gt = evaluate_survival_model(
             predictor_gt,
             iter_X_gt,
             iter_T_gt,
             iter_E_gt,
-            metrics=["c_index"],
+            metrics=["c_index", "brier_score"],
             n_folds=self._n_folds,
             time_horizons=self._time_horizons,
-        )["clf"]["c_index"][0]
+        )["clf"]
+
+        log.info(f"Baseline performance score: {score_gt}")
 
         predictor_syn = model(**args)
 
+        fail_score = {
+            "c_index": (0, 0),
+            "brier_score": (1, 0),
+        }
         try:
             predictor_syn.fit(iter_X_syn, iter_T_syn, iter_E_syn)
             score_syn_id = evaluate_survival_model(
@@ -260,16 +282,18 @@ class PerformanceEvaluator(MetricEvaluator):
                 iter_X_gt,
                 iter_T_gt,
                 iter_E_gt,
-                metrics=["c_index"],
+                metrics=["c_index", "brier_score"],
                 n_folds=self._n_folds,
                 time_horizons=self._time_horizons,
                 pretrained=True,
-            )["clf"]["c_index"][0]
+            )["clf"]
         except BaseException as e:
             log.error(
                 f"Failed to evaluate synthetic ID performance. {model.name()}: {e}"
             )
-            score_syn_id = 0
+            score_syn_id = fail_score
+
+        log.info(f"Synthetic ID performance score: {score_syn_id}")
 
         try:
             predictor_syn.fit(iter_X_syn, iter_T_syn, iter_E_syn)
@@ -278,21 +302,26 @@ class PerformanceEvaluator(MetricEvaluator):
                 ood_X_gt,
                 ood_T_gt,
                 ood_E_gt,
-                metrics=["c_index"],
+                metrics=["c_index", "brier_score"],
                 n_folds=self._n_folds,
                 time_horizons=self._time_horizons,
                 pretrained=True,
-            )["clf"]["c_index"][0]
+            )["clf"]
         except BaseException as e:
             log.error(
                 f"Failed to evaluate synthetic OOD performance. {model.name()}: {e}"
             )
-            score_syn_ood = 0
+            score_syn_ood = fail_score
+
+        log.info(f"Synthetic OOD performance score: {score_syn_ood}")
 
         return {
-            "gt": float(score_gt),
-            "syn_id": float(score_syn_id),
-            "syn_ood": float(score_syn_ood),
+            "gt.c_index": float(score_gt["c_index"][0]),
+            "gt.brier_score": float(score_gt["brier_score"][0]),
+            "syn_id.c_index": float(score_syn_id["c_index"][0]),
+            "syn_id.brier_score": float(score_syn_id["brier_score"][0]),
+            "syn_ood.c_index": float(score_syn_ood["c_index"][0]),
+            "syn_ood.brier_score": float(score_syn_ood["brier_score"][0]),
         }
 
     @validate_arguments(config=dict(arbitrary_types_allowed=True))
@@ -347,7 +376,7 @@ class PerformanceEvaluatorXGB(PerformanceEvaluator):
         return self._evaluate_test_performance(
             XGBClassifier,
             {
-                "n_jobs": 1,
+                "n_jobs": -1,
                 "verbosity": 0,
                 "use_label_encoder": True,
                 "depth": 3,
@@ -355,7 +384,7 @@ class PerformanceEvaluatorXGB(PerformanceEvaluator):
             },
             XGBRegressor,
             {
-                "n_jobs": 1,
+                "n_jobs": -1,
                 "verbosity": 0,
                 "use_label_encoder": False,
                 "depth": 3,
@@ -363,7 +392,7 @@ class PerformanceEvaluatorXGB(PerformanceEvaluator):
             },
             XGBSurvivalAnalysis,
             {
-                "n_jobs": 1,
+                "n_jobs": -1,
                 "verbosity": 0,
                 "use_label_encoder": False,
                 "depth": 3,

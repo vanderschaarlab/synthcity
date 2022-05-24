@@ -19,6 +19,7 @@ from synthcity.metrics.plots import (
 from synthcity.plugins.core.constraints import Constraints
 from synthcity.plugins.core.distribution import Distribution
 from synthcity.plugins.core.schema import Schema
+from synthcity.utils.constants import DEVICE
 
 
 class Plugin(metaclass=ABCMeta):
@@ -56,6 +57,7 @@ class Plugin(metaclass=ABCMeta):
         target_column: Optional[str] = None,
         time_to_event_column: Optional[str] = None,
         time_horizons: Optional[List] = None,
+        device: Any = DEVICE,
     ) -> None:
         """
 
@@ -78,6 +80,7 @@ class Plugin(metaclass=ABCMeta):
         self.sampling_patience = sampling_patience
         self.sensitive_columns = sensitive_columns
         self.strict = strict
+        self.device = device
 
     @staticmethod
     @abstractmethod
@@ -212,14 +215,14 @@ class Plugin(metaclass=ABCMeta):
         ...
 
     def _safe_generate(
-        self, gen_cbk: Callable, count: int, syn_schema: Schema
+        self, gen_cbk: Callable, count: int, syn_schema: Schema, **kwargs: Any
     ) -> pd.DataFrame:
         constraints = syn_schema.as_constraints()
 
         data_synth = pd.DataFrame([], columns=self.schema().features())
         for it in range(self.sampling_patience):
             # sample
-            iter_samples = gen_cbk(count)
+            iter_samples = gen_cbk(count, **kwargs)
             iter_samples_df = pd.DataFrame(
                 iter_samples, columns=self.schema().features()
             )

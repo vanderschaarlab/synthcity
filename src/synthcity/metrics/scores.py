@@ -19,8 +19,7 @@ from .core.metric import MetricEvaluator
 n_jobs = torch.cuda.device_count()
 if n_jobs == 0:
     n_jobs = multiprocessing.cpu_count()
-
-dispatcher = Parallel(n_jobs=n_jobs)
+dispatcher = Parallel(n_jobs=1)
 
 
 def _safe_evaluate(

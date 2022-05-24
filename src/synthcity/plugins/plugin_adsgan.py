@@ -8,7 +8,7 @@ IEEE Journal of Biomedical and Health Informatics (JBHI), 2019.
 Paper link: https://ieeexplore.ieee.org/document/9034117
 """
 # stdlib
-from typing import Any, List, Optional
+from typing import Any, List, Optional, Union
 
 # third party
 import pandas as pd
@@ -27,6 +27,7 @@ from synthcity.plugins.core.distribution import (
 from synthcity.plugins.core.plugin import Plugin
 from synthcity.plugins.core.schema import Schema
 from synthcity.plugins.models import TabularGAN
+from synthcity.utils.constants import DEVICE
 
 
 class AdsGANPlugin(Plugin):
@@ -78,17 +79,19 @@ class AdsGANPlugin(Plugin):
     @validate_arguments(config=dict(arbitrary_types_allowed=True))
     def __init__(
         self,
-        n_iter: int = 1000,
-        generator_n_layers_hidden: int = 2,
+        n_iter: int = 1500,
+        n_units_conditional: int = 0,
+        generator_n_layers_hidden: int = 3,
         generator_n_units_hidden: int = 250,
         generator_nonlin: str = "tanh",
-        generator_dropout: float = 0,
+        generator_dropout: float = 0.1,
         generator_opt_betas: tuple = (0.5, 0.999),
+        generator_extra_penalties: list = ["identifiability_penalty"],
         discriminator_n_layers_hidden: int = 2,
-        discriminator_n_units_hidden: int = 100,
+        discriminator_n_units_hidden: int = 250,
         discriminator_nonlin: str = "leaky_relu",
         discriminator_n_iter: int = 1,
-        discriminator_dropout: float = 0,
+        discriminator_dropout: float = 0.1,
         discriminator_opt_betas: tuple = (0.5, 0.999),
         lr: float = 1e-3,
         weight_decay: float = 1e-3,
@@ -97,9 +100,10 @@ class AdsGANPlugin(Plugin):
         clipping_value: int = 0,
         lambda_gradient_penalty: float = 10,
         lambda_identifiability_penalty: float = 0.1,
-        encoder_max_clusters: int = 5,
+        encoder_max_clusters: int = 10,
         encoder: Any = None,
         dataloader_sampler: Optional[sampler.Sampler] = None,
+        device: Any = DEVICE,
         **kwargs: Any
     ) -> None:
         super().__init__(**kwargs)
@@ -109,7 +113,7 @@ class AdsGANPlugin(Plugin):
         self.n_iter = n_iter
         self.generator_dropout = generator_dropout
         self.generator_opt_betas = generator_opt_betas
-        self.generator_extra_penalties = ["identifiability_penalty"]
+        self.generator_extra_penalties = generator_extra_penalties
         self.discriminator_n_layers_hidden = discriminator_n_layers_hidden
         self.discriminator_n_units_hidden = discriminator_n_units_hidden
         self.discriminator_nonlin = discriminator_nonlin
@@ -126,9 +130,12 @@ class AdsGANPlugin(Plugin):
         self.lambda_gradient_penalty = lambda_gradient_penalty
         self.lambda_identifiability_penalty = lambda_identifiability_penalty
 
+        self.n_units_conditional = n_units_conditional
         self.encoder_max_clusters = encoder_max_clusters
         self.encoder = encoder
         self.dataloader_sampler = dataloader_sampler
+
+        self.device = device
 
     @staticmethod
     def name() -> str:
@@ -168,9 +175,16 @@ class AdsGANPlugin(Plugin):
 
     def _fit(self, X: pd.DataFrame, *args: Any, **kwargs: Any) -> "AdsGANPlugin":
         features = X.shape[1]
+        cond: Optional[Union[pd.DataFrame, pd.Series]] = None
+        if self.n_units_conditional > 0:
+            if "cond" not in kwargs:
+                raise ValueError("expecting 'cond' for training")
+            cond = kwargs["cond"]
+
         self.model = TabularGAN(
             X,
             n_units_latent=features,
+            n_units_conditional=self.n_units_conditional,
             batch_size=self.batch_size,
             generator_n_layers_hidden=self.generator_n_layers_hidden,
             generator_n_units_hidden=self.generator_n_units_hidden,
@@ -201,13 +215,18 @@ class AdsGANPlugin(Plugin):
             lambda_identifiability_penalty=self.lambda_identifiability_penalty,
             encoder_max_clusters=self.encoder_max_clusters,
             dataloader_sampler=self.dataloader_sampler,
+            device=self.device,
         )
-        self.model.fit(X)
+        self.model.fit(X, cond=cond)
 
         return self
 
     def _generate(self, count: int, syn_schema: Schema, **kwargs: Any) -> pd.DataFrame:
-        return self._safe_generate(self.model.generate, count, syn_schema)
+        cond: Optional[Union[pd.DataFrame, pd.Series]] = None
+        if "cond" in kwargs:
+            cond = kwargs["cond"]
+
+        return self._safe_generate(self.model.generate, count, syn_schema, cond=cond)
 
 
 plugin = AdsGANPlugin

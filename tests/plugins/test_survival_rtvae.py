@@ -6,13 +6,11 @@ from lifelines.datasets import load_rossi
 # synthcity absolute
 from synthcity.plugins import Plugin
 from synthcity.plugins.core.constraints import Constraints
-from synthcity.plugins.plugin_survival_adsgan import plugin
+from synthcity.plugins.plugin_survival_rtvae import plugin
 
-plugin_name = "survival_adsgan"
+plugin_name = "survival_rtvae"
 plugins_args = {
-    "seeds": ["weibull_aft", "cox_ph"],
-    "generator_n_layers_hidden": 1,
-    "generator_n_units_hidden": 10,
+    "uncensoring_model": "cox_ph",
 }
 
 
@@ -41,21 +39,29 @@ def test_plugin_type(test_plugin: Plugin) -> None:
     "test_plugin", generate_fixtures(plugin_name, plugin, plugins_args)
 )
 def test_plugin_hyperparams(test_plugin: Plugin) -> None:
-    assert len(test_plugin.hyperparameter_space()) == 14
+    assert len(test_plugin.hyperparameter_space()) == 12
 
 
-def test_plugin_fit() -> None:
+@pytest.mark.parametrize("strategy", ["uncensoring", "survival_function"])
+def test_plugin_fit(strategy: str) -> None:
     test_plugin = plugin(
-        target_column="arrest", time_to_event_column="week", **plugins_args
+        target_column="arrest",
+        time_to_event_column="week",
+        strategy=strategy,
+        **plugins_args
     )
 
     X = load_rossi()
     test_plugin.fit(X)
 
 
-def test_plugin_generate() -> None:
+@pytest.mark.parametrize("strategy", ["uncensoring", "survival_function"])
+def test_plugin_generate(strategy: str) -> None:
     test_plugin = plugin(
-        target_column="arrest", time_to_event_column="week", **plugins_args
+        target_column="arrest",
+        time_to_event_column="week",
+        strategy=strategy,
+        **plugins_args
     )
 
     X = load_rossi()
@@ -70,9 +76,13 @@ def test_plugin_generate() -> None:
     assert test_plugin.schema_includes(X_gen)
 
 
-def test_survival_plugin_generate_constraints() -> None:
+@pytest.mark.parametrize("strategy", ["uncensoring", "survival_function"])
+def test_survival_plugin_generate_constraints(strategy: str) -> None:
     test_plugin = plugin(
-        target_column="arrest", time_to_event_column="week", **plugins_args
+        target_column="arrest",
+        time_to_event_column="week",
+        strategy=strategy,
+        **plugins_args
     )
 
     X = load_rossi()

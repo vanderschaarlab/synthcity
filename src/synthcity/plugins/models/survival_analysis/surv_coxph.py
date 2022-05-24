@@ -9,13 +9,15 @@ from pydantic import validate_arguments
 
 # synthcity absolute
 from synthcity.plugins.core.distribution import Distribution, FloatDistribution
+from synthcity.utils.constants import DEVICE
+from synthcity.utils.dataframe import constant_columns
 
 # synthcity relative
 from ._base import SurvivalAnalysisPlugin
 
 
 class CoxPHSurvivalAnalysis(SurvivalAnalysisPlugin):
-    def __init__(self, **kwargs: Any) -> None:
+    def __init__(self, device: Any = DEVICE, **kwargs: Any) -> None:
         super().__init__()
         self.model = CoxPHFitter(**kwargs)
 
@@ -24,6 +26,9 @@ class CoxPHSurvivalAnalysis(SurvivalAnalysisPlugin):
         self, X: pd.DataFrame, T: pd.Series, Y: pd.Series
     ) -> "SurvivalAnalysisPlugin":
         "Training logic"
+
+        self.constant_cols = constant_columns(X)
+        X = X.drop(columns=self.constant_cols)
 
         df = X.copy()
         df["event"] = Y
@@ -36,6 +41,8 @@ class CoxPHSurvivalAnalysis(SurvivalAnalysisPlugin):
     @validate_arguments(config=dict(arbitrary_types_allowed=True))
     def predict(self, X: pd.DataFrame, time_horizons: List) -> pd.DataFrame:
         "Predict risk estimation"
+
+        X = X.drop(columns=self.constant_cols)
 
         chunks = int(len(X) / 1024) + 1
 

@@ -6,7 +6,7 @@ import numpy as np
 import pandas as pd
 from pydantic import validate_arguments
 from scipy.integrate import trapz
-from xgbse import XGBSEDebiasedBCE
+from xgbse import XGBSEDebiasedBCE, XGBSEKaplanNeighbors, XGBSEStackedWeibull
 from xgbse.converters import convert_to_structured
 
 # synthcity absolute
@@ -15,6 +15,7 @@ from synthcity.plugins.core.distribution import (
     Distribution,
     IntegerDistribution,
 )
+from synthcity.utils.constants import DEVICE
 
 # synthcity relative
 from ._base import TimeToEventPlugin
@@ -36,8 +37,9 @@ class XGBTimeToEvent(TimeToEventPlugin):
         booster: int = 2,
         random_state: int = 0,
         objective: str = "aft",  # "aft", "cox"
-        strategy: str = "weibull",  # "weibull", "debiased_bce"
-        time_points: int = 10,
+        strategy: str = "debiased_bce",  # "weibull", "debiased_bce", "km"
+        time_points: int = 100,
+        device: Any = DEVICE,
         **kwargs: Any
     ) -> None:
         super().__init__()
@@ -73,19 +75,26 @@ class XGBTimeToEvent(TimeToEventPlugin):
             "tree_method": tree_method,
             "booster": XGBTimeToEvent.booster[booster],
             "random_state": random_state,
-            "n_jobs": 2,
+            "n_jobs": -1,
         }
         lr_params = {
             "C": 1e-3,
             "max_iter": 10000,
         }
 
-        self.model = XGBSEDebiasedBCE(xgboost_params, lr_params)
+        if strategy == "debiased_bce":
+            self.model = XGBSEDebiasedBCE(xgboost_params, lr_params)
+        elif strategy == "weibull":
+            self.model = XGBSEStackedWeibull(xgboost_params)
+        elif strategy == "km":
+            self.model = XGBSEKaplanNeighbors(xgboost_params)
+
         self.time_points = time_points
 
     @validate_arguments(config=dict(arbitrary_types_allowed=True))
     def fit(self, X: pd.DataFrame, T: pd.Series, Y: pd.Series) -> "TimeToEventPlugin":
         "Training logic"
+        self._fit_censoring_model(X, T, Y)
 
         y = convert_to_structured(T, Y)
 
@@ -95,13 +104,12 @@ class XGBTimeToEvent(TimeToEventPlugin):
         lower_bound = max(censored_times.min(), obs_times.min()) + 1
         if pd.isna(lower_bound):
             lower_bound = T.min()
-        upper_bound = min(censored_times.max(), obs_times.max()) - 1
-        if pd.isna(upper_bound):
-            upper_bound = T.max()
+        upper_bound = T.max()
 
         time_bins = np.linspace(lower_bound, upper_bound, self.time_points, dtype=int)
 
         self.model.fit(X, y, time_bins=time_bins)
+        self.te_max = T.max()
 
         return self
 
@@ -111,6 +119,19 @@ class XGBTimeToEvent(TimeToEventPlugin):
 
         surv_f = self.model.predict(X)
         return pd.Series(trapz(surv_f.values, surv_f.T.index), index=X.index)
+
+    @validate_arguments(config=dict(arbitrary_types_allowed=True))
+    def predict_any(self, X: pd.DataFrame, E: pd.Series) -> pd.Series:
+        "Predict time-to-event"
+
+        result = pd.Series([0] * len(X), index=E.index)
+
+        if (E == 1).sum() > 0:
+            result[E == 1] = self.predict(X[E == 1])
+        if (E == 0).sum() > 0:
+            result[E == 0] = self._predict_censoring(X[E == 0])
+
+        return result
 
     @staticmethod
     def name() -> str:
@@ -124,6 +145,6 @@ class XGBTimeToEvent(TimeToEventPlugin):
             IntegerDistribution(name="min_child_weight", low=0, high=50),
             CategoricalDistribution(name="objective", choices=["aft", "cox"]),
             CategoricalDistribution(
-                name="strategy", choices=["weibull", "debiased_bce"]
+                name="strategy", choices=["weibull", "debiased_bce", "km"]
             ),
         ]

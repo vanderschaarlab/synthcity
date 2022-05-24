@@ -25,12 +25,11 @@ from synthcity.plugins.core.distribution import (
 )
 from synthcity.plugins.models.mlp import MLP
 from synthcity.plugins.models.time_to_event.metrics import c_index, expected_time_error
+from synthcity.utils.constants import DEVICE
 from synthcity.utils.reproducibility import enable_reproducible_results
 
 # synthcity relative
 from ._base import TimeToEventPlugin
-
-DEVICE = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
 
 class TimeEventGAN(nn.Module):
@@ -68,9 +67,11 @@ class TimeEventGAN(nn.Module):
         seed: int = 0,
         n_iter_min: int = 100,
         clipping_value: int = 0,
+        device: Any = DEVICE,
     ) -> None:
         super(TimeEventGAN, self).__init__()
 
+        self.device = device
         self.n_features = n_features
         self.n_units_latent = n_units_latent
 
@@ -93,7 +94,7 @@ class TimeEventGAN(nn.Module):
             lr=generator_lr,
             residual=generator_residual,
             opt_betas=generator_opt_betas,
-        ).to(DEVICE)
+        ).to(self.device)
 
         self.discriminator = MLP(
             task_type="regression",
@@ -110,7 +111,7 @@ class TimeEventGAN(nn.Module):
             seed=seed,
             lr=discriminator_lr,
             opt_betas=discriminator_opt_betas,
-        ).to(DEVICE)
+        ).to(self.device)
 
         # training
         self.generator_n_iter = generator_n_iter
@@ -151,7 +152,7 @@ class TimeEventGAN(nn.Module):
     def forward(self, X: torch.Tensor) -> torch.Tensor:
         self.generator.eval()
 
-        fixed_noise = torch.randn(len(X), self.n_units_latent, device=DEVICE)
+        fixed_noise = torch.randn(len(X), self.n_units_latent, device=self.device)
         with torch.no_grad():
             return self.generator(torch.hstack([X, fixed_noise])).detach().cpu()
 
@@ -184,14 +185,14 @@ class TimeEventGAN(nn.Module):
         self, X: torch.Tensor, T: torch.Tensor, E: torch.Tensor
     ) -> tuple:
         # Train with non-censored true batch
-        Xnc = X[E == 1].to(DEVICE)
-        Tnc = T[E == 1].to(DEVICE)
+        Xnc = X[E == 1].to(self.device)
+        Tnc = T[E == 1].to(self.device)
         true_features_time = torch.hstack([Xnc, Tnc.reshape(-1, 1)])
 
         true_output = self.discriminator(true_features_time).squeeze().float()
 
         # Train with fake batch
-        noise = torch.randn(len(X), self.n_units_latent, device=DEVICE)
+        noise = torch.randn(len(X), self.n_units_latent, device=self.device)
         noise = torch.hstack([X, noise])
         fake_T = self.generator(noise)
 
@@ -211,12 +212,12 @@ class TimeEventGAN(nn.Module):
         self.generator.optimizer.zero_grad()
 
         # Evaluate noncensored error
-        Xnc = X[E == 1].to(DEVICE)
-        Tnc = T[E == 1].to(DEVICE)
+        Xnc = X[E == 1].to(self.device)
+        Tnc = T[E == 1].to(self.device)
 
         batch_size = len(Xnc)
 
-        noise = torch.randn(batch_size, self.n_units_latent, device=DEVICE)
+        noise = torch.randn(batch_size, self.n_units_latent, device=self.device)
         noncen_input = torch.hstack([Xnc, noise])
         fake_T = self.generator(noncen_input).squeeze()
 
@@ -225,12 +226,12 @@ class TimeEventGAN(nn.Module):
         )  # fake_T should be == T for noncensored data
 
         # Evaluate censored error
-        Xc = X[E == 0].to(DEVICE)
-        Tc = T[E == 0].to(DEVICE)
+        Xc = X[E == 0].to(self.device)
+        Tc = T[E == 0].to(self.device)
 
         batch_size = len(Xc)
 
-        noise = torch.randn(batch_size, self.n_units_latent, device=DEVICE)
+        noise = torch.randn(batch_size, self.n_units_latent, device=self.device)
         cen_input = torch.hstack([Xc, noise])
         fake_T = self.generator(cen_input)
 
@@ -382,9 +383,9 @@ class TimeEventGAN(nn.Module):
 
     def _check_tensor(self, X: torch.Tensor) -> torch.Tensor:
         if isinstance(X, torch.Tensor):
-            return X.to(DEVICE)
+            return X.to(self.device)
         else:
-            return torch.from_numpy(np.asarray(X)).to(DEVICE)
+            return torch.from_numpy(np.asarray(X)).to(self.device)
 
 
 class DATETimeToEvent(TimeToEventPlugin):
@@ -396,6 +397,7 @@ class DATETimeToEvent(TimeToEventPlugin):
     @validate_arguments(config=dict(arbitrary_types_allowed=True))
     def fit(self, X: pd.DataFrame, T: pd.Series, Y: pd.Series) -> "TimeToEventPlugin":
         "Training logic"
+        self._fit_censoring_model(X, T, Y)
 
         self.model = TimeEventGAN(
             n_features=X.shape[1], n_units_latent=X.shape[1], **self.kwargs
@@ -421,6 +423,19 @@ class DATETimeToEvent(TimeToEventPlugin):
         preds = self.scaler_T.inverse_transform(enc_preds).squeeze()
 
         return pd.Series(preds, index=X.index)
+
+    @validate_arguments(config=dict(arbitrary_types_allowed=True))
+    def predict_any(self, X: pd.DataFrame, E: pd.Series) -> pd.Series:
+        "Predict time-to-event"
+
+        result = pd.Series([0] * len(X), index=E.index)
+
+        if (E == 1).sum() > 0:
+            result[E == 1] = self.predict(X[E == 1])
+        if (E == 0).sum() > 0:
+            result[E == 0] = self._predict_censoring(X[E == 0])
+
+        return result
 
     @staticmethod
     def name() -> str:

@@ -26,7 +26,8 @@ from torch import nn, optim
 from torch.nn import functional as F
 from torch.utils.data import DataLoader, TensorDataset
 
-DEVICE = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+# synthcity absolute
+from synthcity.utils.constants import DEVICE
 
 
 def create_alternating_binary_mask(features: int, even: bool = True) -> torch.Tensor:
@@ -107,8 +108,10 @@ class NormalizingFlows(nn.Module):
         base_distribution: str = "standard_normal",  # "standard_normal"
         linear_transform_type: str = "permutation",  # "lu", "permutation", "svd"
         base_transform_type: str = "rq-autoregressive",  # "affine-coupling", "quadratic-coupling", "rq-coupling", "affine-autoregressive", "quadratic-autoregressive", "rq-autoregressive"
+        device: Any = DEVICE,
     ) -> None:
         super(NormalizingFlows, self).__init__()
+        self.device = device
         self.n_iter = n_iter
         self.n_layers_hidden = n_layers_hidden
         self.n_units_hidden = n_units_hidden
@@ -139,16 +142,16 @@ class NormalizingFlows(nn.Module):
 
     def fit(self, X: pd.DataFrame) -> Any:
         # Load Dataset
-        X = self._check_tensor(X).float().to(DEVICE)
+        X = self._check_tensor(X).float().to(self.device)
         loader = self.dataloader(X)
 
         # Prepare flow
         features = X.shape[1]
-        base_dist = self._get_base_distribution()(shape=[X.shape[1]]).to(DEVICE)
+        base_dist = self._get_base_distribution()(shape=[X.shape[1]]).to(self.device)
 
-        transform = self._create_transform(features).to(DEVICE)
+        transform = self._create_transform(features).to(self.device)
 
-        self.flow = Flow(transform=transform, distribution=base_dist).to(DEVICE)
+        self.flow = Flow(transform=transform, distribution=base_dist).to(self.device)
 
         # Prepare optimizer
         optimizer = optim.Adam(self.flow.parameters(), lr=self.lr)
@@ -166,9 +169,9 @@ class NormalizingFlows(nn.Module):
 
     def _check_tensor(self, X: torch.Tensor) -> torch.Tensor:
         if isinstance(X, torch.Tensor):
-            return X.to(DEVICE)
+            return X.to(self.device)
         else:
-            return torch.from_numpy(np.asarray(X)).to(DEVICE)
+            return torch.from_numpy(np.asarray(X)).to(self.device)
 
     def _get_base_distribution(self) -> Any:
         if self.base_distribution == "standard_normal":

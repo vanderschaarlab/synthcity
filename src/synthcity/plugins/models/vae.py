@@ -7,15 +7,14 @@ import torch
 from pydantic import validate_arguments
 from torch import Tensor, nn
 from torch.optim import Adam
-from torch.utils.data import DataLoader, TensorDataset
+from torch.utils.data import DataLoader, TensorDataset, sampler
 
 # synthcity absolute
 import synthcity.logger as log
+from synthcity.utils.constants import DEVICE
 
 # synthcity relative
 from .mlp import MLP
-
-DEVICE = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
 
 class Encoder(nn.Module):
@@ -31,8 +30,10 @@ class Encoder(nn.Module):
         dropout: float = 0.1,
         batch_norm: bool = True,
         residual: bool = False,
+        device: Any = DEVICE,
     ) -> None:
         super(Encoder, self).__init__()
+        self.device = device
         self.model = MLP(
             task_type="regression",
             n_units_in=n_units_in,
@@ -44,10 +45,11 @@ class Encoder(nn.Module):
             dropout=dropout,
             batch_norm=batch_norm,
             residual=residual,
-        ).to(DEVICE)
+            device=device,
+        ).to(self.device)
 
-        self.mu_fc = nn.Linear(n_units_hidden, n_units_embedding).to(DEVICE)
-        self.logvar_fc = nn.Linear(n_units_hidden, n_units_embedding).to(DEVICE)
+        self.mu_fc = nn.Linear(n_units_hidden, n_units_embedding).to(self.device)
+        self.logvar_fc = nn.Linear(n_units_hidden, n_units_embedding).to(self.device)
 
     @validate_arguments(config=dict(arbitrary_types_allowed=True))
     def forward(self, X: Tensor) -> Tuple[Tensor, Tensor]:
@@ -71,8 +73,10 @@ class Decoder(nn.Module):
         dropout: float = 0.1,
         batch_norm: bool = True,
         residual: bool = False,
+        device: Any = DEVICE,
     ) -> None:
         super(Decoder, self).__init__()
+        self.device = device
         self.model = MLP(
             task_type="regression",
             n_units_in=n_units_embedding,
@@ -85,7 +89,8 @@ class Decoder(nn.Module):
             dropout=dropout,
             batch_norm=batch_norm,
             residual=residual,
-        ).to(DEVICE)
+            device=device,
+        ).to(self.device)
 
     @validate_arguments(config=dict(arbitrary_types_allowed=True))
     def forward(self, X: Tensor) -> Tensor:
@@ -175,12 +180,15 @@ class VAE(nn.Module):
         loss_strategy: str = "standard",  # standard, robust_divergence
         loss_factor: int = 2,
         robust_divergence_beta: int = 2,  # used for loss_strategy = robust_divergence
+        dataloader_sampler: Optional[sampler.Sampler] = None,
+        device: Any = DEVICE,
     ) -> None:
         super(VAE, self).__init__()
 
         if loss_strategy not in ["standard", "robust_divergence"]:
             raise ValueError(f"invalid loss strategy {loss_strategy}")
 
+        self.device = device
         self.batch_size = batch_size
         self.n_iter = n_iter
         self.n_iter_print = n_iter_print
@@ -191,6 +199,7 @@ class VAE(nn.Module):
         self.n_units_embedding = n_units_embedding
         self.loss_strategy = loss_strategy
         self.robust_divergence_beta = robust_divergence_beta
+        self.dataloader_sampler = dataloader_sampler
 
         self.seed = seed
         torch.manual_seed(self.seed)
@@ -203,6 +212,7 @@ class VAE(nn.Module):
             nonlin=encoder_nonlin,
             batch_norm=encoder_batch_norm,
             dropout=encoder_dropout,
+            device=device,
         )
         self.decoder = Decoder(
             n_units_embedding,
@@ -214,6 +224,7 @@ class VAE(nn.Module):
             batch_norm=decoder_batch_norm,
             dropout=decoder_dropout,
             residual=decoder_residual,
+            device=device,
         )
 
         if decoder_nonlin_out is None:
@@ -237,7 +248,7 @@ class VAE(nn.Module):
             mean = torch.zeros(self.batch_size, self.n_units_embedding)
             std = torch.ones(self.batch_size, self.n_units_embedding)
 
-            noise = torch.normal(mean=mean, std=std).to(DEVICE)
+            noise = torch.normal(mean=mean, std=std).to(self.device)
             fake = self.decoder(noise)
             data.append(fake.detach().cpu().numpy())
 
@@ -269,7 +280,7 @@ class VAE(nn.Module):
             for id_, data in enumerate(loader):
                 optimizer.zero_grad()
 
-                real = data[0].to(DEVICE)
+                real = data[0].to(self.device)
 
                 mu, logvar = self.encoder(real)
                 embedding = self._reparameterize(mu, logvar)
@@ -289,13 +300,18 @@ class VAE(nn.Module):
 
     def _check_tensor(self, X: Tensor) -> Tensor:
         if isinstance(X, Tensor):
-            return X.to(DEVICE)
+            return X.to(self.device)
         else:
-            return torch.from_numpy(np.asarray(X)).to(DEVICE)
+            return torch.from_numpy(np.asarray(X)).to(self.device)
 
     def _dataloader(self, X: Tensor) -> DataLoader:
         dataset = TensorDataset(X)
-        return DataLoader(dataset, batch_size=self.batch_size, pin_memory=False)
+        return DataLoader(
+            dataset,
+            sampler=self.dataloader_sampler,
+            batch_size=self.batch_size,
+            pin_memory=False,
+        )
 
     def _loss_function(
         self,

@@ -129,11 +129,11 @@ class DataLeakageXGB(AttackEvaluator):
         return self._evaluate_leakage(
             XGBClassifier,
             {
-                "n_jobs": 1,
+                "n_jobs": -1,
                 "eval_metric": "logloss",
             },
             XGBRegressor,
-            {"n_jobs": 1},
+            {"n_jobs": -1},
             X_gt_train,
             X_syn,
         )

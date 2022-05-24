@@ -1,5 +1,5 @@
 # stdlib
-from typing import Callable, List, Optional, Tuple
+from typing import Any, Callable, List, Optional, Tuple
 
 # third party
 import numpy as np
@@ -10,8 +10,8 @@ from torch.utils.data import DataLoader, TensorDataset
 
 # synthcity absolute
 import synthcity.logger as log
-
-DEVICE = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+from synthcity.utils.constants import DEVICE
+from synthcity.utils.reproducibility import enable_reproducible_results
 
 
 def get_nonlin(name: str) -> nn.Module:
@@ -44,9 +44,11 @@ class LinearLayer(nn.Module):
         dropout: float = 0,
         batch_norm: bool = False,
         nonlin: Optional[str] = "relu",
+        device: Any = DEVICE,
     ) -> None:
         super(LinearLayer, self).__init__()
 
+        self.device = device
         layers = []
         if dropout > 0:
             layers.append(nn.Dropout(dropout))
@@ -59,11 +61,11 @@ class LinearLayer(nn.Module):
         if nonlin is not None:
             layers.append(get_nonlin(nonlin))
 
-        self.model = nn.Sequential(*layers).to(DEVICE)
+        self.model = nn.Sequential(*layers).to(self.device)
 
     @validate_arguments(config=dict(arbitrary_types_allowed=True))
     def forward(self, X: torch.Tensor) -> torch.Tensor:
-        return self.model(X.float()).to(DEVICE)
+        return self.model(X.float()).to(self.device)
 
 
 class ResidualLayer(LinearLayer):
@@ -75,6 +77,7 @@ class ResidualLayer(LinearLayer):
         dropout: float = 0,
         batch_norm: bool = False,
         nonlin: Optional[str] = "relu",
+        device: Any = DEVICE,
     ) -> None:
         super(ResidualLayer, self).__init__(
             n_units_in,
@@ -82,18 +85,24 @@ class ResidualLayer(LinearLayer):
             dropout=dropout,
             batch_norm=batch_norm,
             nonlin=nonlin,
+            device=device,
         )
+        self.device = device
 
     @validate_arguments(config=dict(arbitrary_types_allowed=True))
     def forward(self, X: torch.Tensor) -> torch.Tensor:
         out = self.model(X.float())
-        return torch.cat([out, X], dim=1).to(DEVICE)
+        return torch.cat([out, X], dim=1).to(self.device)
 
 
 class MultiActivationHead(nn.Module):
     """Final layer with multiple activations. Useful for tabular data."""
 
-    def __init__(self, activations: List[Tuple[nn.Module, int]]) -> None:
+    def __init__(
+        self,
+        activations: List[Tuple[nn.Module, int]],
+        device: Any = DEVICE,
+    ) -> None:
         super(MultiActivationHead, self).__init__()
         self.activations = []
         self.activation_lengths = []
@@ -187,16 +196,18 @@ class MLP(nn.Module):
         n_iter_min: int = 100,
         dropout: float = 0.1,
         clipping_value: int = 1,
-        batch_norm: bool = True,
+        batch_norm: bool = False,
         early_stopping: bool = True,
         residual: bool = False,
         loss: Optional[Callable] = None,
+        device: Any = DEVICE,
     ) -> None:
         super(MLP, self).__init__()
 
+        enable_reproducible_results(seed)
+        self.device = device
         self.task_type = task_type
         self.seed = seed
-        torch.manual_seed(seed)
 
         if residual:
             block = ResidualLayer
@@ -208,7 +219,13 @@ class MLP(nn.Module):
 
         if n_layers_hidden > 0:
             layers.append(
-                block(n_units_in, n_units_hidden, batch_norm=batch_norm, nonlin=nonlin)
+                block(
+                    n_units_in,
+                    n_units_hidden,
+                    batch_norm=batch_norm,
+                    nonlin=nonlin,
+                    device=device,
+                )
             )
             n_units_hidden += int(residual) * n_units_in
 
@@ -221,14 +238,15 @@ class MLP(nn.Module):
                         batch_norm=batch_norm,
                         nonlin=nonlin,
                         dropout=dropout,
+                        device=device,
                     )
                 )
                 n_units_hidden += int(residual) * n_units_hidden
 
             # add final layers
-            layers.append(nn.Linear(n_units_hidden, n_units_out))
+            layers.append(nn.Linear(n_units_hidden, n_units_out, device=device))
         else:
-            layers = [nn.Linear(n_units_in, n_units_out)]
+            layers = [nn.Linear(n_units_in, n_units_out, device=device)]
 
         if nonlin_out is not None:
             total_nonlin_len = 0
@@ -241,11 +259,13 @@ class MLP(nn.Module):
                 raise RuntimeError(
                     f"Shape mismatch for the output layer. Expected length {n_units_out}, but got {nonlin_out} with length {total_nonlin_len}"
                 )
-            layers.append(MultiActivationHead(activations))
+            layers.append(MultiActivationHead(activations, device=device))
         elif self.task_type == "classification":
-            layers.append(MultiActivationHead([(nn.Softmax(dim=-1), n_units_out)]))
+            layers.append(
+                MultiActivationHead([(nn.Softmax(dim=-1), n_units_out)], device=device)
+            )
 
-        self.model = nn.Sequential(*layers).to(DEVICE)
+        self.model = nn.Sequential(*layers).to(self.device)
 
         # optimizer
         self.lr = lr
@@ -273,8 +293,6 @@ class MLP(nn.Module):
                 self.loss = nn.CrossEntropyLoss()
             else:
                 self.loss = nn.MSELoss()
-
-        torch.manual_seed(seed)
 
     def fit(self, X: np.ndarray, y: np.ndarray) -> "MLP":
         Xt = self._check_tensor(X)
@@ -394,9 +412,9 @@ class MLP(nn.Module):
 
     def _check_tensor(self, X: torch.Tensor) -> torch.Tensor:
         if isinstance(X, torch.Tensor):
-            return X.to(DEVICE)
+            return X.to(self.device)
         else:
-            return torch.from_numpy(np.asarray(X)).to(DEVICE)
+            return torch.from_numpy(np.asarray(X)).to(self.device)
 
     def __len__(self) -> int:
         return len(self.model)

@@ -34,8 +34,8 @@ def test_plugin_hyperparams(test_plugin: Plugin) -> None:
     assert len(test_plugin.hyperparameter_space()) == 14
 
 
-@pytest.mark.parametrize("test_plugin", generate_fixtures(plugin_name, plugin))
-def test_plugin_fit(test_plugin: Plugin) -> None:
+def test_plugin_fit() -> None:
+    test_plugin = plugin(generator_n_layers_hidden=1, generator_n_units_hidden=10)
     X = pd.DataFrame(load_iris()["data"])
     test_plugin.fit(X)
 
@@ -50,6 +50,22 @@ def test_plugin_generate() -> None:
     assert test_plugin.schema_includes(X_gen)
 
     X_gen = test_plugin.generate(50)
+    assert len(X_gen) == 50
+    assert test_plugin.schema_includes(X_gen)
+
+
+def test_plugin_conditional() -> None:
+    test_plugin = plugin(
+        generator_n_layers_hidden=1, generator_n_units_hidden=10, n_units_conditional=1
+    )
+    X, y = load_iris(as_frame=True, return_X_y=True)
+    test_plugin.fit(X, cond=y)
+
+    X_gen = test_plugin.generate()
+    assert len(X_gen) == len(X)
+    assert test_plugin.schema_includes(X_gen)
+
+    X_gen = test_plugin.generate(50, cond=y.sample(50))
     assert len(X_gen) == 50
     assert test_plugin.schema_includes(X_gen)
 
@@ -91,6 +107,7 @@ def test_sample_hyperparams() -> None:
         assert plugin(**args) is not None
 
 
+@pytest.mark.slow
 def test_eval_performance() -> None:
     results = []
 

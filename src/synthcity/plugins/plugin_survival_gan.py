@@ -8,55 +8,19 @@ import pandas as pd
 from pydantic import validate_arguments
 
 # synthcity absolute
-from synthcity.plugins.core.distribution import (
-    CategoricalDistribution,
-    Distribution,
-    FloatDistribution,
-    IntegerDistribution,
-)
+import synthcity.logger as log
+import synthcity.plugins as plugins
+from synthcity.plugins._survival_pipeline import SurvivalPipeline
+from synthcity.plugins.core.distribution import Distribution
 from synthcity.plugins.core.plugin import Plugin
 from synthcity.plugins.core.schema import Schema
-from synthcity.plugins.models import TabularGAN
-from synthcity.plugins.models.time_to_event import select_uncensoring_model
-from synthcity.plugins.models.time_to_event.samplers import ImbalancedDatasetSampler
+from synthcity.plugins.models import BinEncoder
+from synthcity.utils.constants import DEVICE
+from synthcity.utils.samplers import ImbalancedDatasetSampler
 
 
 class SurvivalGANPlugin(Plugin):
-    """SurvivalGAN plugin.
-
-    Args:
-        generator_n_layers_hidden: int
-            Number of hidden layers in the generator
-        generator_n_units_hidden: int
-            Number of hidden units in each layer of the Generator
-        generator_nonlin: string, default 'tanh'
-            Nonlinearity to use in the generator. Can be 'elu', 'relu', 'selu' or 'leaky_relu'.
-        n_iter: int
-            Maximum number of iterations in the Generator.
-        generator_dropout: float
-            Dropout value. If 0, the dropout is not used.
-        discriminator_n_layers_hidden: int
-            Number of hidden layers in the discriminator
-        discriminator_n_units_hidden: int
-            Number of hidden units in each layer of the discriminator
-        discriminator_nonlin: string, default 'leaky_relu'
-            Nonlinearity to use in the discriminator. Can be 'elu', 'relu', 'selu' or 'leaky_relu'.
-        discriminator_n_iter: int
-            Maximum number of iterations in the discriminator.
-        discriminator_dropout: float
-            Dropout value for the discriminator. If 0, the dropout is not used.
-        lr: float
-            learning rate for optimizer. step_size equivalent in the JAX version.
-        weight_decay: float
-            l2 (ridge) penalty for the weights.
-        batch_size: int
-            Batch size
-        seed: int
-            Seed used
-        clipping_value: int, default 0
-            Gradients clipping value. Zero disables the feature
-        encoder_max_clusters: int
-            The max number of clusters to create for continuous columns when encoding
+    """Survival GAN plugin.
 
     Example:
         >>> from synthcity.plugins import Plugins
@@ -72,63 +36,50 @@ class SurvivalGANPlugin(Plugin):
         target_column: str = "event",
         time_to_event_column: str = "duration",
         time_horizons: Optional[List] = None,
-        n_iter: int = 1000,
-        generator_n_layers_hidden: int = 1,
-        generator_n_units_hidden: int = 150,
-        generator_nonlin: str = "tanh",
-        generator_dropout: float = 0,
-        discriminator_n_layers_hidden: int = 2,
-        discriminator_n_units_hidden: int = 100,
-        discriminator_nonlin: str = "leaky_relu",
-        discriminator_n_iter: int = 1,
-        discriminator_dropout: float = 0.1,
-        lr: float = 1e-3,
-        weight_decay: float = 1e-3,
-        batch_size: int = 100,
-        seed: int = 0,
-        clipping_value: int = 0,
-        lambda_gradient_penalty: float = 10,
-        encoder_max_clusters: int = 10,
-        encoder: Any = None,
-        seeds: List[str] = [
-            "weibull_aft",
-            "cox_ph",
-            "random_survival_forest",
-            "survival_xgboost",
-            "deephit",
-            "tenn",
-            "date",
-        ],
+        uncensoring_model: str = "survival_function_regression",
+        dataloader_sampling_strategy: str = "imbalanced_time_censoring",  # none, imbalanced_censoring, imbalanced_time_censoring
+        tte_strategy: str = "survival_function",
+        device: Any = DEVICE,
+        identifiability_penalty: bool = False,
+        use_conditional: bool = True,
         **kwargs: Any,
     ) -> None:
-        super().__init__(**kwargs)
+        super().__init__()
 
+        valid_sampling_strategies = [
+            "none",
+            "imbalanced_censoring",
+            "imbalanced_time_censoring",
+        ]
+        if dataloader_sampling_strategy not in valid_sampling_strategies:
+            raise ValueError(
+                f"Invalid sampling strategy {dataloader_sampling_strategy}. Supported values: {valid_sampling_strategies}"
+            )
         self.target_column = target_column
         self.time_to_event_column = time_to_event_column
         self.time_horizons = time_horizons
-        self.seeds = seeds
+        self.tte_strategy = tte_strategy
+        self.dataloader_sampling_strategy = dataloader_sampling_strategy
+        self.uncensoring_model = uncensoring_model
+        self.device = device
+        self.use_conditional = use_conditional
 
-        self.generator_n_layers_hidden = generator_n_layers_hidden
-        self.generator_n_units_hidden = generator_n_units_hidden
-        self.generator_nonlin = generator_nonlin
-        self.n_iter = n_iter
-        self.generator_dropout = generator_dropout
+        if identifiability_penalty:
+            self.generator_extra_penalties = ["identifiability_penalty"]
+        else:
+            self.generator_extra_penalties = []
 
-        self.discriminator_n_layers_hidden = discriminator_n_layers_hidden
-        self.discriminator_n_units_hidden = discriminator_n_units_hidden
-        self.discriminator_nonlin = discriminator_nonlin
-        self.discriminator_n_iter = discriminator_n_iter
-        self.discriminator_dropout = discriminator_dropout
+        self.kwargs = kwargs
 
-        self.lr = lr
-        self.weight_decay = weight_decay
-        self.batch_size = batch_size
-        self.seed = seed
-        self.clipping_value = clipping_value
-        self.lambda_gradient_penalty = lambda_gradient_penalty
-
-        self.encoder_max_clusters = encoder_max_clusters
-        self.encoder = encoder
+        log.info(
+            f"""
+            Training SurvivalGAN using
+                dataloader_sampling_strategy = {self.dataloader_sampling_strategy};
+                tte_strategy = {self.tte_strategy};
+                uncensoring_model={self.uncensoring_model}
+                device={self.device}
+            """
+        )
 
     @staticmethod
     def name() -> str:
@@ -140,102 +91,61 @@ class SurvivalGANPlugin(Plugin):
 
     @staticmethod
     def hyperparameter_space(**kwargs: Any) -> List[Distribution]:
-        return [
-            IntegerDistribution(name="generator_n_layers_hidden", low=1, high=4),
-            IntegerDistribution(
-                name="generator_n_units_hidden", low=50, high=150, step=50
-            ),
-            CategoricalDistribution(
-                name="generator_nonlin", choices=["relu", "leaky_relu", "tanh", "elu"]
-            ),
-            IntegerDistribution(name="n_iter", low=100, high=1000, step=100),
-            FloatDistribution(name="generator_dropout", low=0, high=0.2),
-            IntegerDistribution(name="discriminator_n_layers_hidden", low=1, high=4),
-            IntegerDistribution(
-                name="discriminator_n_units_hidden", low=50, high=150, step=50
-            ),
-            CategoricalDistribution(
-                name="discriminator_nonlin",
-                choices=["relu", "leaky_relu", "tanh", "elu"],
-            ),
-            IntegerDistribution(name="discriminator_n_iter", low=1, high=5),
-            FloatDistribution(name="discriminator_dropout", low=0, high=0.2),
-            CategoricalDistribution(name="lr", choices=[1e-3, 2e-4, 1e-4]),
-            CategoricalDistribution(name="weight_decay", choices=[1e-3, 1e-4]),
-            CategoricalDistribution(name="batch_size", choices=[100, 200, 500]),
-            IntegerDistribution(name="encoder_max_clusters", low=2, high=20),
-        ]
+        return plugins.Plugins().get_type("adsgan").hyperparameter_space()
 
     def _fit(self, X: pd.DataFrame, *args: Any, **kwargs: Any) -> "SurvivalGANPlugin":
-        if self.target_column not in X.columns:
-            raise ValueError(
-                f"Event column {self.target_column} not found in the dataframe"
-            )
+        sampler: Optional[ImbalancedDatasetSampler] = None
+        sampling_labels: Optional[list] = None
 
-        if self.time_to_event_column not in X.columns:
-            raise ValueError(
-                f"Time to event column {self.time_to_event_column} not found in the dataframe"
-            )
-
-        Xcov = X.drop(columns=[self.target_column, self.time_to_event_column])
-        T = X[self.time_to_event_column]
         E = X[self.target_column]
+        T = X[self.time_to_event_column]
+        if self.dataloader_sampling_strategy == "imbalanced_censoring":
+            log.info("Using imbalanced censoring sampling")
+            sampling_labels = list(E.values)
+        elif self.dataloader_sampling_strategy == "imbalanced_time_censoring":
+            log.info("Using imbalanced time and censoring sampling")
+            Tbins = BinEncoder().fit_transform(T.to_frame()).values.squeeze().tolist()
+            sampling_labels = list(zip(E, Tbins))
 
-        # Uncensoring
-        self.uncensoring_model = select_uncensoring_model(Xcov, T, E, seeds=self.seeds)
+        if sampling_labels is not None:
+            sampler = ImbalancedDatasetSampler(sampling_labels)
 
-        self.uncensoring_model.fit(Xcov, T, E)
-        T_uncensored = pd.Series(self.uncensoring_model.predict(Xcov), index=Xcov.index)
-        T_uncensored[E == 1] = T[E == 1]
-
-        df_uncensored = Xcov
-        df_uncensored[self.time_to_event_column] = T_uncensored
-
-        features = df_uncensored.shape[1]
-
-        # Synthetic data generator
-        self.model = TabularGAN(
-            df_uncensored,
-            n_units_latent=features,
-            batch_size=self.batch_size,
-            generator_n_layers_hidden=self.generator_n_layers_hidden,
-            generator_n_units_hidden=self.generator_n_units_hidden,
-            generator_nonlin=self.generator_nonlin,
-            generator_nonlin_out_discrete="softmax",
-            generator_nonlin_out_continuous="tanh",
-            generator_lr=self.lr,
-            generator_residual=True,
-            generator_n_iter=self.n_iter,
-            generator_batch_norm=False,
-            generator_dropout=self.generator_dropout,
-            generator_weight_decay=self.weight_decay,
-            discriminator_n_units_hidden=self.discriminator_n_units_hidden,
-            discriminator_n_layers_hidden=self.discriminator_n_layers_hidden,
-            discriminator_n_iter=self.discriminator_n_iter,
-            discriminator_nonlin=self.discriminator_nonlin,
-            discriminator_batch_norm=False,
-            discriminator_dropout=self.discriminator_dropout,
-            discriminator_lr=self.lr,
-            discriminator_weight_decay=self.weight_decay,
-            encoder=self.encoder,
-            clipping_value=self.clipping_value,
-            lambda_gradient_penalty=self.lambda_gradient_penalty,
-            encoder_max_clusters=self.encoder_max_clusters,
-            dataloader_sampler=ImbalancedDatasetSampler(E.values.tolist()),
+        if self.use_conditional:
+            self.conditional = BinEncoder().fit_transform(X)
+            n_units_conditional = self.conditional.shape[1]
+        else:
+            self.conditional = None
+            n_units_conditional = 0
+        self.model = SurvivalPipeline(
+            "adsgan",
+            strategy=self.tte_strategy,
+            target_column=self.target_column,
+            time_to_event_column=self.time_to_event_column,
+            time_horizons=self.time_horizons,
+            uncensoring_model=self.uncensoring_model,
+            dataloader_sampler=sampler,
+            generator_extra_penalties=self.generator_extra_penalties,
+            n_units_conditional=n_units_conditional,
+            device=self.device,
+            **self.kwargs,
         )
-        self.model.fit(df_uncensored)
+        self.model.fit(X, cond=self.conditional, *args, **kwargs)
 
         return self
 
     def _generate(self, count: int, syn_schema: Schema, **kwargs: Any) -> pd.DataFrame:
-        def _generate(count: int) -> pd.DataFrame:
-            generated = self.model.generate(count)
-            generated[
-                self.target_column
-            ] = 1  # everybody is uncensored in the synthetic data
-            return generated
+        cond = (
+            self.conditional.sample(count, replace=True)
+            if self.use_conditional
+            else None
+        )
 
-        return self._safe_generate(_generate, count, syn_schema)
+        return self.model._generate(
+            count,
+            syn_schema=syn_schema,
+            cond=cond,
+            **kwargs,
+        )
 
 
 plugin = SurvivalGANPlugin

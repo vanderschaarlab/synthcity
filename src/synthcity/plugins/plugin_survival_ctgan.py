@@ -9,7 +9,7 @@ from pydantic import validate_arguments
 
 # synthcity absolute
 import synthcity.plugins as plugins
-from synthcity.plugins._survival_uncensoring_pipeline import SurvivalUncensoringPipeline
+from synthcity.plugins._survival_pipeline import SurvivalPipeline
 from synthcity.plugins.core.distribution import Distribution
 from synthcity.plugins.core.plugin import Plugin
 from synthcity.plugins.core.schema import Schema
@@ -29,18 +29,11 @@ class SurvivalCTGANPlugin(Plugin):
     @validate_arguments(config=dict(arbitrary_types_allowed=True))
     def __init__(
         self,
+        strategy: str = "survival_function",
         target_column: str = "event",
         time_to_event_column: str = "duration",
         time_horizons: Optional[List] = None,
-        seeds: List[str] = [
-            "weibull_aft",
-            "cox_ph",
-            "random_survival_forest",
-            "survival_xgboost",
-            "deephit",
-            "tenn",
-            "date",
-        ],
+        uncensoring_model: str = "survival_function_regression",
         **kwargs: Any,
     ) -> None:
         super().__init__()
@@ -48,7 +41,8 @@ class SurvivalCTGANPlugin(Plugin):
         self.target_column = target_column
         self.time_to_event_column = time_to_event_column
         self.time_horizons = time_horizons
-        self.seeds = seeds
+        self.uncensoring_model = uncensoring_model
+        self.strategy = strategy
         self.kwargs = kwargs
 
     @staticmethod
@@ -64,12 +58,13 @@ class SurvivalCTGANPlugin(Plugin):
         return plugins.Plugins().get_type("ctgan").hyperparameter_space()
 
     def _fit(self, X: pd.DataFrame, *args: Any, **kwargs: Any) -> "SurvivalCTGANPlugin":
-        self.model = SurvivalUncensoringPipeline(
+        self.model = SurvivalPipeline(
             "ctgan",
+            strategy=self.strategy,
             target_column=self.target_column,
             time_to_event_column=self.time_to_event_column,
             time_horizons=self.time_horizons,
-            seeds=self.seeds,
+            uncensoring_model=self.uncensoring_model,
             **self.kwargs,
         )
         self.model.fit(X, *args, **kwargs)

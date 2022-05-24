@@ -1,4 +1,5 @@
 # third party
+import numpy as np
 import pytest
 from sklearn.datasets import load_iris
 
@@ -99,3 +100,21 @@ def test_gan_classification() -> None:
 
     assert (X.columns == generated.columns).all()
     assert generated.shape == (10, X.shape[1])
+
+
+def test_gan_conditional() -> None:
+    X, y = load_iris(return_X_y=True, as_frame=True)
+
+    model = TabularGAN(
+        X,
+        n_units_latent=50,
+        n_units_conditional=1,
+        generator_n_iter=10,
+    )
+    model.fit(X, cond=y)
+
+    generated = model.generate(10)
+    assert generated.shape == (10, X.shape[1])
+
+    generated = model.generate(5, np.ones(5))
+    assert generated.shape == (5, X.shape[1])

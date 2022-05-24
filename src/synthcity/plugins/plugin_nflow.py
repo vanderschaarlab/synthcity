@@ -72,11 +72,11 @@ class NormalizingFlowsPlugin(Plugin):
     def __init__(
         self,
         n_iter: int = 500,
-        n_layers_hidden: int = 2,
+        n_layers_hidden: int = 1,
         n_units_hidden: int = 100,
         batch_size: int = 100,
-        num_transform_blocks: int = 2,
-        dropout: float = 0.25,
+        num_transform_blocks: int = 1,
+        dropout: float = 0.1,
         batch_norm: bool = False,
         num_bins: int = 8,
         tail_bound: float = 3,
@@ -84,7 +84,7 @@ class NormalizingFlowsPlugin(Plugin):
         apply_unconditional_transform: bool = True,
         base_distribution: str = "standard_normal",  # "standard_normal"
         linear_transform_type: str = "permutation",  # "lu", "permutation", "svd"
-        base_transform_type: str = "rq-autoregressive",  # "affine-coupling", "quadratic-coupling", "rq-coupling", "affine-autoregressive", "quadratic-autoregressive", "rq-autoregressive"
+        base_transform_type: str = "affine-coupling",  # "affine-coupling", "quadratic-coupling", "rq-coupling", "affine-autoregressive", "quadratic-autoregressive", "rq-autoregressive"
         encoder_max_clusters: int = 5,
         tabular: bool = True,
         **kwargs: Any,
