@@ -145,7 +145,7 @@ The following table contains the available evaluation metrics:
 |**inverse_cdf_distance**|The total distance between continuous features, |0: The distributions are the same. <br/>1: The distributions are totally different.|
 |**avg_jensenshannon_distance**|The Jensen-Shannon distance (metric) between two probability arrays. This is the square root of the Jensen-Shannon divergence. |0: The distributions are the same. <br/>1: The distributions are totally different.|
 |**feature_correlation**| The correlation/strength-of-association of features in data-set with both categorical and continuous features using: * Pearson's R for continuous-continuous cases * Cramer's V or Theil's U for categorical-categorical cases |0: The distributions are the same. <br/>1: The distributions are totally different.|
-|**asserstein_distance**| Wasserstein Distance is a measure of the distance between two probability distributions. |0: The distributions are the same.|
+|**wasserstein_distance**| Wasserstein Distance is a measure of the distance between two probability distributions. |0: The distributions are the same.|
 
 
 
@@ -172,8 +172,6 @@ _Quasi-identifiers_ : pieces of information that are not of themselves unique id
 |**delta_presence**|The maximum re-identification risk for the real dataset from the synthetic dataset.|0 for no risk.|
 |**sensitive_data_reidentification_xgb**|Sensitive data prediction from the quasi-identifiers using an XGBoost.|0 for no risk.|
 |**sensitive_data_reidentification_mlp**|Sensitive data prediction from the quasi-identifiers using a Neural Net.|0 for no risk.|
-|**membership_inference_attack**|The probability of a black-box if a subject from the real subject was used for training the generative model.|0 for no risk.|
-
 
 ## :hammer: Tests
 
