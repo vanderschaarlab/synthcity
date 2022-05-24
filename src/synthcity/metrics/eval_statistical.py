@@ -14,6 +14,7 @@ from scipy.special import kl_div
 from scipy.stats import chisquare, ks_2samp
 from sklearn import metrics
 from sklearn.neighbors import NearestNeighbors
+from sklearn.preprocessing import MinMaxScaler
 
 # synthcity absolute
 from synthcity.metrics._utils import get_frequency
@@ -21,7 +22,40 @@ from synthcity.metrics.core import MetricEvaluator
 from synthcity.plugins.models.survival_analysis.metrics import nonparametric_distance
 
 
-class InverseKLDivergence(MetricEvaluator):
+class PerformanceEvaluator(MetricEvaluator):
+    def __init__(self, **kwargs: Any) -> None:
+        super().__init__(**kwargs)
+
+    @staticmethod
+    def type() -> str:
+        return "stats"
+
+    def _normalize_covariates(
+        self, X_gt_train: pd.DataFrame, X_gt_test: pd.DataFrame, X_syn: pd.DataFrame
+    ) -> Tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame]:
+        X_gt_train_norm = X_gt_train.copy()
+        X_gt_test_norm = X_gt_test.copy()
+        X_syn_norm = X_syn.copy()
+        if self._task_type != "survival_analysis":
+            X_gt_train_norm = X_gt_train_norm.drop(
+                columns=[self._target_column, self._time_to_event_column]
+            )
+            X_gt_test_norm = X_gt_test_norm.drop(
+                columns=[self._target_column, self._time_to_event_column]
+            )
+            X_syn = X_syn.drop(
+                columns=[self._target_column, self._time_to_event_column]
+            )
+
+        scaler = MinMaxScaler().fit(X_gt_train_norm)
+        return (
+            pd.DataFrame(scaler.transform(X_gt_train_norm), columns=X_gt_train.columns),
+            pd.DataFrame(scaler.transform(X_gt_test_norm), columns=X_gt_train.columns),
+            pd.DataFrame(scaler.transform(X_syn_norm), columns=X_syn.columns),
+        )
+
+
+class InverseKLDivergence(PerformanceEvaluator):
     """Returns the average inverse of the Kullback–Leibler Divergence metric.
 
     Score:
@@ -31,10 +65,6 @@ class InverseKLDivergence(MetricEvaluator):
 
     def __init__(self, **kwargs: Any) -> None:
         super().__init__(**kwargs)
-
-    @staticmethod
-    def type() -> str:
-        return "stats"
 
     @staticmethod
     def name() -> str:
@@ -48,6 +78,9 @@ class InverseKLDivergence(MetricEvaluator):
     def evaluate(
         self, X_gt_train: pd.DataFrame, X_gt_test: pd.DataFrame, X_syn: pd.DataFrame
     ) -> Dict:
+        X_gt_train, X_gt_test, X_syn = self._normalize_covariates(
+            X_gt_train, X_gt_test, X_syn
+        )
         freqs = get_frequency(
             X_gt_train, X_syn, n_histogram_bins=self._n_histogram_bins
         )
@@ -59,7 +92,7 @@ class InverseKLDivergence(MetricEvaluator):
         return {"marginal": float(self.reduction()(res))}
 
 
-class KolmogorovSmirnovTest(MetricEvaluator):
+class KolmogorovSmirnovTest(PerformanceEvaluator):
     """Performs the Kolmogorov-Smirnov test for goodness of fit.
 
     Score:
@@ -69,10 +102,6 @@ class KolmogorovSmirnovTest(MetricEvaluator):
 
     def __init__(self, **kwargs: Any) -> None:
         super().__init__(**kwargs)
-
-    @staticmethod
-    def type() -> str:
-        return "stats"
 
     @staticmethod
     def name() -> str:
@@ -86,6 +115,9 @@ class KolmogorovSmirnovTest(MetricEvaluator):
     def evaluate(
         self, X_gt_train: pd.DataFrame, X_gt_test: pd.DataFrame, X_syn: pd.DataFrame
     ) -> Dict:
+        X_gt_train, X_gt_test, X_syn = self._normalize_covariates(
+            X_gt_train, X_gt_test, X_syn
+        )
         res = []
         for col in X_gt_train.columns:
             statistic, _ = ks_2samp(X_gt_train[col], X_syn[col])
@@ -94,7 +126,7 @@ class KolmogorovSmirnovTest(MetricEvaluator):
         return {"marginal": float(self.reduction()(res))}
 
 
-class ChiSquaredTest(MetricEvaluator):
+class ChiSquaredTest(PerformanceEvaluator):
     """Performs the one-way chi-square test.
 
     Returns:
@@ -109,10 +141,6 @@ class ChiSquaredTest(MetricEvaluator):
         super().__init__(**kwargs)
 
     @staticmethod
-    def type() -> str:
-        return "stats"
-
-    @staticmethod
     def name() -> str:
         return "chi_squared_test"
 
@@ -124,6 +152,9 @@ class ChiSquaredTest(MetricEvaluator):
     def evaluate(
         self, X_gt_train: pd.DataFrame, X_gt_test: pd.DataFrame, X_syn: pd.DataFrame
     ) -> Dict:
+        X_gt_train, X_gt_test, X_syn = self._normalize_covariates(
+            X_gt_train, X_gt_test, X_syn
+        )
         res = []
         freqs = get_frequency(
             X_gt_train, X_syn, n_histogram_bins=self._n_histogram_bins
@@ -141,7 +172,7 @@ class ChiSquaredTest(MetricEvaluator):
         return {"marginal": float(self.reduction()(res))}
 
 
-class MaximumMeanDiscrepancy(MetricEvaluator):
+class MaximumMeanDiscrepancy(PerformanceEvaluator):
     """Empirical maximum mean discrepancy. The lower the result the more evidence that distributions are the same.
 
     Args:
@@ -159,10 +190,6 @@ class MaximumMeanDiscrepancy(MetricEvaluator):
         self.kernel = kernel
 
     @staticmethod
-    def type() -> str:
-        return "stats"
-
-    @staticmethod
     def name() -> str:
         return "max_mean_discrepancy"
 
@@ -177,6 +204,9 @@ class MaximumMeanDiscrepancy(MetricEvaluator):
         X_gt_test: pd.DataFrame,
         X_syn: pd.DataFrame,
     ) -> Dict:
+        X_gt_train, X_gt_test, X_syn = self._normalize_covariates(
+            X_gt_train, X_gt_test, X_syn
+        )
         if self.kernel == "linear":
             """
             MMD using linear kernel (i.e., k(x,y) = <x,y>)
@@ -215,7 +245,7 @@ class MaximumMeanDiscrepancy(MetricEvaluator):
         return {"joint": float(score)}
 
 
-class InverseCDFDistance(MetricEvaluator):
+class InverseCDFDistance(PerformanceEvaluator):
     """Evaluate the distance between continuous features."""
 
     @validate_arguments(config=dict(arbitrary_types_allowed=True))
@@ -223,10 +253,6 @@ class InverseCDFDistance(MetricEvaluator):
         super().__init__(**kwargs)
 
         self.p = p
-
-    @staticmethod
-    def type() -> str:
-        return "stats"
 
     @staticmethod
     def name() -> str:
@@ -262,7 +288,7 @@ class InverseCDFDistance(MetricEvaluator):
         return {"marginal": float(self.reduction()(distances))}
 
 
-class JensenShannonDistance(MetricEvaluator):
+class JensenShannonDistance(PerformanceEvaluator):
     """Evaluate the average Jensen-Shannon distance (metric) between two probability arrays."""
 
     @validate_arguments(config=dict(arbitrary_types_allowed=True))
@@ -270,10 +296,6 @@ class JensenShannonDistance(MetricEvaluator):
         super().__init__(**kwargs)
 
         self.normalize = normalize
-
-    @staticmethod
-    def type() -> str:
-        return "stats"
 
     @staticmethod
     def name() -> str:
@@ -318,12 +340,15 @@ class JensenShannonDistance(MetricEvaluator):
         X_syn: pd.DataFrame,
         normalizdde: bool = True,
     ) -> Dict:
+        X_gt_train, X_gt_test, X_syn = self._normalize_covariates(
+            X_gt_train, X_gt_test, X_syn
+        )
         stats_, _, _ = self._evaluate_stats(X_gt_train, X_syn)
 
         return {"marginal": sum(stats_.values()) / len(stats_.keys())}
 
 
-class FeatureCorrelation(MetricEvaluator):
+class FeatureCorrelation(PerformanceEvaluator):
     """Evaluate the correlation/strength-of-association of features in data-set with both categorical and continuous features using: * Pearson's R for continuous-continuous cases ** Cramer's V or Theil's U for categorical-categorical cases."""
 
     def __init__(
@@ -333,10 +358,6 @@ class FeatureCorrelation(MetricEvaluator):
 
         self.nom_nom_assoc = nom_nom_assoc
         self.nominal_columns = nominal_columns
-
-    @staticmethod
-    def type() -> str:
-        return "stats"
 
     @staticmethod
     def name() -> str:
@@ -376,12 +397,15 @@ class FeatureCorrelation(MetricEvaluator):
         X_gt_test: pd.DataFrame,
         X_syn: pd.DataFrame,
     ) -> Dict:
+        X_gt_train, X_gt_test, X_syn = self._normalize_covariates(
+            X_gt_train, X_gt_test, X_syn
+        )
         stats_gt, stats_syn = self._evaluate_stats(X_gt_train, X_syn)
 
         return {"joint": np.linalg.norm(stats_gt - stats_syn, "fro")}
 
 
-class WassersteinDistance(MetricEvaluator):
+class WassersteinDistance(PerformanceEvaluator):
     """Compare Wasserstein distance between original data and synthetic data.
 
     Args:
@@ -394,10 +418,6 @@ class WassersteinDistance(MetricEvaluator):
 
     def __init__(self, **kwargs: Any) -> None:
         super().__init__(**kwargs)
-
-    @staticmethod
-    def type() -> str:
-        return "stats"
 
     @staticmethod
     def name() -> str:
@@ -414,6 +434,7 @@ class WassersteinDistance(MetricEvaluator):
         X_test: pd.DataFrame,
         X_syn: pd.DataFrame,
     ) -> Dict:
+        X_train, X_test, X_syn = self._normalize_covariates(X_train, X_test, X_syn)
         X_ten = torch.from_numpy(X_train.values)
         Xsyn_ten = torch.from_numpy(X_syn.values.astype(float))
         OT_solver = SamplesLoss(loss="sinkhorn")
@@ -421,7 +442,7 @@ class WassersteinDistance(MetricEvaluator):
         return {"joint": OT_solver(X_ten, Xsyn_ten).cpu().numpy()}
 
 
-class PRDCScore(MetricEvaluator):
+class PRDCScore(PerformanceEvaluator):
     """
     Computes precision, recall, density, and coverage given two manifolds.
 
@@ -433,10 +454,6 @@ class PRDCScore(MetricEvaluator):
         super().__init__(**kwargs)
 
         self.nearest_k = nearest_k
-
-    @staticmethod
-    def type() -> str:
-        return "stats"
 
     @staticmethod
     def name() -> str:
@@ -453,6 +470,7 @@ class PRDCScore(MetricEvaluator):
         X_test: pd.DataFrame,
         X_syn: pd.DataFrame,
     ) -> Dict:
+        X_train, X_test, X_syn = self._normalize_covariates(X_train, X_test, X_syn)
         return self._compute_prdc(np.asarray(X_train), np.asarray(X_syn))
 
     def _compute_pairwise_distance(
@@ -467,6 +485,7 @@ class PRDCScore(MetricEvaluator):
         """
         if data_y is None:
             data_y = data_x
+
         dists = metrics.pairwise_distances(data_x, data_y, metric="euclidean")
         return dists
 
@@ -553,13 +572,9 @@ class PRDCScore(MetricEvaluator):
         )
 
 
-class AlphaPrecision(MetricEvaluator):
+class AlphaPrecision(PerformanceEvaluator):
     def __init__(self, **kwargs: Any) -> None:
         super().__init__(**kwargs)
-
-    @staticmethod
-    def type() -> str:
-        return "stats"
 
     @staticmethod
     def name() -> str:
@@ -661,6 +676,9 @@ class AlphaPrecision(MetricEvaluator):
         X_test_df: pd.DataFrame,
         X_syn_df: pd.DataFrame,
     ) -> Dict:
+        X_train_df, X_test_df, X_syn_df = self._normalize_covariates(
+            X_train_df, X_test_df, X_syn_df
+        )
 
         (
             alphas,
@@ -678,13 +696,9 @@ class AlphaPrecision(MetricEvaluator):
         }
 
 
-class SurvivalKMDistance(MetricEvaluator):
+class SurvivalKMDistance(PerformanceEvaluator):
     def __init__(self, **kwargs: Any) -> None:
         super().__init__(**kwargs)
-
-    @staticmethod
-    def type() -> str:
-        return "stats"
 
     @staticmethod
     def name() -> str:
