@@ -19,7 +19,9 @@ from sklearn.preprocessing import MinMaxScaler
 # synthcity absolute
 from synthcity.metrics._utils import get_frequency
 from synthcity.metrics.core import MetricEvaluator
-from synthcity.plugins.models.survival_analysis.metrics import nonparametric_distance
+from synthcity.plugins.core.models.survival_analysis.metrics import (
+    nonparametric_distance,
+)
 
 
 class PerformanceEvaluator(MetricEvaluator):

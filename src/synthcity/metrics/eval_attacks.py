@@ -11,7 +11,7 @@ from xgboost import XGBClassifier, XGBRegressor
 
 # synthcity absolute
 from synthcity.metrics.core import MetricEvaluator
-from synthcity.plugins.models.mlp import MLP
+from synthcity.plugins.core.models.mlp import MLP
 
 
 class AttackEvaluator(MetricEvaluator):

@@ -13,7 +13,7 @@ from xgboost import XGBClassifier
 
 # synthcity absolute
 from synthcity.metrics.core import MetricEvaluator
-from synthcity.plugins.models.mlp import MLP
+from synthcity.plugins.core.models.mlp import MLP
 
 
 class DetectionEvaluator(MetricEvaluator):

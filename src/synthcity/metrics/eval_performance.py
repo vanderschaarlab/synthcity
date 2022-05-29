@@ -16,8 +16,8 @@ from xgboost import XGBClassifier, XGBRegressor
 import synthcity.logger as log
 from synthcity.metrics._utils import evaluate_auc
 from synthcity.metrics.core import MetricEvaluator
-from synthcity.plugins.models.mlp import MLP
-from synthcity.plugins.models.survival_analysis import (
+from synthcity.plugins.core.models.mlp import MLP
+from synthcity.plugins.core.models.survival_analysis import (
     CoxPHSurvivalAnalysis,
     DeephitSurvivalAnalysis,
     XGBSurvivalAnalysis,
