@@ -11,12 +11,12 @@ from pydantic import validate_arguments
 import synthcity.logger as log
 import synthcity.plugins as plugins
 from synthcity.plugins.core.distribution import Distribution
-from synthcity.plugins.core.plugin import Plugin
-from synthcity.plugins.core.schema import Schema
-from synthcity.plugins.models.time_to_event import TimeToEventPlugin
-from synthcity.plugins.models.time_to_event import (
+from synthcity.plugins.core.models.time_to_event import TimeToEventPlugin
+from synthcity.plugins.core.models.time_to_event import (
     get_model_template as get_tte_model_template,
 )
+from synthcity.plugins.core.plugin import Plugin
+from synthcity.plugins.core.schema import Schema
 from synthcity.utils.constants import DEVICE
 
 

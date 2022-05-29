@@ -10,8 +10,11 @@ from sklearn.model_selection import StratifiedKFold
 
 # synthcity absolute
 import synthcity.logger as log
-from synthcity.plugins.models.time_to_event.loader import get_model_template
-from synthcity.plugins.models.time_to_event.metrics import c_index, expected_time_error
+from synthcity.plugins.core.models.time_to_event.loader import get_model_template
+from synthcity.plugins.core.models.time_to_event.metrics import (
+    c_index,
+    expected_time_error,
+)
 from synthcity.utils.optimizer import (
     EarlyStoppingExceeded,
     ParamRepeatPruner,

@@ -53,3 +53,8 @@ MANIFEST
 .conda*/
 .ipynb_checkpoints
 weight_checkpoint*
+
+workspace
+output
+diagrams
+data

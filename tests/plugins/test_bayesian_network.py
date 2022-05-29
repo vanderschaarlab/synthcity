@@ -54,6 +54,10 @@ def test_plugin_generate(test_plugin: Plugin) -> None:
     test_plugin.fit(X)
 
     X_gen = test_plugin.generate()
+    for col in X.columns:
+        for e in X_gen[col].unique():
+            assert e in X[col].unique()
+
     assert len(X_gen) == len(X)
     assert test_plugin.schema_includes(X_gen)
 

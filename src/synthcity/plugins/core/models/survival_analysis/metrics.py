@@ -9,7 +9,7 @@ from scipy.integrate import trapz
 from xgbse.non_parametric import _get_conditional_probs_from_survival
 
 # synthcity absolute
-from synthcity.plugins.models.survival_analysis.third_party.metrics import (
+from synthcity.plugins.core.models.survival_analysis.third_party.metrics import (
     brier_score,
     concordance_index_ipcw,
 )

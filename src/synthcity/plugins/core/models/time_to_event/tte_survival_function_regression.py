@@ -9,7 +9,7 @@ from xgboost import XGBRegressor
 
 # synthcity absolute
 from synthcity.plugins.core.distribution import CategoricalDistribution, Distribution
-from synthcity.plugins.models.survival_analysis import get_model_template
+from synthcity.plugins.core.models.survival_analysis import get_model_template
 from synthcity.utils.constants import DEVICE
 
 # synthcity relative

@@ -22,8 +22,11 @@ from synthcity.plugins.core.distribution import (
     FloatDistribution,
     IntegerDistribution,
 )
-from synthcity.plugins.models.mlp import MLP
-from synthcity.plugins.models.time_to_event.metrics import c_index, expected_time_error
+from synthcity.plugins.core.models.mlp import MLP
+from synthcity.plugins.core.models.time_to_event.metrics import (
+    c_index,
+    expected_time_error,
+)
 from synthcity.utils.constants import DEVICE
 from synthcity.utils.reproducibility import enable_reproducible_results
 from synthcity.utils.samplers import ImbalancedDatasetSampler

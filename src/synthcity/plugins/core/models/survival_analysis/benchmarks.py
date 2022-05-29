@@ -9,10 +9,10 @@ from sklearn.metrics import roc_auc_score
 from sklearn.model_selection import StratifiedKFold, train_test_split
 
 # synthcity absolute
-from synthcity.plugins.models.survival_analysis.loader import (
+from synthcity.plugins.core.models.survival_analysis.loader import (
     generate_dataset_for_horizon,
 )
-from synthcity.plugins.models.survival_analysis.metrics import (
+from synthcity.plugins.core.models.survival_analysis.metrics import (
     evaluate_brier_score,
     evaluate_c_index,
     generate_score,
