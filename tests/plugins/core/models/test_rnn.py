@@ -1,4 +1,5 @@
 # third party
+import numpy as np
 import pytest
 
 # synthcity absolute
@@ -7,8 +8,10 @@ from synthcity.utils.datasets.time_series.sine import SineDataloader
 
 
 @pytest.mark.parametrize("mode", ["LSTM", "RNN", "GRU"])
-def test_rnn_sanity(mode: str) -> None:
+@pytest.mark.parametrize("task_type", ["classification", "regression"])
+def test_rnn_sanity(mode: str, task_type: str) -> None:
     model = RNN(
+        task_type=task_type,
         n_units_in=3,
         n_units_out=2,
         n_iter=11,
@@ -32,14 +35,15 @@ def test_rnn_sanity(mode: str) -> None:
 
 
 @pytest.mark.parametrize("mode", ["LSTM", "RNN", "GRU"])
-def test_rnn_fit(mode: str) -> None:
-    data = SineDataloader(no=10, seq_len=5).load()
-    X = data[:, :-1, :]
-    y = data[:, -1, :]
+def test_rnn_regression_fit_predict(mode: str) -> None:
+    data = SineDataloader(no=10, seq_len=8).load()
+    X = data[:, :-2, :]
+    y = data[:, -2:, :]
 
     outlen = len(y[0, :].reshape(-1))
 
     model = RNN(
+        task_type="regression",
         n_units_in=X.shape[-1],
         n_units_out=outlen,
         window_size=2,
@@ -48,3 +52,35 @@ def test_rnn_fit(mode: str) -> None:
     )
 
     model.fit(X, y)
+
+    y_pred = model.predict(X)
+
+    assert y_pred.shape == y.shape
+
+    assert model.score(X, y) < 1
+
+
+@pytest.mark.parametrize("mode", ["LSTM", "RNN", "GRU"])
+def test_rnn_classification_fit_predict(mode: str) -> None:
+    real_data = SineDataloader(no=10, seq_len=8).load()
+    fake_data = np.random.randn(*real_data.shape)
+
+    y = np.asarray([1] * len(real_data) + [0] * len(fake_data))
+
+    model = RNN(
+        task_type="classification",
+        n_units_in=real_data.shape[-1],
+        n_units_out=2,
+        window_size=2,
+        n_iter=100,
+        mode=mode,
+    )
+
+    data = np.concatenate([real_data, fake_data])
+    model.fit(data, y)
+
+    y_pred = model.predict(data)
+
+    assert y_pred.shape == y.shape
+
+    assert model.score(data, y) <= 1
