@@ -39,7 +39,7 @@ class WindowLinearLayer(nn.Module):
         return self.model(batch).to(self.device)
 
 
-class RNN(nn.Module):
+class TimeSeriesRNN(nn.Module):
     @validate_arguments(config=dict(arbitrary_types_allowed=True))
     def __init__(
         self,
@@ -60,7 +60,7 @@ class RNN(nn.Module):
         loss: Optional[Callable] = None,
         seed: int = 0,
     ) -> None:
-        super(RNN, self).__init__()
+        super(TimeSeriesRNN, self).__init__()
 
         enable_reproducible_results(seed)
         assert task_type in ["classification", "regression"]

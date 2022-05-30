@@ -3,14 +3,14 @@ import numpy as np
 import pytest
 
 # synthcity absolute
-from synthcity.plugins.core.models.rnn import RNN
+from synthcity.plugins.core.models.ts_rnn import TimeSeriesRNN
 from synthcity.utils.datasets.time_series.sine import SineDataloader
 
 
 @pytest.mark.parametrize("mode", ["LSTM", "RNN", "GRU"])
 @pytest.mark.parametrize("task_type", ["classification", "regression"])
 def test_rnn_sanity(mode: str, task_type: str) -> None:
-    model = RNN(
+    model = TimeSeriesRNN(
         task_type=task_type,
         n_units_in=3,
         n_units_out=2,
@@ -42,7 +42,7 @@ def test_rnn_regression_fit_predict(mode: str) -> None:
 
     outlen = len(y[0, :].reshape(-1))
 
-    model = RNN(
+    model = TimeSeriesRNN(
         task_type="regression",
         n_units_in=X.shape[-1],
         n_units_out=outlen,
@@ -67,7 +67,7 @@ def test_rnn_classification_fit_predict(mode: str) -> None:
 
     y = np.asarray([1] * len(real_data) + [0] * len(fake_data))
 
-    model = RNN(
+    model = TimeSeriesRNN(
         task_type="classification",
         n_units_in=real_data.shape[-1],
         n_units_out=2,
