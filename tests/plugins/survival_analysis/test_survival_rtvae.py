@@ -1,12 +1,12 @@
 # third party
 import pytest
-from helpers import generate_fixtures
 from lifelines.datasets import load_rossi
+from surv_helpers import generate_fixtures
 
 # synthcity absolute
 from synthcity.plugins import Plugin
 from synthcity.plugins.core.constraints import Constraints
-from synthcity.plugins.plugin_survival_rtvae import plugin
+from synthcity.plugins.survival_analysis.plugin_survival_rtvae import plugin
 
 plugin_name = "survival_rtvae"
 plugins_args = {

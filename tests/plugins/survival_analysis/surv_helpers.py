@@ -2,7 +2,8 @@
 from typing import Dict, List, Type
 
 # synthcity absolute
-from synthcity.plugins import Plugin, Plugins
+from synthcity.plugins import Plugin
+from synthcity.plugins.survival_analysis import SurvivalAnalysisPlugins as Plugins
 from synthcity.utils.serialization import load, save
 
 

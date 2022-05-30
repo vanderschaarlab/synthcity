@@ -9,10 +9,10 @@ from pydantic import validate_arguments
 
 # synthcity absolute
 import synthcity.plugins as plugins
-from synthcity.plugins._survival_pipeline import SurvivalPipeline
 from synthcity.plugins.core.distribution import Distribution
 from synthcity.plugins.core.plugin import Plugin
 from synthcity.plugins.core.schema import Schema
+from synthcity.plugins.survival_analysis._survival_pipeline import SurvivalPipeline
 
 
 class SurvivalBayesianNetworkPlugin(Plugin):

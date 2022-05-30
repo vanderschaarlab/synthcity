@@ -1,3 +1,6 @@
+# stdlib
+from pathlib import Path
+
 # third party
 import pytest
 from lifelines.datasets import load_rossi
@@ -81,6 +84,7 @@ def test_benchmark_survival_analysis() -> None:
         Benchmarks.evaluate(
             [
                 "uniform_sampler",
+                "survival_bayesian_network",
             ],
             df,
             task_type="survival_analysis",
@@ -131,7 +135,7 @@ def test_benchmark_survival_analysis() -> None:
     score = Benchmarks.evaluate(
         [
             "uniform_sampler",
-            "marginal_distributions",
+            "survival_bayesian_network",
         ],
         df,
         task_type="survival_analysis",
@@ -145,3 +149,33 @@ def test_benchmark_survival_analysis() -> None:
         },
     )
     print(score)
+
+
+def test_benchmark_workspace_cache() -> None:
+    df = load_rossi()
+
+    workspace = Path("workspace_test")
+    try:
+        workspace.unlink()
+    except BaseException:
+        pass
+
+    Benchmarks.evaluate(
+        [
+            "uniform_sampler",
+            "survival_bayesian_network",
+        ],
+        df,
+        task_type="survival_analysis",
+        target_column="arrest",
+        time_to_event_column="week",
+        time_horizons=[30],
+        metrics={
+            "performance": [
+                "linear_model",
+            ]
+        },
+        workspace=workspace,
+    )
+
+    assert workspace.exists()

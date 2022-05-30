@@ -55,6 +55,7 @@ MANIFEST
 weight_checkpoint*
 
 workspace
+workspace_test
 output
 diagrams
 data

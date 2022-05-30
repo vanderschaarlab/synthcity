@@ -2,6 +2,9 @@
 import glob
 from os.path import basename, dirname, isfile, join
 
+# third party
+from pydantic import validate_arguments
+
 # synthcity absolute
 from synthcity.plugins.core.plugin import Plugin, PluginLoader  # noqa: F401,E402
 
@@ -13,8 +16,13 @@ for cat in categories:
 
 
 class Plugins(PluginLoader):
-    def __init__(self, category: str = "generic") -> None:
-        super().__init__(plugins[category], Plugin)
+    @validate_arguments
+    def __init__(self, categories: list = ["generic"]) -> None:
+        plugins_to_use = []
+        for cat in categories:
+            plugins_to_use.extend(plugins[cat])
+
+        super().__init__(plugins_to_use, Plugin)
 
 
 __all__ = [basename(f)[:-3] for f in plugins[cat] for cat in plugins if isfile(f)] + [

@@ -81,6 +81,10 @@ class Benchmarks:
         experiment_name = dataframe_hash(X)
         workspace.mkdir(parents=True, exist_ok=True)
 
+        plugin_cats = ["generic"]
+        if task_type == "survival_analysis":
+            plugin_cats.append("survival_analysis")
+
         for plugin in plugins:
             log.info(f"Benchmarking plugin : {plugin}")
             scores = ScoreEvaluator()
@@ -109,7 +113,7 @@ class Benchmarks:
                 if cache_file.exists() and synthetic_reuse_is_exists:
                     X_syn = load_from_file(cache_file)
                 else:
-                    generator = Plugins().get(
+                    generator = Plugins(categories=plugin_cats).get(
                         plugin,
                         **kwargs,
                         target_column=target_column,
