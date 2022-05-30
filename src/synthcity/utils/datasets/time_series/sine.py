@@ -16,7 +16,9 @@ class SineDataloader:
 
     """
 
-    def __init__(self, no: int, seq_len: int, dim: int, freq_scale: float = 1) -> None:
+    def __init__(
+        self, no: int = 100, seq_len: int = 10, dim: int = 10, freq_scale: float = 1
+    ) -> None:
         self.no = no
         self.seq_len = seq_len
         self.dim = dim
