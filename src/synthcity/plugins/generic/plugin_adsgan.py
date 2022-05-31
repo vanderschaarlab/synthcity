@@ -18,6 +18,7 @@ from pydantic import validate_arguments
 from torch.utils.data import sampler
 
 # synthcity absolute
+from synthcity.plugins.core.dataloader import DataLoader
 from synthcity.plugins.core.distribution import (
     CategoricalDistribution,
     Distribution,
@@ -173,7 +174,7 @@ class AdsGANPlugin(Plugin):
             IntegerDistribution(name="encoder_max_clusters", low=2, high=20),
         ]
 
-    def _fit(self, X: pd.DataFrame, *args: Any, **kwargs: Any) -> "AdsGANPlugin":
+    def _fit(self, X: DataLoader, *args: Any, **kwargs: Any) -> "AdsGANPlugin":
         features = X.shape[1]
         cond: Optional[Union[pd.DataFrame, pd.Series]] = None
         if self.n_units_conditional > 0:
@@ -182,7 +183,7 @@ class AdsGANPlugin(Plugin):
             cond = kwargs["cond"]
 
         self.model = TabularGAN(
-            X,
+            X.dataframe(),
             n_units_latent=features,
             n_units_conditional=self.n_units_conditional,
             batch_size=self.batch_size,
@@ -217,11 +218,11 @@ class AdsGANPlugin(Plugin):
             dataloader_sampler=self.dataloader_sampler,
             device=self.device,
         )
-        self.model.fit(X, cond=cond)
+        self.model.fit(X.dataframe(), cond=cond)
 
         return self
 
-    def _generate(self, count: int, syn_schema: Schema, **kwargs: Any) -> pd.DataFrame:
+    def _generate(self, count: int, syn_schema: Schema, **kwargs: Any) -> DataLoader:
         cond: Optional[Union[pd.DataFrame, pd.Series]] = None
         if "cond" in kwargs:
             cond = kwargs["cond"]

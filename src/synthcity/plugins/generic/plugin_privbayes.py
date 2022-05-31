@@ -16,6 +16,7 @@ from pydantic import validate_arguments
 from thomas.core import BayesianNetwork
 
 # synthcity absolute
+from synthcity.plugins.core.dataloader import DataLoader
 from synthcity.plugins.core.distribution import Distribution
 from synthcity.plugins.core.plugin import Plugin
 from synthcity.plugins.core.schema import Schema
@@ -300,6 +301,7 @@ class PrivBayesPlugin(Plugin):
     ) -> None:
         super().__init__(**kwargs)
 
+        self.dp_epsilon = dp_epsilon
         self.theta_usefulness = theta_usefulness
         self.epsilon_split = epsilon_split
 
@@ -315,14 +317,14 @@ class PrivBayesPlugin(Plugin):
     def hyperparameter_space(**kwargs: Any) -> List[Distribution]:
         return []
 
-    def _fit(self, X: pd.DataFrame, *args: Any, **kwargs: Any) -> "PrivBayesPlugin":
+    def _fit(self, X: DataLoader, *args: Any, **kwargs: Any) -> "PrivBayesPlugin":
         self.model = PrivBayes(
             epsilon=self.dp_epsilon,
             theta_usefulness=self.theta_usefulness,
             epsilon_split=self.epsilon_split,
             score_function="R",
         )
-        self.model.fit(X)
+        self.model.fit(X.dataframe())
         return self
 
     def _generate(self, count: int, syn_schema: Schema, **kwargs: Any) -> pd.DataFrame:

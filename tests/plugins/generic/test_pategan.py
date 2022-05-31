@@ -9,6 +9,7 @@ from sklearn.datasets import load_diabetes, load_iris
 from synthcity.metrics import PerformanceEvaluatorXGB
 from synthcity.plugins import Plugin
 from synthcity.plugins.core.constraints import Constraints
+from synthcity.plugins.core.dataloader import GenericDataLoader
 from synthcity.plugins.generic.plugin_pategan import plugin
 
 plugin_name = "pategan"
@@ -37,13 +38,13 @@ def test_plugin_hyperparams(test_plugin: Plugin) -> None:
 @pytest.mark.parametrize("test_plugin", generate_fixtures(plugin_name, plugin))
 def test_plugin_fit(test_plugin: Plugin) -> None:
     X = pd.DataFrame(load_iris()["data"])
-    test_plugin.fit(X)
+    test_plugin.fit(GenericDataLoader(X))
 
 
 def test_plugin_generate() -> None:
     test_plugin = plugin(generator_n_layers_hidden=1, generator_n_units_hidden=10)
     X = pd.DataFrame(load_diabetes()["data"])
-    test_plugin.fit(X)
+    test_plugin.fit(GenericDataLoader(X))
 
     X_gen = test_plugin.generate()
     assert len(X_gen) == len(X)
@@ -57,7 +58,7 @@ def test_plugin_generate() -> None:
 def test_plugin_generate_constraints() -> None:
     test_plugin = plugin(generator_n_layers_hidden=1, generator_n_units_hidden=10)
     X = pd.DataFrame(load_iris()["data"])
-    test_plugin.fit(X)
+    test_plugin.fit(GenericDataLoader(X))
 
     constraints = Constraints(
         rules=[
@@ -72,12 +73,12 @@ def test_plugin_generate_constraints() -> None:
         ]
     )
 
-    X_gen = test_plugin.generate(constraints=constraints)
+    X_gen = test_plugin.generate(constraints=constraints).dataframe()
     assert len(X_gen) == len(X)
     assert test_plugin.schema_includes(X_gen)
     assert constraints.filter(X_gen).sum() == len(X_gen)
 
-    X_gen = test_plugin.generate(count=50, constraints=constraints)
+    X_gen = test_plugin.generate(count=50, constraints=constraints).dataframe()
     assert len(X_gen) == 50
     assert test_plugin.schema_includes(X_gen)
     assert constraints.filter(X_gen).sum() == len(X_gen)
@@ -101,7 +102,7 @@ def test_eval_performance() -> None:
         test_plugin = plugin()
         evaluator = PerformanceEvaluatorXGB()
 
-        test_plugin.fit(X)
+        test_plugin.fit(GenericDataLoader(X))
         X_syn = test_plugin.generate()
 
         results.append(evaluator.evaluate(X, X, X_syn)["syn_id"])

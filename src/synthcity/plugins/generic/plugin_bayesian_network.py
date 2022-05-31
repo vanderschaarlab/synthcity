@@ -8,6 +8,7 @@ from pgmpy.models import BayesianNetwork
 from pgmpy.sampling import BayesianModelSampling
 
 # synthcity absolute
+from synthcity.plugins.core.dataloader import DataLoader
 from synthcity.plugins.core.distribution import CategoricalDistribution, Distribution
 from synthcity.plugins.core.plugin import Plugin
 from synthcity.plugins.core.schema import Schema
@@ -92,13 +93,13 @@ class BayesianNetworkPlugin(Plugin):
         else:
             raise ValueError(f"invalid estimator {self.struct_learning_search_method}")
 
-    def _fit(
-        self, X: pd.DataFrame, *args: Any, **kwargs: Any
-    ) -> "BayesianNetworkPlugin":
-        dag = self._get_dag(X)
+    def _fit(self, X: DataLoader, *args: Any, **kwargs: Any) -> "BayesianNetworkPlugin":
+        df = X.dataframe()
+
+        dag = self._get_dag(df)
 
         network = BayesianNetwork(dag)
-        network.fit(X)
+        network.fit(df)
 
         self.model = BayesianModelSampling(network)
         return self

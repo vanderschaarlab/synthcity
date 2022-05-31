@@ -8,6 +8,7 @@ from pydantic import BaseModel, validate_arguments, validator
 
 # synthcity absolute
 from synthcity.plugins.core.constraints import Constraints
+from synthcity.plugins.core.dataloader import DataLoader
 from synthcity.plugins.core.distribution import (
     CategoricalDistribution,
     Distribution,
@@ -30,9 +31,13 @@ class Schema(BaseModel):
             return v
 
         feature_domain = {}
-        X = values["data"]
-        if not isinstance(X, pd.DataFrame):
-            raise ValueError("You need to provide a DataFrame in the data argument")
+        raw = values["data"]
+        if isinstance(raw, DataLoader):
+            X = raw.dataframe()
+        elif isinstance(raw, pd.DataFrame):
+            X = raw
+        else:
+            raise ValueError("You need to provide a DataLoader in the data argument")
 
         if X.shape[1] == 0 or X.shape[0] == 0:
             return v

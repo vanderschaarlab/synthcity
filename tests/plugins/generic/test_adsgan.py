@@ -9,6 +9,7 @@ from sklearn.datasets import load_iris
 from synthcity.metrics import PerformanceEvaluatorXGB
 from synthcity.plugins import Plugin
 from synthcity.plugins.core.constraints import Constraints
+from synthcity.plugins.core.dataloader import GenericDataLoader
 from synthcity.plugins.generic.plugin_adsgan import plugin
 
 plugin_name = "adsgan"
@@ -35,14 +36,24 @@ def test_plugin_hyperparams(test_plugin: Plugin) -> None:
 
 
 def test_plugin_fit() -> None:
-    test_plugin = plugin(generator_n_layers_hidden=1, generator_n_units_hidden=10)
-    X = pd.DataFrame(load_iris()["data"])
+    test_plugin = plugin(
+        n_iter=100, generator_n_layers_hidden=1, generator_n_units_hidden=10
+    )
+
+    df = pd.DataFrame(load_iris()["data"])
+    X = GenericDataLoader(df)
+
     test_plugin.fit(X)
 
 
 def test_plugin_generate() -> None:
-    test_plugin = plugin(generator_n_layers_hidden=1, generator_n_units_hidden=10)
-    X = pd.DataFrame(load_iris()["data"])
+    test_plugin = plugin(
+        n_iter=100, generator_n_layers_hidden=1, generator_n_units_hidden=10
+    )
+
+    df = pd.DataFrame(load_iris()["data"])
+    X = GenericDataLoader(df)
+
     test_plugin.fit(X)
 
     X_gen = test_plugin.generate()
@@ -56,9 +67,13 @@ def test_plugin_generate() -> None:
 
 def test_plugin_conditional() -> None:
     test_plugin = plugin(
-        generator_n_layers_hidden=1, generator_n_units_hidden=10, n_units_conditional=1
+        n_iter=100,
+        generator_n_layers_hidden=1,
+        generator_n_units_hidden=10,
+        n_units_conditional=1,
     )
-    X, y = load_iris(as_frame=True, return_X_y=True)
+    Xraw, y = load_iris(as_frame=True, return_X_y=True)
+    X = GenericDataLoader(Xraw)
     test_plugin.fit(X, cond=y)
 
     X_gen = test_plugin.generate()
@@ -71,8 +86,12 @@ def test_plugin_conditional() -> None:
 
 
 def test_plugin_generate_constraints() -> None:
-    test_plugin = plugin(generator_n_layers_hidden=1, generator_n_units_hidden=10)
-    X = pd.DataFrame(load_iris()["data"])
+    test_plugin = plugin(
+        n_iter=100, generator_n_layers_hidden=1, generator_n_units_hidden=10
+    )
+
+    Xraw = pd.DataFrame(load_iris()["data"])
+    X = GenericDataLoader(Xraw)
     test_plugin.fit(X)
 
     constraints = Constraints(
@@ -91,12 +110,12 @@ def test_plugin_generate_constraints() -> None:
     X_gen = test_plugin.generate(constraints=constraints)
     assert len(X_gen) == len(X)
     assert test_plugin.schema_includes(X_gen)
-    assert constraints.filter(X_gen).sum() == len(X_gen)
+    assert constraints.filter(X_gen.dataframe()).sum() == len(X_gen)
 
     X_gen = test_plugin.generate(count=50, constraints=constraints)
     assert len(X_gen) == 50
     assert test_plugin.schema_includes(X_gen)
-    assert constraints.filter(X_gen).sum() == len(X_gen)
+    assert constraints.filter(X_gen.dataframe()).sum() == len(X_gen)
     assert list(X_gen.columns) == list(X.columns)
 
 
@@ -111,11 +130,12 @@ def test_sample_hyperparams() -> None:
 def test_eval_performance() -> None:
     results = []
 
-    X, y = load_iris(return_X_y=True, as_frame=True)
-    X["target"] = y
+    Xraw, y = load_iris(return_X_y=True, as_frame=True)
+    Xraw["target"] = y
+    X = GenericDataLoader(Xraw)
 
     for retry in range(2):
-        test_plugin = plugin()
+        test_plugin = plugin(n_iter=200)
         evaluator = PerformanceEvaluatorXGB()
 
         test_plugin.fit(X)

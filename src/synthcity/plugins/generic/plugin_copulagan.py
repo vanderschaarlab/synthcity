@@ -6,6 +6,7 @@ import pandas as pd
 from sdv.tabular import CopulaGAN
 
 # synthcity absolute
+from synthcity.plugins.core.dataloader import DataLoader
 from synthcity.plugins.core.distribution import (
     CategoricalDistribution,
     Distribution,
@@ -114,8 +115,8 @@ class CopulaGANPlugin(Plugin):
             CategoricalDistribution(name="discriminator_decay", choices=[1e-3, 1e-6]),
         ]
 
-    def _fit(self, X: pd.DataFrame, *args: Any, **kwargs: Any) -> "CopulaGANPlugin":
-        self.model.fit(X)
+    def _fit(self, X: DataLoader, *args: Any, **kwargs: Any) -> "CopulaGANPlugin":
+        self.model.fit(X.dataframe())
         return self
 
     def _generate(self, count: int, syn_schema: Schema, **kwargs: Any) -> pd.DataFrame:

@@ -9,6 +9,7 @@ from pydantic import validate_arguments
 from torch.utils.data import sampler
 
 # synthcity absolute
+from synthcity.plugins.core.dataloader import DataLoader
 from synthcity.plugins.core.distribution import (
     CategoricalDistribution,
     Distribution,
@@ -140,10 +141,10 @@ class RTVAEPlugin(Plugin):
             FloatDistribution(name="encoder_dropout", low=0, high=0.2),
         ]
 
-    def _fit(self, X: pd.DataFrame, *args: Any, **kwargs: Any) -> "RTVAEPlugin":
+    def _fit(self, X: DataLoader, *args: Any, **kwargs: Any) -> "RTVAEPlugin":
         features = X.shape[1]
         self.model = TabularVAE(
-            X,
+            X.dataframe(),
             n_units_embedding=features,
             batch_size=self.batch_size,
             lr=self.lr,
@@ -167,7 +168,7 @@ class RTVAEPlugin(Plugin):
             encoder_max_clusters=self.data_encoder_max_clusters,
             dataloader_sampler=self.dataloader_sampler,
         )
-        self.model.fit(X)
+        self.model.fit(X.dataframe())
 
         return self
 

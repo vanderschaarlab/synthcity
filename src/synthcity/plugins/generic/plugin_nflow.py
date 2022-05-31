@@ -6,6 +6,7 @@ import pandas as pd
 from pydantic import validate_arguments
 
 # synthcity absolute
+from synthcity.plugins.core.dataloader import DataLoader
 from synthcity.plugins.core.distribution import (
     CategoricalDistribution,
     Distribution,
@@ -145,11 +146,11 @@ class NormalizingFlowsPlugin(Plugin):
         ]
 
     def _fit(
-        self, X: pd.DataFrame, *args: Any, **kwargs: Any
+        self, X: DataLoader, *args: Any, **kwargs: Any
     ) -> "NormalizingFlowsPlugin":
         if self.tabular:
             self.model = TabularFlows(
-                X,
+                X.dataframe(),
                 n_iter=self.n_iter,
                 n_layers_hidden=self.n_layers_hidden,
                 n_units_hidden=self.n_units_hidden,
@@ -184,7 +185,7 @@ class NormalizingFlowsPlugin(Plugin):
                 base_transform_type=self.base_transform_type,
             )
 
-        self.model.fit(X)
+        self.model.fit(X.dataframe())
         return self
 
     def _generate(self, count: int, syn_schema: Schema, **kwargs: Any) -> pd.DataFrame:

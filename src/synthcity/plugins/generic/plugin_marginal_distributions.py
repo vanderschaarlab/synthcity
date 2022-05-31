@@ -6,6 +6,7 @@ import numpy as np
 import pandas as pd
 
 # synthcity absolute
+from synthcity.plugins.core.dataloader import DataLoader
 from synthcity.plugins.core.distribution import Distribution
 from synthcity.plugins.core.plugin import Plugin
 from synthcity.plugins.core.schema import Schema
@@ -46,7 +47,7 @@ class MarginalDistributionPlugin(Plugin):
         return []
 
     def _fit(
-        self, X: pd.DataFrame, *args: Any, **kwargs: Any
+        self, X: DataLoader, *args: Any, **kwargs: Any
     ) -> "MarginalDistributionPlugin":
         return self
 

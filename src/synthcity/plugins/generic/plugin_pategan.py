@@ -20,6 +20,7 @@ from xgboost import XGBClassifier
 
 # synthcity absolute
 import synthcity.logger as log
+from synthcity.plugins.core.dataloader import DataLoader
 from synthcity.plugins.core.distribution import (
     CategoricalDistribution,
     Distribution,
@@ -496,8 +497,8 @@ class PATEGANPlugin(Plugin):
             IntegerDistribution(name="alpha", low=2, high=50),
         ]
 
-    def _fit(self, X: pd.DataFrame, *args: Any, **kwargs: Any) -> "PATEGANPlugin":
-        self.model.fit(X)
+    def _fit(self, X: DataLoader, *args: Any, **kwargs: Any) -> "PATEGANPlugin":
+        self.model.fit(X.dataframe())
 
         return self
 
