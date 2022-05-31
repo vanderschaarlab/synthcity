@@ -34,8 +34,6 @@ class Plugin(metaclass=ABCMeta):
     If any method implementation is missing, the class constructor will fail.
 
     Constructor Args:
-        dp_epsilon: float.
-            Privacy parameter dp_epsilon in differential privacy. Must be in range [0, float(np.inf)].
         strict: float.
             If True, is raises an exception if the generated data is not following the requested constraints. If False, it returns only the rows that match the constraints.
     """
@@ -46,9 +44,6 @@ class Plugin(metaclass=ABCMeta):
 
     def __init__(
         self,
-        dp_enabled: bool = True,
-        dp_epsilon: float = 1.0,
-        dp_delta: float = 0,
         sampling_strategy: str = "marginal",  # uniform, marginal
         sampling_patience: int = 500,
         sensitive_columns: list = [],
@@ -62,10 +57,6 @@ class Plugin(metaclass=ABCMeta):
         """
 
         Args:
-            dp_enabled: bool
-                If True, the internal samplings are done from differentially private distributions.
-            dp_epsilon: float
-                Privacy parameter dp_epsilon in differential privacy. Must be in range [0, float(np.inf)].
             sampling_strategy: str
                 Internal sampling strategy [marginal, uniform].
             strict: bool
@@ -73,9 +64,6 @@ class Plugin(metaclass=ABCMeta):
 
         """
         self._schema: Optional[Schema] = None
-        self.dp_epsilon = dp_epsilon
-        self.dp_enabled = dp_enabled
-        self.dp_delta = dp_delta
         self.sampling_strategy = sampling_strategy
         self.sampling_patience = sampling_patience
         self.sensitive_columns = sensitive_columns
@@ -131,9 +119,6 @@ class Plugin(metaclass=ABCMeta):
         X.columns = X.columns.astype(str)
         self._schema = Schema(
             data=X,
-            dp_enabled=self.dp_enabled,
-            dp_epsilon=self.dp_epsilon,
-            dp_delta=self.dp_delta,
             sampling_strategy=self.sampling_strategy,
         )
         self._original_shape = X.shape

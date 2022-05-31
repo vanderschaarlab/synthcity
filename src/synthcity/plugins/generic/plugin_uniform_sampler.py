@@ -24,7 +24,7 @@ class UniformSamplerPlugin(Plugin):
     """
 
     def __init__(self, **kwargs: Any) -> None:
-        super().__init__(dp_enabled=False, sampling_strategy="uniform")
+        super().__init__(sampling_strategy="uniform")
 
     @staticmethod
     def name() -> str:

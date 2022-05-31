@@ -20,9 +20,6 @@ from synthcity.plugins.core.distribution import (
 class Schema(BaseModel):
     """Utility class for defining the schema of a Dataset."""
 
-    dp_enabled: bool = False
-    dp_epsilon: float = 1.0
-    dp_delta: float = 0.0
     sampling_strategy: str = "marginal"  # uniform or marginal
     data: Any = None
     domain: Dict = {}
@@ -40,30 +37,16 @@ class Schema(BaseModel):
         if X.shape[1] == 0 or X.shape[0] == 0:
             return v
 
-        local_epsilon = values["dp_epsilon"] / X.shape[1]
-
-        dp_args = {
-            "dp_enabled": values["dp_enabled"],
-            "dp_epsilon": local_epsilon,  # divide epsilon budget for each column
-            "dp_delta": values["dp_delta"],
-        }
-
         sampling_strategy = values["sampling_strategy"]
 
         if sampling_strategy == "marginal":
             for col in X.columns:
                 if X[col].dtype == "object" or len(X[col].unique()) < 10:
-                    feature_domain[col] = CategoricalDistribution(
-                        name=col, data=X[col], **dp_args
-                    )
+                    feature_domain[col] = CategoricalDistribution(name=col, data=X[col])
                 elif X[col].dtype in ["int", "int32", "int64", "uint32", "uint64"]:
-                    feature_domain[col] = IntegerDistribution(
-                        name=col, data=X[col], **dp_args
-                    )
+                    feature_domain[col] = IntegerDistribution(name=col, data=X[col])
                 elif X[col].dtype in ["float", "float32", "float64", "double"]:
-                    feature_domain[col] = FloatDistribution(
-                        name=col, data=X[col], **dp_args
-                    )
+                    feature_domain[col] = FloatDistribution(name=col, data=X[col])
                 else:
                     raise ValueError("unsupported format ", col)
         elif sampling_strategy == "uniform":

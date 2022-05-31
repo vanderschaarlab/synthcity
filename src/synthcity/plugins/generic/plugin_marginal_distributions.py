@@ -23,19 +23,14 @@ class MarginalDistributionPlugin(Plugin):
         >>> plugin.generate()
     """
 
-    def __init__(
-        self, dp_epsilon: float = 1.0, dp_delta: float = 0, **kwargs: Any
-    ) -> None:
+    def __init__(self, **kwargs: Any) -> None:
         """
         Args:
             epsilon: float
                 Privacy parameter epsilon in differential privacy. >= 0.
         """
         super().__init__(
-            dp_enabled=True,
             sampling_strategy="marginal",
-            dp_epsilon=dp_epsilon,
-            dp_delta=dp_delta,
         )
 
     @staticmethod
