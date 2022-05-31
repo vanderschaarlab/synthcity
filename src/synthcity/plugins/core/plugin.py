@@ -17,7 +17,11 @@ from synthcity.metrics.plots import (
     plot_marginal_comparison,
 )
 from synthcity.plugins.core.constraints import Constraints
-from synthcity.plugins.core.dataloader import DataLoader, create_from_info
+from synthcity.plugins.core.dataloader import (
+    DataLoader,
+    GenericDataLoader,
+    create_from_info,
+)
 from synthcity.plugins.core.distribution import Distribution
 from synthcity.plugins.core.schema import Schema
 from synthcity.utils.constants import DEVICE
@@ -101,7 +105,7 @@ class Plugin(metaclass=ABCMeta):
         return cls.type() + "." + cls.name()
 
     @validate_arguments(config=dict(arbitrary_types_allowed=True))
-    def fit(self, X: DataLoader, *args: Any, **kwargs: Any) -> Any:
+    def fit(self, X: Union[DataLoader, pd.DataFrame], *args: Any, **kwargs: Any) -> Any:
         """Training method the synthetic data plugin.
 
         Args:
@@ -111,6 +115,9 @@ class Plugin(metaclass=ABCMeta):
         Returns:
             self
         """
+        if isinstance(X, (pd.DataFrame)):
+            X = GenericDataLoader(X)
+
         self.data_info = X.info()
         self._schema = Schema(
             data=X,

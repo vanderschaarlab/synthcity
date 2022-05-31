@@ -17,7 +17,7 @@ for cat in categories:
 
 class Plugins(PluginLoader):
     @validate_arguments
-    def __init__(self, categories: list = ["generic"]) -> None:
+    def __init__(self, categories: list = categories) -> None:
         plugins_to_use = []
         for cat in categories:
             plugins_to_use.extend(plugins[cat])

@@ -31,6 +31,10 @@ class DataLoader(metaclass=ABCMeta):
     def raw(self) -> Any:
         return self.data
 
+    @abstractmethod
+    def preprocessed(self) -> Any:
+        ...
+
     def type(self) -> str:
         return self.data_type
 
@@ -76,7 +80,15 @@ class DataLoader(metaclass=ABCMeta):
         ...
 
     @abstractmethod
+    def sample(self, count: int) -> "DataLoader":
+        ...
+
+    @abstractmethod
     def __getitem__(self, feature: str) -> Any:
+        ...
+
+    @abstractmethod
+    def __setitem__(self, feature: str, val: Any) -> None:
         ...
 
 
@@ -108,6 +120,9 @@ class GenericDataLoader(DataLoader):
     def columns(self) -> list:
         return list(self.data.columns)
 
+    def preprocessed(self) -> Any:
+        return self.data
+
     def dataframe(self) -> pd.DataFrame:
         return self.data
 
@@ -133,6 +148,11 @@ class GenericDataLoader(DataLoader):
             constraints.match(self.data), sensitive_features=self.sensitive_features
         )
 
+    def sample(self, count: int) -> "DataLoader":
+        return GenericDataLoader(
+            self.data.sample(count), sensitive_features=self.sensitive_features
+        )
+
     @staticmethod
     def from_info(data: Any, info: dict) -> "GenericDataLoader":
         assert isinstance(data, pd.DataFrame)
@@ -142,6 +162,9 @@ class GenericDataLoader(DataLoader):
     def __getitem__(self, feature: str) -> Any:
         return self.data[feature]
 
+    def __setitem__(self, feature: str, val: Any) -> None:
+        self.data[feature] = val
+
 
 class SurvivalAnalysisDataLoader(DataLoader):
     @validate_arguments(config=dict(arbitrary_types_allowed=True))
@@ -150,39 +173,43 @@ class SurvivalAnalysisDataLoader(DataLoader):
         data: pd.DataFrame,
         time_to_event_column: str,
         target_column: str,
-        time_horizons: List,
         sensitive_features: List[str] = [],
         **kwargs: Any,
     ) -> None:
-        data.columns = data.columns.astype(str)
+        if target_column not in data.columns:
+            raise ValueError(f"Event column {target_column} not found in the dataframe")
 
-        X = data.drop(columns=[target_column, time_to_event_column])
-        T = data[time_to_event_column]
-        E = data[target_column]
+        if time_to_event_column not in data.columns:
+            raise ValueError(
+                f"Time to event column {time_to_event_column} not found in the dataframe"
+            )
+
+        data.columns = data.columns.astype(str)
 
         self.target_column = target_column
         self.time_to_event_column = time_to_event_column
 
         super().__init__(
             data_type="survival_analysis",
-            data=(X, T, E),
-            static_features=list(X.columns.astype(str)),
+            data=data,
+            static_features=list(data.columns.astype(str)),
             sensitive_features=sensitive_features,
             **kwargs,
         )
 
     @property
     def shape(self) -> tuple:
-        return self.data[0].shape
+        return self.data.shape
+
+    def preprocessed(self) -> Any:
+        X = self.data.drop(columns=[self.target_column, self.time_to_event_column])
+        T = self.data[self.time_to_event_column]
+        E = self.data[self.target_column]
+
+        return X, T, E
 
     def dataframe(self) -> pd.DataFrame:
-        X, T, E = self.data
-
-        df = X.copy()
-        df[self.time_to_event_column] = T
-        df[self.target_column] = E
-
-        return df
+        return self.data
 
     def numpy(self) -> np.ndarray:
         return self.dataframe().values
@@ -198,14 +225,25 @@ class SurvivalAnalysisDataLoader(DataLoader):
         }
 
     def __len__(self) -> int:
-        return len(self.data[0])
+        return len(self.data)
 
     def satisfies(self, constraints: Constraints) -> bool:
         return constraints.is_valid(self.data)
 
     def match(self, constraints: Constraints) -> "DataLoader":
         return SurvivalAnalysisDataLoader(
-            constraints.match(self.data), sensitive_features=self.sensitive_features
+            constraints.match(self.data),
+            sensitive_features=self.sensitive_features,
+            target_column=self.target_column,
+            time_to_event_column=self.time_to_event_column,
+        )
+
+    def sample(self, count: int) -> "DataLoader":
+        return SurvivalAnalysisDataLoader(
+            self.data.sample(count),
+            sensitive_features=self.sensitive_features,
+            target_column=self.target_column,
+            time_to_event_column=self.time_to_event_column,
         )
 
     @staticmethod
@@ -221,6 +259,9 @@ class SurvivalAnalysisDataLoader(DataLoader):
 
     def __getitem__(self, feature: str) -> Any:
         return self.data[feature]
+
+    def __setitem__(self, feature: str, val: Any) -> None:
+        self.data[feature] = val
 
 
 class TimeSeriesDataLoader(DataLoader):
@@ -260,9 +301,23 @@ class TimeSeriesDataLoader(DataLoader):
     def match(self, constraints: Constraints) -> "DataLoader":
         return constraints.match(self.data)
 
+    def sample(self, count: int) -> "DataLoader":
+        return TimeSeriesDataLoader(
+            self.data.sample(count), sensitive_features=self.sensitive_features
+        )
+
     @staticmethod
     def from_info(data: Any, info: dict) -> "DataLoader":
         pass
+
+    def preprocessed(self) -> Any:
+        return self.data
+
+    def __getitem__(self, feature: str) -> Any:
+        return self.data[feature]
+
+    def __setitem__(self, feature: str, val: Any) -> None:
+        self.data[feature] = val
 
 
 def create_from_info(data: Any, info: dict) -> "DataLoader":

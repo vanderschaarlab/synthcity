@@ -10,6 +10,7 @@ from pydantic import validate_arguments
 # synthcity absolute
 import synthcity.logger as log
 import synthcity.plugins as plugins
+from synthcity.plugins.core.dataloader import DataLoader
 from synthcity.plugins.core.distribution import Distribution
 from synthcity.plugins.core.models import BinEncoder
 from synthcity.plugins.core.plugin import Plugin
@@ -33,14 +34,10 @@ class SurvivalGANPlugin(Plugin):
     @validate_arguments(config=dict(arbitrary_types_allowed=True))
     def __init__(
         self,
-        target_column: str = "event",
-        time_to_event_column: str = "duration",
-        time_horizons: Optional[List] = None,
         uncensoring_model: str = "survival_function_regression",
         dataloader_sampling_strategy: str = "imbalanced_time_censoring",  # none, imbalanced_censoring, imbalanced_time_censoring
         tte_strategy: str = "survival_function",
         device: Any = DEVICE,
-        identifiability_penalty: bool = False,
         use_conditional: bool = True,
         **kwargs: Any,
     ) -> None:
@@ -55,20 +52,11 @@ class SurvivalGANPlugin(Plugin):
             raise ValueError(
                 f"Invalid sampling strategy {dataloader_sampling_strategy}. Supported values: {valid_sampling_strategies}"
             )
-        self.target_column = target_column
-        self.time_to_event_column = time_to_event_column
-        self.time_horizons = time_horizons
         self.tte_strategy = tte_strategy
         self.dataloader_sampling_strategy = dataloader_sampling_strategy
         self.uncensoring_model = uncensoring_model
         self.device = device
         self.use_conditional = use_conditional
-
-        if identifiability_penalty:
-            self.generator_extra_penalties = ["identifiability_penalty"]
-        else:
-            self.generator_extra_penalties = []
-
         self.kwargs = kwargs
 
         log.info(
@@ -93,12 +81,13 @@ class SurvivalGANPlugin(Plugin):
     def hyperparameter_space(**kwargs: Any) -> List[Distribution]:
         return plugins.Plugins().get_type("adsgan").hyperparameter_space()
 
-    def _fit(self, X: pd.DataFrame, *args: Any, **kwargs: Any) -> "SurvivalGANPlugin":
+    def _fit(self, X: DataLoader, *args: Any, **kwargs: Any) -> "SurvivalGANPlugin":
+        assert X.type() == "survival_analysis"
+
         sampler: Optional[ImbalancedDatasetSampler] = None
         sampling_labels: Optional[list] = None
 
-        E = X[self.target_column]
-        T = X[self.time_to_event_column]
+        _, T, E = X.preprocessed()
         if self.dataloader_sampling_strategy == "imbalanced_censoring":
             log.info("Using imbalanced censoring sampling")
             sampling_labels = list(E.values)
@@ -111,20 +100,17 @@ class SurvivalGANPlugin(Plugin):
             sampler = ImbalancedDatasetSampler(sampling_labels)
 
         if self.use_conditional:
-            self.conditional = BinEncoder().fit_transform(X)
+            self.conditional = BinEncoder().fit_transform(X.dataframe())
             n_units_conditional = self.conditional.shape[1]
         else:
             self.conditional = None
             n_units_conditional = 0
+
         self.model = SurvivalPipeline(
             "adsgan",
             strategy=self.tte_strategy,
-            target_column=self.target_column,
-            time_to_event_column=self.time_to_event_column,
-            time_horizons=self.time_horizons,
             uncensoring_model=self.uncensoring_model,
             dataloader_sampler=sampler,
-            generator_extra_penalties=self.generator_extra_penalties,
             n_units_conditional=n_units_conditional,
             device=self.device,
             **self.kwargs,

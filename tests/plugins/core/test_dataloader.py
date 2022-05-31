@@ -18,8 +18,8 @@ def test_generic_dataloader() -> None:
 
     assert loader.raw().shape == X.shape
     assert loader.type() == "generic"
-    assert loader.shape() == X.shape
-    assert list(loader.dataframe().columns) == list(X.columns)
+    assert loader.shape == X.shape
+    assert list(loader.columns) == list(X.columns)
     assert (loader.numpy() == X.values).all()
     assert len(loader) == len(X)
 
@@ -45,19 +45,20 @@ def test_survival_dataloader() -> None:
         time_horizons=[20],
     )
 
-    assert loader.raw()[0].shape == X.shape
-    assert loader.raw()[1].shape == T.shape
-    assert loader.raw()[2].shape == E.shape
+    assert loader.raw().shape == df.shape
+    assert loader.preprocessed()[0].shape == X.shape
+    assert loader.preprocessed()[1].shape == T.shape
+    assert loader.preprocessed()[2].shape == E.shape
 
     assert loader.type() == "survival_analysis"
-    assert loader.shape() == X.shape
+    assert loader.shape == df.shape
     assert sorted(list(loader.dataframe().columns)) == sorted(list(df.columns))
-    assert (loader.numpy() == df[loader.dataframe().columns].values).all()
+    assert (loader.numpy() == df.values).all()
     assert len(loader) == len(X)
 
     assert loader.info()["data_type"] == "survival_analysis"
     assert loader.info()["len"] == len(X)
-    assert loader.info()["static_features"] == list(X.columns)
+    assert loader.info()["static_features"] == list(df.columns)
 
 
 def test_time_series_dataloader() -> None:

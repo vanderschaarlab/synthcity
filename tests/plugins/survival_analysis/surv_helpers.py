@@ -2,14 +2,15 @@
 from typing import Dict, List, Type
 
 # synthcity absolute
-from synthcity.plugins import Plugin
-from synthcity.plugins.survival_analysis import SurvivalAnalysisPlugins as Plugins
+from synthcity.plugins import Plugin, Plugins
 from synthcity.utils.serialization import load, save
 
 
 def generate_fixtures(name: str, plugin: Type, plugin_args: Dict = {}) -> List:
     def from_api() -> Plugin:
-        return Plugins().get(name, **plugin_args)
+        return Plugins(categories=["generic", "survival_analysis"]).get(
+            name, **plugin_args
+        )
 
     def from_module() -> Plugin:
         return plugin(**plugin_args)

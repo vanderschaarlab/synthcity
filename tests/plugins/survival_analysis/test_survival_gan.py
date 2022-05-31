@@ -6,13 +6,23 @@ from surv_helpers import generate_fixtures
 # synthcity absolute
 from synthcity.plugins import Plugin
 from synthcity.plugins.core.constraints import Constraints
+from synthcity.plugins.core.dataloader import SurvivalAnalysisDataLoader
 from synthcity.plugins.survival_analysis.plugin_survival_gan import plugin
+
+X = load_rossi()
+data = SurvivalAnalysisDataLoader(
+    X,
+    target_column="arrest",
+    time_to_event_column="week",
+)
+
 
 plugin_name = "survival_gan"
 plugins_args = {
     "generator_n_layers_hidden": 1,
     "generator_n_units_hidden": 10,
     "uncensoring_model": "cox_ph",
+    "n_iter": 100,
 }
 
 
@@ -67,8 +77,6 @@ def test_plugin_fit(
     use_conditional: bool, dataloader_sampling_strategy: str, tte_strategy: str
 ) -> None:
     test_plugin = plugin(
-        target_column="arrest",
-        time_to_event_column="week",
         tte_strategy=tte_strategy,
         dataloader_sampling_strategy=dataloader_sampling_strategy,
         device="cpu",
@@ -76,21 +84,14 @@ def test_plugin_fit(
         **plugins_args
     )
 
-    X = load_rossi()
-    test_plugin.fit(X)
+    test_plugin.fit(data)
 
 
 @pytest.mark.parametrize("strategy", ["uncensoring", "survival_function"])
 def test_plugin_generate(strategy: str) -> None:
-    test_plugin = plugin(
-        target_column="arrest",
-        time_to_event_column="week",
-        tte_strategy=strategy,
-        **plugins_args
-    )
+    test_plugin = plugin(tte_strategy=strategy, **plugins_args)
 
-    X = load_rossi()
-    test_plugin.fit(X)
+    test_plugin.fit(data)
 
     X_gen = test_plugin.generate()
     assert len(X_gen) == len(X)
@@ -103,15 +104,9 @@ def test_plugin_generate(strategy: str) -> None:
 
 @pytest.mark.parametrize("strategy", ["uncensoring", "survival_function"])
 def test_survival_plugin_generate_constraints(strategy: str) -> None:
-    test_plugin = plugin(
-        target_column="arrest",
-        time_to_event_column="week",
-        tte_strategy=strategy,
-        **plugins_args
-    )
+    test_plugin = plugin(tte_strategy=strategy, **plugins_args)
 
-    X = load_rossi()
-    test_plugin.fit(X)
+    test_plugin.fit(data)
 
     constraints = Constraints(
         rules=[
@@ -119,12 +114,12 @@ def test_survival_plugin_generate_constraints(strategy: str) -> None:
         ]
     )
 
-    X_gen = test_plugin.generate(constraints=constraints)
+    X_gen = test_plugin.generate(constraints=constraints).dataframe()
     assert len(X_gen) == len(X)
     assert test_plugin.schema_includes(X_gen)
     assert constraints.filter(X_gen).sum() == len(X_gen)
 
-    X_gen = test_plugin.generate(count=50, constraints=constraints)
+    X_gen = test_plugin.generate(count=50, constraints=constraints).dataframe()
     assert len(X_gen) == 50
     assert test_plugin.schema_includes(X_gen)
     assert constraints.filter(X_gen).sum() == len(X_gen)
