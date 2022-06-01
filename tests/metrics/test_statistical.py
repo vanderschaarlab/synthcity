@@ -23,19 +23,26 @@ from synthcity.metrics.eval_statistical import (
     WassersteinDistance,
 )
 from synthcity.plugins import Plugin, Plugins
+from synthcity.plugins.core.dataloader import (
+    DataLoader,
+    GenericDataLoader,
+    SurvivalAnalysisDataLoader,
+    create_from_info,
+)
 
 
 def _eval_plugin(
-    evaluator_t: Type, X: pd.DataFrame, X_syn: pd.DataFrame, **kwargs: Any
+    evaluator_t: Type, X: DataLoader, X_syn: DataLoader, **kwargs: Any
 ) -> Tuple:
     evaluator = evaluator_t(**kwargs)
 
-    syn_score = evaluator.evaluate(X, X, X_syn)
+    syn_score = evaluator.evaluate(X, X_syn)
 
     sz = len(X_syn)
-    X_rnd = pd.DataFrame(np.random.randn(sz, len(X.columns)), columns=X.columns)
+    X_rnd = create_from_info(
+        pd.DataFrame(np.random.randn(sz, len(X.columns)), columns=X.columns), X.info()
+    )
     rnd_score = evaluator.evaluate(
-        X,
         X,
         X_rnd,
     )
@@ -47,11 +54,12 @@ def _eval_plugin(
 def test_kl_div(test_plugin: Plugin) -> None:
     X, y = load_iris(return_X_y=True, as_frame=True)
     X["target"] = y
+    Xloader = GenericDataLoader(X)
 
-    test_plugin.fit(X)
+    test_plugin.fit(Xloader)
     X_gen = test_plugin.generate(1000)
 
-    syn_score, rnd_score = _eval_plugin(InverseKLDivergence, X, X_gen)
+    syn_score, rnd_score = _eval_plugin(InverseKLDivergence, Xloader, X_gen)
 
     for key in syn_score:
         assert syn_score[key] > 0
@@ -67,11 +75,12 @@ def test_kl_div(test_plugin: Plugin) -> None:
 def test_evaluate_kolmogorov_smirnov_test(test_plugin: Plugin) -> None:
     X, y = load_iris(return_X_y=True, as_frame=True)
     X["target"] = y
+    Xloader = GenericDataLoader(X)
 
-    test_plugin.fit(X)
+    test_plugin.fit(Xloader)
     X_gen = test_plugin.generate(1000)
 
-    syn_score, rnd_score = _eval_plugin(KolmogorovSmirnovTest, X, X_gen)
+    syn_score, rnd_score = _eval_plugin(KolmogorovSmirnovTest, Xloader, X_gen)
 
     for key in syn_score:
         assert syn_score[key] > 0
@@ -87,11 +96,12 @@ def test_evaluate_kolmogorov_smirnov_test(test_plugin: Plugin) -> None:
 def test_evaluate_chi_squared_test(test_plugin: Plugin) -> None:
     X, y = load_iris(return_X_y=True, as_frame=True)
     X["target"] = y
+    Xloader = GenericDataLoader(X)
 
-    test_plugin.fit(X)
+    test_plugin.fit(Xloader)
     X_gen = test_plugin.generate(1000)
 
-    syn_score, rnd_score = _eval_plugin(ChiSquaredTest, X, X_gen)
+    syn_score, rnd_score = _eval_plugin(ChiSquaredTest, Xloader, X_gen)
 
     for key in syn_score:
         assert syn_score[key] > 0
@@ -108,11 +118,12 @@ def test_evaluate_chi_squared_test(test_plugin: Plugin) -> None:
 def test_evaluate_maximum_mean_discrepancy(kernel: str, test_plugin: Plugin) -> None:
     X, y = load_iris(return_X_y=True, as_frame=True)
     X["target"] = y
+    Xloader = GenericDataLoader(X)
 
-    test_plugin.fit(X)
+    test_plugin.fit(Xloader)
     X_gen = test_plugin.generate(1000)
 
-    syn_score, rnd_score = _eval_plugin(MaximumMeanDiscrepancy, X, X_gen)
+    syn_score, rnd_score = _eval_plugin(MaximumMeanDiscrepancy, Xloader, X_gen)
 
     for key in syn_score:
         assert syn_score[key] > 0
@@ -128,11 +139,12 @@ def test_evaluate_maximum_mean_discrepancy(kernel: str, test_plugin: Plugin) -> 
 def test_evaluate_inv_cdf_function(test_plugin: Plugin) -> None:
     X, y = load_iris(return_X_y=True, as_frame=True)
     X["target"] = y
+    Xloader = GenericDataLoader(X)
 
-    test_plugin.fit(X)
+    test_plugin.fit(Xloader)
     X_gen = test_plugin.generate(1000)
 
-    syn_score, rnd_score = _eval_plugin(InverseCDFDistance, X, X_gen)
+    syn_score, rnd_score = _eval_plugin(InverseCDFDistance, Xloader, X_gen)
 
     for key in syn_score:
         assert syn_score[key] > 0
@@ -148,11 +160,12 @@ def test_evaluate_inv_cdf_function(test_plugin: Plugin) -> None:
 def test_evaluate_avg_jensenshannon_distance(test_plugin: Plugin) -> None:
     X, y = load_iris(return_X_y=True, as_frame=True)
     X["target"] = y
+    Xloader = GenericDataLoader(X)
 
-    test_plugin.fit(X)
+    test_plugin.fit(Xloader)
     X_gen = test_plugin.generate(1000)
 
-    syn_score, rnd_score = _eval_plugin(JensenShannonDistance, X, X_gen)
+    syn_score, rnd_score = _eval_plugin(JensenShannonDistance, Xloader, X_gen)
 
     for key in syn_score:
         assert syn_score[key] > 0
@@ -168,11 +181,12 @@ def test_evaluate_avg_jensenshannon_distance(test_plugin: Plugin) -> None:
 def test_evaluate_feature_correlation(test_plugin: Plugin) -> None:
     X, y = load_iris(return_X_y=True, as_frame=True)
     X["target"] = y
+    Xloader = GenericDataLoader(X)
 
-    test_plugin.fit(X)
+    test_plugin.fit(Xloader)
     X_gen = test_plugin.generate(1000)
 
-    syn_score, rnd_score = _eval_plugin(FeatureCorrelation, X, X_gen)
+    syn_score, rnd_score = _eval_plugin(FeatureCorrelation, Xloader, X_gen)
 
     for key in syn_score:
         assert syn_score[key] > 0
@@ -188,11 +202,12 @@ def test_evaluate_feature_correlation(test_plugin: Plugin) -> None:
 def test_evaluate_wasserstein_distance(test_plugin: Plugin) -> None:
     X, y = load_iris(return_X_y=True, as_frame=True)
     X["target"] = y
+    Xloader = GenericDataLoader(X)
 
-    test_plugin.fit(X)
+    test_plugin.fit(Xloader)
     X_gen = test_plugin.generate(1000)
 
-    syn_score, rnd_score = _eval_plugin(WassersteinDistance, X, X_gen)
+    syn_score, rnd_score = _eval_plugin(WassersteinDistance, Xloader, X_gen)
 
     for key in syn_score:
         assert syn_score[key] > 0
@@ -208,11 +223,12 @@ def test_evaluate_wasserstein_distance(test_plugin: Plugin) -> None:
 def test_evaluate_prdc(test_plugin: Plugin) -> None:
     X, y = load_iris(return_X_y=True, as_frame=True)
     X["target"] = y
+    Xloader = GenericDataLoader(X)
 
-    test_plugin.fit(X)
+    test_plugin.fit(Xloader)
     X_gen = test_plugin.generate(1000)
 
-    syn_score, rnd_score = _eval_plugin(PRDCScore, X, X_gen)
+    syn_score, rnd_score = _eval_plugin(PRDCScore, Xloader, X_gen)
 
     for key in syn_score:
         assert syn_score[key] >= 0
@@ -228,12 +244,12 @@ def test_evaluate_prdc(test_plugin: Plugin) -> None:
 def test_evaluate_alpha_precision(test_plugin: Plugin) -> None:
     X, y = load_iris(return_X_y=True, as_frame=True)
     X["target"] = y
+    Xloader = GenericDataLoader(X)
 
-    test_plugin.fit(X)
+    test_plugin.fit(Xloader)
     X_gen = test_plugin.generate(len(X))
 
-    syn_score, rnd_score = _eval_plugin(AlphaPrecision, X, X_gen)
-    print(syn_score, rnd_score)
+    syn_score, rnd_score = _eval_plugin(AlphaPrecision, Xloader, X_gen)
 
     assert syn_score["delta_precision_alpha"] > rnd_score["delta_precision_alpha"]
     assert syn_score["authenticity"] < rnd_score["authenticity"]
@@ -246,23 +262,22 @@ def test_evaluate_alpha_precision(test_plugin: Plugin) -> None:
 @pytest.mark.parametrize("test_plugin", [Plugins().get("dummy_sampler")])
 def test_evaluate_survival_km_distance(test_plugin: Plugin) -> None:
     X = load_rossi()
-
-    test_plugin.fit(X)
-    X_gen = test_plugin.generate(len(X))
-
-    with pytest.raises(RuntimeError):
-        _eval_plugin(SurvivalKMDistance, X, X_gen)
-
-    syn_score, rnd_score = _eval_plugin(
-        SurvivalKMDistance,
+    Xloader = SurvivalAnalysisDataLoader(
         X,
-        X_gen,
-        task_type="survival_analysis",
         target_column="arrest",
         time_to_event_column="week",
         time_horizons=[25],
     )
-    print(syn_score, rnd_score)
+
+    test_plugin.fit(Xloader)
+    X_gen = test_plugin.generate(len(X))
+
+    syn_score, rnd_score = _eval_plugin(
+        SurvivalKMDistance,
+        Xloader,
+        X_gen,
+        task_type="survival_analysis",
+    )
 
     assert np.abs(syn_score["optimism"]) < np.abs(rnd_score["optimism"])
     assert syn_score["abs_optimism"] < rnd_score["abs_optimism"]

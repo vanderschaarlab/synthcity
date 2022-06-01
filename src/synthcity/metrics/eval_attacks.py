@@ -3,7 +3,6 @@ from typing import Any, Dict
 
 # third party
 import numpy as np
-import pandas as pd
 from pydantic import validate_arguments
 from sklearn.linear_model import LinearRegression, LogisticRegression
 from sklearn.preprocessing import LabelEncoder
@@ -11,6 +10,7 @@ from xgboost import XGBClassifier, XGBRegressor
 
 # synthcity absolute
 from synthcity.metrics.core import MetricEvaluator
+from synthcity.plugins.core.dataloader import DataLoader
 from synthcity.plugins.core.models.mlp import MLP
 
 
@@ -29,14 +29,14 @@ class AttackEvaluator(MetricEvaluator):
         classifier_args: Dict,
         regressor_template: Any,
         regressor_args: Dict,
-        X_gt: pd.DataFrame,
-        X_syn: pd.DataFrame,
+        X_gt: DataLoader,
+        X_syn: DataLoader,
     ) -> Dict:
-        if len(self._sensitive_columns) == 0:
+        if len(X_gt.sensitive_features) == 0:
             return {}
 
         output = []
-        for col in self._sensitive_columns:
+        for col in X_gt.sensitive_features:
             if col not in X_syn.columns:
                 continue
 
@@ -86,26 +86,25 @@ class DataLeakageMLP(AttackEvaluator):
     @validate_arguments(config=dict(arbitrary_types_allowed=True))
     def evaluate(
         self,
-        X_gt_train: pd.DataFrame,
-        X_gt_test: pd.DataFrame,
-        X_syn: pd.DataFrame,
+        X_gt: DataLoader,
+        X_syn: DataLoader,
     ) -> Dict:
         return self._evaluate_leakage(
             MLP,
             {
                 "task_type": "classification",
-                "n_units_in": X_gt_train.shape[1] - 1,
+                "n_units_in": X_gt.shape[1] - 1,
                 "n_units_out": 0,
                 "seed": self._random_seed,
             },
             MLP,
             {
                 "task_type": "regression",
-                "n_units_in": X_gt_train.shape[1] - 1,
+                "n_units_in": X_gt.shape[1] - 1,
                 "n_units_out": 1,
                 "seed": self._random_seed,
             },
-            X_gt_train,
+            X_gt,
             X_syn,
         )
 
@@ -122,9 +121,8 @@ class DataLeakageXGB(AttackEvaluator):
     @validate_arguments(config=dict(arbitrary_types_allowed=True))
     def evaluate(
         self,
-        X_gt_train: pd.DataFrame,
-        X_gt_test: pd.DataFrame,
-        X_syn: pd.DataFrame,
+        X_gt: DataLoader,
+        X_syn: DataLoader,
     ) -> Dict:
         return self._evaluate_leakage(
             XGBClassifier,
@@ -134,7 +132,7 @@ class DataLeakageXGB(AttackEvaluator):
             },
             XGBRegressor,
             {"n_jobs": -1},
-            X_gt_train,
+            X_gt,
             X_syn,
         )
 
@@ -151,15 +149,14 @@ class DataLeakageLinear(AttackEvaluator):
     @validate_arguments(config=dict(arbitrary_types_allowed=True))
     def evaluate(
         self,
-        X_gt_train: pd.DataFrame,
-        X_gt_test: pd.DataFrame,
-        X_syn: pd.DataFrame,
+        X_gt: DataLoader,
+        X_syn: DataLoader,
     ) -> Dict:
         return self._evaluate_leakage(
             LogisticRegression,
             {"random_state": self._random_seed},
             LinearRegression,
             {},
-            X_gt_train,
+            X_gt,
             X_syn,
         )

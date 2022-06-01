@@ -14,6 +14,7 @@ from synthcity.metrics.eval_detection import (
     SyntheticDetectionXGB,
 )
 from synthcity.plugins import Plugin, Plugins
+from synthcity.plugins.core.dataloader import GenericDataLoader
 
 
 @pytest.mark.parametrize("reduction", ["mean", "max", "min"])
@@ -26,16 +27,16 @@ from synthcity.plugins import Plugin, Plugins
 def test_detect_reduction(reduction: str, evaluator_t: Type) -> None:
     X, y = load_iris(return_X_y=True, as_frame=True)
     X["target"] = y
+    Xloader = GenericDataLoader(X)
 
     test_plugin = Plugins().get("marginal_distributions")
-    test_plugin.fit(X)
+    test_plugin.fit(Xloader)
     X_gen = test_plugin.generate(100)
 
     evaluator = evaluator_t(reduction=reduction)
 
     score = evaluator.evaluate(
-        X,
-        X,
+        Xloader,
         X_gen,
     )
 
@@ -54,15 +55,15 @@ def test_detect_reduction(reduction: str, evaluator_t: Type) -> None:
 def test_detect_synth(test_plugin: Plugin, evaluator_t: Type) -> None:
     X, y = load_iris(return_X_y=True, as_frame=True)
     X["target"] = y
+    Xloader = GenericDataLoader(X)
 
-    test_plugin.fit(X)
+    test_plugin.fit(Xloader)
     X_gen = test_plugin.generate(100)
 
     evaluator = evaluator_t()
 
     good_score = evaluator.evaluate(
-        X,
-        X,
+        Xloader,
         X_gen,
     )["mean"]
 
@@ -72,9 +73,8 @@ def test_detect_synth(test_plugin: Plugin, evaluator_t: Type) -> None:
     sz = 100
     X_rnd = pd.DataFrame(np.random.randn(sz, len(X.columns)), columns=X.columns)
     score = evaluator.evaluate(
-        X,
-        X,
-        X_rnd,
+        Xloader,
+        GenericDataLoader(X_rnd),
     )["mean"]
 
     assert score > 0

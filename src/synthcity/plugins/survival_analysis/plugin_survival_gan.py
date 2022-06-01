@@ -87,7 +87,7 @@ class SurvivalGANPlugin(Plugin):
         sampler: Optional[ImbalancedDatasetSampler] = None
         sampling_labels: Optional[list] = None
 
-        _, T, E = X.preprocessed()
+        _, T, E = X.unpack()
         if self.dataloader_sampling_strategy == "imbalanced_censoring":
             log.info("Using imbalanced censoring sampling")
             sampling_labels = list(E.values)

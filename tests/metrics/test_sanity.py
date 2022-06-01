@@ -16,20 +16,20 @@ from synthcity.metrics.eval_sanity import (
     NearestSyntheticNeighborDistance,
 )
 from synthcity.plugins import Plugin, Plugins
+from synthcity.plugins.core.dataloader import DataLoader, GenericDataLoader
 
 
-def _eval_plugin(cbk: Callable, X: pd.DataFrame, X_syn: pd.DataFrame) -> Tuple:
+def _eval_plugin(cbk: Callable, X: DataLoader, X_syn: DataLoader) -> Tuple:
     syn_score = cbk(
-        X,
         X,
         X_syn,
     )
-    print(syn_score)
 
     sz = len(X_syn)
-    X_rnd = pd.DataFrame(np.random.randn(sz, len(X.columns)), columns=X.columns)
+    X_rnd = GenericDataLoader(
+        pd.DataFrame(np.random.randn(sz, len(X.columns)), columns=X.columns)
+    )
     rnd_score = cbk(
-        X,
         X,
         X_rnd,
     )
@@ -41,15 +41,15 @@ def _eval_plugin(cbk: Callable, X: pd.DataFrame, X_syn: pd.DataFrame) -> Tuple:
 def test_evaluate_data_mismatch_score(test_plugin: Plugin) -> None:
     X, y = load_iris(return_X_y=True, as_frame=True)
     X["target"] = y
+    Xloader = GenericDataLoader(X)
 
-    test_plugin.fit(X)
+    test_plugin.fit(Xloader)
     X_gen = test_plugin.generate(100)
 
     evaluator = DataMismatchScore()
 
     score = evaluator.evaluate(
-        X,
-        X,
+        Xloader,
         X_gen,
     )
 
@@ -60,9 +60,8 @@ def test_evaluate_data_mismatch_score(test_plugin: Plugin) -> None:
     X["target"] = "a"
 
     score = evaluator.evaluate(
-        X,
-        X,
-        X_fail,
+        GenericDataLoader(X),
+        GenericDataLoader(X_fail),
     )
 
     for key in score:
@@ -78,12 +77,13 @@ def test_evaluate_data_mismatch_score(test_plugin: Plugin) -> None:
 def test_common_rows(test_plugin: Plugin) -> None:
     X, y = load_iris(return_X_y=True, as_frame=True)
     X["target"] = y
+    Xloader = GenericDataLoader(X)
 
-    test_plugin.fit(X)
+    test_plugin.fit(Xloader)
     X_gen = test_plugin.generate(100)
 
     evaluator = CommonRowsProportion()
-    syn_score, rnd_score = _eval_plugin(evaluator.evaluate, X, X_gen)
+    syn_score, rnd_score = _eval_plugin(evaluator.evaluate, Xloader, X_gen)
 
     for key in syn_score:
         assert syn_score[key] > 0
@@ -99,13 +99,14 @@ def test_common_rows(test_plugin: Plugin) -> None:
 def test_evaluate_avg_distance_nearest_synth_neighbor(test_plugin: Plugin) -> None:
     X, y = load_iris(return_X_y=True, as_frame=True)
     X["target"] = y
+    Xloader = GenericDataLoader(X)
 
-    test_plugin.fit(X)
+    test_plugin.fit(Xloader)
     X_gen = test_plugin.generate(100)
 
     evaluator = NearestSyntheticNeighborDistance()
 
-    syn_score, rnd_score = _eval_plugin(evaluator.evaluate, X, X_gen)
+    syn_score, rnd_score = _eval_plugin(evaluator.evaluate, Xloader, X_gen)
 
     for key in syn_score:
         assert syn_score[key] > 0
@@ -124,12 +125,13 @@ def test_evaluate_avg_distance_nearest_synth_neighbor(test_plugin: Plugin) -> No
 def test_evaluate_close_values(test_plugin: Plugin) -> None:
     X, y = load_iris(return_X_y=True, as_frame=True)
     X["target"] = y
+    Xloader = GenericDataLoader(X)
 
-    test_plugin.fit(X)
+    test_plugin.fit(Xloader)
     X_gen = test_plugin.generate(100)
 
     evaluator = CloseValuesProbability()
-    syn_score, rnd_score = _eval_plugin(evaluator.evaluate, X, X_gen)
+    syn_score, rnd_score = _eval_plugin(evaluator.evaluate, Xloader, X_gen)
 
     for key in syn_score:
         assert 0 < syn_score[key] < 1
@@ -145,12 +147,13 @@ def test_evaluate_close_values(test_plugin: Plugin) -> None:
 def test_evaluate_distant_values(test_plugin: Plugin) -> None:
     X, y = load_iris(return_X_y=True, as_frame=True)
     X["target"] = y
+    Xloader = GenericDataLoader(X)
 
-    test_plugin.fit(X)
+    test_plugin.fit(Xloader)
     X_gen = test_plugin.generate(100)
 
     evaluator = DistantValuesProbability()
-    syn_score, rnd_score = _eval_plugin(evaluator.evaluate, X, X_gen)
+    syn_score, rnd_score = _eval_plugin(evaluator.evaluate, Xloader, X_gen)
 
     for key in syn_score:
         assert 0 < syn_score[key] < 1

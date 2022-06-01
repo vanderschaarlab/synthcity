@@ -4,12 +4,12 @@ from typing import Any
 
 # third party
 import numpy as np
-import pandas as pd
 import seaborn as sns
 from pydantic import validate_arguments
 
 # synthcity absolute
 from synthcity.metrics.eval_statistical import FeatureCorrelation, JensenShannonDistance
+from synthcity.plugins.core.dataloader import DataLoader
 
 COLOR_PALETTE = ["#2b2d42", "#d90429"]
 LABELS = ["real", "syn"]
@@ -17,7 +17,7 @@ LABELS = ["real", "syn"]
 
 @validate_arguments(config=dict(arbitrary_types_allowed=True))
 def plot_marginal_comparison(
-    plt: Any, X_gt: pd.DataFrame, X_syn: pd.DataFrame, normalize: bool = True
+    plt: Any, X_gt: DataLoader, X_syn: DataLoader, normalize: bool = True
 ) -> None:
     evaluator = JensenShannonDistance(n_histogram_bins=10)
     stats_, stats_gt, stats_syn = evaluator._evaluate_stats(X_gt, X_syn)
@@ -82,8 +82,8 @@ def plot_marginal_comparison(
 @validate_arguments(config=dict(arbitrary_types_allowed=True))
 def plot_associations_comparison(
     plt: Any,
-    X_gt: pd.DataFrame,
-    X_syn: pd.DataFrame,
+    X_gt: DataLoader,
+    X_syn: DataLoader,
     nom_nom_assoc: str = "theil",
     nominal_columns: str = "auto",
 ) -> None:
@@ -91,7 +91,7 @@ def plot_associations_comparison(
         nom_nom_assoc=nom_nom_assoc, nominal_columns=nominal_columns
     )
     stats_gt, stats_syn = evaluator._evaluate_stats(X_gt, X_syn)
-    pcd = evaluator.evaluate(X_gt, X_gt, X_syn)["joint"]
+    pcd = evaluator.evaluate(X_gt, X_syn)["joint"]
 
     fig, ax = plt.subplots(1, 2, figsize=(12, 10))
     cbar_ax = fig.add_axes([0.91, 0.3, 0.01, 0.4])

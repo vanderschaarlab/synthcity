@@ -14,17 +14,17 @@ from scipy.special import kl_div
 from scipy.stats import chisquare, ks_2samp
 from sklearn import metrics
 from sklearn.neighbors import NearestNeighbors
-from sklearn.preprocessing import MinMaxScaler
 
 # synthcity absolute
 from synthcity.metrics._utils import get_frequency
 from synthcity.metrics.core import MetricEvaluator
+from synthcity.plugins.core.dataloader import DataLoader
 from synthcity.plugins.core.models.survival_analysis.metrics import (
     nonparametric_distance,
 )
 
 
-class PerformanceEvaluator(MetricEvaluator):
+class StatisticalEvaluator(MetricEvaluator):
     def __init__(self, **kwargs: Any) -> None:
         super().__init__(**kwargs)
 
@@ -32,32 +32,8 @@ class PerformanceEvaluator(MetricEvaluator):
     def type() -> str:
         return "stats"
 
-    def _normalize_covariates(
-        self, X_gt_train: pd.DataFrame, X_gt_test: pd.DataFrame, X_syn: pd.DataFrame
-    ) -> Tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame]:
-        X_gt_train_norm = X_gt_train.copy()
-        X_gt_test_norm = X_gt_test.copy()
-        X_syn_norm = X_syn.copy()
-        if self._task_type != "survival_analysis":
-            X_gt_train_norm = X_gt_train_norm.drop(
-                columns=[self._target_column, self._time_to_event_column]
-            )
-            X_gt_test_norm = X_gt_test_norm.drop(
-                columns=[self._target_column, self._time_to_event_column]
-            )
-            X_syn = X_syn.drop(
-                columns=[self._target_column, self._time_to_event_column]
-            )
 
-        scaler = MinMaxScaler().fit(X_gt_train_norm)
-        return (
-            pd.DataFrame(scaler.transform(X_gt_train_norm), columns=X_gt_train.columns),
-            pd.DataFrame(scaler.transform(X_gt_test_norm), columns=X_gt_train.columns),
-            pd.DataFrame(scaler.transform(X_syn_norm), columns=X_syn.columns),
-        )
-
-
-class InverseKLDivergence(PerformanceEvaluator):
+class InverseKLDivergence(StatisticalEvaluator):
     """Returns the average inverse of the Kullback–Leibler Divergence metric.
 
     Score:
@@ -77,24 +53,19 @@ class InverseKLDivergence(PerformanceEvaluator):
         return "maximize"
 
     @validate_arguments(config=dict(arbitrary_types_allowed=True))
-    def evaluate(
-        self, X_gt_train: pd.DataFrame, X_gt_test: pd.DataFrame, X_syn: pd.DataFrame
-    ) -> Dict:
-        X_gt_train, X_gt_test, X_syn = self._normalize_covariates(
-            X_gt_train, X_gt_test, X_syn
-        )
+    def evaluate(self, X_gt: DataLoader, X_syn: DataLoader) -> Dict:
         freqs = get_frequency(
-            X_gt_train, X_syn, n_histogram_bins=self._n_histogram_bins
+            X_gt.dataframe(), X_syn.dataframe(), n_histogram_bins=self._n_histogram_bins
         )
         res = []
-        for col in X_gt_train.columns:
+        for col in X_gt.columns:
             gt_freq, synth_freq = freqs[col]
             res.append(1 / (1 + np.sum(kl_div(gt_freq, synth_freq))))
 
         return {"marginal": float(self.reduction()(res))}
 
 
-class KolmogorovSmirnovTest(PerformanceEvaluator):
+class KolmogorovSmirnovTest(StatisticalEvaluator):
     """Performs the Kolmogorov-Smirnov test for goodness of fit.
 
     Score:
@@ -114,21 +85,16 @@ class KolmogorovSmirnovTest(PerformanceEvaluator):
         return "maximize"
 
     @validate_arguments(config=dict(arbitrary_types_allowed=True))
-    def evaluate(
-        self, X_gt_train: pd.DataFrame, X_gt_test: pd.DataFrame, X_syn: pd.DataFrame
-    ) -> Dict:
-        X_gt_train, X_gt_test, X_syn = self._normalize_covariates(
-            X_gt_train, X_gt_test, X_syn
-        )
+    def evaluate(self, X_gt: DataLoader, X_syn: DataLoader) -> Dict:
         res = []
-        for col in X_gt_train.columns:
-            statistic, _ = ks_2samp(X_gt_train[col], X_syn[col])
+        for col in X_gt.columns:
+            statistic, _ = ks_2samp(X_gt[col], X_syn[col])
             res.append(1 - statistic)
 
         return {"marginal": float(self.reduction()(res))}
 
 
-class ChiSquaredTest(PerformanceEvaluator):
+class ChiSquaredTest(StatisticalEvaluator):
     """Performs the one-way chi-square test.
 
     Returns:
@@ -151,18 +117,13 @@ class ChiSquaredTest(PerformanceEvaluator):
         return "maximize"
 
     @validate_arguments(config=dict(arbitrary_types_allowed=True))
-    def evaluate(
-        self, X_gt_train: pd.DataFrame, X_gt_test: pd.DataFrame, X_syn: pd.DataFrame
-    ) -> Dict:
-        X_gt_train, X_gt_test, X_syn = self._normalize_covariates(
-            X_gt_train, X_gt_test, X_syn
-        )
+    def evaluate(self, X_gt: DataLoader, X_syn: DataLoader) -> Dict:
         res = []
         freqs = get_frequency(
-            X_gt_train, X_syn, n_histogram_bins=self._n_histogram_bins
+            X_gt.dataframe(), X_syn.dataframe(), n_histogram_bins=self._n_histogram_bins
         )
 
-        for col in X_gt_train.columns:
+        for col in X_gt.columns:
             gt_freq, synth_freq = freqs[col]
             try:
                 _, pvalue = chisquare(gt_freq, synth_freq)
@@ -174,7 +135,7 @@ class ChiSquaredTest(PerformanceEvaluator):
         return {"marginal": float(self.reduction()(res))}
 
 
-class MaximumMeanDiscrepancy(PerformanceEvaluator):
+class MaximumMeanDiscrepancy(StatisticalEvaluator):
     """Empirical maximum mean discrepancy. The lower the result the more evidence that distributions are the same.
 
     Args:
@@ -202,18 +163,14 @@ class MaximumMeanDiscrepancy(PerformanceEvaluator):
     @validate_arguments(config=dict(arbitrary_types_allowed=True))
     def evaluate(
         self,
-        X_gt_train: pd.DataFrame,
-        X_gt_test: pd.DataFrame,
-        X_syn: pd.DataFrame,
+        X_gt: DataLoader,
+        X_syn: DataLoader,
     ) -> Dict:
-        X_gt_train, X_gt_test, X_syn = self._normalize_covariates(
-            X_gt_train, X_gt_test, X_syn
-        )
         if self.kernel == "linear":
             """
             MMD using linear kernel (i.e., k(x,y) = <x,y>)
             """
-            delta_df = X_gt_train.mean(axis=0) - X_syn.mean(axis=0)
+            delta_df = X_gt.dataframe().mean(axis=0) - X_syn.dataframe().mean(axis=0)
             delta = delta_df.values
 
             score = delta.dot(delta.T)
@@ -222,9 +179,9 @@ class MaximumMeanDiscrepancy(PerformanceEvaluator):
             MMD using rbf (gaussian) kernel (i.e., k(x,y) = exp(-gamma * ||x-y||^2 / 2))
             """
             gamma = 1.0
-            XX = metrics.pairwise.rbf_kernel(X_gt_train, X_gt_train, gamma)
-            YY = metrics.pairwise.rbf_kernel(X_syn, X_syn, gamma)
-            XY = metrics.pairwise.rbf_kernel(X_gt_train, X_syn, gamma)
+            XX = metrics.pairwise.rbf_kernel(X_gt.numpy(), X_gt.numpy(), gamma)
+            YY = metrics.pairwise.rbf_kernel(X_syn.numpy(), X_syn.numpy(), gamma)
+            XY = metrics.pairwise.rbf_kernel(X_gt.numpy(), X_syn.numpy(), gamma)
             score = XX.mean() + YY.mean() - 2 * XY.mean()
         elif self.kernel == "polynomial":
             """
@@ -234,11 +191,13 @@ class MaximumMeanDiscrepancy(PerformanceEvaluator):
             gamma = 1
             coef0 = 0
             XX = metrics.pairwise.polynomial_kernel(
-                X_gt_train, X_gt_train, degree, gamma, coef0
+                X_gt.numpy(), X_gt.numpy(), degree, gamma, coef0
             )
-            YY = metrics.pairwise.polynomial_kernel(X_syn, X_syn, degree, gamma, coef0)
+            YY = metrics.pairwise.polynomial_kernel(
+                X_syn.numpy(), X_syn.numpy(), degree, gamma, coef0
+            )
             XY = metrics.pairwise.polynomial_kernel(
-                X_gt_train, X_syn, degree, gamma, coef0
+                X_gt.numpy(), X_syn.numpy(), degree, gamma, coef0
             )
             score = XX.mean() + YY.mean() - 2 * XY.mean()
         else:
@@ -247,7 +206,7 @@ class MaximumMeanDiscrepancy(PerformanceEvaluator):
         return {"joint": float(score)}
 
 
-class InverseCDFDistance(PerformanceEvaluator):
+class InverseCDFDistance(StatisticalEvaluator):
     """Evaluate the distance between continuous features."""
 
     @validate_arguments(config=dict(arbitrary_types_allowed=True))
@@ -267,16 +226,15 @@ class InverseCDFDistance(PerformanceEvaluator):
     @validate_arguments(config=dict(arbitrary_types_allowed=True))
     def evaluate(
         self,
-        X_gt_train: pd.DataFrame,
-        X_gt_test: pd.DataFrame,
-        X_syn: pd.DataFrame,
+        X_gt: DataLoader,
+        X_syn: DataLoader,
     ) -> Dict:
         distances = []
         for col in X_syn.columns:
             if len(X_syn[col].unique()) < 15:
                 continue
             syn_col = X_syn[col]
-            gt_col = X_gt_train[col]
+            gt_col = X_gt[col]
 
             predictor = Univariate()
             predictor.fit(syn_col)
@@ -290,7 +248,7 @@ class InverseCDFDistance(PerformanceEvaluator):
         return {"marginal": float(self.reduction()(distances))}
 
 
-class JensenShannonDistance(PerformanceEvaluator):
+class JensenShannonDistance(StatisticalEvaluator):
     """Evaluate the average Jensen-Shannon distance (metric) between two probability arrays."""
 
     @validate_arguments(config=dict(arbitrary_types_allowed=True))
@@ -310,8 +268,8 @@ class JensenShannonDistance(PerformanceEvaluator):
     @validate_arguments(config=dict(arbitrary_types_allowed=True))
     def _evaluate_stats(
         self,
-        X_gt: pd.DataFrame,
-        X_syn: pd.DataFrame,
+        X_gt: DataLoader,
+        X_syn: DataLoader,
     ) -> Tuple[Dict, Dict, Dict]:
 
         stats_gt = {}
@@ -337,20 +295,16 @@ class JensenShannonDistance(PerformanceEvaluator):
     @validate_arguments(config=dict(arbitrary_types_allowed=True))
     def evaluate(
         self,
-        X_gt_train: pd.DataFrame,
-        X_gt_test: pd.DataFrame,
-        X_syn: pd.DataFrame,
+        X_gt: DataLoader,
+        X_syn: DataLoader,
         normalizdde: bool = True,
     ) -> Dict:
-        X_gt_train, X_gt_test, X_syn = self._normalize_covariates(
-            X_gt_train, X_gt_test, X_syn
-        )
-        stats_, _, _ = self._evaluate_stats(X_gt_train, X_syn)
+        stats_, _, _ = self._evaluate_stats(X_gt, X_syn)
 
         return {"marginal": sum(stats_.values()) / len(stats_.keys())}
 
 
-class FeatureCorrelation(PerformanceEvaluator):
+class FeatureCorrelation(StatisticalEvaluator):
     """Evaluate the correlation/strength-of-association of features in data-set with both categorical and continuous features using: * Pearson's R for continuous-continuous cases ** Cramer's V or Theil's U for categorical-categorical cases."""
 
     def __init__(
@@ -372,18 +326,18 @@ class FeatureCorrelation(PerformanceEvaluator):
     @validate_arguments(config=dict(arbitrary_types_allowed=True))
     def _evaluate_stats(
         self,
-        X_gt: pd.DataFrame,
-        X_syn: pd.DataFrame,
+        X_gt: DataLoader,
+        X_syn: DataLoader,
     ) -> Tuple[Dict, Dict]:
         stats_gt = associations(
-            X_gt,
+            X_gt.numpy(),
             nom_nom_assoc=self.nom_nom_assoc,
             nominal_columns=self.nominal_columns,
             nan_replace_value="nan",
             compute_only=True,
         )["corr"]
         stats_syn = associations(
-            X_syn,
+            X_syn.numpy(),
             nom_nom_assoc=self.nom_nom_assoc,
             nominal_columns=self.nominal_columns,
             nan_replace_value="nan",
@@ -395,19 +349,15 @@ class FeatureCorrelation(PerformanceEvaluator):
     @validate_arguments(config=dict(arbitrary_types_allowed=True))
     def evaluate(
         self,
-        X_gt_train: pd.DataFrame,
-        X_gt_test: pd.DataFrame,
-        X_syn: pd.DataFrame,
+        X_gt: DataLoader,
+        X_syn: DataLoader,
     ) -> Dict:
-        X_gt_train, X_gt_test, X_syn = self._normalize_covariates(
-            X_gt_train, X_gt_test, X_syn
-        )
-        stats_gt, stats_syn = self._evaluate_stats(X_gt_train, X_syn)
+        stats_gt, stats_syn = self._evaluate_stats(X_gt, X_syn)
 
         return {"joint": np.linalg.norm(stats_gt - stats_syn, "fro")}
 
 
-class WassersteinDistance(PerformanceEvaluator):
+class WassersteinDistance(StatisticalEvaluator):
     """Compare Wasserstein distance between original data and synthetic data.
 
     Args:
@@ -432,19 +382,17 @@ class WassersteinDistance(PerformanceEvaluator):
     @validate_arguments(config=dict(arbitrary_types_allowed=True))
     def evaluate(
         self,
-        X_train: pd.DataFrame,
-        X_test: pd.DataFrame,
-        X_syn: pd.DataFrame,
+        X: DataLoader,
+        X_syn: DataLoader,
     ) -> Dict:
-        X_train, X_test, X_syn = self._normalize_covariates(X_train, X_test, X_syn)
-        X_ten = torch.from_numpy(X_train.values)
-        Xsyn_ten = torch.from_numpy(X_syn.values.astype(float))
+        X_ten = torch.from_numpy(X.numpy())
+        Xsyn_ten = torch.from_numpy(X_syn.numpy())
         OT_solver = SamplesLoss(loss="sinkhorn")
 
         return {"joint": OT_solver(X_ten, Xsyn_ten).cpu().numpy()}
 
 
-class PRDCScore(PerformanceEvaluator):
+class PRDCScore(StatisticalEvaluator):
     """
     Computes precision, recall, density, and coverage given two manifolds.
 
@@ -468,12 +416,10 @@ class PRDCScore(PerformanceEvaluator):
     @validate_arguments(config=dict(arbitrary_types_allowed=True))
     def evaluate(
         self,
-        X_train: pd.DataFrame,
-        X_test: pd.DataFrame,
-        X_syn: pd.DataFrame,
+        X: DataLoader,
+        X_syn: DataLoader,
     ) -> Dict:
-        X_train, X_test, X_syn = self._normalize_covariates(X_train, X_test, X_syn)
-        return self._compute_prdc(np.asarray(X_train), np.asarray(X_syn))
+        return self._compute_prdc(X.numpy(), X_syn.numpy())
 
     def _compute_pairwise_distance(
         self, data_x: np.ndarray, data_y: Optional[np.ndarray] = None
@@ -574,7 +520,7 @@ class PRDCScore(PerformanceEvaluator):
         )
 
 
-class AlphaPrecision(PerformanceEvaluator):
+class AlphaPrecision(StatisticalEvaluator):
     def __init__(self, **kwargs: Any) -> None:
         super().__init__(**kwargs)
 
@@ -586,13 +532,12 @@ class AlphaPrecision(PerformanceEvaluator):
     def direction() -> str:
         return "maximize"
 
+    @validate_arguments(config=dict(arbitrary_types_allowed=True))
     def metrics(
         self,
-        X_df: pd.DataFrame,
-        X_syn_df: pd.DataFrame,
+        X: np.ndarray,
+        X_syn: np.ndarray,
     ) -> Tuple:
-        X = X_df.values.astype(float)
-        X_syn = X_syn_df.values.astype(float)
         assert len(X) == len(
             X_syn
         ), "The real and synthetic data mush have the same length"
@@ -674,13 +619,9 @@ class AlphaPrecision(PerformanceEvaluator):
     @validate_arguments(config=dict(arbitrary_types_allowed=True))
     def evaluate(
         self,
-        X_train_df: pd.DataFrame,
-        X_test_df: pd.DataFrame,
-        X_syn_df: pd.DataFrame,
+        X: DataLoader,
+        X_syn: DataLoader,
     ) -> Dict:
-        X_train_df, X_test_df, X_syn_df = self._normalize_covariates(
-            X_train_df, X_test_df, X_syn_df
-        )
 
         (
             alphas,
@@ -689,7 +630,7 @@ class AlphaPrecision(PerformanceEvaluator):
             Delta_precision_alpha,
             Delta_coverage_beta,
             authenticity,
-        ) = self.metrics(X_train_df, X_syn_df)
+        ) = self.metrics(X.numpy(), X_syn.numpy())
 
         return {
             "delta_precision_alpha": Delta_precision_alpha,
@@ -698,7 +639,7 @@ class AlphaPrecision(PerformanceEvaluator):
         }
 
 
-class SurvivalKMDistance(PerformanceEvaluator):
+class SurvivalKMDistance(StatisticalEvaluator):
     def __init__(self, **kwargs: Any) -> None:
         super().__init__(**kwargs)
 
@@ -713,25 +654,20 @@ class SurvivalKMDistance(PerformanceEvaluator):
     @validate_arguments(config=dict(arbitrary_types_allowed=True))
     def evaluate(
         self,
-        X_train_df: pd.DataFrame,
-        X_test_df: pd.DataFrame,
-        X_syn_df: pd.DataFrame,
+        X: DataLoader,
+        X_syn: DataLoader,
     ) -> Dict:
         if self._task_type != "survival_analysis":
             raise RuntimeError(
                 f"The metric is valid only for survival analysis tasks, but got {self._task_type}"
             )
+        if X.type() != "survival_analysis" or X_syn.type() != "survival_analysis":
+            raise RuntimeError(
+                f"The metric is valid only for survival analysis tasks, but got datasets {X.type()} and {X_syn.type()}"
+            )
 
-        target_col = self._target_column
-        tte_col = self._time_to_event_column
-
-        X = X_train_df.append(X_test_df).reset_index(drop=True)
-
-        real_T = X[tte_col]
-        real_E = X[target_col]
-
-        syn_T = X_syn_df[tte_col]
-        syn_E = X_syn_df[target_col]
+        _, real_T, real_E = X.unpack()
+        _, syn_T, syn_E = X_syn.unpack()
 
         optimism, abs_optimism, sightedness = nonparametric_distance(
             (real_T, real_E), (syn_T, syn_E)

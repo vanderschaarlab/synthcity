@@ -59,7 +59,7 @@ class SurvivalPipeline(Plugin):
         return []
 
     def _fit(self, X: DataLoader, *args: Any, **kwargs: Any) -> "SurvivalPipeline":
-        Xcov, T, E = X.preprocessed()
+        Xcov, T, E = X.unpack()
 
         self.last_te = T[E == 1].max()
         self.censoring_ratio = (E == 0).sum() / len(E)

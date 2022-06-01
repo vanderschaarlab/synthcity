@@ -204,6 +204,9 @@ class MLP(nn.Module):
     ) -> None:
         super(MLP, self).__init__()
 
+        assert n_units_in > 0
+        assert n_units_out > 0
+
         enable_reproducible_results(seed)
         self.device = device
         self.task_type = task_type

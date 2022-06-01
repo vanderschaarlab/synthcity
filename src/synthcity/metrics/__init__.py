@@ -1,12 +1,16 @@
 # stdlib
-from typing import Dict, List, Optional
+from typing import Dict, List, Optional, Union
 
 # third party
 import pandas as pd
 from pydantic import validate_arguments
 
 # synthcity absolute
-from synthcity.plugins.core.dataloader import DataLoader
+from synthcity.plugins.core.dataloader import (
+    DataLoader,
+    GenericDataLoader,
+    create_from_info,
+)
 
 # synthcity relative
 from .eval_detection import (
@@ -86,8 +90,8 @@ class Metrics:
     @staticmethod
     @validate_arguments(config=dict(arbitrary_types_allowed=True))
     def evaluate(
-        X_gt: DataLoader,
-        X_syn: DataLoader,
+        X_gt: Union[DataLoader, pd.DataFrame],
+        X_syn: Union[DataLoader, pd.DataFrame],
         reduction: str = "mean",
         n_histogram_bins: int = 10,
         metrics: Optional[Dict] = None,
@@ -98,6 +102,11 @@ class Metrics:
             raise ValueError(
                 f"Invalid task type {task_type}. Supported: {supported_tasks}"
             )
+
+        if not isinstance(X_gt, DataLoader):
+            X_gt = GenericDataLoader(X_gt)
+        if not isinstance(X_syn, DataLoader):
+            X_syn = create_from_info(X_syn, X_gt.info())
 
         if X_gt.type() != X_syn.type():
             raise ValueError("Different dataloader types")
