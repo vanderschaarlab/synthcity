@@ -97,14 +97,14 @@ def test_eval_performance() -> None:
 
     X, y = load_iris(return_X_y=True, as_frame=True)
     X["target"] = y
-
+    loader = GenericDataLoader(X)
     for retry in range(2):
         test_plugin = plugin()
         evaluator = PerformanceEvaluatorXGB()
 
-        test_plugin.fit(GenericDataLoader(X))
+        test_plugin.fit(loader)
         X_syn = test_plugin.generate()
 
-        results.append(evaluator.evaluate(X, X, X_syn)["syn_id"])
+        results.append(evaluator.evaluate(loader, X_syn)["syn_id"])
 
     assert np.mean(results) > 0.5

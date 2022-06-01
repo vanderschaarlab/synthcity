@@ -7,7 +7,6 @@ from typing import Dict, List, Optional
 import pandas as pd
 from IPython.display import display
 from pydantic import validate_arguments
-from sklearn.model_selection import train_test_split
 
 # synthcity absolute
 import synthcity.logger as log
@@ -15,8 +14,9 @@ from synthcity.metrics import Metrics
 from synthcity.metrics.scores import ScoreEvaluator
 from synthcity.plugins import Plugins
 from synthcity.plugins.core.constraints import Constraints
+from synthcity.plugins.core.dataloader import DataLoader
 from synthcity.utils.reproducibility import enable_reproducible_results
-from synthcity.utils.serialization import dataframe_hash, load_from_file, save_to_file
+from synthcity.utils.serialization import load_from_file, save_to_file
 
 
 class Benchmarks:
@@ -24,8 +24,7 @@ class Benchmarks:
     @validate_arguments(config=dict(arbitrary_types_allowed=True))
     def evaluate(
         plugins: List,
-        X: pd.DataFrame,
-        sensitive_columns: List[str] = [],
+        X: DataLoader,
         metrics: Optional[Dict] = None,
         repeats: int = 3,
         synthetic_size: Optional[int] = None,
@@ -33,12 +32,6 @@ class Benchmarks:
         synthetic_cache: bool = True,
         synthetic_reuse_is_exists: bool = True,
         task_type: str = "classification",  # classification, regression, survival_analysis
-        target_column: Optional[str] = None,
-        time_to_event_column: Optional[
-            str
-        ] = None,  # only for task_type = survival_analysis
-        time_horizons: Optional[List] = None,  # only for task_type = survival_analysis
-        train_size: float = 0.8,
         workspace: Path = Path("workspace"),
         plugin_kwargs: Dict = {},
     ) -> pd.DataFrame:
@@ -49,8 +42,6 @@ class Benchmarks:
                 The list of algorithms to evaluate
             X:
                 The baseline dataset to learn
-            sensitive_columns:
-                Optional list of sensitive columns, used for the privacy metrics.
             metrics:
                 List of metrics to test. By default, all metrics are evaluated.
             repeats:
@@ -65,12 +56,6 @@ class Benchmarks:
                 If the current synthetic dataset is cached, it will be reused for the experiments.
             task_type: str
                 The task type to benchmark for performance. Options: classification, regression, survival_analysis.
-            target_column:
-                The name of the column to use as target for benchmarking the performance metrics. By default, it uses the last column in the dataframe.
-            time_to_event_column: Optional str.
-                Only for survival_analysis: which column to use for time to event.
-            time_horizons: Optional list
-                Only for survival_analysis: which time horizons to use for performance evaluation.
             workspace: Path
                 Path for caching experiments
             plugin_kwargs:
@@ -78,7 +63,7 @@ class Benchmarks:
         """
         out = {}
 
-        experiment_name = dataframe_hash(X)
+        experiment_name = X.hash()
         workspace.mkdir(parents=True, exist_ok=True)
 
         plugin_cats = ["generic"]
@@ -102,12 +87,8 @@ class Benchmarks:
                     workspace / f"{experiment_name}_{plugin}{kwargs_hash}_{repeat}.bkp"
                 )
 
-                X_train, X_test = train_test_split(
-                    X, train_size=train_size, random_state=repeat
-                )
-
                 log.info(
-                    f" Experiment repeat: {repeat} task type: {task_type} Train df hash = {dataframe_hash(X_train)}"
+                    f" Experiment repeat: {repeat} task type: {task_type} Train df hash = {X.train().hash()}"
                 )
 
                 if cache_file.exists() and synthetic_reuse_is_exists:
@@ -116,13 +97,10 @@ class Benchmarks:
                     generator = Plugins(categories=plugin_cats).get(
                         plugin,
                         **kwargs,
-                        target_column=target_column,
-                        time_to_event_column=time_to_event_column,
-                        time_horizons=time_horizons,
                     )
 
                     try:
-                        generator.fit(X_train)
+                        generator.fit(X.train())
                         X_syn = generator.generate(
                             count=synthetic_size, constraints=synthetic_constraints
                         )
@@ -136,15 +114,10 @@ class Benchmarks:
                         save_to_file(cache_file, X_syn)
 
                 evaluation = Metrics.evaluate(
-                    X_train,
-                    X_test,
+                    X,
                     X_syn,
-                    sensitive_columns=sensitive_columns,
                     metrics=metrics,
                     task_type=task_type,
-                    target_column=target_column,
-                    time_to_event_column=time_to_event_column,
-                    time_horizons=time_horizons,
                 )
 
                 mean_score = evaluation["mean"].to_dict()

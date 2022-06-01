@@ -11,6 +11,7 @@ from sklearn.preprocessing import MinMaxScaler
 
 # synthcity absolute
 from synthcity.plugins.core.constraints import Constraints
+from synthcity.utils.serialization import dataframe_hash
 
 
 class DataLoader(metaclass=ABCMeta):
@@ -115,6 +116,10 @@ class DataLoader(metaclass=ABCMeta):
 
     @abstractmethod
     def normalize(self) -> "DataLoader":
+        ...
+
+    @abstractmethod
+    def hash(self) -> str:
         ...
 
 
@@ -229,6 +234,9 @@ class GenericDataLoader(DataLoader):
         norm = MinMaxScaler().fit_transform(self.data)
 
         return self.decorate(norm)
+
+    def hash(self) -> str:
+        return dataframe_hash(self.data)
 
 
 class SurvivalAnalysisDataLoader(DataLoader):
@@ -375,6 +383,9 @@ class SurvivalAnalysisDataLoader(DataLoader):
 
         return self.decorate(norm)
 
+    def hash(self) -> str:
+        return dataframe_hash(self.data)
+
 
 class TimeSeriesDataLoader(DataLoader):
     @validate_arguments(config=dict(arbitrary_types_allowed=True))
@@ -448,6 +459,9 @@ class TimeSeriesDataLoader(DataLoader):
 
     def normalize(self) -> "DataLoader":
         raise NotImplementedError()
+
+    def hash(self) -> str:
+        return dataframe_hash(self.data)
 
 
 def create_from_info(data: Any, info: dict) -> "DataLoader":
