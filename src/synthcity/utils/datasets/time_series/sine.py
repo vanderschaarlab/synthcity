@@ -1,5 +1,9 @@
+# stdlib
+from typing import List, Optional, Tuple
+
 # third party
 import numpy as np
+import pandas as pd
 
 
 class SineDataloader:
@@ -17,17 +21,29 @@ class SineDataloader:
     """
 
     def __init__(
-        self, no: int = 100, seq_len: int = 10, dim: int = 10, freq_scale: float = 1
+        self,
+        no: int = 100,
+        seq_len: int = 20,
+        temporal_dim: int = 10,
+        static_dim: int = 4,
+        freq_scale: float = 1,
     ) -> None:
         self.no = no
         self.seq_len = seq_len
-        self.dim = dim
+        self.temporal_dim = temporal_dim
+        self.static_dim = static_dim
         self.freq_scale = freq_scale
 
-    def load(self) -> np.ndarray:
+    def load(
+        self,
+    ) -> Tuple[Optional[pd.DataFrame], List[pd.DataFrame], Optional[pd.DataFrame]]:
         # Initialize the output
 
-        data = list()
+        static_data = pd.DataFrame(np.random.rand(self.no, self.static_dim))
+        static_data.columns = static_data.columns.astype(str)
+        temporal_data = list()
+        outcome = pd.DataFrame(np.random.randint(0, 2, self.no))
+        outcome.columns = outcome.columns.astype(str)
 
         # Generate sine data
 
@@ -37,7 +53,7 @@ class SineDataloader:
             local = list()
 
             # For each feature
-            for k in range(self.dim):
+            for k in range(self.temporal_dim):
 
                 # Randomly drawn frequency and phase
                 freq = np.random.beta(2, 2)
@@ -52,9 +68,11 @@ class SineDataloader:
                 local.append(temp_data)
 
             # Align row/column
-            local_data = np.transpose(np.asarray(local))
+            # DataFrame with index - time, and columns - temporal features
+            local_data = pd.DataFrame(np.transpose(np.asarray(local)))
+            local_data.columns = local_data.columns.astype(str)
 
             # Stack the generated data
-            data.append(local_data)
+            temporal_data.append(local_data)
 
-        return np.asarray(data)
+        return static_data, temporal_data, outcome

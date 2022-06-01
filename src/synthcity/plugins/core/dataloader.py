@@ -1,13 +1,12 @@
 # stdlib
 from abc import ABCMeta, abstractmethod
-from typing import Any, List, Optional, Union
+from typing import Any, List, Optional, Tuple, Union
 
 # third party
 import numpy as np
 import pandas as pd
 from pydantic import validate_arguments
 from sklearn.model_selection import train_test_split
-from sklearn.preprocessing import MinMaxScaler
 
 # synthcity absolute
 from synthcity.plugins.core.constraints import Constraints
@@ -20,14 +19,14 @@ class DataLoader(metaclass=ABCMeta):
         data_type: str,
         data: Any,
         static_features: List[str],
-        dynamic_features: List[str] = [],
+        temporal_features: List[str] = [],
         sensitive_features: List[str] = [],
         train_size: float = 0.8,
         random_state: int = 0,
         **kwargs: Any,
     ) -> None:
         self.static_features = static_features
-        self.dynamic_features = dynamic_features
+        self.temporal_features = temporal_features
         self.sensitive_features = sensitive_features
         self.random_state = random_state
 
@@ -115,10 +114,6 @@ class DataLoader(metaclass=ABCMeta):
         ...
 
     @abstractmethod
-    def normalize(self) -> "DataLoader":
-        ...
-
-    @abstractmethod
     def hash(self) -> str:
         ...
 
@@ -131,6 +126,7 @@ class GenericDataLoader(DataLoader):
         sensitive_features: List[str] = [],
         target_column: Optional[str] = None,
         random_state: int = 0,
+        train_size: float = 0.8,
         **kwargs: Any,
     ) -> None:
         if not isinstance(data, pd.DataFrame):
@@ -191,6 +187,8 @@ class GenericDataLoader(DataLoader):
             data,
             sensitive_features=self.sensitive_features,
             target_column=self.target_column,
+            random_state=self.random_state,
+            train_size=self.train_size,
         )
 
     def match(self, constraints: Constraints) -> "DataLoader":
@@ -230,11 +228,6 @@ class GenericDataLoader(DataLoader):
         )
         return self.decorate(test_data.reset_index(drop=True))
 
-    def normalize(self) -> "DataLoader":
-        norm = MinMaxScaler().fit_transform(self.data)
-
-        return self.decorate(norm)
-
     def hash(self) -> str:
         return dataframe_hash(self.data)
 
@@ -249,6 +242,7 @@ class SurvivalAnalysisDataLoader(DataLoader):
         time_horizons: list = [],
         sensitive_features: List[str] = [],
         random_state: int = 0,
+        train_size: float = 0.8,
         **kwargs: Any,
     ) -> None:
         if target_column not in data.columns:
@@ -323,6 +317,8 @@ class SurvivalAnalysisDataLoader(DataLoader):
             target_column=self.target_column,
             time_to_event_column=self.time_to_event_column,
             time_horizons=self.time_horizons,
+            random_state=self.random_state,
+            train_size=self.train_size,
         )
 
     def match(self, constraints: Constraints) -> "DataLoader":
@@ -374,15 +370,6 @@ class SurvivalAnalysisDataLoader(DataLoader):
             test_data.reset_index(drop=True),
         )
 
-    def normalize(self) -> "DataLoader":
-        X, T, E = self.unpack()
-        norm = MinMaxScaler().fit_transform(X)
-
-        norm[self.target_column] = E
-        norm[self.time_to_event_column] = T
-
-        return self.decorate(norm)
-
     def hash(self) -> str:
         return dataframe_hash(self.data)
 
@@ -391,43 +378,195 @@ class TimeSeriesDataLoader(DataLoader):
     @validate_arguments(config=dict(arbitrary_types_allowed=True))
     def __init__(
         self,
-        static_data: pd.DataFrame,
         temporal_data: List[pd.DataFrame],
+        outcome: Optional[pd.DataFrame] = None,
+        static_data: Optional[pd.DataFrame] = None,
+        sensitive_features: List[str] = [],
         random_state: int = 0,
+        train_size: float = 0.8,
         **kwargs: Any,
     ) -> None:
-        super().__init__(data_type="time_series", random_state=random_state, **kwargs)
+        static_features = []
+        temporal_features = []
+        self.outcome_features = []
+
+        if len(temporal_data) == 0:
+            raise ValueError("Empty temporal data")
+
+        temporal_features = list(temporal_data[0].columns)
+
+        if static_data is not None:
+            if len(static_data) != len(temporal_data):
+                raise ValueError("Static and temporal data mismatch")
+            static_features = list(static_data.columns)
+
+        if outcome is not None:
+            if len(outcome) != len(temporal_data):
+                raise ValueError("Temporal and outcome data mismatch")
+            self.outcome_features = list(outcome.columns)
+
+        for item in temporal_data:
+            # TODO: handling missing features
+            # TODO: handle missing time points
+            assert list(item.columns) == list(temporal_features)
+            assert len(item) == len(temporal_data[0])
+
+        self.seq_len = len(temporal_data[0])
+        grouped = TimeSeriesDataLoader.pack_raw_data(
+            static_data, temporal_data, outcome
+        )
+
+        super().__init__(
+            data={
+                "static_data": static_data,
+                "temporal_data": temporal_data,
+                "outcome": outcome,
+                "grouped_data": grouped,
+            },
+            data_type="time_series",
+            static_features=static_features,
+            temporal_features=temporal_features,
+            random_state=random_state,
+            **kwargs,
+        )
+
+    @staticmethod
+    @validate_arguments(config=dict(arbitrary_types_allowed=True))
+    def pack_raw_data(
+        static_data: Optional[pd.DataFrame],
+        temporal_data: List[pd.DataFrame],
+        outcome: Optional[pd.DataFrame],
+    ) -> pd.DataFrame:
+        # Temporal data: (subjects, temporal_sequence, temporal_feature)
+        raw_temporal = []
+        for item in temporal_data:
+            raw_temporal.append(np.asarray(item).tolist())
+
+        ext_temporal_features = []
+        temporal_features = temporal_data[0].columns
+
+        for feat in temporal_features:
+            ext_temporal_features.extend(
+                [f"temporal_{feat}_t{idx}" for idx in range(len(temporal_data[0]))]
+            )
+
+        temporal_arr = np.asarray(raw_temporal)
+        temporal_arr = np.swapaxes(temporal_arr, 1, 2)
+
+        out_df = pd.DataFrame(
+            temporal_arr.reshape(len(temporal_arr), -1), columns=ext_temporal_features
+        )
+        if static_data is not None:
+            out_df = pd.concat(
+                [
+                    pd.DataFrame(
+                        static_data.values,
+                        columns=[f"static_{feat}" for feat in static_data.columns],
+                    ),
+                    out_df,
+                ],
+                axis=1,
+            )
+        if outcome is not None:
+            out_df = pd.concat(
+                [
+                    out_df,
+                    pd.DataFrame(
+                        outcome.values,
+                        columns=[f"out_{feat}" for feat in outcome.columns],
+                    ),
+                ],
+                axis=1,
+            )
+
+        return out_df
+
+    @staticmethod
+    @validate_arguments(config=dict(arbitrary_types_allowed=True))
+    def unpack_raw_data(
+        data: pd.DataFrame,
+        static_features: List[str],
+        temporal_features: List[str],
+        outcome_features: List[str],
+        seq_len: int,
+    ) -> Tuple[Optional[pd.DataFrame], pd.DataFrame, Optional[pd.DataFrame]]:
+        static_data: Optional[pd.DataFrame] = None
+        if len(static_features) > 0:
+            static_data = pd.DataFrame([], columns=static_features, index=data.index)
+            for feat in static_features:
+                static_data[feat] = data[f"static_{feat}"]
+
+        outcome: Optional[pd.DataFrame] = None
+        if len(outcome_features) > 0:
+            outcome = pd.DataFrame([], columns=outcome_features, index=data.index)
+            for feat in outcome_features:
+                outcome[feat] = data[f"out_{feat}"]
+
+        temporal_data = []
+        for idx, row in data.iterrows():
+            local_df = pd.DataFrame(
+                [], columns=temporal_features, index=list(range(seq_len))
+            )
+            for feat in temporal_features:
+                for seq in range(seq_len):
+                    local_df.loc[seq, feat] = row[f"temporal_{feat}_t{seq}"]
+            temporal_data.append(local_df)
+        return static_data, temporal_data, outcome
 
     @property
     def shape(self) -> tuple:
-        raise NotImplementedError()
+        return self.data["grouped_data"].shape
 
     @property
     def columns(self) -> list:
-        raise NotImplementedError()
+        return self.data["grouped_data"].columns
+
+    @property
+    def temporal_columns(self) -> list:
+        return self.data["temporal_data"][0].columns
 
     def dataframe(self) -> pd.DataFrame:
-        raise NotImplementedError("TimeSeries type not supported for dataframes")
+        return self.data["grouped_data"]
 
     def numpy(self) -> np.ndarray:
         return self.dataframe().values
+
+    def temporal_numpy(self) -> np.ndarray:
+        raw_temporal = []
+        for item in self.data["temporal_data"]:
+            raw_temporal.append(np.asarray(item).tolist())
+
+        return np.asarray(raw_temporal)
 
     def info(self) -> dict:
         return {
             "data_type": self.data_type,
             "len": len(self),
             "static_features": self.static_features,
+            "temporal_features": self.temporal_features,
+            "outcome_features": self.outcome_features,
+            "group_features": list(self.data["grouped_data"].columns),
+            "seq_len": self.seq_len,
             "sensitive_features": self.sensitive_features,
         }
 
     def __len__(self) -> int:
-        return len(self.data)
+        return len(self.data["grouped_data"])
 
     def satisfies(self, constraints: Constraints) -> bool:
         raise NotImplementedError()
 
     def decorate(self, data: Any) -> "DataLoader":
-        raise NotImplementedError()
+        static_data, temporal_data, outcome = data
+
+        return TimeSeriesDataLoader(
+            temporal_data,
+            static_data=static_data,
+            outcome=outcome,
+            sensitive_features=self.sensitive_features,
+            random_state=self.random_state,
+            train_size=self.train_size,
+        )
 
     def match(self, constraints: Constraints) -> "DataLoader":
         raise NotImplementedError()
@@ -443,25 +582,54 @@ class TimeSeriesDataLoader(DataLoader):
         raise NotImplementedError()
 
     def unpack(self) -> Any:
-        raise NotImplementedError()
+        return (
+            self.data["static_data"],
+            self.data["temporal_data"],
+            self.data["outcome"],
+        )
 
     def __getitem__(self, feature: Union[str, list]) -> Any:
-        raise NotImplementedError()
+        return self.data["grouped_data"][feature]
 
     def __setitem__(self, feature: str, val: Any) -> None:
-        raise NotImplementedError()
+        self.data["grouped_data"][feature] = val
 
     def train(self) -> "DataLoader":
-        raise NotImplementedError()
+        idxs, _, temporal_train, _ = train_test_split(
+            list(range(len(self))),
+            self.data["temporal_data"],
+            train_size=self.train_size,
+            random_state=self.random_state,
+        )
+        static_train: Optional[pd.DataFrame] = None
+        outcome_train: Optional[pd.DataFrame] = None
+
+        if self.data["static_data"] is not None:
+            static_train = self.data["static_data"].iloc[idxs]
+        if self.data["outcome"] is not None:
+            outcome_train = self.data["outcome"].iloc[idxs]
+
+        return self.decorate((static_train, temporal_train, outcome_train))
 
     def test(self) -> "DataLoader":
-        raise NotImplementedError()
+        _, idxs, _, temporal_test = train_test_split(
+            list(range(len(self))),
+            self.data["temporal_data"],
+            train_size=self.train_size,
+            random_state=self.random_state,
+        )
+        static_test: Optional[pd.DataFrame] = None
+        outcome_test: Optional[pd.DataFrame] = None
 
-    def normalize(self) -> "DataLoader":
-        raise NotImplementedError()
+        if self.data["static_data"] is not None:
+            static_test = self.data["static_data"].iloc[idxs]
+        if self.data["outcome"] is not None:
+            outcome_test = self.data["outcome"].iloc[idxs]
+
+        return self.decorate((static_test, temporal_test, outcome_test))
 
     def hash(self) -> str:
-        return dataframe_hash(self.data)
+        return dataframe_hash(self.data["grouped_data"])
 
 
 def create_from_info(data: Any, info: dict) -> "DataLoader":
