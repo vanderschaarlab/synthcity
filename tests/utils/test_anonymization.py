@@ -4,6 +4,7 @@ from sklearn.datasets import load_breast_cancer, load_diabetes
 
 # synthcity absolute
 from synthcity.metrics.eval_privacy import kAnonymization, lDiversityDistinct
+from synthcity.plugins.core.dataloader import GenericDataLoader
 from synthcity.utils.anonymization import DatasetAnonymization
 
 
@@ -106,8 +107,10 @@ def test_k_anonymity_anonymize_column() -> None:
 
     sensitive_features = ["target"]
 
-    kevaluator = kAnonymization(sensitive_columns=sensitive_features)
-    k = kevaluator.evaluate_data(X)
+    kevaluator = kAnonymization()
+    k = kevaluator.evaluate_data(
+        GenericDataLoader(X, sensitive_features=sensitive_features)
+    )
     evaluator = DatasetAnonymization(k_threshold=k + 1)
     assert evaluator.is_anonymous(X, sensitive_features) is False
 
@@ -122,13 +125,15 @@ def test_k_anonymity_anonymize_columns() -> None:
     X["target"] = y
 
     sensitive_features = list(X.columns)[:2]
-    kevaluator = kAnonymization(sensitive_columns=sensitive_features)
-    k = kevaluator.evaluate_data(X)
+    kevaluator = kAnonymization()
+    k = kevaluator.evaluate_data(
+        GenericDataLoader(X, sensitive_features=sensitive_features)
+    )
 
     evaluator = DatasetAnonymization(k_threshold=k + 1)
     assert evaluator.is_anonymous(X, sensitive_features) is False
 
-    anon_df = evaluator.anonymize_columns(X, sensitive_columns=sensitive_features)
+    anon_df = evaluator.anonymize_columns(X, sensitive_features=sensitive_features)
 
     assert evaluator.is_anonymous(anon_df, sensitive_features) is True
     assert len(anon_df.drop_duplicates()) > 1
@@ -139,7 +144,7 @@ def test_k_anonymity_anonymize_full() -> None:
     X["target"] = y
 
     kevaluator = kAnonymization()
-    k = kevaluator.evaluate_data(X)
+    k = kevaluator.evaluate_data(GenericDataLoader(X))
     evaluator = DatasetAnonymization(k_threshold=k + 1)
     assert evaluator.is_anonymous(X) is False
 
@@ -206,10 +211,10 @@ def test_l_diversity_validation() -> None:
     X, y = load_breast_cancer(return_X_y=True, as_frame=True)
 
     evaluator = DatasetAnonymization(k_threshold=1, l_diversity=1)
-    assert evaluator.is_anonymous(X, sensitive_columns=[X.columns[0]]) is True
+    assert evaluator.is_anonymous(X, sensitive_features=[X.columns[0]]) is True
 
     evaluator = DatasetAnonymization(k_threshold=2, l_diversity=1)
-    assert evaluator.is_anonymous(X, sensitive_columns=[X.columns[0]]) is False
+    assert evaluator.is_anonymous(X, sensitive_features=[X.columns[0]]) is False
 
 
 def test_l_diversity_anonymize_column() -> None:
@@ -217,11 +222,15 @@ def test_l_diversity_anonymize_column() -> None:
     X["target"] = y
 
     sensitive_features = ["target"]
-    kevaluator = kAnonymization(sensitive_columns=sensitive_features)
-    k_threshold = kevaluator.evaluate_data(X)
+    kevaluator = kAnonymization()
+    k_threshold = kevaluator.evaluate_data(
+        GenericDataLoader(X, sensitive_features=sensitive_features)
+    )
 
-    levaluator = lDiversityDistinct(sensitive_columns=sensitive_features)
-    l_diversity = levaluator.evaluate_data(X)
+    levaluator = lDiversityDistinct()
+    l_diversity = levaluator.evaluate_data(
+        GenericDataLoader(X, sensitive_features=sensitive_features)
+    )
 
     evaluator = DatasetAnonymization(
         k_threshold=k_threshold + 1, l_diversity=l_diversity + 1
@@ -239,18 +248,22 @@ def test_l_diversity_anonymize_columns() -> None:
     X["target"] = y
 
     sensitive_features = list(X.columns)[:2]
-    kevaluator = kAnonymization(sensitive_columns=sensitive_features)
-    k_threshold = kevaluator.evaluate_data(X)
+    kevaluator = kAnonymization()
+    k_threshold = kevaluator.evaluate_data(
+        GenericDataLoader(X, sensitive_features=sensitive_features)
+    )
 
-    levaluator = lDiversityDistinct(sensitive_columns=sensitive_features)
-    l_diversity = levaluator.evaluate_data(X)
+    levaluator = lDiversityDistinct()
+    l_diversity = levaluator.evaluate_data(
+        GenericDataLoader(X, sensitive_features=sensitive_features)
+    )
 
     evaluator = DatasetAnonymization(
         k_threshold=k_threshold + 1, l_diversity=l_diversity + 1
     )
     assert evaluator.is_anonymous(X, sensitive_features) is False
 
-    anon_df = evaluator.anonymize_columns(X, sensitive_columns=[sensitive_features[0]])
+    anon_df = evaluator.anonymize_columns(X, sensitive_features=[sensitive_features[0]])
 
     assert evaluator.is_anonymous(anon_df, sensitive_features) is True
     assert len(anon_df.drop_duplicates()) > 1
@@ -261,11 +274,15 @@ def test_l_diversity_anonymize_full() -> None:
     X["target"] = y
 
     sensitive_features = list(X.columns)[:2]
-    kevaluator = kAnonymization(sensitive_columns=sensitive_features)
-    k_threshold = kevaluator.evaluate_data(X)
+    kevaluator = kAnonymization()
+    k_threshold = kevaluator.evaluate_data(
+        GenericDataLoader(X, sensitive_features=sensitive_features)
+    )
 
-    levaluator = lDiversityDistinct(sensitive_columns=sensitive_features)
-    l_diversity = levaluator.evaluate_data(X)
+    levaluator = lDiversityDistinct()
+    l_diversity = levaluator.evaluate_data(
+        GenericDataLoader(X, sensitive_features=sensitive_features)
+    )
 
     evaluator = DatasetAnonymization(
         k_threshold=k_threshold + 1, l_diversity=l_diversity + 1
@@ -337,14 +354,16 @@ def test_t_closeness_partition() -> None:
 def test_t_closeness_validation() -> None:
     X, y = load_diabetes(return_X_y=True, as_frame=True)
 
-    kevaluator = kAnonymization(sensitive_columns=["sex"])
-    k_threshold = kevaluator.evaluate_data(X)
+    kevaluator = kAnonymization()
+    k_threshold = kevaluator.evaluate_data(
+        GenericDataLoader(X, sensitive_features=["sex"])
+    )
 
     evaluator = DatasetAnonymization(k_threshold=1, t_threshold=0.2)
-    assert evaluator.is_anonymous(X, sensitive_columns=["sex"]) is True
+    assert evaluator.is_anonymous(X, sensitive_features=["sex"]) is True
 
     evaluator = DatasetAnonymization(k_threshold=k_threshold + 1, t_threshold=0.5)
-    assert evaluator.is_anonymous(X, sensitive_columns=["sex"]) is False
+    assert evaluator.is_anonymous(X, sensitive_features=["sex"]) is False
 
 
 @pytest.mark.parametrize("t_threshold", [0.2, 0.5])
@@ -353,11 +372,15 @@ def test_t_closeness_anonymize_column(t_threshold: float) -> None:
     X["target"] = y
 
     sensitive_features = ["target"]
-    kevaluator = kAnonymization(sensitive_columns=sensitive_features)
-    k_threshold = kevaluator.evaluate_data(X)
+    kevaluator = kAnonymization()
+    k_threshold = kevaluator.evaluate_data(
+        GenericDataLoader(X, sensitive_features=sensitive_features)
+    )
 
-    levaluator = lDiversityDistinct(sensitive_columns=sensitive_features)
-    l_diversity = levaluator.evaluate_data(X)
+    levaluator = lDiversityDistinct()
+    l_diversity = levaluator.evaluate_data(
+        GenericDataLoader(X, sensitive_features=sensitive_features)
+    )
 
     evaluator = DatasetAnonymization(
         k_threshold=k_threshold + 1,
@@ -378,11 +401,15 @@ def test_t_closeness_anonymize_columns(t_threshold: float) -> None:
     X["target"] = y
 
     sensitive_features = list(X.columns)[:2]
-    kevaluator = kAnonymization(sensitive_columns=sensitive_features)
-    k_threshold = kevaluator.evaluate_data(X)
+    kevaluator = kAnonymization()
+    k_threshold = kevaluator.evaluate_data(
+        GenericDataLoader(X, sensitive_features=sensitive_features)
+    )
 
-    levaluator = lDiversityDistinct(sensitive_columns=sensitive_features)
-    l_diversity = levaluator.evaluate_data(X)
+    levaluator = lDiversityDistinct()
+    l_diversity = levaluator.evaluate_data(
+        GenericDataLoader(X, sensitive_features=sensitive_features)
+    )
 
     evaluator = DatasetAnonymization(
         k_threshold=k_threshold + 1,
@@ -403,11 +430,15 @@ def test_t_closeness_anonymize_full(t_threshold: float) -> None:
     X["target"] = y
 
     sensitive_features = list(X.columns)[:2]
-    kevaluator = kAnonymization(sensitive_columns=sensitive_features)
-    k_threshold = kevaluator.evaluate_data(X)
+    kevaluator = kAnonymization()
+    k_threshold = kevaluator.evaluate_data(
+        GenericDataLoader(X, sensitive_features=sensitive_features)
+    )
 
-    levaluator = lDiversityDistinct(sensitive_columns=sensitive_features)
-    l_diversity = levaluator.evaluate_data(X)
+    levaluator = lDiversityDistinct()
+    l_diversity = levaluator.evaluate_data(
+        GenericDataLoader(X, sensitive_features=sensitive_features)
+    )
 
     evaluator = DatasetAnonymization(
         k_threshold=k_threshold + 1,

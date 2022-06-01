@@ -46,9 +46,9 @@ def test_survival_dataloader() -> None:
     )
 
     assert loader.raw().shape == df.shape
-    assert loader.preprocessed()[0].shape == X.shape
-    assert loader.preprocessed()[1].shape == T.shape
-    assert loader.preprocessed()[2].shape == E.shape
+    assert loader.unpack()[0].shape == X.shape
+    assert loader.unpack()[1].shape == T.shape
+    assert loader.unpack()[2].shape == E.shape
 
     assert loader.type() == "survival_analysis"
     assert loader.shape == df.shape

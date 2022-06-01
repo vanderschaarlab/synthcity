@@ -2,7 +2,6 @@
 from typing import Any, List
 
 # third party
-import pandas as pd
 import pytest
 
 # synthcity absolute
@@ -37,7 +36,7 @@ class MockPlugin(Plugin):
 
 def test_mock_plugin_fail() -> None:
     with pytest.raises(TypeError):
-        AbstractMockPlugin()  # type: ignore
+        AbstractMockPlugin()
 
 
 def test_mock_plugin_ok() -> None:
@@ -45,5 +44,5 @@ def test_mock_plugin_ok() -> None:
 
     assert plugin.name() == "mock"
     assert plugin.type() == "debug"
-    assert plugin.fit(GenericDataLoader(pd.DataFrame([]))) == plugin
+    assert plugin.fit(GenericDataLoader([1])) == plugin
     assert plugin.generate().values == [1]
