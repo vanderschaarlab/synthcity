@@ -10,6 +10,7 @@ from torch.utils.data import DataLoader, TensorDataset, sampler
 
 # synthcity absolute
 import synthcity.logger as log
+from synthcity.plugins.core.models.mlp import MLP
 from synthcity.utils.constants import DEVICE
 from synthcity.utils.reproducibility import enable_reproducible_results
 
@@ -18,23 +19,36 @@ class WindowLinearLayer(nn.Module):
     @validate_arguments(config=dict(arbitrary_types_allowed=True))
     def __init__(
         self,
-        n_units_in: int,
+        n_static_units_in: int,
+        n_temporal_units_in: int,
         window_size: int,
         n_units_out: int,
+        n_units_hidden: int = 100,
+        n_layers: int = 2,
         device: Any = DEVICE,
     ) -> None:
         super(WindowLinearLayer, self).__init__()
 
         self.device = device
         self.window_size = window_size
-        self.model = nn.Linear(n_units_in * window_size, n_units_out)
+        self.model = MLP(
+            task_type="regression",
+            n_units_in=n_static_units_in + n_temporal_units_in * window_size,
+            n_units_out=n_units_out,
+            n_layers_hidden=n_layers,
+            n_units_hidden=n_units_hidden,
+        )
 
     @validate_arguments(config=dict(arbitrary_types_allowed=True))
-    def forward(self, X: torch.Tensor) -> torch.Tensor:
-        batch_size, seq_len, n_feats = X.shape
-        batch = X[:, seq_len - self.window_size :, :].reshape(
+    def forward(
+        self, static_data: torch.Tensor, temporal_data: torch.Tensor
+    ) -> torch.Tensor:
+        assert len(static_data) == len(temporal_data)
+        batch_size, seq_len, n_feats = temporal_data.shape
+        temporal_batch = temporal_data[:, seq_len - self.window_size :, :].reshape(
             batch_size, n_feats * self.window_size
         )
+        batch = torch.cat([static_data, temporal_batch], axis=1)
 
         return self.model(batch).to(self.device)
 
@@ -44,10 +58,13 @@ class TimeSeriesRNN(nn.Module):
     def __init__(
         self,
         task_type: str,  # regression, classification
-        n_units_in: int,
+        n_static_units_in: int,
+        n_temporal_units_in: int,
         n_units_out: int,
-        n_units_hidden: int = 100,
-        n_layers: int = 2,
+        n_static_units_hidden: int = 100,
+        n_static_layers: int = 2,
+        n_temporal_units_hidden: int = 100,
+        n_temporal_layers: int = 2,
         n_iter: int = 100,
         mode: str = "RNN",  # RNN, LSTM, GRU
         n_iter_print: int = 10,
@@ -76,44 +93,41 @@ class TimeSeriesRNN(nn.Module):
         self.n_iter = n_iter
         self.n_iter_print = n_iter_print
         self.batch_size = batch_size
-        self.n_units_in = n_units_in
+        self.n_static_units_in = n_static_units_in
+        self.n_temporal_units_in = n_temporal_units_in
         self.n_units_out = n_units_out
-        self.n_units_hidden = n_units_hidden
-        self.n_layers = n_layers
+        self.n_static_units_hidden = n_static_units_hidden
+        self.n_temporal_units_hidden = n_temporal_units_hidden
+        self.n_static_layers = n_static_layers
+        self.n_temporal_layers = n_temporal_layers
         self.device = device
         self.window_size = window_size
         self.dataloader_sampler = dataloader_sampler
 
-        if mode == "RNN":
-            self.rnn = nn.RNN(
-                input_size=self.n_units_in,
-                hidden_size=self.n_units_hidden,
-                num_layers=self.n_layers,
-                batch_first=True,
-            )
-        elif mode == "LSTM":
-            self.rnn = nn.LSTM(
-                input_size=self.n_units_in,
-                hidden_size=self.n_units_hidden,
-                num_layers=self.n_layers,
-                batch_first=True,
-            )
-        elif mode == "GRU":
-            self.rnn = nn.GRU(
-                input_size=self.n_units_in,
-                hidden_size=self.n_units_hidden,
-                num_layers=self.n_layers,
-                batch_first=True,
-            )
-        else:
-            raise ValueError(f"unsupported mode {mode}")
+        temporal_params = {
+            "input_size": self.n_temporal_units_in,
+            "hidden_size": self.n_temporal_units_hidden,
+            "num_layers": self.n_temporal_layers,
+            "batch_first": True,
+        }
+        temporal_models = {
+            "RNN": nn.RNN,
+            "LSTM": nn.LSTM,
+            "GRU": nn.GRU,
+        }
+
+        self.temporal_layer = temporal_models[mode](**temporal_params)
         self.mode = mode
 
-        self.out = nn.Sequential(
-            WindowLinearLayer(self.n_units_hidden, self.window_size, self.n_units_out),
+        self.out = WindowLinearLayer(
+            n_static_units_in=n_static_units_in,
+            n_temporal_units_in=self.n_temporal_units_hidden,
+            window_size=self.window_size,
+            n_units_out=self.n_units_out,
         )
-        if task_type == "classification":
-            self.out.append(nn.Softmax(dim=-1))
+
+        # if task_type == "classification":
+        #    self.out.append(nn.Softmax(dim=-1))
 
         self.optimizer = torch.optim.Adam(
             self.parameters(),
@@ -122,60 +136,77 @@ class TimeSeriesRNN(nn.Module):
         )  # optimize all rnn parameters
 
     @validate_arguments(config=dict(arbitrary_types_allowed=True))
-    def forward(self, x: torch.Tensor) -> torch.Tensor:
+    def forward(
+        self, static_data: torch.Tensor, temporal_data: torch.Tensor
+    ) -> torch.Tensor:
         # x shape (batch, time_step, input_size)
         # r_out shape (batch, time_step, output_size)
-        # h_n shape (n_layers, batch, hidden_size)
-        # h_c shape (n_layers, batch, hidden_size)
-
-        if self.mode == "LSTM":
-            r_out, (h_n, h_c) = self.rnn(
-                x, None
-            )  # None represents zero initial hidden state
-        else:
-            r_out, h_n = self.rnn(x, None)
+        X_interm, _ = self.temporal_layer(temporal_data)
 
         # choose r_out at the last <window size> steps
-        return self.out(r_out).reshape(self.output_shape)
+        pred = self.out(static_data, X_interm)
+
+        if self.task_type == "classification":
+            pred = nn.Softmax(dim=-1)(pred)
+
+        pred = pred.reshape(-1, *self.output_shape)
+
+        return pred
 
     @validate_arguments(config=dict(arbitrary_types_allowed=True))
-    def predict(self, X: np.ndarray) -> np.ndarray:
+    def predict(self, static_data: np.ndarray, temporal_data: np.ndarray) -> np.ndarray:
         with torch.no_grad():
-            X_test = self._check_tensor(X).float()
+            temporal_data_t = self._check_tensor(temporal_data).float()
+            static_data_t = self._check_tensor(static_data).float()
 
-            yt = self(X_test)
+            yt = self(static_data_t, temporal_data_t)
 
             if self.task_type == "classification":
-                return np.argmax(yt.cpu().numpy().squeeze(), -1).squeeze()
+                return np.argmax(yt.cpu().numpy(), -1)
             else:
-                return yt.cpu().numpy().squeeze()
+                return yt.cpu().numpy()
 
-    def score(self, X: np.ndarray, y: np.ndarray) -> float:
-        y_pred = self.predict(X)
+    def score(
+        self,
+        static_data: np.ndarray,
+        temporal_data: np.ndarray,
+        outcome: np.ndarray,
+    ) -> float:
+        y_pred = self.predict(static_data, temporal_data)
         if self.task_type == "classification":
-            return np.mean(y_pred == y)
+            return np.mean(y_pred == outcome)
         else:
-            return np.mean(np.inner(y - y_pred, y - y_pred) / 2.0)
+            return np.mean(np.inner(outcome - y_pred, outcome - y_pred) / 2.0)
 
     @validate_arguments(config=dict(arbitrary_types_allowed=True))
-    def fit(self, X: np.ndarray, y: np.ndarray) -> Any:
-        Xt = self._check_tensor(X).float()
-        yt = self._check_tensor(y).float()
+    def fit(
+        self,
+        static_data: np.ndarray,
+        temporal_data: np.ndarray,
+        outcome: np.ndarray,
+    ) -> Any:
+        temporal_data_t = self._check_tensor(temporal_data).float()
+        static_data_t = self._check_tensor(static_data).float()
+        outcome_t = self._check_tensor(outcome).float()
         if self.task_type == "classification":
-            yt = yt.long()
+            outcome_t = outcome_t.long()
 
-        return self._train(Xt, yt)
+        return self._train(static_data_t, temporal_data_t, outcome_t)
 
     @validate_arguments(config=dict(arbitrary_types_allowed=True))
-    def _train(self, X: torch.Tensor, y: torch.Tensor) -> Any:
-        loader = self.dataloader(X, y)
-        self.output_shape = list(y.shape)
+    def _train(
+        self,
+        static_data: Optional[torch.Tensor],
+        temporal_data: torch.Tensor,
+        outcome: torch.Tensor,
+    ) -> Any:
+        loader = self.dataloader(static_data, temporal_data, outcome)
+        self.output_shape = list(outcome.shape[1:])
         if self.task_type == "classification":
             self.output_shape.append(self.n_units_out)
 
         # training and testing
         for it in range(self.n_iter):
-
             loss = self._train_epoch(loader)
             if it % self.n_iter_print == 0:
                 log.info(f"Epoch:{it}| train loss: {loss}")
@@ -184,11 +215,11 @@ class TimeSeriesRNN(nn.Module):
 
     def _train_epoch(self, loader: DataLoader) -> float:
         losses = []
-        for step, (Xmb, ymb) in enumerate(loader):
+        for step, (static_mb, temporal_mb, y_mb) in enumerate(loader):
             self.optimizer.zero_grad()  # clear gradients for this training step
 
-            pred = self(Xmb)  # rnn output
-            loss = self.loss(pred, ymb)
+            pred = self(static_mb, temporal_mb)  # rnn output
+            loss = self.loss(pred, y_mb)
 
             loss.backward()  # backpropagation, compute gradients
             self.optimizer.step()  # apply gradients
@@ -199,10 +230,12 @@ class TimeSeriesRNN(nn.Module):
 
     def dataloader(
         self,
-        X: torch.Tensor,
-        y: torch.Tensor,
+        static_data: torch.Tensor,
+        temporal_data: torch.Tensor,
+        outcome: torch.Tensor,
     ) -> DataLoader:
-        dataset = TensorDataset(X, y)
+        dataset = TensorDataset(static_data, temporal_data, outcome)
+
         return DataLoader(
             dataset,
             batch_size=self.batch_size,

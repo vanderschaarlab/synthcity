@@ -10,7 +10,7 @@ def test_dataloader() -> None:
     static_data, temporal_data, outcome = loader.load()
 
     assert static_data.shape == (5, 3)
-    assert outcome.shape == (5,)
+    assert outcome.shape == (5, 1)
     assert len(temporal_data) == 5
     for item in temporal_data:
         assert item.shape == (10, 15)

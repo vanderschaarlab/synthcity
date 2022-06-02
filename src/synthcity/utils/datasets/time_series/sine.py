@@ -1,5 +1,5 @@
 # stdlib
-from typing import List, Optional, Tuple
+from typing import List, Tuple
 
 # third party
 import numpy as np
@@ -27,16 +27,18 @@ class SineDataloader:
         temporal_dim: int = 10,
         static_dim: int = 4,
         freq_scale: float = 1,
+        as_numpy: bool = False,
     ) -> None:
         self.no = no
         self.seq_len = seq_len
         self.temporal_dim = temporal_dim
         self.static_dim = static_dim
         self.freq_scale = freq_scale
+        self.as_numpy = as_numpy
 
     def load(
         self,
-    ) -> Tuple[Optional[pd.DataFrame], List[pd.DataFrame], Optional[pd.DataFrame]]:
+    ) -> Tuple[pd.DataFrame, List[pd.DataFrame], pd.DataFrame]:
         # Initialize the output
 
         static_data = pd.DataFrame(np.random.rand(self.no, self.static_dim))
@@ -74,5 +76,12 @@ class SineDataloader:
 
             # Stack the generated data
             temporal_data.append(local_data)
+
+        if self.as_numpy:
+            return (
+                np.asarray(static_data),
+                np.asarray(temporal_data),
+                np.asarray(outcome),
+            )
 
         return static_data, temporal_data, outcome

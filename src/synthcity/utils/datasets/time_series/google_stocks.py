@@ -1,21 +1,23 @@
 # stdlib
 from pathlib import Path
-from typing import List, Optional, Tuple
+from typing import List, Tuple
 
 # third party
 import numpy as np
 import pandas as pd
+from sklearn.preprocessing import MinMaxScaler
 
 df_path = Path(__file__).parent / "data/goog.csv"
 
 
 class GoogleStocksDataloader:
-    def __init__(self, seq_len: int = 50) -> None:
+    def __init__(self, seq_len: int = 50, as_numpy: bool = False) -> None:
         self.seq_len = seq_len
+        self.as_numpy = as_numpy
 
     def load(
         self,
-    ) -> Tuple[Optional[pd.DataFrame], List[pd.DataFrame], Optional[pd.DataFrame]]:
+    ) -> Tuple[pd.DataFrame, List[pd.DataFrame], pd.DataFrame]:
         # Load Google Data
         df = pd.read_csv(df_path)
 
@@ -23,6 +25,7 @@ class GoogleStocksDataloader:
         df = pd.DataFrame(df.values[::-1], columns=df.columns)
         df = df.drop(columns=["date"])
 
+        df = pd.DataFrame(MinMaxScaler().fit_transform(df), columns=df.columns)
         # Build dataset
         dataX = []
         outcome = []
@@ -42,4 +45,15 @@ class GoogleStocksDataloader:
         for i in range(len(dataX)):
             temporal_data.append(dataX[idx[i]])
 
-        return None, temporal_data, pd.DataFrame(outcome, columns=["open_next"])
+        if self.as_numpy:
+            return (
+                np.zeros((len(temporal_data), 0)),
+                np.asarray(temporal_data, dtype=np.float32),
+                np.asarray(outcome, dtype=np.float32),
+            )
+
+        return (
+            pd.DataFrame(np.zeros((len(temporal_data), 0))),
+            temporal_data,
+            pd.DataFrame(outcome, columns=["open_next"]),
+        )

@@ -494,13 +494,13 @@ class TimeSeriesDataLoader(DataLoader):
         outcome_features: List[str],
         seq_len: int,
     ) -> Tuple[Optional[pd.DataFrame], pd.DataFrame, Optional[pd.DataFrame]]:
-        static_data: Optional[pd.DataFrame] = None
+        static_data: Optional[pd.DataFrame] = pd.DataFrame(np.zeros((len(data), 0)))
         if len(static_features) > 0:
             static_data = pd.DataFrame([], columns=static_features, index=data.index)
             for feat in static_features:
                 static_data[feat] = data[f"static_{feat}"]
 
-        outcome: Optional[pd.DataFrame] = None
+        outcome: Optional[pd.DataFrame] = pd.DataFrame(np.zeros((len(data), 0)))
         if len(outcome_features) > 0:
             outcome = pd.DataFrame([], columns=outcome_features, index=data.index)
             for feat in outcome_features:
