@@ -574,15 +574,7 @@ class TimeSeriesDataLoader(DataLoader):
         return self.decorate(unpacked_data)
 
     def satisfies(self, constraints: Constraints) -> bool:
-        valid = constraints.is_valid(self.data["grouped_data"])
-
-        for dtype in ["static_data", "outcome"]:
-            if self.data[dtype] is not None:
-                valid &= constraints.is_valid(self.data[dtype])
-        for item in self.data["temporal_data"]:
-            valid &= constraints.is_valid(item)
-
-        return valid
+        return constraints.is_valid(self.data["grouped_data"])
 
     def match(self, constraints: Constraints) -> "DataLoader":
         new_data = constraints.match(self.data["grouped_data"])
