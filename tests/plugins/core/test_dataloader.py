@@ -16,7 +16,7 @@ from synthcity.utils.datasets.time_series.google_stocks import GoogleStocksDatal
 from synthcity.utils.datasets.time_series.sine import SineDataloader
 
 
-def test_generic_dataloader() -> None:
+def test_generic_dataloader_sanity() -> None:
     X, y = load_breast_cancer(return_X_y=True, as_frame=True)
 
     X["target"] = y
@@ -32,22 +32,113 @@ def test_generic_dataloader() -> None:
     assert (loader.values == X.values).all()
     assert len(loader) == len(X)
 
-    assert loader.info()["data_type"] == "generic"
-    assert loader.info()["len"] == len(X)
-    assert loader.info()["static_features"] == list(X.columns)
-
-    Xu, yu = loader.unpack()
-    assert Xu.shape == (len(X), X.shape[1] - 1)
-    assert yu.shape == y.shape
-
     assert loader.sample(5).shape == (5, X.shape[1])
     assert len(loader[X.columns[0]]) == len(X)
     assert loader.train().shape == (455, X.shape[1])
     assert loader.test().shape == (114, X.shape[1])
     assert loader.hash() != ""
 
+    assert (loader["target"].values == y.values).all()
+    assert "target" not in loader.drop(columns=["target"]).columns
 
-def test_survival_dataloader() -> None:
+
+def test_generic_dataloader_info() -> None:
+    X, y = load_breast_cancer(return_X_y=True, as_frame=True)
+
+    X["target"] = y
+
+    loader = GenericDataLoader(X, target_column="target", sensitive_features=["target"])
+
+    assert loader.info()["data_type"] == "generic"
+    assert loader.info()["len"] == len(X)
+    assert loader.info()["static_features"] == list(X.columns)
+    assert loader.info()["sensitive_features"] == ["target"]
+    assert loader.info()["target_column"] == "target"
+    assert loader.info()["outcome_features"] == ["target"]
+
+    new_loader = GenericDataLoader.from_info(loader.dataframe(), loader.info())
+    assert new_loader.shape == loader.shape
+    assert new_loader.info() == loader.info()
+
+
+def test_generic_dataloader_pack_unpack() -> None:
+    X, y = load_breast_cancer(return_X_y=True, as_frame=True)
+
+    X["target"] = y
+
+    loader = GenericDataLoader(X, target_column="target")
+
+    Xu, yu = loader.unpack()
+    assert Xu.shape == (len(X), X.shape[1] - 1)
+    assert yu.shape == y.shape
+
+
+def test_survival_dataloader_sanity() -> None:
+    df = load_rossi()
+
+    target_column = "arrest"
+    time_to_event_column = "week"
+
+    X = df.drop(columns=[target_column, time_to_event_column])
+    E = df[target_column]
+
+    loader = SurvivalAnalysisDataLoader(
+        df,
+        time_to_event_column=time_to_event_column,
+        target_column=target_column,
+        time_horizons=[20],
+    )
+
+    assert (loader.dataframe().values == df.values).all()
+    assert loader.raw().shape == df.shape
+
+    assert loader.type() == "survival_analysis"
+    assert loader.shape == df.shape
+    assert sorted(list(loader.dataframe().columns)) == sorted(list(df.columns))
+    assert (loader.numpy() == df.values).all()
+    assert len(loader) == len(X)
+
+    assert loader.sample(5).shape == (5, df.shape[1])
+    assert len(loader[X.columns[0]]) == len(X)
+    assert loader.train().shape == (345, df.shape[1])
+    assert loader.test().shape == (87, df.shape[1])
+    assert loader.hash() != ""
+
+    assert (loader["arrest"].values == E.values).all()
+    assert X.columns[0] not in loader.drop(columns=[X.columns[0]]).columns
+
+
+def test_survival_dataloader_info() -> None:
+    df = load_rossi()
+
+    target_column = "arrest"
+    time_to_event_column = "week"
+
+    X = df.drop(columns=[target_column, time_to_event_column])
+
+    loader = SurvivalAnalysisDataLoader(
+        df,
+        time_to_event_column=time_to_event_column,
+        target_column=target_column,
+        time_horizons=[20],
+        sensitive_features=["arrest", "week"],
+    )
+
+    assert loader.info()["data_type"] == "survival_analysis"
+    assert loader.info()["len"] == len(X)
+    assert loader.info()["static_features"] == list(df.columns)
+    assert loader.info()["sensitive_features"] == ["arrest", "week"]
+    assert loader.info()["target_column"] == "arrest"
+    assert loader.info()["time_to_event_column"] == "week"
+    assert loader.info()["outcome_features"] == ["arrest"]
+    assert loader.info()["time_horizons"] == [20]
+
+    new_loader = SurvivalAnalysisDataLoader.from_info(loader.dataframe(), loader.info())
+    assert new_loader.shape == loader.shape
+    assert new_loader.info() == loader.info()
+
+
+def test_survival_dataloader_pack_unpack() -> None:
     df = load_rossi()
 
     target_column = "arrest"
@@ -88,7 +179,7 @@ def test_survival_dataloader() -> None:
 
 
 @pytest.mark.parametrize("source", [SineDataloader, GoogleStocksDataloader])
-def test_time_series_dataloader(source: Any) -> None:
+def test_time_series_dataloader_sanity(source: Any) -> None:
     static_data, temporal_data, outcome = source().load()
 
     loader = TimeSeriesDataLoader(
@@ -107,13 +198,27 @@ def test_time_series_dataloader(source: Any) -> None:
 
     assert loader.dataframe().shape == (len(temporal_data), feat_cnt)
     assert loader.numpy().shape == (len(temporal_data), feat_cnt)
-    assert loader.temporal_numpy().shape == (
-        len(temporal_data),
-        temporal_data[0].shape[0],
-        temporal_data[0].shape[1],
-    )
-    assert (loader.temporal_columns == temporal_data[0].columns).all()
     assert len(loader) == len(temporal_data)
+
+    train_len = int(0.8 * (len(temporal_data)))
+    assert loader.train().shape == (train_len, feat_cnt)
+    assert loader.test().shape == (len(temporal_data) - train_len, feat_cnt)
+    assert loader.sample(10).shape == (10, feat_cnt)
+
+    assert loader.hash() != ""
+
+
+@pytest.mark.parametrize("source", [SineDataloader, GoogleStocksDataloader])
+def test_time_series_dataloader_info(source: Any) -> None:
+    static_data, temporal_data, outcome = source().load()
+
+    loader = TimeSeriesDataLoader(
+        temporal_data=temporal_data,
+        static_data=static_data,
+        outcome=outcome,
+        train_size=0.8,
+        sensitive_features=["test"],
+    )
 
     info = loader.info()
     assert info["data_type"] == "time_series"
@@ -126,13 +231,11 @@ def test_time_series_dataloader(source: Any) -> None:
         list(outcome.columns) if outcome is not None else []
     )
     assert info["seq_len"] == len(temporal_data[0])
-    assert info["sensitive_features"] == []
+    assert info["sensitive_features"] == ["test"]
 
-    train_len = int(0.8 * (len(temporal_data)))
-    assert loader.train().shape == (train_len, feat_cnt)
-    assert loader.test().shape == (len(temporal_data) - train_len, feat_cnt)
-
-    assert loader.hash() != ""
+    new_loader = TimeSeriesDataLoader.from_info(loader.dataframe(), loader.info())
+    assert new_loader.shape == loader.shape
+    assert new_loader.info() == loader.info()
 
 
 @pytest.mark.parametrize("source", [SineDataloader, GoogleStocksDataloader])

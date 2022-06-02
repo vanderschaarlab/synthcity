@@ -21,6 +21,7 @@ class DataLoader(metaclass=ABCMeta):
         static_features: List[str],
         temporal_features: List[str] = [],
         sensitive_features: List[str] = [],
+        outcome_features: List[str] = [],
         train_size: float = 0.8,
         random_state: int = 0,
         **kwargs: Any,
@@ -28,6 +29,7 @@ class DataLoader(metaclass=ABCMeta):
         self.static_features = static_features
         self.temporal_features = temporal_features
         self.sensitive_features = sensitive_features
+        self.outcome_features = outcome_features
         self.random_state = random_state
 
         self.data = data
@@ -86,7 +88,7 @@ class DataLoader(metaclass=ABCMeta):
 
     @staticmethod
     @abstractmethod
-    def from_info(data: Any, info: dict) -> "DataLoader":
+    def from_info(data: pd.DataFrame, info: dict) -> "DataLoader":
         ...
 
     @abstractmethod
@@ -143,6 +145,7 @@ class GenericDataLoader(DataLoader):
             data=data,
             static_features=list(data.columns),
             sensitive_features=sensitive_features,
+            outcome_features=[self.target_column],
             random_state=random_state,
             **kwargs,
         )
@@ -173,6 +176,7 @@ class GenericDataLoader(DataLoader):
             "len": len(self),
             "static_features": self.static_features,
             "sensitive_features": self.sensitive_features,
+            "outcome_features": self.outcome_features,
             "target_column": self.target_column,
         }
 
@@ -201,7 +205,7 @@ class GenericDataLoader(DataLoader):
         return self.decorate(self.data.drop(columns=columns))
 
     @staticmethod
-    def from_info(data: Any, info: dict) -> "GenericDataLoader":
+    def from_info(data: pd.DataFrame, info: dict) -> "GenericDataLoader":
         assert isinstance(data, pd.DataFrame)
 
         return GenericDataLoader(
@@ -268,6 +272,7 @@ class SurvivalAnalysisDataLoader(DataLoader):
             data=data,
             static_features=list(data.columns.astype(str)),
             sensitive_features=sensitive_features,
+            outcome_features=[self.target_column],
             random_state=random_state,
             **kwargs,
         )
@@ -299,6 +304,7 @@ class SurvivalAnalysisDataLoader(DataLoader):
             "len": len(self),
             "static_features": list(self.static_features),
             "sensitive_features": self.sensitive_features,
+            "outcome_features": self.outcome_features,
             "target_column": self.target_column,
             "time_to_event_column": self.time_to_event_column,
             "time_horizons": self.time_horizons,
@@ -337,7 +343,7 @@ class SurvivalAnalysisDataLoader(DataLoader):
         )
 
     @staticmethod
-    def from_info(data: Any, info: dict) -> "DataLoader":
+    def from_info(data: pd.DataFrame, info: dict) -> "DataLoader":
         assert isinstance(data, pd.DataFrame)
 
         return SurvivalAnalysisDataLoader(
@@ -426,6 +432,8 @@ class TimeSeriesDataLoader(DataLoader):
             data_type="time_series",
             static_features=static_features,
             temporal_features=temporal_features,
+            outcome_features=self.outcome_features,
+            sensitive_features=sensitive_features,
             random_state=random_state,
             **kwargs,
         )
@@ -438,10 +446,6 @@ class TimeSeriesDataLoader(DataLoader):
         outcome: Optional[pd.DataFrame],
     ) -> pd.DataFrame:
         # Temporal data: (subjects, temporal_sequence, temporal_feature)
-        raw_temporal = []
-        for item in temporal_data:
-            raw_temporal.append(np.asarray(item).tolist())
-
         ext_temporal_features = []
         temporal_features = temporal_data[0].columns
 
@@ -450,7 +454,7 @@ class TimeSeriesDataLoader(DataLoader):
                 [f"temporal_{feat}_t{idx}" for idx in range(len(temporal_data[0]))]
             )
 
-        temporal_arr = np.asarray(raw_temporal)
+        temporal_arr = np.asarray(temporal_data)
         temporal_arr = np.swapaxes(temporal_arr, 1, 2)
 
         out_df = pd.DataFrame(
@@ -522,8 +526,8 @@ class TimeSeriesDataLoader(DataLoader):
         return self.data["grouped_data"].columns
 
     @property
-    def temporal_columns(self) -> list:
-        return self.data["temporal_data"][0].columns
+    def raw_columns(self) -> list:
+        return self.static_features + self.temporal_features + self.outcome_features
 
     def dataframe(self) -> pd.DataFrame:
         return self.data["grouped_data"]
@@ -531,30 +535,20 @@ class TimeSeriesDataLoader(DataLoader):
     def numpy(self) -> np.ndarray:
         return self.dataframe().values
 
-    def temporal_numpy(self) -> np.ndarray:
-        raw_temporal = []
-        for item in self.data["temporal_data"]:
-            raw_temporal.append(np.asarray(item).tolist())
-
-        return np.asarray(raw_temporal)
-
     def info(self) -> dict:
         return {
             "data_type": self.data_type,
             "len": len(self),
             "static_features": self.static_features,
             "temporal_features": self.temporal_features,
-            "outcome_features": self.outcome_features,
             "group_features": list(self.data["grouped_data"].columns),
+            "outcome_features": self.outcome_features,
             "seq_len": self.seq_len,
             "sensitive_features": self.sensitive_features,
         }
 
     def __len__(self) -> int:
         return len(self.data["grouped_data"])
-
-    def satisfies(self, constraints: Constraints) -> bool:
-        raise NotImplementedError()
 
     def decorate(self, data: Any) -> "DataLoader":
         static_data, temporal_data, outcome = data
@@ -568,23 +562,61 @@ class TimeSeriesDataLoader(DataLoader):
             train_size=self.train_size,
         )
 
+    def unpack_and_decorate(self, data: pd.DataFrame) -> "DataLoader":
+        unpacked_data = TimeSeriesDataLoader.unpack_raw_data(
+            data,
+            self.static_features,
+            self.temporal_features,
+            self.outcome_features,
+            self.seq_len,
+        )
+
+        return self.decorate(unpacked_data)
+
+    def satisfies(self, constraints: Constraints) -> bool:
+        valid = constraints.is_valid(self.data["grouped_data"])
+
+        for dtype in ["static_data", "outcome"]:
+            if self.data[dtype] is not None:
+                valid &= constraints.is_valid(self.data[dtype])
+        for item in self.data["temporal_data"]:
+            valid &= constraints.is_valid(item)
+
+        return valid
+
     def match(self, constraints: Constraints) -> "DataLoader":
-        raise NotImplementedError()
+        new_data = constraints.match(self.data["grouped_data"])
+
+        return self.unpack_and_decorate(new_data)
 
     def sample(self, count: int) -> "DataLoader":
-        raise NotImplementedError()
+        new_data = self.data["grouped_data"].sample(count)
+        return self.unpack_and_decorate(new_data)
 
     def drop(self, columns: list = []) -> "DataLoader":
-        raise NotImplementedError()
+        new_data = self.data["grouped_data"].drop(columns=columns)
+        return self.unpack_and_decorate(new_data)
 
     @staticmethod
-    def from_info(data: Any, info: dict) -> "DataLoader":
-        raise NotImplementedError()
+    def from_info(data: pd.DataFrame, info: dict) -> "DataLoader":
+        static_data, temporal_data, outcome = TimeSeriesDataLoader.unpack_raw_data(
+            data,
+            static_features=info["static_features"],
+            temporal_features=info["temporal_features"],
+            outcome_features=info["outcome_features"],
+            seq_len=info["seq_len"],
+        )
+        return TimeSeriesDataLoader(
+            temporal_data,
+            static_data=static_data,
+            outcome=outcome,
+            sensitive_features=info["sensitive_features"],
+        )
 
     def unpack(self) -> Any:
         return (
             self.data["static_data"],
-            self.data["temporal_data"],
+            np.asarray(self.data["temporal_data"]),
             self.data["outcome"],
         )
 
@@ -595,44 +627,27 @@ class TimeSeriesDataLoader(DataLoader):
         self.data["grouped_data"][feature] = val
 
     def train(self) -> "DataLoader":
-        idxs, _, temporal_train, _ = train_test_split(
-            list(range(len(self))),
-            self.data["temporal_data"],
+        new_data, _ = train_test_split(
+            self.data["grouped_data"],
             train_size=self.train_size,
             random_state=self.random_state,
         )
-        static_train: Optional[pd.DataFrame] = None
-        outcome_train: Optional[pd.DataFrame] = None
-
-        if self.data["static_data"] is not None:
-            static_train = self.data["static_data"].iloc[idxs]
-        if self.data["outcome"] is not None:
-            outcome_train = self.data["outcome"].iloc[idxs]
-
-        return self.decorate((static_train, temporal_train, outcome_train))
+        return self.unpack_and_decorate(new_data)
 
     def test(self) -> "DataLoader":
-        _, idxs, _, temporal_test = train_test_split(
-            list(range(len(self))),
-            self.data["temporal_data"],
+        _, new_data = train_test_split(
+            self.data["grouped_data"],
             train_size=self.train_size,
             random_state=self.random_state,
         )
-        static_test: Optional[pd.DataFrame] = None
-        outcome_test: Optional[pd.DataFrame] = None
-
-        if self.data["static_data"] is not None:
-            static_test = self.data["static_data"].iloc[idxs]
-        if self.data["outcome"] is not None:
-            outcome_test = self.data["outcome"].iloc[idxs]
-
-        return self.decorate((static_test, temporal_test, outcome_test))
+        return self.unpack_and_decorate(new_data)
 
     def hash(self) -> str:
         return dataframe_hash(self.data["grouped_data"])
 
 
-def create_from_info(data: Any, info: dict) -> "DataLoader":
+@validate_arguments(config=dict(arbitrary_types_allowed=True))
+def create_from_info(data: pd.DataFrame, info: dict) -> "DataLoader":
     if info["data_type"] == "generic":
         return GenericDataLoader.from_info(data, info)
     elif info["data_type"] == "survival_analysis":

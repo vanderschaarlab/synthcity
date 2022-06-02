@@ -59,6 +59,8 @@ class SurvivalPipeline(Plugin):
         return []
 
     def _fit(self, X: DataLoader, *args: Any, **kwargs: Any) -> "SurvivalPipeline":
+        assert X.type() == "survival_analysis"
+
         Xcov, T, E = X.unpack()
 
         self.last_te = T[E == 1].max()
