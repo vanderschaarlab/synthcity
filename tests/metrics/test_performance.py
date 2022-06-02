@@ -18,8 +18,10 @@ from synthcity.plugins import Plugin, Plugins
 from synthcity.plugins.core.dataloader import (
     GenericDataLoader,
     SurvivalAnalysisDataLoader,
+    TimeSeriesDataLoader,
     create_from_info,
 )
+from synthcity.utils.datasets.time_series.google_stocks import GoogleStocksDataloader
 
 
 @pytest.mark.parametrize("test_plugin", [Plugins().get("marginal_distributions")])
@@ -209,3 +211,54 @@ def test_evaluate_performance_custom_labels(
     assert "gt" in good_score
     assert "syn_id" in good_score
     assert "syn_ood" in good_score
+
+
+@pytest.mark.parametrize("test_plugin", [Plugins().get("marginal_distributions")])
+@pytest.mark.parametrize(
+    "evaluator_t",
+    [
+        PerformanceEvaluatorMLP,
+    ],
+)
+def test_evaluate_performance_time_series(
+    test_plugin: Plugin, evaluator_t: Type
+) -> None:
+    static_data, temporal_data, outcome = GoogleStocksDataloader().load()
+    data = TimeSeriesDataLoader(
+        temporal_data=temporal_data,
+        static_data=static_data,
+        outcome=outcome,
+    )
+
+    test_plugin.fit(data)
+    data_gen = test_plugin.generate(100)
+
+    evaluator = evaluator_t(
+        task_type="time_series",
+    )
+    good_score = evaluator.evaluate(
+        data,
+        data_gen,
+    )
+
+    assert "gt" in good_score
+    assert "syn_id" in good_score
+    assert "syn_ood" in good_score
+
+    sz = 100
+    X_rnd = pd.DataFrame(np.random.randn(sz, len(data.columns)), columns=data.columns)
+    X_rnd["arrest"] = 1
+    score = evaluator.evaluate(
+        data,
+        create_from_info(X_rnd, data.info()),
+    )
+
+    assert "gt" in score
+    assert "syn_id" in score
+    assert "syn_ood" in score
+
+    assert score["syn_id"] < 1
+    assert score["syn_ood"] < 1
+    assert good_score["gt"] < 1
+    assert good_score["syn_id"] > score["syn_id"]
+    assert good_score["syn_ood"] > score["syn_ood"]

@@ -40,7 +40,7 @@ class DataLoader(metaclass=ABCMeta):
         return self.data
 
     @abstractmethod
-    def unpack(self) -> Any:
+    def unpack(self, as_numpy: bool = False) -> Any:
         ...
 
     @abstractmethod
@@ -158,10 +158,12 @@ class GenericDataLoader(DataLoader):
     def columns(self) -> list:
         return list(self.data.columns)
 
-    def unpack(self) -> Any:
+    def unpack(self, as_numpy: bool = False) -> Any:
         X = self.data.drop(columns=[self.target_column])
         y = self.data[self.target_column]
 
+        if as_numpy:
+            return np.asarray(X), np.asarray(y)
         return X, y
 
     def dataframe(self) -> pd.DataFrame:
@@ -285,10 +287,13 @@ class SurvivalAnalysisDataLoader(DataLoader):
     def columns(self) -> list:
         return list(self.data.columns)
 
-    def unpack(self) -> Any:
+    def unpack(self, as_numpy: bool = False) -> Any:
         X = self.data.drop(columns=[self.target_column, self.time_to_event_column])
         T = self.data[self.time_to_event_column]
         E = self.data[self.target_column]
+
+        if as_numpy:
+            return np.asarray(X), np.asarray(T), np.asarray(E)
 
         return X, T, E
 
@@ -546,6 +551,8 @@ class TimeSeriesDataLoader(DataLoader):
             "temporal_features": self.temporal_features,
             "group_features": list(self.data["grouped_data"].columns),
             "outcome_features": self.outcome_features,
+            "outcome_len": len(self.data["outcome"].values.reshape(-1))
+            / len(self.data["outcome"]),
             "seq_len": self.seq_len,
             "sensitive_features": self.sensitive_features,
         }
@@ -608,10 +615,16 @@ class TimeSeriesDataLoader(DataLoader):
             sensitive_features=info["sensitive_features"],
         )
 
-    def unpack(self) -> Any:
+    def unpack(self, as_numpy: bool = False) -> Any:
+        if as_numpy:
+            return (
+                np.asarray(self.data["static_data"]),
+                np.asarray(self.data["temporal_data"]),
+                np.asarray(self.data["outcome"]),
+            )
         return (
             self.data["static_data"],
-            np.asarray(self.data["temporal_data"]),
+            self.data["temporal_data"],
             self.data["outcome"],
         )
 

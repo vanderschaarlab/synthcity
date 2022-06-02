@@ -24,6 +24,7 @@ from synthcity.plugins.core.models.survival_analysis import (
     XGBSurvivalAnalysis,
     evaluate_survival_model,
 )
+from synthcity.plugins.core.models.ts_rnn import TimeSeriesRNN
 from synthcity.utils.serialization import dataframe_hash
 
 
@@ -197,6 +198,8 @@ class PerformanceEvaluator(MetricEvaluator):
         Returns:
             gt and syn performance scores
         """
+        assert X_gt.type() == "survival_analysis"
+        assert X_syn.type() == "survival_analysis"
 
         info = X_gt.info()
         time_horizons = info["time_horizons"]
@@ -276,6 +279,101 @@ class PerformanceEvaluator(MetricEvaluator):
             "syn_ood.brier_score": float(score_syn_ood["brier_score"][0]),
         }
 
+    @validate_arguments(config=dict(arbitrary_types_allowed=True))
+    def _evaluate_time_series_performance(
+        self,
+        model: Any,
+        model_args: Any,
+        X_gt: DataLoader,
+        X_syn: DataLoader,
+    ) -> Dict:
+        """Train a regressor on the time series data and evaluate the performance on real test data. Returns the average performance discrepancy between training on real data vs on synthetic data.
+
+        Returns:
+            gt and syn performance scores
+        """
+        assert X_gt.type() == "time_series"
+        assert X_syn.type() == "time_series"
+
+        id_static_gt, id_temporal_gt, id_outcome_gt = X_gt.train().unpack(as_numpy=True)
+        ood_static_gt, ood_temporal_gt, ood_outcome_gt = X_gt.test().unpack(
+            as_numpy=True
+        )
+        static_syn, temporal_syn, outcome_syn = X_syn.unpack(as_numpy=True)
+
+        skf = KFold(
+            n_splits=self._n_folds, shuffle=True, random_state=self._random_seed
+        )
+
+        real_scores = []
+        syn_scores_id = []
+        syn_scores_ood = []
+
+        def ts_eval_cbk(
+            static_train: np.ndarray,
+            temporal_train: np.ndarray,
+            outcome_train: np.ndarray,
+            static_test: np.ndarray,
+            temporal_test: np.ndarray,
+            outcome_test: np.ndarray,
+        ) -> float:
+            try:
+                estimator = model(**model_args).fit(
+                    static_train, temporal_train, outcome_train
+                )
+                preds = estimator.predict(static_test, temporal_test)
+
+                score = mean_squared_error(outcome_test, preds)
+            except BaseException as e:
+                log.error(f"regression evaluation failed {e}")
+                score = 100
+
+            return 1 / (1 + score)
+
+        for train_idx, test_idx in skf.split(id_static_gt):
+            static_train_data = id_static_gt[train_idx]
+            temporal_train_data = id_temporal_gt[train_idx]
+            outcome_train_data = id_outcome_gt[train_idx]
+
+            static_test_data = id_static_gt[test_idx]
+            temporal_test_data = id_temporal_gt[test_idx]
+            outcome_test_data = id_outcome_gt[test_idx]
+
+            real_score = ts_eval_cbk(
+                static_train_data,
+                temporal_train_data,
+                outcome_train_data,
+                static_test_data,
+                temporal_test_data,
+                outcome_test_data,
+            )
+            synth_score_id = ts_eval_cbk(
+                static_syn,
+                temporal_syn,
+                outcome_syn,
+                static_test_data,
+                temporal_test_data,
+                outcome_test_data,
+            )
+            synth_score_ood = ts_eval_cbk(
+                static_syn,
+                temporal_syn,
+                outcome_syn,
+                ood_static_gt,
+                ood_temporal_gt,
+                ood_outcome_gt,
+            )
+
+            real_scores.append(real_score)
+            syn_scores_id.append(synth_score_id)
+            syn_scores_ood.append(synth_score_ood)
+
+        return {
+            "gt": float(self.reduction()(real_scores)),
+            "syn_id": float(self.reduction()(syn_scores_id)),
+            "syn_ood": float(self.reduction()(syn_scores_ood)),
+        }
+
 
 class PerformanceEvaluatorXGB(PerformanceEvaluator):
     """Train an XGBoost classifier or regressor on the synthetic data and evaluate the performance on real test data. Returns the average performance discrepancy between training on real data vs on synthetic data.
@@ -309,26 +407,28 @@ class PerformanceEvaluatorXGB(PerformanceEvaluator):
                 X_gt,
                 X_syn,
             )
+        elif self._task_type == "classification" or self._task_type == "regression":
+            xgb_clf_args = {
+                "n_jobs": -1,
+                "verbosity": 0,
+                "use_label_encoder": True,
+                "depth": 3,
+                "random_state": self._random_seed,
+            }
 
-        xgb_clf_args = {
-            "n_jobs": -1,
-            "verbosity": 0,
-            "use_label_encoder": True,
-            "depth": 3,
-            "random_state": self._random_seed,
-        }
+            xgb_reg_args = copy.deepcopy(xgb_clf_args)
+            xgb_reg_args["use_label_encoder"] = False
 
-        xgb_reg_args = copy.deepcopy(xgb_clf_args)
-        xgb_reg_args["use_label_encoder"] = False
-
-        return self._evaluate_standard_performance(
-            XGBClassifier,
-            xgb_clf_args,
-            XGBRegressor,
-            xgb_reg_args,
-            X_gt,
-            X_syn,
-        )
+            return self._evaluate_standard_performance(
+                XGBClassifier,
+                xgb_clf_args,
+                XGBRegressor,
+                xgb_reg_args,
+                X_gt,
+                X_syn,
+            )
+        else:
+            raise RuntimeError(f"Unuspported task type {self._task_type}")
 
 
 class PerformanceEvaluatorLinear(PerformanceEvaluator):
@@ -351,15 +451,17 @@ class PerformanceEvaluatorLinear(PerformanceEvaluator):
     ) -> Dict:
         if self._task_type == "survival_analysis":
             return self._evaluate_survival_model(CoxPHSurvivalAnalysis, {}, X_gt, X_syn)
-
-        return self._evaluate_standard_performance(
-            LogisticRegression,
-            {"random_state": self._random_seed},
-            LinearRegression,
-            {},
-            X_gt,
-            X_syn,
-        )
+        elif self._task_type == "classification" or self._task_type == "regression":
+            return self._evaluate_standard_performance(
+                LogisticRegression,
+                {"random_state": self._random_seed},
+                LinearRegression,
+                {},
+                X_gt,
+                X_syn,
+            )
+        else:
+            raise RuntimeError(f"Unuspported task type {self._task_type}")
 
 
 class PerformanceEvaluatorMLP(PerformanceEvaluator):
@@ -385,21 +487,36 @@ class PerformanceEvaluatorMLP(PerformanceEvaluator):
                 DeephitSurvivalAnalysis, {}, X_gt, X_syn
             )
 
-        mlp_args = {
-            "n_units_in": X_gt.shape[1] - 1,
-            "n_units_out": 1,
-            "seed": self._random_seed,
-        }
-        clf_args = copy.deepcopy(mlp_args)
-        clf_args["task_type"] = "classification"
-        reg_args = copy.deepcopy(mlp_args)
-        reg_args["task_type"] = "regression"
+        elif self._task_type == "classification" or self._task_type == "regression":
+            mlp_args = {
+                "n_units_in": X_gt.shape[1] - 1,
+                "n_units_out": 1,
+                "seed": self._random_seed,
+            }
+            clf_args = copy.deepcopy(mlp_args)
+            clf_args["task_type"] = "classification"
+            reg_args = copy.deepcopy(mlp_args)
+            reg_args["task_type"] = "regression"
 
-        return self._evaluate_standard_performance(
-            MLP,
-            clf_args,
-            MLP,
-            reg_args,
-            X_gt,
-            X_syn,
-        )
+            return self._evaluate_standard_performance(
+                MLP,
+                clf_args,
+                MLP,
+                reg_args,
+                X_gt,
+                X_syn,
+            )
+        elif self._task_type == "time_series":
+            info = X_gt.info()
+            args = {
+                "task_type": "regression",
+                "n_static_units_in": len(info["static_features"]),
+                "n_temporal_units_in": len(info["temporal_features"]),
+                "n_units_out": info["outcome_len"],
+            }
+            return self._evaluate_time_series_performance(
+                TimeSeriesRNN, args, X_gt, X_syn
+            )
+
+        else:
+            raise RuntimeError(f"Unuspported task type {self._task_type}")
