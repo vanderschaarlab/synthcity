@@ -67,7 +67,7 @@ def test_rnn_regression_fit_predict(mode: str, source: Any) -> None:
 
     assert y_pred.shape == outcome.shape
 
-    assert model.score(static, temporal, outcome) < 1
+    assert model.score(static, temporal, outcome) < 2
 
 
 @pytest.mark.parametrize("mode", ["LSTM", "RNN", "GRU"])

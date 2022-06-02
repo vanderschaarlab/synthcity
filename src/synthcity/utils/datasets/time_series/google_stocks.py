@@ -11,7 +11,7 @@ df_path = Path(__file__).parent / "data/goog.csv"
 
 
 class GoogleStocksDataloader:
-    def __init__(self, seq_len: int = 50, as_numpy: bool = False) -> None:
+    def __init__(self, seq_len: int = 10, as_numpy: bool = False) -> None:
         self.seq_len = seq_len
         self.as_numpy = as_numpy
 

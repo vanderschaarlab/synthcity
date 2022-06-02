@@ -90,12 +90,21 @@ class Constraints(BaseModel):
                 res &= False
                 continue
 
+            prev = res.sum()
             res &= self._eval(
                 X,
                 feature,
                 op,
                 thresh,
             )
+            if res.sum() == 0 and prev != 0:
+                print(
+                    "quality loss for constraints ",
+                    feature,
+                    op,
+                    thresh,
+                    X[feature].dtype,
+                )
         return res
 
     @validate_arguments(config=dict(arbitrary_types_allowed=True))

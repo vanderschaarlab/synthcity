@@ -514,6 +514,9 @@ class TimeSeriesDataLoader(DataLoader):
             for feat in temporal_features:
                 for seq in range(seq_len):
                     local_df.loc[seq, feat] = row[f"temporal_{feat}_t{seq}"]
+                local_df[feat] = local_df[feat].astype(
+                    row[f"temporal_{feat}_t{seq}"].dtype
+                )
             temporal_data.append(local_df)
         return static_data, temporal_data, outcome
 

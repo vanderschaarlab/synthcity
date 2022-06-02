@@ -23,8 +23,8 @@ class SineDataloader:
     def __init__(
         self,
         no: int = 100,
-        seq_len: int = 20,
-        temporal_dim: int = 10,
+        seq_len: int = 10,
+        temporal_dim: int = 5,
         static_dim: int = 4,
         freq_scale: float = 1,
         as_numpy: bool = False,
