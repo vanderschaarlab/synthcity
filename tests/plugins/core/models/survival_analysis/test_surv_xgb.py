@@ -28,7 +28,7 @@ def test_train_prediction() -> None:
     T = df["week"]
     time_horizons = np.linspace(T.min(), T.max(), num=4)[1:-1].tolist()
 
-    model = XGBSurvivalAnalysis()
+    model = XGBSurvivalAnalysis(n_estimators=10)
 
     model.fit(X, T, Y)
 

@@ -92,6 +92,7 @@ def test_sample_hyperparams() -> None:
         assert plugin(**args) is not None
 
 
+@pytest.mark.slow
 def test_eval_performance() -> None:
     results = []
 

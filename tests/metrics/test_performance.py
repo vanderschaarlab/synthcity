@@ -119,6 +119,7 @@ def test_evaluate_performance_regression(
     assert score["syn_ood"] <= good_score["syn_ood"]
 
 
+@pytest.mark.slow
 @pytest.mark.parametrize("test_plugin", [Plugins().get("marginal_distributions")])
 @pytest.mark.parametrize(
     "evaluator_t",
@@ -213,6 +214,7 @@ def test_evaluate_performance_custom_labels(
     assert "syn_ood" in good_score
 
 
+@pytest.mark.slow
 @pytest.mark.parametrize("test_plugin", [Plugins().get("marginal_distributions")])
 @pytest.mark.parametrize(
     "evaluator_t",

@@ -51,7 +51,7 @@ def test_plugin_fit(test_plugin: Plugin) -> None:
 
 
 def test_plugin_generate() -> None:
-    test_plugin = plugin(n_layers_hidden=2, n_units_hidden=100, n_iter=500)
+    test_plugin = plugin(n_layers_hidden=2, n_units_hidden=100, n_iter=50)
     X = pd.DataFrame(load_iris()["data"])
     test_plugin.fit(GenericDataLoader(X))
 
@@ -65,7 +65,7 @@ def test_plugin_generate() -> None:
 
 
 def test_plugin_generate_constraints() -> None:
-    test_plugin = plugin(n_layers_hidden=2, n_units_hidden=100, n_iter=500)
+    test_plugin = plugin(n_layers_hidden=2, n_units_hidden=100, n_iter=50)
     X = pd.DataFrame(load_iris()["data"])
     test_plugin.fit(GenericDataLoader(X))
 

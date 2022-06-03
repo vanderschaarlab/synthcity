@@ -26,7 +26,7 @@ def test_train_prediction() -> None:
     Y = df["arrest"]
     T = df["week"]
 
-    model = XGBTimeToEvent()
+    model = XGBTimeToEvent(n_estimators=10)
 
     model.fit(X, T, Y)
 

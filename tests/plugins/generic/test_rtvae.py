@@ -11,6 +11,7 @@ from synthcity.plugins.core.dataloader import GenericDataLoader
 from synthcity.plugins.generic.plugin_rtvae import plugin
 
 plugin_name = "rtvae"
+plugin_args = {"n_iter": 10}
 
 
 @pytest.mark.parametrize("test_plugin", generate_fixtures(plugin_name, plugin))
@@ -33,13 +34,17 @@ def test_plugin_hyperparams(test_plugin: Plugin) -> None:
     assert len(test_plugin.hyperparameter_space()) == 12
 
 
-@pytest.mark.parametrize("test_plugin", generate_fixtures(plugin_name, plugin))
+@pytest.mark.parametrize(
+    "test_plugin", generate_fixtures(plugin_name, plugin, plugin_args)
+)
 def test_plugin_fit(test_plugin: Plugin) -> None:
     X = pd.DataFrame(load_iris()["data"])
     test_plugin.fit(GenericDataLoader(X))
 
 
-@pytest.mark.parametrize("test_plugin", generate_fixtures(plugin_name, plugin))
+@pytest.mark.parametrize(
+    "test_plugin", generate_fixtures(plugin_name, plugin, plugin_args)
+)
 def test_plugin_generate(test_plugin: Plugin) -> None:
     X = pd.DataFrame(load_iris()["data"])
     test_plugin.fit(GenericDataLoader(X))
@@ -53,7 +58,9 @@ def test_plugin_generate(test_plugin: Plugin) -> None:
     assert test_plugin.schema_includes(X_gen)
 
 
-@pytest.mark.parametrize("test_plugin", generate_fixtures(plugin_name, plugin))
+@pytest.mark.parametrize(
+    "test_plugin", generate_fixtures(plugin_name, plugin, plugin_args)
+)
 def test_plugin_generate_constraints(test_plugin: Plugin) -> None:
     X = pd.DataFrame(load_iris()["data"])
     test_plugin.fit(GenericDataLoader(X))

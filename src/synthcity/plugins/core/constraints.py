@@ -6,6 +6,9 @@ import numpy as np
 import pandas as pd
 from pydantic import BaseModel, validate_arguments, validator
 
+# synthcity absolute
+import synthcity.logger as log
+
 
 class Constraints(BaseModel):
     rules: list = []
@@ -98,12 +101,8 @@ class Constraints(BaseModel):
                 thresh,
             )
             if res.sum() == 0 and prev != 0:
-                print(
-                    "quality loss for constraints ",
-                    feature,
-                    op,
-                    thresh,
-                    X[feature].dtype,
+                log.error(
+                    f"[{feature}] quality loss for constraints {op} = {thresh}. Original dtype {X[feature].dtype} ",
                 )
         return res
 

@@ -37,6 +37,7 @@ class WindowLinearLayer(nn.Module):
             n_units_out=n_units_out,
             n_layers_hidden=n_layers,
             n_units_hidden=n_units_hidden,
+            device=device,
         )
 
     @validate_arguments(config=dict(arbitrary_types_allowed=True))
@@ -116,7 +117,7 @@ class TimeSeriesRNN(nn.Module):
             "GRU": nn.GRU,
         }
 
-        self.temporal_layer = temporal_models[mode](**temporal_params)
+        self.temporal_layer = temporal_models[mode](**temporal_params).to(self.device)
         self.mode = mode
 
         self.out = WindowLinearLayer(
@@ -124,10 +125,8 @@ class TimeSeriesRNN(nn.Module):
             n_temporal_units_in=self.n_temporal_units_hidden,
             window_size=self.window_size,
             n_units_out=self.n_units_out,
+            device=device,
         )
-
-        # if task_type == "classification":
-        #    self.out.append(nn.Softmax(dim=-1))
 
         self.optimizer = torch.optim.Adam(
             self.parameters(),

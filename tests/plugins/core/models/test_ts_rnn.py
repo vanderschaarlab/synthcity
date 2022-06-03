@@ -57,7 +57,7 @@ def test_rnn_regression_fit_predict(mode: str, source: Any) -> None:
         n_temporal_units_in=temporal.shape[-1],
         n_units_out=outlen,
         window_size=2,
-        n_iter=100,
+        n_iter=10,
         mode=mode,
     )
 
@@ -86,7 +86,7 @@ def test_rnn_classification_fit_predict(mode: str, source: Any) -> None:
         n_temporal_units_in=temporal.shape[-1],
         n_units_out=2,
         window_size=2,
-        n_iter=100,
+        n_iter=10,
         mode=mode,
     )
 
