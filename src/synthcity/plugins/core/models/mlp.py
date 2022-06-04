@@ -113,7 +113,7 @@ class MultiActivationHead(nn.Module):
 
     @validate_arguments(config=dict(arbitrary_types_allowed=True))
     def forward(self, X: torch.Tensor) -> torch.Tensor:
-        if X.shape[1] != np.sum(self.activation_lengths):
+        if X.shape[-1] != np.sum(self.activation_lengths):
             raise RuntimeError(
                 f"Shape mismatch for the activations: expected {np.sum(self.activation_lengths)}. Got shape {X.shape}."
             )
@@ -204,8 +204,8 @@ class MLP(nn.Module):
     ) -> None:
         super(MLP, self).__init__()
 
-        assert n_units_in > 0
-        assert n_units_out > 0
+        assert n_units_in >= 0
+        assert n_units_out >= 0
 
         enable_reproducible_results(seed)
         self.device = device

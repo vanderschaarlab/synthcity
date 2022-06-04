@@ -18,12 +18,12 @@ def test_rnn_sanity(mode: str, task_type: str) -> None:
         task_type=task_type,
         n_static_units_in=3,
         n_temporal_units_in=4,
-        n_units_out=2,
+        output_shape=[2],
         n_iter=11,
         n_static_units_hidden=41,
         n_temporal_units_hidden=42,
-        n_static_layers=2,
-        n_temporal_layers=3,
+        n_static_layers_hidden=2,
+        n_temporal_layers_hidden=3,
         mode=mode,
         n_iter_print=12,
         batch_size=123,
@@ -35,10 +35,11 @@ def test_rnn_sanity(mode: str, task_type: str) -> None:
     assert model.n_static_units_in == 3
     assert model.n_temporal_units_in == 4
     assert model.n_units_out == 2
+    assert model.output_shape == [2]
     assert model.n_static_units_hidden == 41
     assert model.n_temporal_units_hidden == 42
-    assert model.n_static_layers == 2
-    assert model.n_temporal_layers == 3
+    assert model.n_static_layers_hidden == 2
+    assert model.n_temporal_layers_hidden == 3
     assert model.mode == mode
     assert model.n_iter_print == 12
     assert model.batch_size == 123
@@ -48,6 +49,7 @@ def test_rnn_sanity(mode: str, task_type: str) -> None:
 @pytest.mark.parametrize("source", [SineDataloader, GoogleStocksDataloader])
 def test_rnn_regression_fit_predict(mode: str, source: Any) -> None:
     static, temporal, outcome = source(as_numpy=True).load()
+    outcome = outcome.reshape(-1, 1)
 
     outlen = len(outcome.reshape(-1)) / len(outcome)
 
@@ -55,9 +57,10 @@ def test_rnn_regression_fit_predict(mode: str, source: Any) -> None:
         task_type="regression",
         n_static_units_in=static.shape[-1],
         n_temporal_units_in=temporal.shape[-1],
-        n_units_out=outlen,
+        output_shape=outcome.shape[1:],
         window_size=2,
         n_iter=10,
+        nonlin_out=[("tanh", outlen)],
         mode=mode,
     )
 
@@ -84,7 +87,7 @@ def test_rnn_classification_fit_predict(mode: str, source: Any) -> None:
         task_type="classification",
         n_static_units_in=static.shape[-1],
         n_temporal_units_in=temporal.shape[-1],
-        n_units_out=2,
+        output_shape=[2],
         window_size=2,
         n_iter=10,
         mode=mode,

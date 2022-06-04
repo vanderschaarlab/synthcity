@@ -1,0 +1,151 @@
+# stdlib
+from typing import Any
+
+# third party
+import numpy as np
+import pytest
+
+# synthcity absolute
+from synthcity.plugins.core.models.ts_gan import TimeSeriesGAN
+from synthcity.utils.datasets.time_series.google_stocks import GoogleStocksDataloader
+from synthcity.utils.datasets.time_series.sine import SineDataloader
+
+
+def test_network_config() -> None:
+    net = TimeSeriesGAN(
+        n_static_units=10,
+        n_static_units_latent=2,
+        n_temporal_units=11,
+        n_temporal_window=2,
+        n_temporal_units_latent=3,
+        # Generator
+        generator_n_layers_hidden=2,
+        generator_n_units_hidden=100,
+        generator_nonlin="elu",
+        generator_static_nonlin_out=[("sigmoid", 10)],
+        generator_temporal_nonlin_out=[("sigmoid", 22)],
+        generator_n_iter=1001,
+        generator_batch_norm=False,
+        generator_dropout=0,
+        generator_lr=1e-3,
+        generator_weight_decay=1e-3,
+        # Discriminator
+        discriminator_n_layers_hidden=3,
+        discriminator_n_units_hidden=100,
+        discriminator_nonlin="elu",
+        discriminator_n_iter=1002,
+        discriminator_batch_norm=False,
+        discriminator_dropout=0,
+        discriminator_lr=1e-3,
+        discriminator_weight_decay=1e-3,
+        # Training
+        batch_size=64,
+        n_iter_print=100,
+        seed=77,
+        n_iter_min=100,
+        clipping_value=1,
+        lambda_gradient_penalty=2,
+        lambda_identifiability_penalty=3,
+    )
+
+    assert net.static_generator is not None
+    assert net.temporal_generator is not None
+    assert net.discriminator is not None
+    assert net.batch_size == 64
+    assert net.generator_n_iter == 1001
+    assert net.discriminator_n_iter == 1002
+    assert net.seed == 77
+    assert net.lambda_gradient_penalty == 2
+    assert net.lambda_identifiability_penalty == 3
+
+
+@pytest.mark.parametrize("nonlin", ["relu", "elu", "leaky_relu"])
+@pytest.mark.parametrize("n_iter", [10])
+@pytest.mark.parametrize("dropout", [0, 0.5, 0.2])
+@pytest.mark.parametrize("batch_norm", [True, False])
+@pytest.mark.parametrize("lr", [1e-3, 3e-4])
+@pytest.mark.parametrize("mode", ["LSTM", "RNN", "GRU"])
+def test_basic_network(
+    nonlin: str,
+    n_iter: int,
+    dropout: float,
+    batch_norm: bool,
+    lr: float,
+    mode: str,
+) -> None:
+    net = TimeSeriesGAN(
+        n_static_units=10,
+        n_static_units_latent=2,
+        n_temporal_units=11,
+        n_temporal_window=2,
+        n_temporal_units_latent=2,
+        generator_n_iter=n_iter,
+        discriminator_n_iter=n_iter,
+        generator_dropout=dropout,
+        discriminator_dropout=dropout,
+        generator_nonlin=nonlin,
+        discriminator_nonlin=nonlin,
+        generator_batch_norm=batch_norm,
+        discriminator_batch_norm=batch_norm,
+        generator_n_layers_hidden=2,
+        discriminator_n_layers_hidden=2,
+        generator_lr=lr,
+        discriminator_lr=lr,
+        mode=mode,
+    )
+
+    assert net.generator_n_iter == n_iter
+    assert net.discriminator_n_iter == n_iter
+    assert net.static_generator.lr == lr
+    assert net.temporal_generator.lr == lr
+    assert net.temporal_generator.mode == mode
+    assert net.discriminator.lr == lr
+    assert net.discriminator.mode == mode
+
+
+@pytest.mark.parametrize(
+    "discriminator_extra_loss", [[], ["gradient_penalty"], ["identifiability_penalty"]]
+)
+@pytest.mark.parametrize("source", [SineDataloader, GoogleStocksDataloader])
+def test_ts_gan_generation(discriminator_extra_loss: list, source: Any) -> None:
+    static, temporal, _ = source(as_numpy=True).load()
+
+    model = TimeSeriesGAN(
+        n_static_units=static.shape[-1],
+        n_static_units_latent=static.shape[-1],
+        n_temporal_units=temporal.shape[-1],
+        n_temporal_window=temporal.shape[-2],
+        n_temporal_units_latent=temporal.shape[-1],
+        generator_n_iter=10,
+        discriminator_extra_penalties=discriminator_extra_loss,
+    )
+    model.fit(static, temporal)
+
+    static_gen, temporal_gen = model.generate(10)
+
+    assert static_gen.shape == (10, static.shape[1])
+    assert temporal_gen.shape == (10, temporal.shape[1], temporal.shape[2])
+
+
+@pytest.mark.parametrize("source", [SineDataloader, GoogleStocksDataloader])
+def test_ts_gan_conditional(source: Any) -> None:
+    static, temporal, outcome = source(as_numpy=True).load()
+
+    model = TimeSeriesGAN(
+        n_static_units=static.shape[-1],
+        n_static_units_latent=static.shape[-1],
+        n_temporal_units=temporal.shape[-1],
+        n_temporal_window=temporal.shape[-2],
+        n_temporal_units_latent=temporal.shape[-1],
+        n_units_conditional=1,
+        generator_n_iter=10,
+    )
+    model.fit(static, temporal, cond=outcome)
+
+    static_gen, temporal_gen = model.generate(10)
+    assert static_gen.shape == (10, static.shape[1])
+    assert temporal_gen.shape == (10, temporal.shape[1], temporal.shape[2])
+
+    static_gen, temporal_gen = model.generate(5, np.ones([5, *outcome.shape[1:]]))
+    assert static_gen.shape == (5, static.shape[1])
+    assert temporal_gen.shape == (5, temporal.shape[1], temporal.shape[2])

@@ -1,5 +1,5 @@
 # stdlib
-from typing import Any, Callable, Optional
+from typing import Any, Callable, List, Optional, Tuple
 
 # third party
 import numpy as np
@@ -10,7 +10,7 @@ from torch.utils.data import DataLoader, TensorDataset, sampler
 
 # synthcity absolute
 import synthcity.logger as log
-from synthcity.plugins.core.models.mlp import MLP
+from synthcity.plugins.core.models.mlp import MLP, MultiActivationHead, get_nonlin
 from synthcity.utils.constants import DEVICE
 from synthcity.utils.reproducibility import enable_reproducible_results
 
@@ -25,6 +25,8 @@ class WindowLinearLayer(nn.Module):
         n_units_out: int,
         n_units_hidden: int = 100,
         n_layers: int = 2,
+        dropout: float = 0,
+        nonlin: Optional[str] = "relu",
         device: Any = DEVICE,
     ) -> None:
         super(WindowLinearLayer, self).__init__()
@@ -37,6 +39,8 @@ class WindowLinearLayer(nn.Module):
             n_units_out=n_units_out,
             n_layers_hidden=n_layers,
             n_units_hidden=n_units_hidden,
+            dropout=dropout,
+            nonlin=nonlin,
             device=device,
         )
 
@@ -61,11 +65,11 @@ class TimeSeriesRNN(nn.Module):
         task_type: str,  # regression, classification
         n_static_units_in: int,
         n_temporal_units_in: int,
-        n_units_out: int,
+        output_shape: List[int],
         n_static_units_hidden: int = 100,
-        n_static_layers: int = 2,
+        n_static_layers_hidden: int = 2,
         n_temporal_units_hidden: int = 100,
-        n_temporal_layers: int = 2,
+        n_temporal_layers_hidden: int = 2,
         n_iter: int = 100,
         mode: str = "RNN",  # RNN, LSTM, GRU
         n_iter_print: int = 10,
@@ -75,13 +79,19 @@ class TimeSeriesRNN(nn.Module):
         window_size: int = 1,
         device: Any = DEVICE,
         dataloader_sampler: Optional[sampler.Sampler] = None,
+        nonlin_out: Optional[List[Tuple[str, int]]] = None,
         loss: Optional[Callable] = None,
+        dropout: float = 0,
+        nonlin: Optional[str] = "relu",
         seed: int = 0,
     ) -> None:
         super(TimeSeriesRNN, self).__init__()
 
         enable_reproducible_results(seed)
+
         assert task_type in ["classification", "regression"]
+        assert len(output_shape) > 0
+
         self.task_type = task_type
 
         if loss is not None:
@@ -96,19 +106,21 @@ class TimeSeriesRNN(nn.Module):
         self.batch_size = batch_size
         self.n_static_units_in = n_static_units_in
         self.n_temporal_units_in = n_temporal_units_in
-        self.n_units_out = n_units_out
         self.n_static_units_hidden = n_static_units_hidden
         self.n_temporal_units_hidden = n_temporal_units_hidden
-        self.n_static_layers = n_static_layers
-        self.n_temporal_layers = n_temporal_layers
+        self.n_static_layers_hidden = n_static_layers_hidden
+        self.n_temporal_layers_hidden = n_temporal_layers_hidden
         self.device = device
         self.window_size = window_size
         self.dataloader_sampler = dataloader_sampler
+        self.lr = lr
+        self.output_shape = output_shape
+        self.n_units_out = np.prod(self.output_shape)
 
         temporal_params = {
             "input_size": self.n_temporal_units_in,
             "hidden_size": self.n_temporal_units_hidden,
-            "num_layers": self.n_temporal_layers,
+            "num_layers": self.n_temporal_layers_hidden,
             "batch_first": True,
         }
         temporal_models = {
@@ -125,8 +137,30 @@ class TimeSeriesRNN(nn.Module):
             n_temporal_units_in=self.n_temporal_units_hidden,
             window_size=self.window_size,
             n_units_out=self.n_units_out,
+            n_layers=n_static_layers_hidden,
+            dropout=dropout,
+            nonlin=nonlin,
             device=device,
         )
+
+        self.out_activation: Optional[nn.Module] = None
+
+        if nonlin_out is not None:
+            total_nonlin_len = 0
+            activations = []
+            for nonlin, nonlin_len in nonlin_out:
+                total_nonlin_len += nonlin_len
+                activations.append((get_nonlin(nonlin), nonlin_len))
+
+            if total_nonlin_len != self.n_units_out:
+                raise RuntimeError(
+                    f"Shape mismatch for the output layer. Expected length {self.n_units_out}, but got {nonlin_out} with length {total_nonlin_len}"
+                )
+            self.out_activation = MultiActivationHead(activations, device=device)
+        elif self.task_type == "classification":
+            self.out_activation = MultiActivationHead(
+                [(nn.Softmax(dim=-1), self.n_units_out)], device=device
+            )
 
         self.optimizer = torch.optim.Adam(
             self.parameters(),
@@ -145,8 +179,8 @@ class TimeSeriesRNN(nn.Module):
         # choose r_out at the last <window size> steps
         pred = self.out(static_data, X_interm)
 
-        if self.task_type == "classification":
-            pred = nn.Softmax(dim=-1)(pred)
+        if self.out_activation is not None:
+            pred = self.out_activation(pred)
 
         pred = pred.reshape(-1, *self.output_shape)
 
@@ -154,6 +188,7 @@ class TimeSeriesRNN(nn.Module):
 
     @validate_arguments(config=dict(arbitrary_types_allowed=True))
     def predict(self, static_data: np.ndarray, temporal_data: np.ndarray) -> np.ndarray:
+        self.eval()
         with torch.no_grad():
             temporal_data_t = self._check_tensor(temporal_data).float()
             static_data_t = self._check_tensor(static_data).float()
@@ -200,10 +235,6 @@ class TimeSeriesRNN(nn.Module):
         outcome: torch.Tensor,
     ) -> Any:
         loader = self.dataloader(static_data, temporal_data, outcome)
-        self.output_shape = list(outcome.shape[1:])
-        if self.task_type == "classification":
-            self.output_shape.append(self.n_units_out)
-
         # training and testing
         for it in range(self.n_iter):
             loss = self._train_epoch(loader)
