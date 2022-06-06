@@ -1,14 +1,21 @@
 # stdlib
+import sys
 from typing import Any
 
 # third party
 import numpy as np
+import pandas as pd
 import pytest
 
 # synthcity absolute
+import synthcity.logger as log
+from synthcity.plugins.core.dataloader import TimeSeriesDataLoader
 from synthcity.plugins.core.models.ts_gan import TimeSeriesGAN
+from synthcity.plugins.core.schema import Schema
 from synthcity.utils.datasets.time_series.google_stocks import GoogleStocksDataloader
 from synthcity.utils.datasets.time_series.sine import SineDataloader
+
+log.add(sink=sys.stderr, level="DEBUG")
 
 
 def test_network_config() -> None:
@@ -125,6 +132,43 @@ def test_ts_gan_generation(discriminator_extra_loss: list, source: Any) -> None:
 
     assert static_gen.shape == (10, static.shape[1])
     assert temporal_gen.shape == (10, temporal.shape[1], temporal.shape[2])
+
+
+@pytest.mark.slow
+@pytest.mark.parametrize("source", [SineDataloader, GoogleStocksDataloader])
+def test_ts_gan_generation_schema(source: Any) -> None:
+    static, temporal, _ = source().load()
+
+    model = TimeSeriesGAN(
+        n_static_units=static.shape[-1],
+        n_static_units_latent=static.shape[-1],
+        n_temporal_units=temporal[0].shape[-1],
+        n_temporal_window=temporal[0].shape[0],
+        n_temporal_units_latent=temporal[0].shape[-1],
+        generator_n_iter=200,
+    )
+    model.fit(static, temporal)
+
+    static_gen, temporal_gen = model.generate(1000)
+
+    reference_data = TimeSeriesDataLoader(
+        temporal_data=temporal,
+        static_data=static,
+    )
+    reference_schema = Schema(data=reference_data)
+
+    temporal_list = []
+    for item in temporal_gen:
+        temporal_list.append(pd.DataFrame(item, columns=temporal[0].columns))
+    gen_data = TimeSeriesDataLoader(
+        temporal_data=temporal_list,
+        static_data=pd.DataFrame(static_gen, columns=static.columns),
+    )
+
+    print(reference_data.dataframe())
+    print(gen_data.dataframe())
+
+    assert reference_schema.as_constraints().filter(gen_data.dataframe()).sum() > 0
 
 
 @pytest.mark.parametrize("source", [SineDataloader, GoogleStocksDataloader])

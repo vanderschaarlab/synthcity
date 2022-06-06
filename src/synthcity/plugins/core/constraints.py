@@ -89,6 +89,8 @@ class Constraints(BaseModel):
         X = pd.DataFrame(X)
         res = pd.Series([True] * len(X), index=X.index)
         for feature, op, thresh in self.rules:
+            if op == "dtype":
+                continue
             if feature not in X:
                 res &= False
                 continue
@@ -100,7 +102,7 @@ class Constraints(BaseModel):
                 op,
                 thresh,
             )
-            if res.sum() == 0 and prev != 0:
+            if res.sum() < prev:
                 log.error(
                     f"[{feature}] quality loss for constraints {op} = {thresh}. Original dtype {X[feature].dtype} ",
                 )

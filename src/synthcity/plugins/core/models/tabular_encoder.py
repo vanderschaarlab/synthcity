@@ -302,7 +302,6 @@ class TabularEncoder(TransformerMixin, BaseEstimator):
             column_data.values[:, :2], columns=list(gm.get_output_types())
         )
         data.iloc[:, 1] = np.argmax(column_data.values[:, 1:], axis=1)
-
         return gm.reverse_transform(data, [column_transform_info.column_name])
 
     @validate_arguments(config=dict(arbitrary_types_allowed=True))

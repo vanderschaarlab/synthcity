@@ -24,7 +24,7 @@ class WindowLinearLayer(nn.Module):
         window_size: int,
         n_units_out: int,
         n_units_hidden: int = 100,
-        n_layers: int = 2,
+        n_layers: int = 1,
         dropout: float = 0,
         nonlin: Optional[str] = "relu",
         device: Any = DEVICE,
@@ -144,20 +144,22 @@ class TimeSeriesRNN(nn.Module):
         )
 
         self.out_activation: Optional[nn.Module] = None
+        self.n_act_out: Optional[int] = None
 
         if nonlin_out is not None:
-            total_nonlin_len = 0
+            self.n_act_out = 0
             activations = []
             for nonlin, nonlin_len in nonlin_out:
-                total_nonlin_len += nonlin_len
+                self.n_act_out += nonlin_len
                 activations.append((get_nonlin(nonlin), nonlin_len))
 
-            if total_nonlin_len != self.n_units_out:
+            if self.n_units_out % self.n_act_out != 0:
                 raise RuntimeError(
-                    f"Shape mismatch for the output layer. Expected length {self.n_units_out}, but got {nonlin_out} with length {total_nonlin_len}"
+                    f"Shape mismatch for the output layer. Expected length {self.n_units_out}, but got {nonlin_out} with length {self.n_act_out}"
                 )
             self.out_activation = MultiActivationHead(activations, device=device)
         elif self.task_type == "classification":
+            self.n_act_out = self.n_units_out
             self.out_activation = MultiActivationHead(
                 [(nn.Softmax(dim=-1), self.n_units_out)], device=device
             )
@@ -175,11 +177,11 @@ class TimeSeriesRNN(nn.Module):
         # x shape (batch, time_step, input_size)
         # r_out shape (batch, time_step, output_size)
         X_interm, _ = self.temporal_layer(temporal_data)
-
         # choose r_out at the last <window size> steps
         pred = self.out(static_data, X_interm)
 
         if self.out_activation is not None:
+            pred = pred.reshape(-1, self.n_act_out)
             pred = self.out_activation(pred)
 
         pred = pred.reshape(-1, *self.output_shape)
