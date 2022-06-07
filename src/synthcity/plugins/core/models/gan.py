@@ -237,7 +237,7 @@ class GAN(nn.Module):
         if cond is not None:
             condt = self._check_tensor(cond)
         with torch.no_grad():
-            return self(count, condt).idetach().cpu().numpy()
+            return self(count, condt).detach().cpu().numpy()
 
     @validate_arguments(config=dict(arbitrary_types_allowed=True))
     def forward(

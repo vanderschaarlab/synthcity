@@ -70,7 +70,7 @@ class TimeSeriesRNN(nn.Module):
         n_static_layers_hidden: int = 2,
         n_temporal_units_hidden: int = 100,
         n_temporal_layers_hidden: int = 2,
-        n_iter: int = 100,
+        n_iter: int = 500,
         mode: str = "RNN",  # RNN, LSTM, GRU
         n_iter_print: int = 10,
         batch_size: int = 150,

@@ -325,6 +325,7 @@ class PerformanceEvaluator(MetricEvaluator):
 
                 score = mean_squared_error(outcome_test, preds)
             except BaseException as e:
+                print(e)
                 log.error(f"regression evaluation failed {e}")
                 score = 100
 
@@ -512,7 +513,7 @@ class PerformanceEvaluatorMLP(PerformanceEvaluator):
                 "task_type": "regression",
                 "n_static_units_in": len(info["static_features"]),
                 "n_temporal_units_in": len(info["temporal_features"]),
-                "n_units_out": info["outcome_len"],
+                "output_shape": [info["outcome_len"]],
             }
             return self._evaluate_time_series_performance(
                 TimeSeriesRNN, args, X_gt, X_syn
