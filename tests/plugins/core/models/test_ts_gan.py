@@ -52,7 +52,6 @@ def test_network_config() -> None:
         n_iter_min=100,
         clipping_value=1,
         lambda_gradient_penalty=2,
-        lambda_identifiability_penalty=3,
     )
 
     assert net.static_generator is not None
@@ -63,7 +62,6 @@ def test_network_config() -> None:
     assert net.discriminator_n_iter == 1002
     assert net.seed == 77
     assert net.lambda_gradient_penalty == 2
-    assert net.lambda_identifiability_penalty == 3
 
 
 @pytest.mark.parametrize("nonlin", ["relu", "elu", "leaky_relu"])
@@ -110,11 +108,8 @@ def test_basic_network(
     assert net.discriminator.mode == mode
 
 
-@pytest.mark.parametrize(
-    "discriminator_extra_loss", [[], ["gradient_penalty"], ["identifiability_penalty"]]
-)
 @pytest.mark.parametrize("source", [SineDataloader, GoogleStocksDataloader])
-def test_ts_gan_generation(discriminator_extra_loss: list, source: Any) -> None:
+def test_ts_gan_generation(source: Any) -> None:
     static, temporal, _ = source(as_numpy=True).load()
 
     model = TimeSeriesGAN(
@@ -124,7 +119,6 @@ def test_ts_gan_generation(discriminator_extra_loss: list, source: Any) -> None:
         n_temporal_window=temporal.shape[-2],
         n_temporal_units_latent=temporal.shape[-1],
         generator_n_iter=10,
-        discriminator_extra_penalties=discriminator_extra_loss,
     )
     model.fit(static, temporal)
 

@@ -231,10 +231,13 @@ class GAN(nn.Module):
         return self
 
     def generate(self, count: int, cond: Optional[np.ndarray] = None) -> np.ndarray:
+        self.generator.eval()
+
         condt: Optional[torch.Tensor] = None
         if cond is not None:
             condt = self._check_tensor(cond)
-        return self(count, condt).cpu().numpy()
+        with torch.no_grad():
+            return self(count, condt).idetach().cpu().numpy()
 
     @validate_arguments(config=dict(arbitrary_types_allowed=True))
     def forward(
@@ -242,8 +245,6 @@ class GAN(nn.Module):
         count: int,
         cond: Optional[torch.Tensor] = None,
     ) -> torch.Tensor:
-        self.generator.eval()
-
         if cond is None and self.n_units_conditional > 0:
             # sample from the original conditional
             if self._original_cond is None:
@@ -259,8 +260,8 @@ class GAN(nn.Module):
 
         fixed_noise = torch.randn(count, self.n_units_latent, device=self.device)
         fixed_noise = self._append_optional_cond(fixed_noise, cond)
-        with torch.no_grad():
-            return self.generator(fixed_noise).detach().cpu()
+
+        return self.generator(fixed_noise)
 
     def dataloader(
         self, X: torch.Tensor, cond: Optional[torch.Tensor] = None

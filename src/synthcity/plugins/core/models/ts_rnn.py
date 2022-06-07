@@ -121,6 +121,7 @@ class TimeSeriesRNN(nn.Module):
             "input_size": self.n_temporal_units_in,
             "hidden_size": self.n_temporal_units_hidden,
             "num_layers": self.n_temporal_layers_hidden,
+            "dropout": dropout,
             "batch_first": True,
         }
         temporal_models = {

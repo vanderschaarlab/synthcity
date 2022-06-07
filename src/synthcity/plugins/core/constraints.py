@@ -89,8 +89,6 @@ class Constraints(BaseModel):
         X = pd.DataFrame(X)
         res = pd.Series([True] * len(X), index=X.index)
         for feature, op, thresh in self.rules:
-            if op == "dtype":
-                continue
             if feature not in X:
                 res &= False
                 continue
