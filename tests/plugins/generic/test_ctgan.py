@@ -9,6 +9,7 @@ from synthcity.plugins import Plugin
 from synthcity.plugins.core.constraints import Constraints
 from synthcity.plugins.core.dataloader import GenericDataLoader
 from synthcity.plugins.generic.plugin_ctgan import plugin
+from synthcity.utils.serialization import load, save
 
 plugin_name = "ctgan"
 plugin_args = {"n_iter": 10}
@@ -45,9 +46,14 @@ def test_plugin_fit(test_plugin: Plugin) -> None:
 @pytest.mark.parametrize(
     "test_plugin", generate_fixtures(plugin_name, plugin, plugin_args)
 )
-def test_plugin_generate(test_plugin: Plugin) -> None:
+@pytest.mark.parametrize("serialize", [True, False])
+def test_plugin_generate(test_plugin: Plugin, serialize: bool) -> None:
     X = pd.DataFrame(load_iris()["data"])
     test_plugin.fit(GenericDataLoader(X))
+
+    if serialize:
+        saved = save(test_plugin)
+        test_plugin = load(saved)
 
     X_gen = test_plugin.generate()
     assert len(X_gen) == len(X)
