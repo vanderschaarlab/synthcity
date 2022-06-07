@@ -15,6 +15,7 @@ import synthcity.logger as log
 from synthcity.metrics.plots import (
     plot_associations_comparison,
     plot_marginal_comparison,
+    plot_tsne,
 )
 from synthcity.plugins.core.constraints import Constraints
 from synthcity.plugins.core.dataloader import (
@@ -262,6 +263,7 @@ class Plugin(metaclass=ABCMeta):
 
         plot_marginal_comparison(plt, X, X_syn)
         plot_associations_comparison(plt, X, X_syn)
+        plot_tsne(plt, X, X_syn)
 
 
 class PluginLoader:
@@ -325,7 +327,7 @@ class PluginLoader:
     def add(self, name: str, cls: Type) -> "PluginLoader":
         """Add a new plugin"""
         if name in self._plugins:
-            raise ValueError(f"Plugin {name} already exists.")
+            log.info(f"Plugin {name} already exists. Overwriting")
 
         if not issubclass(cls, self._expected_type):
             raise ValueError(

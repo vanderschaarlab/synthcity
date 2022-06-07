@@ -12,6 +12,7 @@ from sklearn.datasets import load_iris
 from synthcity.metrics.plots import (
     plot_associations_comparison,
     plot_marginal_comparison,
+    plot_tsne,
 )
 from synthcity.plugins import Plugin, Plugins
 from synthcity.plugins.core.dataloader import DataLoader, GenericDataLoader
@@ -54,3 +55,15 @@ def test_plot_associations_comparison(test_plugin: Plugin) -> None:
     X_gen = test_plugin.generate(1000)
 
     _eval_plugin(plot_associations_comparison, Xloader, X_gen)
+
+
+@pytest.mark.parametrize("test_plugin", [Plugins().get("marginal_distributions")])
+def test_plot_tsne(test_plugin: Plugin) -> None:
+    X, y = load_iris(return_X_y=True, as_frame=True)
+    X["target"] = y
+    Xloader = GenericDataLoader(X)
+
+    test_plugin.fit(Xloader)
+    X_gen = test_plugin.generate(1000)
+
+    _eval_plugin(plot_tsne, Xloader, X_gen)

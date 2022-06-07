@@ -658,6 +658,12 @@ class TimeSeriesDataLoader(DataLoader):
     def hash(self) -> str:
         return dataframe_hash(self.data["grouped_data"])
 
+    def __repr__(self, *args: Any, **kwargs: Any) -> str:
+        return self.dataframe().__repr__(*args, **kwargs)
+
+    def _repr_html_(self, *args: Any, **kwargs: Any) -> Any:
+        return self.dataframe()._repr_html_(*args, **kwargs)
+
 
 @validate_arguments(config=dict(arbitrary_types_allowed=True))
 def create_from_info(data: pd.DataFrame, info: dict) -> "DataLoader":
