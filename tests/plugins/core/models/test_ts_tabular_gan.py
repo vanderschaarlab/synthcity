@@ -47,9 +47,10 @@ def test_network_config() -> None:
         seed=77,
         n_iter_min=100,
         clipping_value=1,
-        lambda_gradient_penalty=2,
-        lambda_identifiability_penalty=3,
         encoder_max_clusters=11,
+        gamma_penalty=2,
+        moments_penalty=2,
+        embedding_penalty=2,
     )
 
     assert net.model is not None
@@ -59,8 +60,9 @@ def test_network_config() -> None:
     assert net.model.generator_n_iter == 1001
     assert net.model.discriminator_n_iter == 1002
     assert net.model.seed == 77
-    assert net.model.lambda_gradient_penalty == 2
-    assert net.model.lambda_identifiability_penalty == 3
+    assert net.model.gamma_penalty == 2
+    assert net.model.moments_penalty == 2
+    assert net.model.embedding_penalty == 2
 
 
 @pytest.mark.parametrize("source", [SineDataloader, GoogleStocksDataloader])
@@ -114,9 +116,6 @@ def test_ts_gan_generation_schema(source: Any) -> None:
         temporal_data=temporal_gen,
         static_data=static_gen,
     )
-
-    print(reference_data.dataframe())
-    print(gen_data.dataframe())
 
     assert reference_schema.as_constraints().filter(gen_data.dataframe()).sum() > 0
 

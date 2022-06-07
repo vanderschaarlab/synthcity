@@ -487,6 +487,11 @@ class TimeSeriesDataLoader(DataLoader):
                 ],
                 axis=1,
             )
+        for col in out_df.columns:
+            if "int" in str(out_df[col].dtype):
+                out_df[col] = out_df[col].astype(int)
+            if "float" in str(out_df[col].dtype):
+                out_df[col] = out_df[col].astype(float)
 
         return out_df
 

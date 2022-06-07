@@ -104,9 +104,7 @@ class TimeSeriesTabularGAN(torch.nn.Module):
         generator_loss: Optional[Callable] = None,
         generator_lr: float = 1e-3,
         generator_weight_decay: float = 1e-3,
-        generator_opt_betas: tuple = (0.9, 0.999),
         generator_residual: bool = True,
-        generator_extra_penalties: list = [],  # "gradient_penalty", "identifiability_penalty"
         discriminator_n_layers_hidden: int = 3,
         discriminator_n_units_hidden: int = 300,
         discriminator_nonlin: str = "leaky_relu",
@@ -116,10 +114,6 @@ class TimeSeriesTabularGAN(torch.nn.Module):
         discriminator_loss: Optional[Callable] = None,
         discriminator_lr: float = 1e-3,
         discriminator_weight_decay: float = 1e-3,
-        discriminator_opt_betas: tuple = (0.9, 0.999),
-        discriminator_extra_penalties: list = [
-            "gradient_penalty"
-        ],  # "identifiability_penalty", "gradient_penalty"
         batch_size: int = 64,
         n_iter_print: int = 50,
         seed: int = 0,
@@ -132,6 +126,9 @@ class TimeSeriesTabularGAN(torch.nn.Module):
         encoder: Any = None,
         dataloader_sampler: Optional[torch.utils.data.sampler.Sampler] = None,
         device: Any = DEVICE,
+        gamma_penalty: float = 1,
+        moments_penalty: float = 100,
+        embedding_penalty: float = 10,
     ) -> None:
         super(TimeSeriesTabularGAN, self).__init__()
         if encoder is not None:
@@ -151,10 +148,10 @@ class TimeSeriesTabularGAN(torch.nn.Module):
         )
         self.model = TimeSeriesGAN(
             n_static_units=n_static_units,
-            n_static_units_latent=n_static_units_latent,
+            n_static_units_latent=n_static_units,
             n_temporal_units=n_temporal_units,
             n_temporal_window=n_temporal_window,
-            n_temporal_units_latent=n_temporal_units_latent,
+            n_temporal_units_latent=n_temporal_units,
             n_units_conditional=n_units_conditional,
             batch_size=batch_size,
             generator_n_layers_hidden=generator_n_layers_hidden,
@@ -169,8 +166,6 @@ class TimeSeriesTabularGAN(torch.nn.Module):
             generator_lr=generator_lr,
             generator_residual=generator_residual,
             generator_weight_decay=generator_weight_decay,
-            generator_opt_betas=generator_opt_betas,
-            generator_extra_penalties=generator_extra_penalties,
             discriminator_n_units_hidden=discriminator_n_units_hidden,
             discriminator_n_layers_hidden=discriminator_n_layers_hidden,
             discriminator_n_iter=discriminator_n_iter,
@@ -180,17 +175,16 @@ class TimeSeriesTabularGAN(torch.nn.Module):
             discriminator_loss=discriminator_loss,
             discriminator_lr=discriminator_lr,
             discriminator_weight_decay=discriminator_weight_decay,
-            discriminator_extra_penalties=discriminator_extra_penalties,
-            discriminator_opt_betas=discriminator_opt_betas,
             mode=mode,
-            lambda_gradient_penalty=lambda_gradient_penalty,
-            lambda_identifiability_penalty=lambda_identifiability_penalty,
             clipping_value=clipping_value,
             n_iter_print=n_iter_print,
             seed=seed,
             n_iter_min=n_iter_min,
             dataloader_sampler=dataloader_sampler,
             device=device,
+            gamma_penalty=gamma_penalty,
+            moments_penalty=moments_penalty,
+            embedding_penalty=embedding_penalty,
         )
 
     @validate_arguments(config=dict(arbitrary_types_allowed=True))
@@ -211,8 +205,6 @@ class TimeSeriesTabularGAN(torch.nn.Module):
         static_data: pd.DataFrame,
         temporal_data: List[pd.DataFrame],
         cond: Optional[Union[pd.DataFrame, pd.Series]] = None,
-        fake_labels_generator: Optional[Callable] = None,
-        true_labels_generator: Optional[Callable] = None,
         encoded: bool = False,
     ) -> Any:
         if encoded:
@@ -228,8 +220,6 @@ class TimeSeriesTabularGAN(torch.nn.Module):
             np.asarray(static_enc),
             np.asarray(temporal_enc),
             np.asarray(cond),
-            fake_labels_generator=fake_labels_generator,
-            true_labels_generator=true_labels_generator,
         )
         return self
 

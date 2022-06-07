@@ -1,5 +1,4 @@
 # stdlib
-import sys
 from typing import Any
 
 # third party
@@ -8,14 +7,11 @@ import pandas as pd
 import pytest
 
 # synthcity absolute
-import synthcity.logger as log
 from synthcity.plugins.core.dataloader import TimeSeriesDataLoader
 from synthcity.plugins.core.models.ts_gan import TimeSeriesGAN
 from synthcity.plugins.core.schema import Schema
 from synthcity.utils.datasets.time_series.google_stocks import GoogleStocksDataloader
 from synthcity.utils.datasets.time_series.sine import SineDataloader
-
-log.add(sink=sys.stderr, level="DEBUG")
 
 
 def test_network_config() -> None:
@@ -51,7 +47,9 @@ def test_network_config() -> None:
         seed=77,
         n_iter_min=100,
         clipping_value=1,
-        lambda_gradient_penalty=2,
+        gamma_penalty=2,
+        moments_penalty=2,
+        embedding_penalty=2,
     )
 
     assert net.static_generator is not None
@@ -61,7 +59,9 @@ def test_network_config() -> None:
     assert net.generator_n_iter == 1001
     assert net.discriminator_n_iter == 1002
     assert net.seed == 77
-    assert net.lambda_gradient_penalty == 2
+    assert net.gamma_penalty == 2
+    assert net.moments_penalty == 2
+    assert net.embedding_penalty == 2
 
 
 @pytest.mark.parametrize("nonlin", ["relu", "elu", "leaky_relu"])
@@ -158,9 +158,6 @@ def test_ts_gan_generation_schema(source: Any) -> None:
         temporal_data=temporal_list,
         static_data=pd.DataFrame(static_gen, columns=static.columns),
     )
-
-    print(reference_data.dataframe())
-    print(gen_data.dataframe())
 
     assert reference_schema.as_constraints().filter(gen_data.dataframe()).sum() > 0
 
