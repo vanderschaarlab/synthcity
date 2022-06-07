@@ -77,11 +77,6 @@ class TimeSeriesGAN(nn.Module):
             Minimum number of iterations to go through before starting early stopping
         clipping_value: int, default 0
             Gradients clipping value. Zero disables the feature
-        criterion: str
-            Loss criterion:
-                - bce: Uses BCELoss for discriminating the outputs.
-                - wd: Uses the WGAN strategy for the critic.
-
     """
 
     @validate_arguments(config=dict(arbitrary_types_allowed=True))
@@ -105,8 +100,6 @@ class TimeSeriesGAN(nn.Module):
         generator_lr: float = 2e-4,
         generator_weight_decay: float = 1e-3,
         generator_residual: bool = True,
-        generator_opt_betas: tuple = (0.9, 0.999),
-        generator_extra_penalties: list = [],  # "gradient_penalty", "identifiability_penalty"
         discriminator_n_layers_hidden: int = 1,
         discriminator_n_units_hidden: int = 300,
         discriminator_nonlin: str = "leaky_relu",
@@ -116,10 +109,6 @@ class TimeSeriesGAN(nn.Module):
         discriminator_loss: Optional[Callable] = None,
         discriminator_lr: float = 2e-4,
         discriminator_weight_decay: float = 1e-3,
-        discriminator_opt_betas: tuple = (0.9, 0.999),
-        discriminator_extra_penalties: list = [
-            "gradient_penalty"
-        ],  # "gradient_penalty", "identifiability_penalty"
         batch_size: int = 64,
         n_iter_print: int = 10,
         seed: int = 0,
@@ -127,26 +116,17 @@ class TimeSeriesGAN(nn.Module):
         clipping_value: int = 1,
         lambda_gradient_penalty: float = 10,
         lambda_identifiability_penalty: float = 0.1,
+        gamma_penalty: float = 1,
         dataloader_sampler: Optional[sampler.Sampler] = None,
         mode: str = "RNN",
         device: Any = DEVICE,
     ) -> None:
         super(TimeSeriesGAN, self).__init__()
 
-        extra_penalty_list = ["gradient_penalty", "identifiability_penalty"]
-        for penalty in discriminator_extra_penalties:
-            assert (
-                penalty in extra_penalty_list
-            ), f"Unsupported dscriminator penalty {penalty}"
-        for penalty in generator_extra_penalties:
-            assert (
-                penalty in extra_penalty_list
-            ), f"Unsupported generator penalty {penalty}"
+        enable_reproducible_results(seed)
 
         log.debug(f"Training GAN on device {device}")
         self.device = device
-        self.discriminator_extra_penalties = discriminator_extra_penalties
-        self.generator_extra_penalties = generator_extra_penalties
 
         self.n_static_units = n_static_units
         self.n_static_units_latent = n_static_units_latent
@@ -155,6 +135,7 @@ class TimeSeriesGAN(nn.Module):
         self.n_temporal_window = n_temporal_window
         self.n_units_conditional = n_units_conditional
 
+        # Static generator: Z_static -> static_data
         self.static_generator = MLP(
             task_type="regression",
             n_units_in=n_static_units_latent + n_units_conditional,
@@ -170,31 +151,64 @@ class TimeSeriesGAN(nn.Module):
             seed=seed,
             lr=generator_lr,
             residual=generator_residual,
-            opt_betas=generator_opt_betas,
             device=device,
         ).to(self.device)
 
-        self.temporal_generator = TimeSeriesRNN(
+        rnn_generator_extra_args = {
+            "window_size": n_temporal_window,
+            "n_static_layers_hidden": generator_n_layers_hidden,
+            "n_static_units_hidden": generator_n_units_hidden,
+            "n_temporal_layers_hidden": generator_n_layers_hidden,
+            "n_temporal_units_hidden": generator_n_units_hidden,
+            "mode": mode,
+            "nonlin": generator_nonlin,
+            "n_iter": generator_n_iter,
+            "dropout": generator_dropout,
+            "loss": generator_loss,
+            "seed": seed,
+            "lr": generator_lr,
+            "device": device,
+        }
+        # Embedding network between original feature space to latent space: (X_static, X_temporal) -> H_temporal
+        self.temporal_embedder = TimeSeriesRNN(
             task_type="regression",
-            n_static_units_in=n_static_units_latent + n_units_conditional,
+            n_static_units_in=n_static_units + n_units_conditional,
+            n_temporal_units_in=n_temporal_units,
+            output_shape=[n_temporal_window, n_temporal_units_latent],
+            **rnn_generator_extra_args,
+        ).to(self.device)
+
+        # Recovery network from latent space to original space: (X_static, H_temporal) -> X_temporal
+        self.temporal_recovery = TimeSeriesRNN(
+            task_type="regression",
+            n_static_units_in=n_static_units + n_units_conditional,
             n_temporal_units_in=n_temporal_units_latent,
             output_shape=[n_temporal_window, n_temporal_units],
-            window_size=n_temporal_window,
-            n_static_layers_hidden=generator_n_layers_hidden,
-            n_static_units_hidden=generator_n_units_hidden,
-            n_temporal_layers_hidden=generator_n_layers_hidden,
-            n_temporal_units_hidden=generator_n_units_hidden,
-            mode=mode,
-            nonlin=generator_nonlin,
             nonlin_out=generator_temporal_nonlin_out,
-            n_iter=generator_n_iter,
-            dropout=generator_dropout,
-            loss=generator_loss,
-            seed=seed,
-            lr=generator_lr,
-            device=device,
-        ).to(self.device)
+            **rnn_generator_extra_args,
+        )
 
+        # Temporal generator from the latent space: Z_temporal -> E_temporal
+        self.temporal_generator = TimeSeriesRNN(
+            task_type="regression",
+            n_static_units_in=n_static_units + n_units_conditional,
+            n_temporal_units_in=n_temporal_units_latent,
+            output_shape=[n_temporal_window, n_temporal_units_latent],
+            nonlin_out=generator_temporal_nonlin_out,
+            **rnn_generator_extra_args,
+        )
+
+        # Temporal supervisor: Generate the next sequence: E_temporal -> H_hat_temporal
+        self.temporal_supervisor = TimeSeriesRNN(
+            task_type="regression",
+            n_static_units_in=n_static_units + n_units_conditional,
+            n_temporal_units_in=n_temporal_units_latent,
+            output_shape=[n_temporal_window, n_temporal_units_latent],
+            nonlin_out=generator_temporal_nonlin_out,
+            **rnn_generator_extra_args,
+        )
+
+        # Discriminate the original and synthetic time-series data.
         self.discriminator = TimeSeriesRNN(
             task_type="regression",
             n_static_units_in=n_static_units + n_units_conditional,
@@ -225,11 +239,9 @@ class TimeSeriesGAN(nn.Module):
         self.clipping_value = clipping_value
         self.criterion = nn.BCELoss()
 
-        self.lambda_gradient_penalty = lambda_gradient_penalty
-        self.lambda_identifiability_penalty = lambda_identifiability_penalty
+        self.gamma_penalty = gamma_penalty
 
         self.seed = seed
-        enable_reproducible_results(seed)
 
         self.dataloader_sampler = dataloader_sampler
 
@@ -335,24 +347,24 @@ class TimeSeriesGAN(nn.Module):
             pin_memory=False,
         )
 
-    def _train_epoch_generator(
+    def _train_epoch_all_models(
         self,
         static_data: torch.Tensor,
         temporal_data: torch.Tensor,
         cond: Optional[torch.Tensor],
-    ) -> float:
-        # Update the G network
-        self.static_generator.optimizer.zero_grad()
-        self.temporal_generator.optimizer.zero_grad()
+    ) -> Tuple:
+        batch_size = min(self.batch_size, len(static_data))
 
-        assert len(static_data) == len(temporal_data)
+        # Prepare the real batch
+        real_static_data = static_data.to(self.device)
+        real_static_data = self._append_optional_cond(real_static_data, cond)
 
-        batch_size = len(static_data)
-
+        # Prepare the fake batch
         static_noise = torch.randn(
             batch_size, self.n_static_units_latent, device=self.device
         )
         static_noise = self._append_optional_cond(static_noise, cond)
+
         temporal_noise = torch.randn(
             batch_size,
             self.n_temporal_window,
@@ -360,17 +372,138 @@ class TimeSeriesGAN(nn.Module):
             device=self.device,
         )
 
-        fake_static = self.static_generator(static_noise)
-        fake_static = self._append_optional_cond(fake_static, cond)
-        fake_temporal = self.temporal_generator(static_noise, temporal_noise)
+        # Embedder & Recovery
+        H_temporal = self.temporal_embedder(real_static_data, temporal_data)
+        X_temporal = self.temporal_recovery(real_static_data, H_temporal)
 
-        output = self.discriminator(fake_static, fake_temporal).squeeze().float()
+        # Generator
+        E_hat = self.temporal_generator(real_static_data, temporal_noise)
+        H_hat = self.temporal_supervisor(real_static_data, E_hat)
+        H_hat_supervised = self.temporal_supervisor(real_static_data, H_temporal)
 
-        # Calculate G's loss based on this output
-        errG = self.criterion(output, torch.ones(len(fake_temporal)).to(DEVICE))
+        # Synthetic data
+        X_hat = self.temporal_recovery(real_static_data, H_hat)
+
+        # Discriminator
+        Y_fake = self.discriminator(real_static_data, H_hat).squeeze()
+        Y_real = self.discriminator(real_static_data, H_temporal).squeeze()
+        Y_fake_e = self.discriminator(real_static_data, E_hat).squeeze()
+
+        return (
+            H_temporal,
+            X_temporal,
+            E_hat,
+            H_hat,
+            H_hat_supervised,
+            X_hat,
+            Y_fake,
+            Y_real,
+            Y_fake_e,
+        )
+
+    def _train_epoch_embedding(
+        self,
+        static_data: torch.Tensor,
+        temporal_data: torch.Tensor,
+        cond: Optional[torch.Tensor],
+    ) -> float:
+        # Update the G network
+        self.temporal_embedder.optimizer.zero_grad()
+        self.temporal_recovery.optimizer.zero_grad()
+        self.temporal_supervisor.optimizer.zero_grad()
+
+        assert len(static_data) == len(temporal_data)
+
+        (
+            H_temporal,
+            X_temporal,
+            E_hat,
+            H_hat,
+            H_hat_supervised,
+            X_hat,
+            Y_fake,
+            Y_real,
+            Y_fake_e,
+        ) = self._train_epoch_all_models(static_data, temporal_data, cond)
+
+        # Embedder network loss
+        G_loss_S = nn.MSELoss()(H_temporal[:, 1:, :], H_hat_supervised[:, :-1, :])
+
+        E_loss_T0 = nn.MSELoss()(temporal_data, X_temporal)
+        E_loss0 = 10 * torch.sqrt(E_loss_T0)
+        E_loss = E_loss0 + 0.1 * G_loss_S
 
         # Calculate gradients for G
-        errG.backward()
+        E_loss.backward()
+
+        # Update G
+        if self.clipping_value > 0:
+            torch.nn.utils.clip_grad_norm_(
+                self.temporal_generator.parameters(), self.clipping_value
+            )
+            torch.nn.utils.clip_grad_norm_(
+                self.static_generator.parameters(), self.clipping_value
+            )
+        self.temporal_embedder.optimizer.step()
+        self.temporal_recovery.optimizer.step()
+        self.temporal_supervisor.optimizer.step()
+
+        # Return loss
+        return E_loss.item()
+
+    def _train_epoch_generator(
+        self,
+        static_data: torch.Tensor,
+        temporal_data: torch.Tensor,
+        cond: Optional[torch.Tensor],
+    ) -> float:
+        # Update the G network
+        self.temporal_generator.optimizer.zero_grad()
+        self.temporal_supervisor.optimizer.zero_grad()
+
+        assert len(static_data) == len(temporal_data)
+
+        (
+            H_temporal,
+            X_temporal,
+            E_hat,
+            H_hat,
+            H_hat_supervised,
+            X_hat,
+            Y_fake,
+            Y_real,
+            Y_fake_e,
+        ) = self._train_epoch_all_models(static_data, temporal_data, cond)
+
+        fake_labels = torch.ones(len(temporal_data)).to(self.device).squeeze()
+
+        # Generator loss
+        # 1. Adversarial loss
+        G_loss_U = self.criterion(Y_fake, fake_labels)
+        G_loss_U_e = self.criterion(Y_fake_e, fake_labels)
+
+        # 2. Supervised loss
+        G_loss_S = nn.MSELoss()(H_temporal[:, 1:, :], H_hat_supervised[:, :-1, :])
+
+        # 3. Two Momments
+
+        X_hat_var, X_hat_mean = torch.var_mean(X_hat, 0)
+        X_var, X_mean = torch.var_mean(temporal_data, 0)
+
+        G_loss_V1 = nn.L1Loss()(torch.sqrt(X_hat_var + 1e-6), torch.sqrt(X_var + 1e-6))
+        G_loss_V2 = nn.L1Loss()(X_hat_mean, X_mean)
+        G_loss_V = G_loss_V1 + G_loss_V2
+
+        # 4. Summation
+        G_loss = (
+            G_loss_U
+            + self.gamma_penalty * G_loss_U_e
+            + 100 * torch.sqrt(G_loss_S)
+            + 100 * G_loss_V
+        )
+
+        # Calculate gradients for G
+        G_loss.backward()
 
         # Update G
         if self.clipping_value > 0:
@@ -381,10 +514,10 @@ class TimeSeriesGAN(nn.Module):
                 self.static_generator.parameters(), self.clipping_value
             )
         self.temporal_generator.optimizer.step()
-        self.static_generator.optimizer.step()
+        self.temporal_supervisor.optimizer.step()
 
         # Return loss
-        return errG.item()
+        return G_loss.item()
 
     def _train_epoch_discriminator(
         self,
@@ -395,67 +528,46 @@ class TimeSeriesGAN(nn.Module):
         # Update the D network
         errors = []
 
-        batch_size = min(self.batch_size, len(static_data))
+        self.discriminator.zero_grad()
 
-        for epoch in range(self.discriminator_n_iter):
-            self.discriminator.zero_grad()
+        (
+            _,
+            _,
+            _,
+            _,
+            _,
+            _,
+            Y_fake,
+            Y_real,
+            Y_fake_e,
+        ) = self._train_epoch_all_models(static_data, temporal_data, cond)
 
-            # Train with all-real batch
-            real_static_data = static_data.to(self.device)
-            real_static_data = self._append_optional_cond(real_static_data, cond)
-            real_temporal_data = temporal_data.to(self.device)
+        real_labels = torch.ones(len(temporal_data)).to(self.device).squeeze()
+        fake_labels = torch.zeros(len(temporal_data)).to(self.device).squeeze().float()
 
-            real_labels = torch.ones(len(real_static_data)).to(self.device).squeeze()
-            real_output = (
-                self.discriminator(real_static_data, real_temporal_data)
-                .squeeze()
-                .float()
+        errD_real = self.criterion(Y_real, real_labels)
+        errD_fake = self.criterion(Y_fake, fake_labels)
+        errD_fake_e = self.criterion(Y_fake_e, fake_labels)
+
+        errD = errD_real + errD_fake + self.gamma_penalty * errD_fake_e
+
+        errD.backward()
+        # Update D
+        if self.clipping_value > 0:
+            torch.nn.utils.clip_grad_norm_(
+                self.discriminator.parameters(), self.clipping_value
             )
+        self.discriminator.optimizer.step()
 
-            # Train with all-fake batch
-            static_noise = torch.randn(
-                batch_size, self.n_static_units_latent, device=self.device
-            )
-            static_noise = self._append_optional_cond(static_noise, cond)
-            temporal_noise = torch.randn(
-                batch_size,
-                self.n_temporal_window,
-                self.n_temporal_units_latent,
-                device=self.device,
-            )
-
-            fake_static = self.static_generator(static_noise)
-            fake_static = self._append_optional_cond(fake_static, cond)
-            fake_temporal = self.temporal_generator(static_noise, temporal_noise)
-
-            fake_labels = (
-                torch.zeros(len(fake_static)).to(self.device).squeeze().float()
-            )
-            fake_output = self.discriminator(
-                fake_static.detach(), fake_temporal.detach()
-            ).squeeze()
-
-            errD_real = self.criterion(real_output, real_labels)
-            errD_fake = self.criterion(fake_output, fake_labels)
-
-            errD = errD_real + errD_fake
-
-            errD.backward()
-            # Update D
-            if self.clipping_value > 0:
-                torch.nn.utils.clip_grad_norm_(
-                    self.discriminator.parameters(), self.clipping_value
-                )
-            self.discriminator.optimizer.step()
-
-            errors.append(errD.item())
+        errors.append(errD.item())
 
         return np.mean(errors)
 
     def _train_epoch(
         self,
         loader: DataLoader,
-    ) -> Tuple[float, float]:
+    ) -> Tuple[float, float, float]:
+        E_losses = []
         G_losses = []
         D_losses = []
 
@@ -466,6 +578,13 @@ class TimeSeriesGAN(nn.Module):
             else:
                 static_data, temporal_data = data
 
+            E_losses.append(
+                self._train_epoch_embedding(
+                    static_data,
+                    temporal_data,
+                    cond,
+                )
+            )
             D_losses.append(
                 self._train_epoch_discriminator(
                     static_data,
@@ -481,7 +600,7 @@ class TimeSeriesGAN(nn.Module):
                 )
             )
 
-        return np.mean(G_losses), np.mean(D_losses)
+        return np.mean(E_losses), np.mean(G_losses), np.mean(D_losses)
 
     def _train(
         self,
@@ -498,13 +617,13 @@ class TimeSeriesGAN(nn.Module):
 
         # Train loop
         for i in range(self.generator_n_iter):
-            g_loss, d_loss = self._train_epoch(
+            e_loss, g_loss, d_loss = self._train_epoch(
                 loader,
             )
             # Check how the generator is doing by saving G's output on fixed_noise
             if (i + 1) % self.n_iter_print == 0:
                 log.debug(
-                    f"[{i}/{self.generator_n_iter}]\tLoss_D: {d_loss}\tLoss_G: {g_loss}"
+                    f"[{i}/{self.generator_n_iter}]\tLoss_D: {d_loss}\tLoss_G: {g_loss}\t Loss_E: {e_loss}"
                 )
 
         return self

@@ -129,7 +129,7 @@ def test_ts_gan_generation(source: Any) -> None:
 
 
 @pytest.mark.slow
-@pytest.mark.parametrize("source", [SineDataloader, GoogleStocksDataloader])
+@pytest.mark.parametrize("source", [GoogleStocksDataloader])
 def test_ts_gan_generation_schema(source: Any) -> None:
     static, temporal, _ = source().load()
 
@@ -139,7 +139,7 @@ def test_ts_gan_generation_schema(source: Any) -> None:
         n_temporal_units=temporal[0].shape[-1],
         n_temporal_window=temporal[0].shape[0],
         n_temporal_units_latent=temporal[0].shape[-1],
-        generator_n_iter=200,
+        generator_n_iter=100,
     )
     model.fit(static, temporal)
 
