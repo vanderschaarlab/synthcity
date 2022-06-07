@@ -286,11 +286,15 @@ class TimeSeriesGAN(nn.Module):
         condt: Optional[torch.Tensor] = None
         self.static_generator.eval()
         self.temporal_generator.eval()
+        self.temporal_embedder.eval()
+        self.temporal_supervisor.eval()
+        self.temporal_recovery.eval()
+
         if cond is not None:
             condt = self._check_tensor(cond)
 
         static, temporal = self(count, condt)
-        return static.cpu().numpy(), temporal.cpu().numpy()
+        return static.detach().cpu().numpy(), temporal.detach().cpu().numpy()
 
     @validate_arguments(config=dict(arbitrary_types_allowed=True))
     def forward(
@@ -313,10 +317,14 @@ class TimeSeriesGAN(nn.Module):
                 f"cond length must match count Actual {len(cond)} Expected{count}"
             )
 
+        # Static data
         static_noise = torch.randn(
             count, self.n_static_units_latent, device=self.device
         )
         static_noise = self._append_optional_cond(static_noise, cond)
+        static_data = self.static_generator(static_noise)
+
+        # Temporal data
         temporal_noise = torch.randn(
             count,
             self.n_temporal_window,
@@ -324,11 +332,11 @@ class TimeSeriesGAN(nn.Module):
             device=self.device,
         )
 
-        with torch.no_grad():
-            return (
-                self.static_generator(static_noise).detach(),
-                self.temporal_generator(static_noise, temporal_noise).detach(),
-            )
+        E_hat = self.temporal_generator(static_data, temporal_noise)
+        H_hat = self.temporal_supervisor(static_data, E_hat)
+        temporal_data = self.temporal_recovery(static_data, H_hat)
+
+        return static_data, temporal_data
 
     def dataloader(
         self,
