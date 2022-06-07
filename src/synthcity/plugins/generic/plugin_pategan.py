@@ -73,7 +73,7 @@ class Teachers:
             ]
             teacher_X = X[teacher_idx, :]
 
-            g_mb = generator(self.partition_size)
+            g_mb = generator(self.partition_size).detach().cpu()
 
             idx = np.random.permutation(len(teacher_X[:, 0]))
             x_mb = teacher_X[idx[: self.partition_size], :]
