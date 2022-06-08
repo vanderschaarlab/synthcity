@@ -214,6 +214,8 @@ class TimeGANPlugin(Plugin):
         ]
 
     def _fit(self, X: DataLoader, *args: Any, **kwargs: Any) -> "TimeGANPlugin":
+        assert X.type() == "time_series"
+
         cond: Optional[Union[pd.DataFrame, pd.Series]] = None
         if self.n_units_conditional > 0:
             if "cond" not in kwargs:

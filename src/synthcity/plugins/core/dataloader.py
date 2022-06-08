@@ -137,8 +137,10 @@ class GenericDataLoader(DataLoader):
         data.columns = data.columns.astype(str)
         if target_column is not None:
             self.target_column = target_column
-        else:
+        elif len(data.columns) > 0:
             self.target_column = data.columns[-1]
+        else:
+            self.target_column = "---"
 
         super().__init__(
             data_type="generic",

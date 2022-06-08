@@ -178,7 +178,10 @@ class Plugin(metaclass=ABCMeta):
                 f"Plugin {self.name()} failed to meet the synthetic constraints."
             )
 
-        return X_syn.match(gen_constraints)
+        if self.strict:
+            return X_syn.match(gen_constraints)
+
+        return X_syn
 
     @abstractmethod
     def _generate(
@@ -216,8 +219,10 @@ class Plugin(metaclass=ABCMeta):
             # validate schema
             iter_samples_df = self.schema().adapt_dtypes(iter_samples_df)
 
-            iter_synth_valid = constraints.match(iter_samples_df)
-            data_synth = pd.concat([data_synth, iter_synth_valid], ignore_index=True)
+            if self.strict:
+                iter_samples_df = constraints.match(iter_samples_df)
+
+            data_synth = pd.concat([data_synth, iter_samples_df], ignore_index=True)
 
             if len(data_synth) >= count:
                 break
@@ -246,8 +251,10 @@ class Plugin(metaclass=ABCMeta):
             # validate schema
             iter_samples_df = self.schema().adapt_dtypes(iter_samples_df)
 
-            iter_synth_valid = constraints.match(iter_samples_df)
-            data_synth = pd.concat([data_synth, iter_synth_valid], ignore_index=True)
+            if self.strict:
+                iter_samples_df = constraints.match(iter_samples_df)
+
+            data_synth = pd.concat([data_synth, iter_samples_df], ignore_index=True)
 
             if len(data_synth) >= count:
                 break
