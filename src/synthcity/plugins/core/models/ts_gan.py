@@ -73,8 +73,6 @@ class TimeSeriesGAN(nn.Module):
             Number of iterations after which to print updates and check the validation loss.
         seed: int
             Seed used
-        n_iter_min: int
-            Minimum number of iterations to go through before starting early stopping
         clipping_value: int, default 0
             Gradients clipping value. Zero disables the feature
     """
@@ -112,7 +110,6 @@ class TimeSeriesGAN(nn.Module):
         batch_size: int = 64,
         n_iter_print: int = 10,
         seed: int = 0,
-        n_iter_min: int = 100,
         clipping_value: int = 1,
         gamma_penalty: float = 1,
         moments_penalty: float = 100,
@@ -233,7 +230,6 @@ class TimeSeriesGAN(nn.Module):
         self.generator_n_iter = generator_n_iter
         self.discriminator_n_iter = discriminator_n_iter
         self.n_iter_print = n_iter_print
-        self.n_iter_min = n_iter_min
         self.batch_size = batch_size
         self.clipping_value = clipping_value
         self.criterion = nn.BCELoss()

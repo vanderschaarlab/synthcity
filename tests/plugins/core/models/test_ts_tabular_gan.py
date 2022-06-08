@@ -18,9 +18,6 @@ def test_network_config() -> None:
     net = TimeSeriesTabularGAN(
         static,
         temporal,
-        n_static_units_latent=2,
-        n_temporal_window=2,
-        n_temporal_units_latent=3,
         # Generator
         generator_n_layers_hidden=2,
         generator_n_units_hidden=100,
@@ -45,7 +42,6 @@ def test_network_config() -> None:
         batch_size=64,
         n_iter_print=100,
         seed=77,
-        n_iter_min=100,
         clipping_value=1,
         encoder_max_clusters=11,
         gamma_penalty=2,
@@ -72,9 +68,6 @@ def test_ts_gan_generation(source: Any) -> None:
     model = TimeSeriesTabularGAN(
         static,
         temporal,
-        n_static_units_latent=static.shape[-1],
-        n_temporal_window=temporal[0].shape[0],
-        n_temporal_units_latent=temporal[0].shape[-1],
         generator_n_iter=10,
     )
     model.fit(static, temporal)
@@ -97,9 +90,6 @@ def test_ts_gan_generation_schema(source: Any) -> None:
     model = TimeSeriesTabularGAN(
         static,
         temporal,
-        n_static_units_latent=static.shape[-1],
-        n_temporal_window=temporal[0].shape[0],
-        n_temporal_units_latent=temporal[0].shape[-1],
         generator_n_iter=10,
     )
     model.fit(static, temporal)
@@ -127,9 +117,6 @@ def test_ts_gan_conditional(source: Any) -> None:
     model = TimeSeriesTabularGAN(
         static,
         temporal,
-        n_static_units_latent=static.shape[-1],
-        n_temporal_window=temporal[0].shape[0],
-        n_temporal_units_latent=temporal[0].shape[-1],
         n_units_conditional=1,
         generator_n_iter=10,
     )

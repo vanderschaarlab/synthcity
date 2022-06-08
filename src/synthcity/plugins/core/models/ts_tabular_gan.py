@@ -22,14 +22,10 @@ class TimeSeriesTabularGAN(torch.nn.Module):
     Args:
         n_static_units: int,
             Number of units for the static features
-        n_static_units_latent: int,
-            Number of latent units for the static features
         n_temporal_units: int,
             Number of units for the temporal features
         n_temporal_window: int,
             Number of temporal sequences for each subject
-        n_temporal_units_latent: int,
-            Number of temporal latent units
         n_units_conditional: int = 0,
             Number of conditional units
         n_units_in: int
@@ -70,18 +66,20 @@ class TimeSeriesTabularGAN(torch.nn.Module):
             Number of iterations after which to print updates and check the validation loss.
         seed: int
             Seed used
-        n_iter_min: int
-            Minimum number of iterations to go through before starting early stopping
         clipping_value: int, default 0
             Gradients clipping value
-        lambda_gradient_penalty: float
-            Lambda weight for the gradient penalty
-        lambda_identifiability_penalty: float
-            Lambda weight for the identifiability loss
         encoder_max_clusters: int
             The max number of clusters to create for continuous columns when encoding
         encoder:
             Pre-trained tabular encoder. If None, a new encoder is trained.
+        device:
+            Device to use for computation
+        gamma_penalty
+            Latent representation penalty
+        moments_penalty: float = 100
+            Moments(var and mean) penalty
+        embedding_penalty: float = 10
+            Embedding representation penalty
     """
 
     @validate_arguments(config=dict(arbitrary_types_allowed=True))
@@ -89,9 +87,6 @@ class TimeSeriesTabularGAN(torch.nn.Module):
         self,
         static_data: pd.DataFrame,
         temporal_data: List[pd.DataFrame],
-        n_static_units_latent: int,
-        n_temporal_window: int,
-        n_temporal_units_latent: int,
         n_units_conditional: int = 0,
         generator_n_layers_hidden: int = 2,
         generator_n_units_hidden: int = 150,
@@ -117,10 +112,7 @@ class TimeSeriesTabularGAN(torch.nn.Module):
         batch_size: int = 64,
         n_iter_print: int = 50,
         seed: int = 0,
-        n_iter_min: int = 100,
         clipping_value: int = 0,
-        lambda_gradient_penalty: float = 10,
-        lambda_identifiability_penalty: float = 0.1,
         mode: str = "RNN",
         encoder_max_clusters: int = 20,
         encoder: Any = None,
@@ -150,7 +142,7 @@ class TimeSeriesTabularGAN(torch.nn.Module):
             n_static_units=n_static_units,
             n_static_units_latent=n_static_units,
             n_temporal_units=n_temporal_units,
-            n_temporal_window=n_temporal_window,
+            n_temporal_window=len(temporal_data[0]),
             n_temporal_units_latent=n_temporal_units,
             n_units_conditional=n_units_conditional,
             batch_size=batch_size,
@@ -179,7 +171,6 @@ class TimeSeriesTabularGAN(torch.nn.Module):
             clipping_value=clipping_value,
             n_iter_print=n_iter_print,
             seed=seed,
-            n_iter_min=n_iter_min,
             dataloader_sampler=dataloader_sampler,
             device=device,
             gamma_penalty=gamma_penalty,

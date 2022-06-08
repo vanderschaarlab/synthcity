@@ -21,6 +21,7 @@ from synthcity.plugins.core.constraints import Constraints
 from synthcity.plugins.core.dataloader import (
     DataLoader,
     GenericDataLoader,
+    TimeSeriesDataLoader,
     create_from_info,
 )
 from synthcity.plugins.core.distribution import Distribution
@@ -212,6 +213,36 @@ class Plugin(metaclass=ABCMeta):
             iter_samples_df = pd.DataFrame(
                 iter_samples, columns=self.schema().features()
             )
+            # validate schema
+            iter_samples_df = self.schema().adapt_dtypes(iter_samples_df)
+
+            iter_synth_valid = constraints.match(iter_samples_df)
+            data_synth = pd.concat([data_synth, iter_synth_valid], ignore_index=True)
+
+            if len(data_synth) >= count:
+                break
+
+        data_synth = self.schema().adapt_dtypes(data_synth).head(count)
+
+        return create_from_info(data_synth, self.data_info)
+
+    @validate_arguments(config=dict(arbitrary_types_allowed=True))
+    def _safe_generate_time_series(
+        self, gen_cbk: Callable, count: int, syn_schema: Schema, **kwargs: Any
+    ) -> DataLoader:
+        assert self.data_info["data_type"] == "time_series"
+
+        constraints = syn_schema.as_constraints()
+
+        data_synth = pd.DataFrame([], columns=self.schema().features())
+        for it in range(self.sampling_patience):
+            # sample
+            static, temporal, outcome = gen_cbk(count, **kwargs)
+            loader = TimeSeriesDataLoader(
+                temporal_data=temporal, static_data=static, outcome=outcome
+            )
+            iter_samples_df = loader.dataframe()
+
             # validate schema
             iter_samples_df = self.schema().adapt_dtypes(iter_samples_df)
 

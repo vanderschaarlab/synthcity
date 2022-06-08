@@ -25,9 +25,15 @@ class SurvivalGANPlugin(Plugin):
 
     Example:
         >>> from synthcity.plugins import Plugins
+        >>> from synthcity.plugins.core.dataloader import SurvivalAnalysisDataLoader
         >>> X = load_rossi()
-        >>> plugin = Plugins().get("survival_gan", target_column = "arrest", time_to_event_column="week")
-        >>> plugin.fit(X)
+        >>> data = SurvivalAnalysisDataLoader(
+        >>>        X,
+        >>>        target_column="arrest",
+        >>>        time_to_event_column="week",
+        >>> )
+        >>> plugin = Plugins().get("survival_gan")
+        >>> plugin.fit(data)
         >>> plugin.generate()
     """
 
