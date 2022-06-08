@@ -47,7 +47,7 @@ def test_plugin_fit() -> None:
 
 def test_plugin_generate() -> None:
     test_plugin = plugin(
-        n_iter=10,
+        n_iter=100,
     )
     test_plugin.fit(data)
 
