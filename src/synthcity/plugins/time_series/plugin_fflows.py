@@ -166,7 +166,7 @@ class FourierFlowsPlugin(Plugin):
             if self.static_model is None:
                 static_enc = pd.DataFrame(np.zeros((count, 0)))
             else:
-                static_enc = self.static_model.generate(count)
+                static_enc = self.static_model.generate(count).numpy()
 
             # Temporal generation
             temporal_enc_raw = self.temporal_model.sample(count)

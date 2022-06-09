@@ -7,7 +7,6 @@ from typing import Any, Callable, List, Optional, Tuple, Union
 # third party
 import numpy as np
 import pandas as pd
-import torch
 
 # synthcity absolute
 from synthcity.plugins.core.dataloader import DataLoader
@@ -130,7 +129,6 @@ class TimeGANPlugin(Plugin):
         clipping_value: int = 0,
         encoder_max_clusters: int = 20,
         encoder: Any = None,
-        dataloader_sampler: Optional[torch.utils.data.sampler.Sampler] = None,
         device: Any = DEVICE,
         mode: str = "RNN",
         gamma_penalty: float = 1,
@@ -168,7 +166,6 @@ class TimeGANPlugin(Plugin):
         self.mode = mode
         self.encoder_max_clusters = encoder_max_clusters
         self.encoder = encoder
-        self.dataloader_sampler = dataloader_sampler
         self.device = device
         self.gamma_penalty = gamma_penalty
         self.moments_penalty = moments_penalty
@@ -260,7 +257,6 @@ class TimeGANPlugin(Plugin):
             mode=self.mode,
             encoder_max_clusters=self.encoder_max_clusters,
             encoder=self.encoder,
-            dataloader_sampler=self.dataloader_sampler,
             device=self.device,
             gamma_penalty=self.gamma_penalty,
             moments_penalty=self.moments_penalty,
