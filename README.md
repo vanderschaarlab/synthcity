@@ -24,12 +24,12 @@ The library can be installed using
 $ pip install .
 ```
 
-## :boom: Sample Usage
+## :boom: Sample Usage: Generic data
 List available generators
 ```python
 from synthcity.plugins import Plugins
 
-Plugins().list()
+Plugins(categories=["generic"]).list()
 ```
 
 Load and train a generator
@@ -55,9 +55,9 @@ Generate new synthetic data under some constraints
 # Constraint: target <= 100
 from synthcity.plugins.core.constraints import Constraints
 
-constraints = Constraints(rules = [("target", "<=", 100)])
+constraints = Constraints(rules=[("target", "<=", 100)])
 
-generated = syn_model.generate(count = 10, constraints = constraints)
+generated = syn_model.generate(count=10, constraints=constraints)
 
 assert (generated["target"] <= 100).any()
 ```
@@ -65,17 +65,26 @@ assert (generated["target"] <= 100).any()
 Benchmark the quality of the plugins
 ```python
 from synthcity.benchmark import Benchmarks
-constraints = Constraints(rules = [("target", "ge", 150)])
+from synthcity.plugins.core.dataloader import GenericDataLoader
+
+loader = GenericDataLoader(X, target_column="target", sensitive_columns=["sex"])
+
+constraints = Constraints(rules=[("target", "ge", 150)])
 
 score = Benchmarks.evaluate(
-    ["marginal_distributions", "pategan"],
-    X, y,
-    sensitive_columns = ["sex"],
-    synthetic_size = 1000,
-    synthetic_constraints = constraints,
-    repeats = 5,
+    ["marginal_distributions"],
+    loader,
+    synthetic_size=1000,
+    synthetic_constraints=constraints,
+    metrics={"performance": ["linear_model"]},
+    repeats=3,
 )
+Benchmarks.print(score)
 ```
+
+## :boom: Sample Usage: Survival analysis
+
+## :boom: Sample Usage: Time series
 
 ## 📓 Tutorials
  - [Tutorial 0: Basics](tutorials/tutorial0_basic_examples.ipynb)
