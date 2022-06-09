@@ -83,9 +83,59 @@ Benchmarks.print(score)
 ```
 
 ## :boom: Sample Usage: Survival analysis
+List available generators
+```python
+from synthcity.plugins import Plugins
+
+Plugins(categories=["survival_analysis"]).list()
+```
+Generate new data
+```python
+from lifelines.datasets import load_rossi
+from synthcity.plugins.core.dataloader import SurvivalAnalysisDataLoader
+from synthcity.plugins import Plugins
+
+X = load_rossi()
+data = SurvivalAnalysisDataLoader(
+    X,
+    target_column="arrest",
+    time_to_event_column="week",
+)
+
+syn_model = Plugins().get("marginal_distributions")
+
+syn_model.fit(data)
+
+syn_model.generate(count=10)
+```
 
 ## :boom: Sample Usage: Time series
+List available generators
+```python
+from synthcity.plugins import Plugins
 
+Plugins(categories=["time_series"]).list()
+```
+
+Generate new data
+```python
+from synthcity.utils.datasets.time_series.google_stocks import GoogleStocksDataloader
+from synthcity.plugins.core.dataloader import TimeSeriesDataLoader
+from synthcity.plugins import Plugins
+
+static_data, temporal_data, outcome = GoogleStocksDataloader().load()
+data = TimeSeriesDataLoader(
+    temporal_data=temporal_data,
+    static_data=static_data,
+    outcome=outcome,
+)
+
+syn_model = Plugins().get("marginal_distributions")
+
+syn_model.fit(data)
+
+syn_model.generate(count=10)
+```
 ## 📓 Tutorials
  - [Tutorial 0: Basics](tutorials/tutorial0_basic_examples.ipynb)
  - [Tutorial 1: Write a new plugin](tutorials/tutorial1_add_a_new_plugin.ipynb)
