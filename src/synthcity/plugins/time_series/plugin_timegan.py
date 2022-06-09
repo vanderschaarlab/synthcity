@@ -17,6 +17,7 @@ from synthcity.plugins.core.distribution import (
     FloatDistribution,
     IntegerDistribution,
 )
+from synthcity.plugins.core.models.tabular_encoder import TabularEncoder
 from synthcity.plugins.core.models.ts_rnn import TimeSeriesRNN
 from synthcity.plugins.core.models.ts_tabular_gan import TimeSeriesTabularGAN
 from synthcity.plugins.core.plugin import Plugin
@@ -173,6 +174,8 @@ class TimeGANPlugin(Plugin):
         self.moments_penalty = moments_penalty
         self.embedding_penalty = embedding_penalty
 
+        self.outcome_encoder = TabularEncoder(max_clusters=encoder_max_clusters)
+
     @staticmethod
     def name() -> str:
         return "timegan"
@@ -222,6 +225,7 @@ class TimeGANPlugin(Plugin):
                 raise ValueError("expecting 'cond' for training")
             cond = kwargs["cond"]
 
+        # Static and temporal generation
         static, temporal, outcome = X.unpack()
 
         self.cov_model = TimeSeriesTabularGAN(
@@ -264,13 +268,16 @@ class TimeGANPlugin(Plugin):
         )
         self.cov_model.fit(static, temporal, cond=cond)
 
-        static, temporal, outcome = X.unpack(as_numpy=True)
+        # Outcome generation
+        self.outcome_encoder.fit(outcome)
+        outcome_enc = self.outcome_encoder.transform(outcome)
+        self.outcome_encoded_columns = outcome_enc.columns
 
         self.outcome_model = TimeSeriesRNN(
             task_type="regression",
             n_static_units_in=static.shape[-1],
             n_temporal_units_in=temporal[0].shape[-1],
-            output_shape=outcome.shape[1:],
+            output_shape=outcome_enc.shape[1:],
             n_static_units_hidden=self.generator_n_units_hidden,
             n_static_layers_hidden=self.generator_n_layers_hidden,
             n_temporal_units_hidden=self.generator_n_units_hidden,
@@ -285,8 +292,14 @@ class TimeGANPlugin(Plugin):
             device=self.device,
             dropout=self.generator_dropout,
             nonlin=self.generator_nonlin,
+            nonlin_out=self.outcome_encoder.activation_layout(
+                discrete_activation="softmax",
+                continuous_activation="tanh",
+            ),
         )
-        self.outcome_model.fit(static, temporal, outcome)
+        self.outcome_model.fit(
+            np.asarray(static), np.asarray(temporal), np.asarray(outcome_enc)
+        )
 
         return self
 
@@ -297,10 +310,15 @@ class TimeGANPlugin(Plugin):
 
         def _sample(count: int) -> Tuple:
             static, temporal = self.cov_model.generate(count, cond=cond)
-            outcome = self.outcome_model.predict(
-                np.asarray(static), np.asarray(temporal)
+
+            outcome_enc = pd.DataFrame(
+                self.outcome_model.predict(np.asarray(static), np.asarray(temporal)),
+                columns=self.outcome_encoded_columns,
             )
-            outcome = pd.DataFrame(outcome, columns=self.data_info["outcome_features"])
+            outcome_raw = self.outcome_encoder.inverse_transform(outcome_enc)
+            outcome = pd.DataFrame(
+                outcome_raw, columns=self.data_info["outcome_features"]
+            )
 
             return static, temporal, outcome
 

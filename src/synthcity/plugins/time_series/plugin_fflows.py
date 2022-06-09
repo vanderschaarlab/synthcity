@@ -11,7 +11,11 @@ from fflows import FourierFlow
 
 # synthcity absolute
 from synthcity.plugins.core.dataloader import DataLoader
-from synthcity.plugins.core.distribution import Distribution
+from synthcity.plugins.core.distribution import (
+    CategoricalDistribution,
+    Distribution,
+    IntegerDistribution,
+)
 from synthcity.plugins.core.models.tabular_encoder import (
     TabularEncoder,
     TimeSeriesTabularEncoder,
@@ -94,7 +98,20 @@ class FourierFlowsPlugin(Plugin):
 
     @staticmethod
     def hyperparameter_space(**kwargs: Any) -> List[Distribution]:
-        return []
+        return [
+            IntegerDistribution(name="n_iter", low=100, high=1000, step=100),
+            CategoricalDistribution(name="lr", choices=[1e-3, 2e-4, 1e-4]),
+            CategoricalDistribution(name="batch_size", choices=[100, 200, 500]),
+            IntegerDistribution(name="n_units_hidden", low=50, high=150, step=50),
+            IntegerDistribution(name="n_flows", low=5, high=100),
+            CategoricalDistribution(name="FFT", choices=[True, False]),
+            CategoricalDistribution(name="flip", choices=[True, False]),
+            CategoricalDistribution(name="normalize", choices=[True, False]),
+            CategoricalDistribution(
+                name="static_model", choices=["ctgan", "adsgan", "privbayes"]
+            ),
+            IntegerDistribution(name="encoder_max_clusters", low=2, high=20),
+        ]
 
     def _fit(self, X: DataLoader, *args: Any, **kwargs: Any) -> "FourierFlowsPlugin":
         assert X.type() == "time_series"
@@ -128,6 +145,10 @@ class FourierFlowsPlugin(Plugin):
             batch_size=self.train_args["batch_size"],
             lr=self.train_args["learning_rate"],
             device=self.device,
+            nonlin_out=self.outcome_encoder.activation_layout(
+                discrete_activation="softmax",
+                continuous_activation="tanh",
+            ),
         )
         self.outcome_model.fit(
             np.asarray(static_enc), np.asarray(temporal_enc), np.asarray(outcome_enc)
