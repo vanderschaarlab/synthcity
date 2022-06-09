@@ -10,7 +10,7 @@ plugins = glob.glob(join(dirname(__file__), "plugin*.py"))
 
 class GenericPlugins(PluginLoader):
     def __init__(self) -> None:
-        super().__init__(plugins, Plugin)
+        super().__init__(plugins, Plugin, ["generic"])
 
 
 __all__ = [basename(f)[:-3] for f in plugins if isfile(f)] + [

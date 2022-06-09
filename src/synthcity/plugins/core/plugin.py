@@ -27,6 +27,7 @@ from synthcity.plugins.core.dataloader import (
 from synthcity.plugins.core.distribution import Distribution
 from synthcity.plugins.core.schema import Schema
 from synthcity.utils.constants import DEVICE
+from synthcity.utils.serialization import save as serialize
 from synthcity.version import MAJOR_VERSION
 
 
@@ -318,6 +319,11 @@ class Plugin(metaclass=ABCMeta):
         if "tsne" in plots:
             plot_tsne(plt, X, X_syn)
 
+    def save(self) -> bytes:
+        buff = self.__dict__.copy()
+
+        return serialize(buff)
+
 
 class PluginLoader:
     """Plugin loading utility class.
@@ -325,7 +331,7 @@ class PluginLoader:
     """
 
     @validate_arguments
-    def __init__(self, plugins: list, expected_type: Type) -> None:
+    def __init__(self, plugins: list, expected_type: Type, categories: list) -> None:
         self._plugins: Dict[str, Type] = {}
         self._available_plugins = {}
         for plugin in plugins:
@@ -333,6 +339,7 @@ class PluginLoader:
             self._available_plugins[stem] = plugin
 
         self._expected_type = expected_type
+        self._categories = categories
 
     @validate_arguments
     def _load_single_plugin(self, plugin: str) -> None:
@@ -354,7 +361,6 @@ class PluginLoader:
             except BaseException as e:
                 log.critical(f"load failed: {e}")
                 failed = True
-                break
 
         if failed:
             log.critical(f"module {name} load failed")
@@ -363,12 +369,12 @@ class PluginLoader:
         log.debug(f"Loaded plugin {cls.type()} - {cls.name()}")
         self.add(cls.name(), cls)
 
-    def list(self, category: str = "generic") -> List[str]:
+    def list(self) -> List[str]:
         """Get all the available plugins."""
         all_plugins = list(self._plugins.keys()) + list(self._available_plugins.keys())
         plugins = []
         for plugin in all_plugins:
-            if self.get_type(plugin).type() == category:
+            if self.get_type(plugin).type() in self._categories:
                 plugins.append(plugin)
 
         return list(set(plugins))

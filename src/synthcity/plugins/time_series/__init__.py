@@ -10,7 +10,7 @@ plugins = glob.glob(join(dirname(__file__), "plugin*.py"))
 
 class TimeSeriesPlugins(PluginLoader):
     def __init__(self) -> None:
-        super().__init__(plugins, Plugin)
+        super().__init__(plugins, Plugin, ["generic", "time_series"])
 
 
 __all__ = [basename(f)[:-3] for f in plugins if isfile(f)] + [
