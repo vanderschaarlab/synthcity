@@ -170,6 +170,7 @@ syn_model.generate(count=10)
 |--- | --- | --- |
 |**marginal_distributions**| A differentially private method that samples from the marginal distributions of the training set|  --- |
 |**uniform_sampler**| A differentially private method that uniformly samples from the [min, max] ranges of each column.|  --- |
+|**dummy_sampler**| Resample data points from the training set|  --- |
 
 ### Normalizing Flows
 
@@ -177,10 +178,15 @@ syn_model.generate(count=10)
 |--- | --- | --- |
 |**nflow**| Normalizing Flows are generative models which produce tractable distributions where both sampling and density evaluation can be efficient and exact.| [Neural Spline Flows](https://arxiv.org/abs/1906.04032) |
 
-### Debug methods
+### Survival analysis methods
 | Method | Description | Reference |
-|--- | --- | --- |
-|**dummy_sampler**| Resample data points from the training set|  --- |
+|SurvivalGAN | --- | --- |
+
+### Time Series methods
+| Method | Description | Reference |
+| TimeGAN | --- | [Time-series Generative Adversarial Networks](https://proceedings.neurips.cc/paper/2019/file/c9efe5f26cd17ba6216bbe2a7d26d490-Paper.pdf) |
+| Fourier Flows | --- | [Generative Time-series Modeling with Fourier Flows](https://openreview.net/forum?id=PpshD0AXfA) |
+| Autoregressive Models | --- | --- |
 
 ## :zap: Evaluation metrics
 The following table contains the available evaluation metrics:
