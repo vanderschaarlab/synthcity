@@ -400,7 +400,6 @@ class PerformanceEvaluatorXGB(PerformanceEvaluator):
                 {
                     "n_jobs": -1,
                     "verbosity": 0,
-                    "use_label_encoder": False,
                     "depth": 3,
                     "strategy": "debiased_bce",  # "weibull", "debiased_bce"
                     "random_state": self._random_seed,
@@ -412,13 +411,11 @@ class PerformanceEvaluatorXGB(PerformanceEvaluator):
             xgb_clf_args = {
                 "n_jobs": -1,
                 "verbosity": 0,
-                "use_label_encoder": True,
                 "depth": 3,
                 "random_state": self._random_seed,
             }
 
             xgb_reg_args = copy.deepcopy(xgb_clf_args)
-            xgb_reg_args["use_label_encoder"] = False
 
             return self._evaluate_standard_performance(
                 XGBClassifier,

@@ -45,7 +45,6 @@ def test_network_config() -> None:
         batch_size=64,
         n_iter_print=100,
         seed=77,
-        n_iter_min=100,
         clipping_value=1,
         gamma_penalty=2,
         moments_penalty=2,

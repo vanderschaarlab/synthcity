@@ -150,7 +150,7 @@ class TimeSeriesGAN(nn.Module):
             lr=generator_lr,
             residual=generator_residual,
             device=device,
-        ).to(self.device)
+        )
 
         rnn_generator_extra_args = {
             "window_size": window_size,

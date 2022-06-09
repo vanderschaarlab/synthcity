@@ -290,6 +290,7 @@ class Plugin(metaclass=ABCMeta):
         self,
         plt: Any,
         X: DataLoader,
+        count: Optional[int] = None,
         plots: list = ["marginal", "associations", "tsne"],
     ) -> Any:
         """Plot the real-synthetic distributions.
@@ -302,7 +303,7 @@ class Plugin(metaclass=ABCMeta):
         Returns:
             self
         """
-        X_syn = self.generate()
+        X_syn = self.generate(count=count)
 
         if "marginal" in plots:
             plot_marginal_comparison(plt, X, X_syn)

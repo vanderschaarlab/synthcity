@@ -31,7 +31,7 @@ class Benchmarks:
         synthetic_constraints: Optional[Constraints] = None,
         synthetic_cache: bool = True,
         synthetic_reuse_is_exists: bool = True,
-        task_type: str = "classification",  # classification, regression, survival_analysis
+        task_type: str = "classification",  # classification, regression, survival_analysis, time_series
         workspace: Path = Path("workspace"),
         plugin_kwargs: Dict = {},
     ) -> pd.DataFrame:
@@ -69,6 +69,8 @@ class Benchmarks:
         plugin_cats = ["generic"]
         if task_type == "survival_analysis":
             plugin_cats.append("survival_analysis")
+        elif task_type == "time_series":
+            plugin_cats.append("time_series")
 
         for plugin in plugins:
             log.info(f"Benchmarking plugin : {plugin}")

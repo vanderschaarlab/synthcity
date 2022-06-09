@@ -97,7 +97,12 @@ class Metrics:
         metrics: Optional[Dict] = None,
         task_type: str = "classification",
     ) -> pd.DataFrame:
-        supported_tasks = ["classification", "regression", "survival_analysis"]
+        supported_tasks = [
+            "classification",
+            "regression",
+            "survival_analysis",
+            "time_series",
+        ]
         if task_type not in supported_tasks:
             raise ValueError(
                 f"Invalid task type {task_type}. Supported: {supported_tasks}"

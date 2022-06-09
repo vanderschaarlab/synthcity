@@ -88,9 +88,13 @@ class ResidualLayer(LinearLayer):
             device=device,
         )
         self.device = device
+        self.n_units_out = n_units_out
 
     @validate_arguments(config=dict(arbitrary_types_allowed=True))
     def forward(self, X: torch.Tensor) -> torch.Tensor:
+        if X.shape[-1] == 0:
+            return torch.zeros((len(X), self.n_units_out)).to(self.device)
+
         out = self.model(X.float())
         return torch.cat([out, X], dim=1).to(self.device)
 
