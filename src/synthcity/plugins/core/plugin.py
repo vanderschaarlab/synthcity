@@ -27,6 +27,7 @@ from synthcity.plugins.core.dataloader import (
 from synthcity.plugins.core.distribution import Distribution
 from synthcity.plugins.core.schema import Schema
 from synthcity.utils.constants import DEVICE
+from synthcity.version import MAJOR_VERSION
 
 
 class Plugin(metaclass=ABCMeta):
@@ -100,6 +101,11 @@ class Plugin(metaclass=ABCMeta):
     def type() -> str:
         """The type of the plugin."""
         ...
+
+    @staticmethod
+    def version() -> str:
+        "API version"
+        return MAJOR_VERSION
 
     @classmethod
     def fqdn(cls) -> str:
