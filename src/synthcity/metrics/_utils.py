@@ -50,10 +50,10 @@ def get_frequency(
     return res
 
 
-def get_features(X: pd.DataFrame, sensitive_columns: List[str] = []) -> List:
+def get_features(X: pd.DataFrame, sensitive_features: List[str] = []) -> List:
     """Return the non-sensitive features from dataset X"""
     features = list(X.columns)
-    for col in sensitive_columns:
+    for col in sensitive_features:
         if col in features:
             features.remove(col)
 

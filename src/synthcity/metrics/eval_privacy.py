@@ -8,12 +8,11 @@ import pandas as pd
 from pydantic import validate_arguments
 from scipy.stats import entropy
 from sklearn.cluster import KMeans
-from sklearn.covariance import EllipticEnvelope
-from sklearn.ensemble import IsolationForest
-from sklearn.neighbors import LocalOutlierFactor, NearestNeighbors
+from sklearn.neighbors import NearestNeighbors
 
 # synthcity absolute
 from synthcity.metrics._utils import get_features
+from synthcity.plugins.core.dataloader import DataLoader
 
 # synthcity relative
 from .core import MetricEvaluator
@@ -42,9 +41,9 @@ class kAnonymization(PrivacyEvaluator):
         return "maximize"
 
     @validate_arguments(config=dict(arbitrary_types_allowed=True))
-    def evaluate_data(self, X: pd.DataFrame) -> int:
+    def evaluate_data(self, X: DataLoader) -> int:
 
-        features = get_features(X, self._sensitive_columns)
+        features = get_features(X, X.sensitive_features)
 
         values = [999]
         for n_clusters in [2, 5, 10, 15]:
@@ -59,11 +58,9 @@ class kAnonymization(PrivacyEvaluator):
         return int(np.min(values))
 
     @validate_arguments(config=dict(arbitrary_types_allowed=True))
-    def evaluate(
-        self, X_gt_train: pd.DataFrame, X_gt_test: pd.DataFrame, X_syn: pd.DataFrame
-    ) -> Dict:
+    def evaluate(self, X_gt: DataLoader, X_syn: DataLoader) -> Dict:
         return {
-            "gt": self.evaluate_data(X_gt_train),
+            "gt": self.evaluate_data(X_gt),
             "syn": (self.evaluate_data(X_syn) + 1e-8),
         }
 
@@ -84,8 +81,8 @@ class lDiversityDistinct(PrivacyEvaluator):
     def direction() -> str:
         return "maximize"
 
-    def evaluate_data(self, X: pd.DataFrame) -> int:
-        features = get_features(X, self._sensitive_columns)
+    def evaluate_data(self, X: DataLoader) -> int:
+        features = get_features(X, X.sensitive_features)
 
         values = [999]
         for n_clusters in [2, 5, 10, 15]:
@@ -94,21 +91,19 @@ class lDiversityDistinct(PrivacyEvaluator):
             model = KMeans(n_clusters=n_clusters, init="k-means++", random_state=0).fit(
                 X[features]
             )
-            clusters = model.predict(X[features])
-            clusters_df = pd.Series(clusters, index=X.index)
+            clusters = model.predict(X.dataframe()[features])
+            clusters_df = pd.Series(clusters, index=X.dataframe().index)
             for cluster in range(n_clusters):
-                partition = X[clusters_df == cluster]
-                uniq_values = partition[self._sensitive_columns].drop_duplicates()
+                partition = X.dataframe()[clusters_df == cluster]
+                uniq_values = partition[X.sensitive_features].drop_duplicates()
                 values.append(len(uniq_values))
 
         return int(np.min(values))
 
     @validate_arguments(config=dict(arbitrary_types_allowed=True))
-    def evaluate(
-        self, X_gt_train: pd.DataFrame, X_gt_test: pd.DataFrame, X_syn: pd.DataFrame
-    ) -> Dict:
+    def evaluate(self, X_gt: DataLoader, X_syn: DataLoader) -> Dict:
         return {
-            "gt": self.evaluate_data(X_gt_train),
+            "gt": self.evaluate_data(X_gt),
             "syn": (self.evaluate_data(X_syn) + 1e-8),
         }
 
@@ -128,17 +123,15 @@ class kMap(PrivacyEvaluator):
         return "maximize"
 
     @validate_arguments(config=dict(arbitrary_types_allowed=True))
-    def evaluate(
-        self, X_gt_train: pd.DataFrame, X_gt_test: pd.DataFrame, X_syn: pd.DataFrame
-    ) -> Dict:
-        features = get_features(X_gt_train, self._sensitive_columns)
+    def evaluate(self, X_gt: DataLoader, X_syn: DataLoader) -> Dict:
+        features = get_features(X_gt, X_gt.sensitive_features)
 
         values = []
         for n_clusters in [2, 5, 10, 15]:
-            if len(X_gt_train) / n_clusters < 10:
+            if len(X_gt) / n_clusters < 10:
                 continue
             model = KMeans(n_clusters=n_clusters, init="k-means++", random_state=0).fit(
-                X_gt_train[features]
+                X_gt[features]
             )
             clusters = model.predict(X_syn[features])
             counts: dict = Counter(clusters)
@@ -165,17 +158,15 @@ class DeltaPresence(PrivacyEvaluator):
         return "maximize"
 
     @validate_arguments(config=dict(arbitrary_types_allowed=True))
-    def evaluate(
-        self, X_gt_train: pd.DataFrame, X_gt_test: pd.DataFrame, X_syn: pd.DataFrame
-    ) -> Dict:
-        features = get_features(X_gt_train, self._sensitive_columns)
+    def evaluate(self, X_gt: DataLoader, X_syn: DataLoader) -> Dict:
+        features = get_features(X_gt, X_gt.sensitive_features)
 
         values = []
         for n_clusters in [2, 5, 10, 15]:
-            if len(X_gt_train) / n_clusters < 10:
+            if len(X_gt) / n_clusters < 10:
                 continue
             model = KMeans(n_clusters=n_clusters, init="k-means++", random_state=0).fit(
-                X_gt_train[features]
+                X_gt[features]
             )
             clusters = model.predict(X_syn[features])
             synth_counts: dict = Counter(clusters)
@@ -211,9 +202,8 @@ class IdentifiabilityScore(PrivacyEvaluator):
     @validate_arguments(config=dict(arbitrary_types_allowed=True))
     def evaluate(
         self,
-        X_gt_train_df: pd.DataFrame,
-        X_gt_test_df: pd.DataFrame,
-        X_syn_df: pd.DataFrame,
+        X_gt: DataLoader,
+        X_syn: DataLoader,
     ) -> Dict:
         """Compare Wasserstein distance between original data and synthetic data.
 
@@ -225,16 +215,13 @@ class IdentifiabilityScore(PrivacyEvaluator):
             WD_value: Wasserstein distance
         """
 
-        X = np.asarray(X_gt_train_df)
-        X_syn = np.asarray(X_syn_df)
-
         # Entropy computation
         def compute_entropy(labels: np.ndarray) -> np.ndarray:
             value, counts = np.unique(np.round(labels), return_counts=True)
             return entropy(counts)
 
         # Parameters
-        no, x_dim = X.shape
+        no, x_dim = X_gt.shape
 
         # Weights
         W = np.zeros(
@@ -244,18 +231,18 @@ class IdentifiabilityScore(PrivacyEvaluator):
         )
 
         for i in range(x_dim):
-            W[i] = compute_entropy(X[:, i])
+            W[i] = compute_entropy(X_gt.numpy()[:, i])
 
         # Normalization
-        X_hat = X.copy()
-        X_syn_hat = X_syn.copy()
+        X_hat = X_gt.numpy().copy()
+        X_syn_hat = X_syn.numpy().copy()
 
         eps = 1e-16
         W = np.ones_like(W)
 
         for i in range(x_dim):
-            X_hat[:, i] = X[:, i] * 1.0 / (W[i] + eps)
-            X_syn_hat[:, i] = X_syn[:, i] * 1.0 / (W[i] + eps)
+            X_hat[:, i] = X_gt.numpy()[:, i] * 1.0 / (W[i] + eps)
+            X_syn_hat[:, i] = X_syn.numpy()[:, i] * 1.0 / (W[i] + eps)
 
         # r_i computation
         nbrs = NearestNeighbors(n_neighbors=2).fit(X_hat)
@@ -270,33 +257,3 @@ class IdentifiabilityScore(PrivacyEvaluator):
         identifiability_value = np.sum(R_Diff < 0) / float(no)
 
         return {"score": identifiability_value}
-
-
-@validate_arguments(config=dict(arbitrary_types_allowed=True))
-def select_outliers(
-    X_gt: pd.DataFrame, method: str = "local_outlier_factor"
-) -> pd.Index:
-    if method == "isolation_forests":
-        predictions = IsolationForest().fit_predict(X_gt)
-    elif method == "local_outlier_factor":
-        predictions = LocalOutlierFactor().fit_predict(X_gt)
-    elif method == "elliptic_envelope":
-        predictions = EllipticEnvelope().fit_predict(X_gt)
-    else:
-        raise RuntimeError(f"Unknown outlier method {method}")
-
-    outliers = pd.Series(predictions, index=X_gt.index)
-    return outliers == -1
-
-
-@validate_arguments(config=dict(arbitrary_types_allowed=True))
-def select_quantiles(
-    X_gt: pd.DataFrame,
-    quantiles: int = 5,
-) -> pd.DataFrame:
-    X = X_gt.copy()
-    for col in X.columns:
-        if len(X[col].unique()) > quantiles:
-            X[col] = pd.qcut(X[col], quantiles, labels=False, duplicates="drop")
-
-    return X

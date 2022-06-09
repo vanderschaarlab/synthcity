@@ -1,5 +1,5 @@
 # stdlib
-import traceback
+import copy
 from typing import Any, Dict
 
 # third party
@@ -16,13 +16,15 @@ from xgboost import XGBClassifier, XGBRegressor
 import synthcity.logger as log
 from synthcity.metrics._utils import evaluate_auc
 from synthcity.metrics.core import MetricEvaluator
-from synthcity.plugins.models.mlp import MLP
-from synthcity.plugins.models.survival_analysis import (
+from synthcity.plugins.core.dataloader import DataLoader
+from synthcity.plugins.core.models.mlp import MLP
+from synthcity.plugins.core.models.survival_analysis import (
     CoxPHSurvivalAnalysis,
     DeephitSurvivalAnalysis,
     XGBSurvivalAnalysis,
     evaluate_survival_model,
 )
+from synthcity.plugins.core.models.ts_rnn import TimeSeriesRNN
 from synthcity.utils.serialization import dataframe_hash
 
 
@@ -113,7 +115,6 @@ class PerformanceEvaluator(MetricEvaluator):
 
             score = mean_squared_error(y_test, y_pred)
         except BaseException as e:
-            traceback.print_stack()
             log.error(f"regression evaluation failed {e}")
             score = 100
 
@@ -126,9 +127,8 @@ class PerformanceEvaluator(MetricEvaluator):
         clf_args: Dict,
         regression_model: Any,
         regression_args: Any,
-        X_gt_train: pd.DataFrame,
-        X_gt_test: pd.DataFrame,
-        X_syn: pd.DataFrame,
+        X_gt: DataLoader,
+        X_syn: DataLoader,
     ) -> Dict:
         """Train a classifier or regressor on the synthetic data and evaluate the performance on real test data. Returns the average performance discrepancy between training on real data vs on synthetic data.
 
@@ -136,25 +136,11 @@ class PerformanceEvaluator(MetricEvaluator):
             gt and syn performance scores
         """
 
-        if self._target_column is not None:
-            target_col = self._target_column
-        else:
-            target_col = X_gt_train.columns[-1]
+        id_X_gt, id_y_gt = X_gt.train().unpack()
+        ood_X_gt, ood_y_gt = X_gt.test().unpack()
+        iter_X_syn, iter_y_syn = X_syn.unpack()
 
-        if target_col not in X_gt_train.columns:
-            raise ValueError(
-                f"Target column not found {target_col}. Available: {X_gt_train.columns}"
-            )
-        iter_X_gt = X_gt_train.drop(columns=[target_col]).reset_index(drop=True)
-        iter_y_gt = X_gt_train[target_col].reset_index(drop=True)
-
-        ood_X_gt = X_gt_test.drop(columns=[target_col]).reset_index(drop=True)
-        ood_y_gt = X_gt_test[target_col].reset_index(drop=True)
-
-        iter_X_syn = X_syn.drop(columns=[target_col]).reset_index(drop=True)
-        iter_y_syn = X_syn[target_col].reset_index(drop=True)
-
-        if len(iter_y_gt.unique()) < 5:
+        if len(id_y_gt.unique()) < 5:
             eval_cbk = self._evaluate_performance_classification
             skf = StratifiedKFold(
                 n_splits=self._n_folds, shuffle=True, random_state=self._random_seed
@@ -173,11 +159,11 @@ class PerformanceEvaluator(MetricEvaluator):
         syn_scores_id = []
         syn_scores_ood = []
 
-        for train_idx, test_idx in skf.split(iter_X_gt, iter_y_gt):
-            train_data = np.asarray(iter_X_gt.loc[train_idx])
-            test_data = np.asarray(iter_X_gt.loc[test_idx])
-            train_labels = np.asarray(iter_y_gt.loc[train_idx])
-            test_labels = np.asarray(iter_y_gt.loc[test_idx])
+        for train_idx, test_idx in skf.split(id_X_gt, id_y_gt):
+            train_data = np.asarray(id_X_gt.loc[train_idx])
+            test_data = np.asarray(id_X_gt.loc[test_idx])
+            train_labels = np.asarray(id_y_gt.loc[train_idx])
+            test_labels = np.asarray(id_y_gt.loc[test_idx])
 
             real_score = eval_cbk(
                 model, model_args, train_data, train_labels, test_data, test_labels
@@ -204,67 +190,36 @@ class PerformanceEvaluator(MetricEvaluator):
         self,
         model: Any,
         args: Dict,
-        X_gt_train: pd.DataFrame,
-        X_gt_test: pd.DataFrame,
-        X_syn: pd.DataFrame,
+        X_gt: DataLoader,
+        X_syn: DataLoader,
     ) -> Dict:
         """Train a survival model on the synthetic data and evaluate the performance on real test data. Returns the average performance discrepancy between training on real data vs on synthetic data.
 
         Returns:
             gt and syn performance scores
         """
+        assert X_gt.type() == "survival_analysis"
+        assert X_syn.type() == "survival_analysis"
 
-        target_col = self._target_column
-        tte_col = self._time_to_event_column
+        info = X_gt.info()
+        time_horizons = info["time_horizons"]
 
-        if target_col is None:
-            raise ValueError("target_column must not be None for survival analysis")
-
-        if self._time_to_event_column is None:
-            raise ValueError("time to event must not be None for survival analysis")
-
-        if self._time_horizons is None:
-            raise ValueError("time horizons must not be None for survival analysis")
-
-        if target_col not in X_gt_train.columns:
-            raise ValueError(
-                f"Target column not found {target_col}. Available: {X_gt_train.columns}"
-            )
-        if tte_col not in X_gt_train.columns:
-            raise ValueError(
-                f"TimeToEvent column not found {tte_col}. Available: {X_gt_train.columns}"
-            )
-
-        X_gt_train = X_gt_train.copy()
-        X_gt_test = X_gt_test.copy()
-        X_syn = X_syn.copy()
-
-        iter_X_gt = X_gt_train.drop(columns=[target_col, tte_col]).reset_index(
-            drop=True
-        )
-        iter_E_gt = X_gt_train[target_col].reset_index(drop=True)
-        iter_T_gt = X_gt_train[tte_col].reset_index(drop=True)
-
-        ood_X_gt = X_gt_test.drop(columns=[target_col, tte_col]).reset_index(drop=True)
-        ood_E_gt = X_gt_test[target_col].reset_index(drop=True)
-        ood_T_gt = X_gt_test[tte_col].reset_index(drop=True)
-
-        iter_X_syn = X_syn.drop(columns=[target_col, tte_col]).reset_index(drop=True)
-        iter_E_syn = X_syn[target_col].reset_index(drop=True)
-        iter_T_syn = X_syn[tte_col].reset_index(drop=True)
+        id_X_gt, id_T_gt, id_E_gt = X_gt.train().unpack()
+        ood_X_gt, ood_T_gt, ood_E_gt = X_gt.test().unpack()
+        iter_X_syn, iter_T_syn, iter_E_syn = X_syn.unpack()
 
         predictor_gt = model(**args)
         log.info(
-            f" Performance eval for df hash = {dataframe_hash(iter_X_gt)} ood hash = {dataframe_hash(ood_X_gt)}"
+            f" Performance eval for df hash = {dataframe_hash(id_X_gt)} ood hash = {dataframe_hash(ood_X_gt)}"
         )
         score_gt = evaluate_survival_model(
             predictor_gt,
-            iter_X_gt,
-            iter_T_gt,
-            iter_E_gt,
+            id_X_gt,
+            id_T_gt,
+            id_E_gt,
             metrics=["c_index", "brier_score"],
             n_folds=self._n_folds,
-            time_horizons=self._time_horizons,
+            time_horizons=time_horizons,
         )["clf"]
 
         log.info(f"Baseline performance score: {score_gt}")
@@ -279,12 +234,12 @@ class PerformanceEvaluator(MetricEvaluator):
             predictor_syn.fit(iter_X_syn, iter_T_syn, iter_E_syn)
             score_syn_id = evaluate_survival_model(
                 [predictor_syn] * self._n_folds,
-                iter_X_gt,
-                iter_T_gt,
-                iter_E_gt,
+                id_X_gt,
+                id_T_gt,
+                id_E_gt,
                 metrics=["c_index", "brier_score"],
                 n_folds=self._n_folds,
-                time_horizons=self._time_horizons,
+                time_horizons=time_horizons,
                 pretrained=True,
             )["clf"]
         except BaseException as e:
@@ -304,7 +259,7 @@ class PerformanceEvaluator(MetricEvaluator):
                 ood_E_gt,
                 metrics=["c_index", "brier_score"],
                 n_folds=self._n_folds,
-                time_horizons=self._time_horizons,
+                time_horizons=time_horizons,
                 pretrained=True,
             )["clf"]
         except BaseException as e:
@@ -325,32 +280,100 @@ class PerformanceEvaluator(MetricEvaluator):
         }
 
     @validate_arguments(config=dict(arbitrary_types_allowed=True))
-    def _evaluate_test_performance(
+    def _evaluate_time_series_performance(
         self,
-        clf_model: Any,
-        clf_args: Dict,
-        regression_model: Any,
-        regression_args: Any,
-        surv_model: Any,
-        suv_model_args: Any,
-        X_gt_train: pd.DataFrame,
-        X_gt_test: pd.DataFrame,
-        X_syn: pd.DataFrame,
+        model: Any,
+        model_args: Any,
+        X_gt: DataLoader,
+        X_syn: DataLoader,
     ) -> Dict:
-        if self._task_type == "survival_analysis":
-            return self._evaluate_survival_model(
-                surv_model, suv_model_args, X_gt_train, X_gt_test, X_syn
+        """Train a regressor on the time series data and evaluate the performance on real test data. Returns the average performance discrepancy between training on real data vs on synthetic data.
+
+        Returns:
+            gt and syn performance scores
+        """
+        assert X_gt.type() == "time_series"
+        assert X_syn.type() == "time_series"
+
+        id_static_gt, id_temporal_gt, id_outcome_gt = X_gt.train().unpack(as_numpy=True)
+        ood_static_gt, ood_temporal_gt, ood_outcome_gt = X_gt.test().unpack(
+            as_numpy=True
+        )
+        static_syn, temporal_syn, outcome_syn = X_syn.unpack(as_numpy=True)
+
+        skf = KFold(
+            n_splits=self._n_folds, shuffle=True, random_state=self._random_seed
+        )
+
+        real_scores = []
+        syn_scores_id = []
+        syn_scores_ood = []
+
+        def ts_eval_cbk(
+            static_train: np.ndarray,
+            temporal_train: np.ndarray,
+            outcome_train: np.ndarray,
+            static_test: np.ndarray,
+            temporal_test: np.ndarray,
+            outcome_test: np.ndarray,
+        ) -> float:
+            try:
+                estimator = model(**model_args).fit(
+                    static_train, temporal_train, outcome_train
+                )
+                preds = estimator.predict(static_test, temporal_test)
+
+                score = mean_squared_error(outcome_test, preds)
+            except BaseException as e:
+                print(e)
+                log.error(f"regression evaluation failed {e}")
+                score = 100
+
+            return 1 / (1 + score)
+
+        for train_idx, test_idx in skf.split(id_static_gt):
+            static_train_data = id_static_gt[train_idx]
+            temporal_train_data = id_temporal_gt[train_idx]
+            outcome_train_data = id_outcome_gt[train_idx]
+
+            static_test_data = id_static_gt[test_idx]
+            temporal_test_data = id_temporal_gt[test_idx]
+            outcome_test_data = id_outcome_gt[test_idx]
+
+            real_score = ts_eval_cbk(
+                static_train_data,
+                temporal_train_data,
+                outcome_train_data,
+                static_test_data,
+                temporal_test_data,
+                outcome_test_data,
+            )
+            synth_score_id = ts_eval_cbk(
+                static_syn,
+                temporal_syn,
+                outcome_syn,
+                static_test_data,
+                temporal_test_data,
+                outcome_test_data,
+            )
+            synth_score_ood = ts_eval_cbk(
+                static_syn,
+                temporal_syn,
+                outcome_syn,
+                ood_static_gt,
+                ood_temporal_gt,
+                ood_outcome_gt,
             )
 
-        return self._evaluate_standard_performance(
-            clf_model,
-            clf_args,
-            regression_model,
-            regression_args,
-            X_gt_train,
-            X_gt_test,
-            X_syn,
-        )
+            real_scores.append(real_score)
+            syn_scores_id.append(synth_score_id)
+            syn_scores_ood.append(synth_score_ood)
+
+        return {
+            "gt": float(self.reduction()(real_scores)),
+            "syn_id": float(self.reduction()(syn_scores_id)),
+            "syn_ood": float(self.reduction()(syn_scores_ood)),
+        }
 
 
 class PerformanceEvaluatorXGB(PerformanceEvaluator):
@@ -368,41 +391,42 @@ class PerformanceEvaluatorXGB(PerformanceEvaluator):
     @validate_arguments(config=dict(arbitrary_types_allowed=True))
     def evaluate(
         self,
-        X_gt_train: pd.DataFrame,
-        X_gt_test: pd.DataFrame,
-        X_syn: pd.DataFrame,
+        X_gt: DataLoader,
+        X_syn: DataLoader,
     ) -> Dict:
+        if self._task_type == "survival_analysis":
+            return self._evaluate_survival_model(
+                XGBSurvivalAnalysis,
+                {
+                    "n_jobs": -1,
+                    "verbosity": 0,
+                    "depth": 3,
+                    "strategy": "debiased_bce",  # "weibull", "debiased_bce"
+                    "random_state": self._random_seed,
+                },
+                X_gt,
+                X_syn,
+            )
+        elif self._task_type == "classification" or self._task_type == "regression":
+            xgb_clf_args = {
+                "n_jobs": -1,
+                "verbosity": 0,
+                "depth": 3,
+                "random_state": self._random_seed,
+            }
 
-        return self._evaluate_test_performance(
-            XGBClassifier,
-            {
-                "n_jobs": -1,
-                "verbosity": 0,
-                "use_label_encoder": True,
-                "depth": 3,
-                "random_state": self._random_seed,
-            },
-            XGBRegressor,
-            {
-                "n_jobs": -1,
-                "verbosity": 0,
-                "use_label_encoder": False,
-                "depth": 3,
-                "random_state": self._random_seed,
-            },
-            XGBSurvivalAnalysis,
-            {
-                "n_jobs": -1,
-                "verbosity": 0,
-                "use_label_encoder": False,
-                "depth": 3,
-                "strategy": "debiased_bce",  # "weibull", "debiased_bce"
-                "random_state": self._random_seed,
-            },
-            X_gt_train,
-            X_gt_test,
-            X_syn,
-        )
+            xgb_reg_args = copy.deepcopy(xgb_clf_args)
+
+            return self._evaluate_standard_performance(
+                XGBClassifier,
+                xgb_clf_args,
+                XGBRegressor,
+                xgb_reg_args,
+                X_gt,
+                X_syn,
+            )
+        else:
+            raise RuntimeError(f"Unuspported task type {self._task_type}")
 
 
 class PerformanceEvaluatorLinear(PerformanceEvaluator):
@@ -420,22 +444,22 @@ class PerformanceEvaluatorLinear(PerformanceEvaluator):
     @validate_arguments(config=dict(arbitrary_types_allowed=True))
     def evaluate(
         self,
-        X_gt_train: pd.DataFrame,
-        X_gt_test: pd.DataFrame,
-        X_syn: pd.DataFrame,
+        X_gt: DataLoader,
+        X_syn: DataLoader,
     ) -> Dict:
-
-        return self._evaluate_test_performance(
-            LogisticRegression,
-            {"random_state": self._random_seed},
-            LinearRegression,
-            {},
-            CoxPHSurvivalAnalysis,
-            {},
-            X_gt_train,
-            X_gt_test,
-            X_syn,
-        )
+        if self._task_type == "survival_analysis":
+            return self._evaluate_survival_model(CoxPHSurvivalAnalysis, {}, X_gt, X_syn)
+        elif self._task_type == "classification" or self._task_type == "regression":
+            return self._evaluate_standard_performance(
+                LogisticRegression,
+                {"random_state": self._random_seed},
+                LinearRegression,
+                {},
+                X_gt,
+                X_syn,
+            )
+        else:
+            raise RuntimeError(f"Unuspported task type {self._task_type}")
 
 
 class PerformanceEvaluatorMLP(PerformanceEvaluator):
@@ -453,29 +477,44 @@ class PerformanceEvaluatorMLP(PerformanceEvaluator):
     @validate_arguments(config=dict(arbitrary_types_allowed=True))
     def evaluate(
         self,
-        X_gt_train: pd.DataFrame,
-        X_gt_test: pd.DataFrame,
-        X_syn: pd.DataFrame,
+        X_gt: DataLoader,
+        X_syn: DataLoader,
     ) -> Dict:
+        if self._task_type == "survival_analysis":
+            return self._evaluate_survival_model(
+                DeephitSurvivalAnalysis, {}, X_gt, X_syn
+            )
 
-        return self._evaluate_test_performance(
-            MLP,
-            {
-                "task_type": "classification",
-                "n_units_in": X_gt_train.shape[1] - 1,
-                "n_units_out": 0,
-                "seed": self._random_seed,
-            },
-            MLP,
-            {
-                "task_type": "regression",
-                "n_units_in": X_gt_train.shape[1] - 1,
+        elif self._task_type == "classification" or self._task_type == "regression":
+            mlp_args = {
+                "n_units_in": X_gt.shape[1] - 1,
                 "n_units_out": 1,
                 "seed": self._random_seed,
-            },
-            DeephitSurvivalAnalysis,
-            {},
-            X_gt_train,
-            X_gt_test,
-            X_syn,
-        )
+            }
+            clf_args = copy.deepcopy(mlp_args)
+            clf_args["task_type"] = "classification"
+            reg_args = copy.deepcopy(mlp_args)
+            reg_args["task_type"] = "regression"
+
+            return self._evaluate_standard_performance(
+                MLP,
+                clf_args,
+                MLP,
+                reg_args,
+                X_gt,
+                X_syn,
+            )
+        elif self._task_type == "time_series":
+            info = X_gt.info()
+            args = {
+                "task_type": "regression",
+                "n_static_units_in": len(info["static_features"]),
+                "n_temporal_units_in": len(info["temporal_features"]),
+                "output_shape": [info["outcome_len"]],
+            }
+            return self._evaluate_time_series_performance(
+                TimeSeriesRNN, args, X_gt, X_syn
+            )
+
+        else:
+            raise RuntimeError(f"Unuspported task type {self._task_type}")

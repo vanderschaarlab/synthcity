@@ -6,6 +6,7 @@ from sklearn.datasets import load_iris
 # synthcity absolute
 from synthcity.metrics import Metrics
 from synthcity.plugins import Plugins
+from synthcity.plugins.core.dataloader import GenericDataLoader
 
 
 @pytest.mark.parametrize("test_plugin", ["dummy_sampler", "marginal_distributions"])
@@ -15,13 +16,15 @@ def test_basic(test_plugin: str) -> None:
     X, y = load_iris(return_X_y=True, as_frame=True)
     X["target"] = y
 
-    model.fit(X)
+    Xraw = GenericDataLoader(X, target_column="target")
+
+    model.fit(Xraw)
     X_gen = model.generate(100)
 
     out = Metrics.evaluate(
-        X,
-        X,
+        Xraw,
         X_gen,
+        metrics={"sanity": ["common_rows_proportion"]},
     )
 
     assert isinstance(out, pd.DataFrame)
@@ -64,13 +67,13 @@ def test_metric_filter(metric_filter: dict) -> None:
 
     X, y = load_iris(return_X_y=True, as_frame=True)
     X["target"] = y
+    Xraw = GenericDataLoader(X, target_column="target")
 
-    model.fit(X)
+    model.fit(Xraw)
     X_gen = model.generate(100)
 
     out = Metrics.evaluate(
-        X,
-        X,
+        Xraw,
         X_gen,
         metrics=metric_filter,
     )
@@ -111,13 +114,12 @@ def test_custom_label(target: str) -> None:
 
     X, y = load_iris(return_X_y=True, as_frame=True)
     X["target"] = y
+    Xraw = GenericDataLoader(X, target_column="target")
 
-    model.fit(X)
+    model.fit(Xraw)
     X_gen = model.generate(100)
 
-    out = Metrics.evaluate(
-        X, X, X_gen, target_column=target, metrics={"performance": "linear_model"}
-    )
+    out = Metrics.evaluate(Xraw, X_gen, metrics={"performance": "linear_model"})
 
     assert "performance.linear_model.syn_id" in out.index
     assert "performance.linear_model.syn_ood" in out.index

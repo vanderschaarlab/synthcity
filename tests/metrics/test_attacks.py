@@ -12,6 +12,7 @@ from synthcity.metrics.eval_attacks import (
     DataLeakageXGB,
 )
 from synthcity.plugins import Plugins
+from synthcity.plugins.core.dataloader import GenericDataLoader
 
 
 @pytest.mark.parametrize("reduction", ["mean", "max", "min"])
@@ -29,14 +30,15 @@ def test_reduction(reduction: str, evaluator_t: Type) -> None:
 
     # Sampler
     test_plugin = Plugins().get("dummy_sampler")
-    test_plugin.fit(X)
+    Xloader = GenericDataLoader(X, sensitive_features=["sex"])
+
+    test_plugin.fit(Xloader)
     X_gen = test_plugin.generate(10)
 
-    evaluator = evaluator_t(reduction=reduction, sensitive_columns=["sex"])
+    evaluator = evaluator_t(reduction=reduction)
 
     score = evaluator.evaluate(
-        X,
-        X,
+        Xloader,
         X_gen,
     )
 
@@ -57,14 +59,15 @@ def test_evaluate_sensitive_data_leakage(evaluator_t: Type) -> None:
 
     # Sampler
     test_plugin = Plugins().get("dummy_sampler")
-    test_plugin.fit(X)
+    Xloader = GenericDataLoader(X, sensitive_features=["sex"])
+
+    test_plugin.fit(Xloader)
     X_gen = test_plugin.generate(2 * len(X))
 
-    evaluator = evaluator_t(sensitive_columns=["sex"])
+    evaluator = evaluator_t()
 
     score = evaluator.evaluate(
-        X,
-        X,
+        Xloader,
         X_gen,
     )["mean"]
     assert score > 0.5
@@ -73,12 +76,11 @@ def test_evaluate_sensitive_data_leakage(evaluator_t: Type) -> None:
     # Random noise
 
     test_plugin = Plugins().get("uniform_sampler")
-    test_plugin.fit(X)
+    test_plugin.fit(Xloader)
     X_gen = test_plugin.generate(2 * len(X))
 
     score = evaluator.evaluate(
-        X,
-        X,
+        Xloader,
         X_gen,
     )["mean"]
     assert score < 1

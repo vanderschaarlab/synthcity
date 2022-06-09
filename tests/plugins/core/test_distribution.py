@@ -1,6 +1,5 @@
 # third party
 import pandas as pd
-import pytest
 
 # synthcity absolute
 from synthcity.plugins.core.distribution import (
@@ -47,10 +46,8 @@ def test_categorical() -> None:
     assert param.dtype() == "object"
 
 
-@pytest.mark.parametrize("dp_enabled", [True, False])
-def test_categorical_from_data(dp_enabled: bool) -> None:
+def test_categorical_from_data() -> None:
     param = CategoricalDistribution(
-        dp_enabled=dp_enabled,
         name="test",
         data=pd.Series([1, 1, 1, 1, 2, 2, 2, 22, 3, 3, 3, 3]),
     )
@@ -70,16 +67,6 @@ def test_categorical_from_data(dp_enabled: bool) -> None:
 
     assert param.marginal_distribution is not None
     assert set(param.marginal_distribution.keys()) == set([1, 2, 3, 22])
-
-
-def test_categorical_invalid_eps_dp() -> None:
-    with pytest.raises(ValueError):
-        CategoricalDistribution(
-            dp_enabled=True,
-            dp_epsilon=0,
-            name="test",
-            data=pd.Series([1, 1, 1, 1, 2, 2, 2, 22, 3, 3, 3, 3]),
-        )
 
 
 def test_integer() -> None:
@@ -118,10 +105,8 @@ def test_integer() -> None:
     assert param.dtype() == "int"
 
 
-@pytest.mark.parametrize("dp_enabled", [True, False])
-def test_integer_from_data(dp_enabled: bool) -> None:
+def test_integer_from_data() -> None:
     param = IntegerDistribution(
-        dp_enabled=dp_enabled,
         name="test",
         data=pd.Series([1, 1, 1, 12, 2, 2, 2, 4, 4, 88, 4]),
     )
@@ -180,10 +165,8 @@ def test_float() -> None:
     assert param.dtype() == "float"
 
 
-@pytest.mark.parametrize("dp_enabled", [True, False])
-def test_float_from_data(dp_enabled: bool) -> None:
+def test_float_from_data() -> None:
     param = FloatDistribution(
-        dp_enabled=dp_enabled,
         name="test",
         data=pd.Series([0, 1.1, 2.3, 1, 0.5, 1, 1, 1, 1, 1, 1]),
     )

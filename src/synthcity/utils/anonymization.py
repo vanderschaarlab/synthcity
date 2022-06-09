@@ -8,6 +8,7 @@ from sklearn.preprocessing import LabelEncoder
 
 # synthcity absolute
 from synthcity.metrics.eval_privacy import kAnonymization
+from synthcity.plugins.core.dataloader import GenericDataLoader
 
 
 class DatasetAnonymization:
@@ -47,10 +48,15 @@ class DatasetAnonymization:
         self.max_partitions = max_partitions
 
     @validate_arguments(config=dict(arbitrary_types_allowed=True))
-    def is_anonymous(self, X: pd.DataFrame, sensitive_columns: List[str] = []) -> bool:
+    def is_anonymous(self, X: pd.DataFrame, sensitive_features: List[str] = []) -> bool:
         """True if the dataset is valid according to the k-anonymity criteria, False otherwise."""
-        evaluator = kAnonymization(sensitive_columns=sensitive_columns)
-        return bool(evaluator.evaluate_data(X) >= self.k_threshold)
+        evaluator = kAnonymization()
+        return bool(
+            evaluator.evaluate_data(
+                GenericDataLoader(X, sensitive_features=sensitive_features)
+            )
+            >= self.k_threshold
+        )
 
     def _setup(self, X: pd.DataFrame) -> Tuple[pd.DataFrame, Dict]:
         encoders = {}
@@ -85,9 +91,9 @@ class DatasetAnonymization:
     def anonymize_columns(
         self,
         X: pd.DataFrame,
-        sensitive_columns: List[str],
+        sensitive_features: List[str],
     ) -> pd.DataFrame:
-        for column in sensitive_columns:
+        for column in sensitive_features:
             X = self.anonymize_column(X, column)
 
         return X
@@ -161,10 +167,12 @@ class DatasetAnonymization:
         return self._tear_down(result, encoders)
 
     @validate_arguments(config=dict(arbitrary_types_allowed=True))
-    def _get_features(self, X: pd.DataFrame, sensitive_columns: List[str] = []) -> List:
+    def _get_features(
+        self, X: pd.DataFrame, sensitive_features: List[str] = []
+    ) -> List:
         """Return the non-sensitive features from dataset X"""
         features = list(X.columns)
-        for col in sensitive_columns:
+        for col in sensitive_features:
             if col in features:
                 features.remove(col)
 

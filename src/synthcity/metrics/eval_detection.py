@@ -1,19 +1,18 @@
 # stdlib
-from typing import Any, Dict, Tuple
+from typing import Any, Dict
 
 # third party
 import numpy as np
-import pandas as pd
 from pydantic import validate_arguments
 from sklearn.metrics import roc_auc_score
 from sklearn.mixture import GaussianMixture
 from sklearn.model_selection import StratifiedKFold
-from sklearn.preprocessing import MinMaxScaler
 from xgboost import XGBClassifier
 
 # synthcity absolute
 from synthcity.metrics.core import MetricEvaluator
-from synthcity.plugins.models.mlp import MLP
+from synthcity.plugins.core.dataloader import DataLoader
+from synthcity.plugins.core.models.mlp import MLP
 
 
 class DetectionEvaluator(MetricEvaluator):
@@ -38,46 +37,22 @@ class DetectionEvaluator(MetricEvaluator):
     def direction() -> str:
         return "minimize"
 
-    def _normalize_covariates(
-        self, X_gt_train: pd.DataFrame, X_gt_test: pd.DataFrame, X_syn: pd.DataFrame
-    ) -> Tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame]:
-        X_gt_train_norm = X_gt_train.copy()
-        X_gt_test_norm = X_gt_test.copy()
-        X_syn_norm = X_syn.copy()
-        if self._task_type != "survival_analysis":
-            X_gt_train_norm = X_gt_train_norm.drop(
-                columns=[self._target_column, self._time_to_event_column]
-            )
-            X_gt_test_norm = X_gt_test_norm.drop(
-                columns=[self._target_column, self._time_to_event_column]
-            )
-            X_syn = X_syn.drop(
-                columns=[self._target_column, self._time_to_event_column]
-            )
-
-        scaler = MinMaxScaler().fit(X_gt_train_norm)
-        return (
-            pd.DataFrame(scaler.transform(X_gt_train_norm), columns=X_gt_train.columns),
-            pd.DataFrame(scaler.transform(X_gt_test_norm), columns=X_gt_train.columns),
-            pd.DataFrame(scaler.transform(X_syn_norm), columns=X_syn.columns),
-        )
-
     @validate_arguments(config=dict(arbitrary_types_allowed=True))
     def _evaluate_detection(
         self,
         model_template: Any,
-        X_gt: pd.DataFrame,
-        X_syn: pd.DataFrame,
+        X_gt: DataLoader,
+        X_syn: DataLoader,
         **model_args: Any,
     ) -> Dict:
-        X_gt = X_gt.reset_index(drop=True)
-        labels_gt = pd.Series([0] * len(X_gt))
+        arr_gt = X_gt.numpy()
+        labels_gt = np.asarray([0] * len(X_gt))
 
-        X_syn = X_syn.reset_index(drop=True)
-        labels_syn = pd.Series([1] * len(X_syn))
+        arr_syn = X_syn.numpy()
+        labels_syn = np.asarray([1] * len(X_syn))
 
-        data = pd.concat([X_gt, X_syn]).reset_index(drop=True)
-        labels = pd.concat([labels_gt, labels_syn]).reset_index(drop=True)
+        data = np.concatenate([arr_gt, arr_syn])
+        labels = np.concatenate([labels_gt, labels_syn])
 
         res = []
 
@@ -85,18 +60,18 @@ class DetectionEvaluator(MetricEvaluator):
             n_splits=self._n_folds, shuffle=True, random_state=self._random_seed
         )
         for train_idx, test_idx in skf.split(data, labels):
-            train_data = data.loc[train_idx]
-            train_labels = labels.loc[train_idx]
-            test_data = data.loc[test_idx]
-            test_labels = labels.loc[test_idx]
+            train_data = data[train_idx]
+            train_labels = labels[train_idx]
+            test_data = data[test_idx]
+            test_labels = labels[test_idx]
 
             model = model_template(**model_args).fit(
-                train_data.values.astype(float), train_labels.values
+                train_data.astype(float), train_labels
             )
 
-            test_pred = model.predict(test_data.values.astype(float))
+            test_pred = model.predict(test_data.astype(float))
 
-            score = roc_auc_score(np.asarray(test_labels), np.asarray(test_pred))
+            score = roc_auc_score(test_labels, test_pred)
             res.append(score)
 
         return {self._reduction: float(self.reduction()(res))}
@@ -118,12 +93,7 @@ class SyntheticDetectionXGB(DetectionEvaluator):
         return "detection_xgb"
 
     @validate_arguments(config=dict(arbitrary_types_allowed=True))
-    def evaluate(
-        self, X_gt_train: pd.DataFrame, X_gt_test: pd.DataFrame, X_syn: pd.DataFrame
-    ) -> Dict:
-        X_gt_train, X_gt_test, X_syn = self._normalize_covariates(
-            X_gt_train, X_gt_test, X_syn
-        )
+    def evaluate(self, X_gt: DataLoader, X_syn: DataLoader) -> Dict:
         model_template = XGBClassifier
         model_args = {
             "n_jobs": -1,
@@ -133,7 +103,7 @@ class SyntheticDetectionXGB(DetectionEvaluator):
             "random_state": self._random_seed,
         }
 
-        return self._evaluate_detection(model_template, X_gt_train, X_syn, **model_args)
+        return self._evaluate_detection(model_template, X_gt, X_syn, **model_args)
 
 
 class SyntheticDetectionMLP(DetectionEvaluator):
@@ -152,21 +122,16 @@ class SyntheticDetectionMLP(DetectionEvaluator):
         return "detection_mlp"
 
     @validate_arguments(config=dict(arbitrary_types_allowed=True))
-    def evaluate(
-        self, X_gt_train: pd.DataFrame, X_gt_test: pd.DataFrame, X_syn: pd.DataFrame
-    ) -> Dict:
-        X_gt_train, X_gt_test, X_syn = self._normalize_covariates(
-            X_gt_train, X_gt_test, X_syn
-        )
+    def evaluate(self, X_gt: DataLoader, X_syn: DataLoader) -> Dict:
         model_args = {
             "task_type": "classification",
-            "n_units_in": X_gt_train.shape[1],
+            "n_units_in": X_gt.shape[1],
             "n_units_out": 2,
             "seed": self._random_seed,
         }
         return self._evaluate_detection(
             MLP,
-            X_gt_train,
+            X_gt,
             X_syn,
             **model_args,
         )
@@ -190,20 +155,16 @@ class SyntheticDetectionGMM(DetectionEvaluator):
     @validate_arguments(config=dict(arbitrary_types_allowed=True))
     def evaluate(
         self,
-        X_gt_train: pd.DataFrame,
-        X_gt_test: pd.DataFrame,
-        X_syn: pd.DataFrame,
+        X_gt: DataLoader,
+        X_syn: DataLoader,
     ) -> Dict:
-        X_gt_train, X_gt_test, X_syn = self._normalize_covariates(
-            X_gt_train, X_gt_test, X_syn
-        )
         scores = []
 
         for component in [1, 5, 10]:
             gmm = GaussianMixture(n_components=component, covariance_type="diag")
-            gmm.fit(X_gt_train)
+            gmm.fit(X_gt.dataframe())
 
-            scores.append(gmm.score(X_syn))  # Higher is better
+            scores.append(gmm.score(X_syn.dataframe()))  # Higher is better
 
         scores_np = np.asarray(scores)
         scores_np = (scores_np - np.min(scores_np)) / (

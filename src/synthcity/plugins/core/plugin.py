@@ -4,7 +4,7 @@ from abc import ABCMeta, abstractmethod
 from importlib.abc import Loader
 from os.path import basename
 from pathlib import Path
-from typing import Any, Callable, Dict, Generator, List, Optional, Type
+from typing import Any, Callable, Dict, Generator, List, Optional, Type, Union
 
 # third party
 import pandas as pd
@@ -15,8 +15,15 @@ import synthcity.logger as log
 from synthcity.metrics.plots import (
     plot_associations_comparison,
     plot_marginal_comparison,
+    plot_tsne,
 )
 from synthcity.plugins.core.constraints import Constraints
+from synthcity.plugins.core.dataloader import (
+    DataLoader,
+    GenericDataLoader,
+    TimeSeriesDataLoader,
+    create_from_info,
+)
 from synthcity.plugins.core.distribution import Distribution
 from synthcity.plugins.core.schema import Schema
 from synthcity.utils.constants import DEVICE
@@ -34,8 +41,6 @@ class Plugin(metaclass=ABCMeta):
     If any method implementation is missing, the class constructor will fail.
 
     Constructor Args:
-        dp_epsilon: float.
-            Privacy parameter dp_epsilon in differential privacy. Must be in range [0, float(np.inf)].
         strict: float.
             If True, is raises an exception if the generated data is not following the requested constraints. If False, it returns only the rows that match the constraints.
     """
@@ -46,26 +51,14 @@ class Plugin(metaclass=ABCMeta):
 
     def __init__(
         self,
-        dp_enabled: bool = True,
-        dp_epsilon: float = 1.0,
-        dp_delta: float = 0,
         sampling_strategy: str = "marginal",  # uniform, marginal
         sampling_patience: int = 500,
-        sensitive_columns: list = [],
         strict: bool = True,
-        # survival analysis
-        target_column: Optional[str] = None,
-        time_to_event_column: Optional[str] = None,
-        time_horizons: Optional[List] = None,
         device: Any = DEVICE,
     ) -> None:
         """
 
         Args:
-            dp_enabled: bool
-                If True, the internal samplings are done from differentially private distributions.
-            dp_epsilon: float
-                Privacy parameter dp_epsilon in differential privacy. Must be in range [0, float(np.inf)].
             sampling_strategy: str
                 Internal sampling strategy [marginal, uniform].
             strict: bool
@@ -73,12 +66,8 @@ class Plugin(metaclass=ABCMeta):
 
         """
         self._schema: Optional[Schema] = None
-        self.dp_epsilon = dp_epsilon
-        self.dp_enabled = dp_enabled
-        self.dp_delta = dp_delta
         self.sampling_strategy = sampling_strategy
         self.sampling_patience = sampling_patience
-        self.sensitive_columns = sensitive_columns
         self.strict = strict
         self.device = device
 
@@ -118,34 +107,33 @@ class Plugin(metaclass=ABCMeta):
         return cls.type() + "." + cls.name()
 
     @validate_arguments(config=dict(arbitrary_types_allowed=True))
-    def fit(self, X: pd.DataFrame, *args: Any, **kwargs: Any) -> Any:
+    def fit(self, X: Union[DataLoader, pd.DataFrame], *args: Any, **kwargs: Any) -> Any:
         """Training method the synthetic data plugin.
 
         Args:
-            X: DataFrame.
+            X: DataLoader.
                 The reference dataset.
 
         Returns:
             self
         """
-        X.columns = X.columns.astype(str)
+        if isinstance(X, (pd.DataFrame)):
+            X = GenericDataLoader(X)
+
+        self.data_info = X.info()
         self._schema = Schema(
             data=X,
-            dp_enabled=self.dp_enabled,
-            dp_epsilon=self.dp_epsilon,
-            dp_delta=self.dp_delta,
             sampling_strategy=self.sampling_strategy,
         )
-        self._original_shape = X.shape
 
         return self._fit(X, *args, **kwargs)
 
     @abstractmethod
-    def _fit(self, X: pd.DataFrame, *args: Any, **kwargs: Any) -> "Plugin":
+    def _fit(self, X: DataLoader, *args: Any, **kwargs: Any) -> "Plugin":
         """Internal training method the synthetic data plugin.
 
         Args:
-            X: DataFrame.
+            X: DataLoader.
                 The reference dataset.
 
         Returns:
@@ -159,7 +147,7 @@ class Plugin(metaclass=ABCMeta):
         count: Optional[int] = None,
         constraints: Optional[Constraints] = None,
         **kwargs: Any,
-    ) -> pd.DataFrame:
+    ) -> DataLoader:
         """Synthetic data generation method.
 
         Args:
@@ -175,7 +163,7 @@ class Plugin(metaclass=ABCMeta):
             raise RuntimeError("Fit the model first")
 
         if count is None:
-            count = self._original_shape[0]
+            count = self.data_info["len"]
 
         gen_constraints = self.schema().as_constraints()
         if constraints is not None:
@@ -183,16 +171,17 @@ class Plugin(metaclass=ABCMeta):
 
         syn_schema = Schema.from_constraints(gen_constraints)
 
-        X_syn = pd.DataFrame(
-            self._generate(count=count, syn_schema=syn_schema, **kwargs)
-        )
+        X_syn = self._generate(count=count, syn_schema=syn_schema, **kwargs)
 
-        if not gen_constraints.is_valid(X_syn) and self.strict:
+        if not X_syn.satisfies(gen_constraints) and self.strict:
             raise RuntimeError(
                 f"Plugin {self.name()} failed to meet the synthetic constraints."
             )
 
-        return gen_constraints.match(X_syn)
+        if self.strict:
+            return X_syn.match(gen_constraints)
+
+        return X_syn
 
     @abstractmethod
     def _generate(
@@ -200,7 +189,7 @@ class Plugin(metaclass=ABCMeta):
         count: int,
         syn_schema: Schema,
         **kwargs: Any,
-    ) -> pd.DataFrame:
+    ) -> DataLoader:
         """Internal synthetic data generation method.
 
         Args:
@@ -214,9 +203,10 @@ class Plugin(metaclass=ABCMeta):
         """
         ...
 
+    @validate_arguments(config=dict(arbitrary_types_allowed=True))
     def _safe_generate(
         self, gen_cbk: Callable, count: int, syn_schema: Schema, **kwargs: Any
-    ) -> pd.DataFrame:
+    ) -> DataLoader:
         constraints = syn_schema.as_constraints()
 
         data_synth = pd.DataFrame([], columns=self.schema().features())
@@ -229,22 +219,56 @@ class Plugin(metaclass=ABCMeta):
             # validate schema
             iter_samples_df = self.schema().adapt_dtypes(iter_samples_df)
 
-            iter_synth_valid = constraints.match(iter_samples_df)
-            data_synth = pd.concat([data_synth, iter_synth_valid], ignore_index=True)
+            if self.strict:
+                iter_samples_df = constraints.match(iter_samples_df)
+
+            data_synth = pd.concat([data_synth, iter_samples_df], ignore_index=True)
 
             if len(data_synth) >= count:
                 break
 
         data_synth = self.schema().adapt_dtypes(data_synth).head(count)
 
-        return data_synth
+        return create_from_info(data_synth, self.data_info)
 
     @validate_arguments(config=dict(arbitrary_types_allowed=True))
-    def schema_includes(self, other: pd.DataFrame) -> bool:
+    def _safe_generate_time_series(
+        self, gen_cbk: Callable, count: int, syn_schema: Schema, **kwargs: Any
+    ) -> DataLoader:
+        assert self.data_info["data_type"] == "time_series"
+
+        constraints = syn_schema.as_constraints()
+
+        data_synth = pd.DataFrame([], columns=self.schema().features())
+        for it in range(self.sampling_patience):
+            # sample
+            static, temporal, outcome = gen_cbk(count, **kwargs)
+            loader = TimeSeriesDataLoader(
+                temporal_data=temporal, static_data=static, outcome=outcome
+            )
+            iter_samples_df = loader.dataframe()
+
+            # validate schema
+            iter_samples_df = self.schema().adapt_dtypes(iter_samples_df)
+
+            if self.strict:
+                iter_samples_df = constraints.match(iter_samples_df)
+
+            data_synth = pd.concat([data_synth, iter_samples_df], ignore_index=True)
+
+            if len(data_synth) >= count:
+                break
+
+        data_synth = self.schema().adapt_dtypes(data_synth).head(count)
+
+        return create_from_info(data_synth, self.data_info)
+
+    @validate_arguments(config=dict(arbitrary_types_allowed=True))
+    def schema_includes(self, other: Union[DataLoader, pd.DataFrame]) -> bool:
         """Helper method to test if the reference schema includes a Dataset
 
         Args:
-            other: DataFrame.
+            other: DataLoader.
                 The dataset to test
 
         Returns:
@@ -262,21 +286,31 @@ class Plugin(metaclass=ABCMeta):
         return self._schema
 
     @validate_arguments(config=dict(arbitrary_types_allowed=True))
-    def plot(self, plt: Any, X: pd.DataFrame, *args: Any, **kwargs: Any) -> Any:
+    def plot(
+        self,
+        plt: Any,
+        X: DataLoader,
+        count: Optional[int] = None,
+        plots: list = ["marginal", "associations", "tsne"],
+    ) -> Any:
         """Plot the real-synthetic distributions.
 
         Args:
             plt: output
-            X: DataFrame.
+            X: DataLoader.
                 The reference dataset.
 
         Returns:
             self
         """
-        X_syn = self.generate()
+        X_syn = self.generate(count=count)
 
-        plot_marginal_comparison(plt, X, X_syn)
-        plot_associations_comparison(plt, X, X_syn)
+        if "marginal" in plots:
+            plot_marginal_comparison(plt, X, X_syn)
+        if "associations" in plots:
+            plot_associations_comparison(plt, X, X_syn)
+        if "tsne" in plots:
+            plot_tsne(plt, X, X_syn)
 
 
 class PluginLoader:
@@ -340,7 +374,7 @@ class PluginLoader:
     def add(self, name: str, cls: Type) -> "PluginLoader":
         """Add a new plugin"""
         if name in self._plugins:
-            raise ValueError(f"Plugin {name} already exists.")
+            log.info(f"Plugin {name} already exists. Overwriting")
 
         if not issubclass(cls, self._expected_type):
             raise ValueError(

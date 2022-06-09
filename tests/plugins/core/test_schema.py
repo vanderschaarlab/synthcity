@@ -43,24 +43,16 @@ def test_schema_from_constraint() -> None:
     assert schema.domain == reloaded.domain
 
 
-@pytest.mark.parametrize("dp_enabled", [False, True])
-@pytest.mark.parametrize("dp_epsilon", [1, 10])
 @pytest.mark.parametrize("sampling_strategy", ["marginal", "uniform"])
-def test_schema_sample(
-    dp_enabled: float, dp_epsilon: float, sampling_strategy: str
-) -> None:
+def test_schema_sample(sampling_strategy: str) -> None:
     data = load_breast_cancer(as_frame=True)["data"]
     schema = Schema(
         data=data,
-        dp_enabled=dp_enabled,
-        dp_epsilon=dp_epsilon,
         sampling_strategy=sampling_strategy,
     )
 
     assert schema.sample(10).shape == (10, data.shape[1])
     assert schema.sampling_strategy == sampling_strategy
-    assert schema.dp_epsilon == dp_epsilon
-    assert schema.dp_enabled == dp_enabled
 
 
 def test_schema_inclusion() -> None:

@@ -1,3 +1,6 @@
+# stdlib
+from pathlib import Path
+
 # third party
 import pytest
 from lifelines.datasets import load_rossi
@@ -5,6 +8,10 @@ from sklearn.datasets import load_diabetes, load_iris
 
 # synthcity absolute
 from synthcity.benchmark import Benchmarks
+from synthcity.plugins.core.dataloader import (
+    GenericDataLoader,
+    SurvivalAnalysisDataLoader,
+)
 
 
 def test_benchmark_sanity() -> None:
@@ -16,8 +23,7 @@ def test_benchmark_sanity() -> None:
             "marginal_distributions",
             "dummy_sampler",
         ],
-        X,
-        sensitive_columns=["sex"],
+        GenericDataLoader(X, sensitive_columns=["sex"]),
         metrics={"sanity": ["common_rows_proportion", "data_mismatch_score"]},
     )
 
@@ -34,8 +40,7 @@ def test_benchmark_invalid_plugin() -> None:
                 "invalid",
                 "uniform_sampler",
             ],
-            X,
-            sensitive_columns=["sex"],
+            GenericDataLoader(X, sensitive_columns=["sex"]),
             metrics={"sanity": ["common_rows_proportion", "data_mismatch_score"]},
         )
 
@@ -48,8 +53,7 @@ def test_benchmark_invalid_metric() -> None:
         [
             "uniform_sampler",
         ],
-        X,
-        sensitive_columns=["sex"],
+        GenericDataLoader(X, sensitive_columns=["sex"]),
         metrics={"sanity": ["invalid"]},
     )
     assert len(score["uniform_sampler"]) == 0
@@ -63,9 +67,9 @@ def test_benchmark_custom_target() -> None:
         [
             "uniform_sampler",
         ],
-        X,
-        sensitive_columns=["sex"],
-        target_column="sepal width (cm)",
+        GenericDataLoader(
+            X, sensitive_columns=["sex"], target_column="sepal width (cm)"
+        ),
         metrics={
             "performance": [
                 "linear_model",
@@ -82,15 +86,17 @@ def test_benchmark_survival_analysis() -> None:
             [
                 "uniform_sampler",
             ],
-            df,
+            SurvivalAnalysisDataLoader(
+                df, target_column=None, time_to_event_column="week", time_horizons=[30]
+            ),
             task_type="survival_analysis",
-            target_column=None,
-            time_to_event_column="week",
-            time_horizons=[30],
             metrics={
                 "performance": [
                     "linear_model",
                 ]
+            },
+            plugin_kwargs={
+                "survival_gan": {"n_iter": 100},
             },
         )
 
@@ -99,15 +105,20 @@ def test_benchmark_survival_analysis() -> None:
             [
                 "uniform_sampler",
             ],
-            df,
+            SurvivalAnalysisDataLoader(
+                df,
+                target_column="arrest",
+                time_to_event_column=None,
+                time_horizons=[30],
+            ),
             task_type="survival_analysis",
-            target_column="arrest",
-            time_to_event_column=None,
-            time_horizons=[30],
             metrics={
                 "performance": [
                     "linear_model",
                 ]
+            },
+            plugin_kwargs={
+                "survival_gan": {"n_iter": 100},
             },
         )
 
@@ -116,11 +127,13 @@ def test_benchmark_survival_analysis() -> None:
             [
                 "uniform_sampler",
             ],
-            df,
+            SurvivalAnalysisDataLoader(
+                df,
+                target_column="arrest",
+                time_to_event_column="week",
+                time_horizons=None,
+            ),
             task_type="survival_analysis",
-            target_column="arrest",
-            time_to_event_column="week",
-            time_horizons=None,
             metrics={
                 "performance": [
                     "linear_model",
@@ -131,17 +144,49 @@ def test_benchmark_survival_analysis() -> None:
     score = Benchmarks.evaluate(
         [
             "uniform_sampler",
-            "marginal_distributions",
         ],
-        df,
+        SurvivalAnalysisDataLoader(
+            df, target_column="arrest", time_to_event_column="week", time_horizons=[30]
+        ),
         task_type="survival_analysis",
-        target_column="arrest",
-        time_to_event_column="week",
-        time_horizons=[30],
         metrics={
             "performance": [
                 "linear_model",
             ]
         },
+        plugin_kwargs={
+            "survival_gan": {"n_iter": 100},
+        },
     )
     print(score)
+
+
+def test_benchmark_workspace_cache() -> None:
+    df = load_rossi()
+
+    workspace = Path("workspace_test")
+    try:
+        workspace.unlink()
+    except BaseException:
+        pass
+
+    Benchmarks.evaluate(
+        [
+            "uniform_sampler",
+        ],
+        SurvivalAnalysisDataLoader(
+            df, target_column="arrest", time_to_event_column="week", time_horizons=[30]
+        ),
+        task_type="survival_analysis",
+        metrics={
+            "performance": [
+                "linear_model",
+            ]
+        },
+        workspace=workspace,
+        plugin_kwargs={
+            "survival_gan": {"n_iter": 100},
+        },
+    )
+
+    assert workspace.exists()

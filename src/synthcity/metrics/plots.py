@@ -1,4 +1,3 @@
-# Adapted from https://github.com/daanknoors/synthetic_data_generation
 # stdlib
 from typing import Any
 
@@ -7,9 +6,11 @@ import numpy as np
 import pandas as pd
 import seaborn as sns
 from pydantic import validate_arguments
+from sklearn.manifold import TSNE
 
 # synthcity absolute
 from synthcity.metrics.eval_statistical import FeatureCorrelation, JensenShannonDistance
+from synthcity.plugins.core.dataloader import DataLoader
 
 COLOR_PALETTE = ["#2b2d42", "#d90429"]
 LABELS = ["real", "syn"]
@@ -17,7 +18,7 @@ LABELS = ["real", "syn"]
 
 @validate_arguments(config=dict(arbitrary_types_allowed=True))
 def plot_marginal_comparison(
-    plt: Any, X_gt: pd.DataFrame, X_syn: pd.DataFrame, normalize: bool = True
+    plt: Any, X_gt: DataLoader, X_syn: DataLoader, normalize: bool = True
 ) -> None:
     evaluator = JensenShannonDistance(n_histogram_bins=10)
     stats_, stats_gt, stats_syn = evaluator._evaluate_stats(X_gt, X_syn)
@@ -82,8 +83,8 @@ def plot_marginal_comparison(
 @validate_arguments(config=dict(arbitrary_types_allowed=True))
 def plot_associations_comparison(
     plt: Any,
-    X_gt: pd.DataFrame,
-    X_syn: pd.DataFrame,
+    X_gt: DataLoader,
+    X_syn: DataLoader,
     nom_nom_assoc: str = "theil",
     nominal_columns: str = "auto",
 ) -> None:
@@ -91,7 +92,7 @@ def plot_associations_comparison(
         nom_nom_assoc=nom_nom_assoc, nominal_columns=nominal_columns
     )
     stats_gt, stats_syn = evaluator._evaluate_stats(X_gt, X_syn)
-    pcd = evaluator.evaluate(X_gt, X_gt, X_syn)["joint"]
+    pcd = evaluator.evaluate(X_gt, X_syn)["joint"]
 
     fig, ax = plt.subplots(1, 2, figsize=(12, 10))
     cbar_ax = fig.add_axes([0.91, 0.3, 0.01, 0.4])
@@ -137,3 +138,24 @@ def plot_associations_comparison(
     cbar.ax.tick_params(labelsize=10)
 
     ax[0].set_ylabel("Correlation")
+
+
+@validate_arguments(config=dict(arbitrary_types_allowed=True))
+def plot_tsne(
+    plt: Any,
+    X_gt: DataLoader,
+    X_syn: DataLoader,
+) -> None:
+    fig, ax = plt.subplots(1, 1, figsize=(12, 10))
+
+    tsne_gt = TSNE(n_components=2, random_state=0)
+    proj_gt = pd.DataFrame(tsne_gt.fit_transform(X_gt.dataframe()))
+
+    tsne_syn = TSNE(n_components=2, random_state=0)
+    proj_syn = pd.DataFrame(tsne_syn.fit_transform(X_syn.dataframe()))
+
+    ax.scatter(x=proj_gt[0], y=proj_gt[1], s=10, label="Real data")
+    ax.scatter(x=proj_syn[0], y=proj_syn[1], s=10, label="Synthetic data")
+
+    ax.legend(loc="upper left")
+    ax.set_ylabel("t-SNE plot")
