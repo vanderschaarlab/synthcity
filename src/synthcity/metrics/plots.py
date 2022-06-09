@@ -154,7 +154,8 @@ def plot_tsne(
     tsne_syn = TSNE(n_components=2, random_state=0)
     proj_syn = pd.DataFrame(tsne_syn.fit_transform(X_syn.dataframe()))
 
-    ax.scatter(x=proj_gt[0], y=proj_gt[1], s=3, alpha=0.8, label="Real data")
-    ax.scatter(x=proj_syn[0], y=proj_syn[1], s=3, alpha=0.8, label="Synthetic data")
+    ax.scatter(x=proj_gt[0], y=proj_gt[1], s=10, label="Real data")
+    ax.scatter(x=proj_syn[0], y=proj_syn[1], s=10, label="Synthetic data")
 
+    ax.legend(loc="upper left")
     ax.set_ylabel("t-SNE plot")

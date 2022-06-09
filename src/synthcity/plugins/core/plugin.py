@@ -286,7 +286,12 @@ class Plugin(metaclass=ABCMeta):
         return self._schema
 
     @validate_arguments(config=dict(arbitrary_types_allowed=True))
-    def plot(self, plt: Any, X: DataLoader, *args: Any, **kwargs: Any) -> Any:
+    def plot(
+        self,
+        plt: Any,
+        X: DataLoader,
+        plots: list = ["marginal", "associations", "tsne"],
+    ) -> Any:
         """Plot the real-synthetic distributions.
 
         Args:
@@ -299,9 +304,12 @@ class Plugin(metaclass=ABCMeta):
         """
         X_syn = self.generate()
 
-        plot_marginal_comparison(plt, X, X_syn)
-        plot_associations_comparison(plt, X, X_syn)
-        plot_tsne(plt, X, X_syn)
+        if "marginal" in plots:
+            plot_marginal_comparison(plt, X, X_syn)
+        if "associations" in plots:
+            plot_associations_comparison(plt, X, X_syn)
+        if "tsne" in plots:
+            plot_tsne(plt, X, X_syn)
 
 
 class PluginLoader:
