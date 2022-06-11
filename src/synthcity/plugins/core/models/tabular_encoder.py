@@ -247,7 +247,7 @@ class TabularEncoder(TransformerMixin, BaseEstimator):
         output = np.zeros((len(transformed), column_transform_info.output_dimensions))
         output[:, 0] = transformed[f"{column_name}.normalized"].to_numpy()
         index = transformed[f"{column_name}.component"].to_numpy().astype(int)
-        output[np.arange(index.size), index + 1] = 1.0
+        output[np.arange(index.size), index + 1] = 1
 
         return pd.DataFrame(
             output,
