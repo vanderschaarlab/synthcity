@@ -48,22 +48,22 @@ class BinEncoder(TransformerMixin, BaseEstimator):
         self.categorical_limit = categorical_limit
 
     @validate_arguments(config=dict(arbitrary_types_allowed=True))
-    def _fit_continuous(self, data: pd.DataFrame) -> ColumnTransformInfo:
+    def _fit_continuous(self, data: pd.Series) -> ColumnTransformInfo:
         """Train Bayesian GMM for continuous columns.
 
         Args:
-            data (pd.DataFrame):
+            data (pd.Series):
                 A dataframe containing a column.
 
         Returns:
             namedtuple:
                 A ``ColumnTransformInfo`` object.
         """
-        column_name = data.columns[0]
+        column_name = data.name
         gm = BayesGMMTransformer(
             max_clusters=self.max_clusters, weight_threshold=self.weight_threshold
         )
-        gm.fit(data, [column_name])
+        gm.fit(data.to_frame(), [column_name])
         num_components = sum(gm.valid_component_indicator)
 
         return ColumnTransformInfo(
@@ -74,7 +74,7 @@ class BinEncoder(TransformerMixin, BaseEstimator):
         )
 
     def fit(
-        self, raw_data: pd.DataFrame, discrete_columns: Optional[List] = None
+        self, raw_data: pd.Series, discrete_columns: Optional[List] = None
     ) -> "BinEncoder":
         """Fit the ``BinEncoder``.
 
@@ -92,17 +92,17 @@ class BinEncoder(TransformerMixin, BaseEstimator):
         self._column_transform_info = {}
         for column_name in raw_data.columns:
             if column_name not in discrete_columns:
-                column_transform_info = self._fit_continuous(raw_data[[column_name]])
+                column_transform_info = self._fit_continuous(raw_data[column_name])
                 self._column_transform_info[column_name] = column_transform_info
 
         return self
 
     def _transform_continuous(
-        self, column_transform_info: ColumnTransformInfo, data: pd.DataFrame
-    ) -> pd.DataFrame:
-        column_name = data.columns[0]
+        self, column_transform_info: ColumnTransformInfo, data: pd.Series
+    ) -> pd.Series:
+        column_name = data.name
         gm = column_transform_info.transform
-        transformed = gm.transform(data, [column_name])
+        transformed = gm.transform(data.to_frame(), [column_name])
 
         return transformed[f"{column_name}.component"].to_numpy().astype(int)
 
@@ -115,7 +115,7 @@ class BinEncoder(TransformerMixin, BaseEstimator):
             column_transform_info = self._column_transform_info[column_name]
 
             output[column_name] = self._transform_continuous(
-                column_transform_info, raw_data[[column_name]]
+                column_transform_info, raw_data[column_name]
             )
 
         return output
@@ -493,3 +493,71 @@ class TimeSeriesTabularEncoder(TransformerMixin, BaseEstimator):
         ), self.temporal_encoder.activation_layout(
             discrete_activation, continuous_activation
         )
+
+
+class TimeSeriesBinEncoder(TransformerMixin, BaseEstimator):
+    """Time series Bin encoder.
+
+    Model continuous columns with a BayesianGMM and normalized to a scalar [0, 1] and a vector.
+    Discrete columns are encoded using a scikit-learn OneHotEncoder.
+    """
+
+    @validate_arguments(config=dict(arbitrary_types_allowed=True))
+    def __init__(
+        self,
+        max_clusters: int = 10,
+        weight_threshold: float = 0.001,
+        categorical_limit: int = 15,
+    ) -> None:
+        """Create a data transformer.
+
+        Args:
+            max_clusters (int):
+                Maximum number of Gaussian distributions in Bayesian GMM.
+            weight_threshold (float):
+                Weight threshold for a Gaussian distribution to be kept.
+        """
+        self.encoder = BinEncoder(
+            max_clusters=max_clusters,
+            weight_threshold=weight_threshold,
+            categorical_limit=categorical_limit,
+        )
+
+    def _prepare(
+        self,
+        static_data: pd.DataFrame,
+        temporal_data: List[pd.DataFrame],
+    ) -> pd.DataFrame:
+        temporal_init = np.asarray(temporal_data)[:, 0, :].squeeze()
+        temporal_init_df = pd.DataFrame(temporal_init, columns=temporal_data[0].columns)
+
+        return pd.concat([static_data, temporal_init_df], axis=1)
+
+    def fit(
+        self,
+        static_data: pd.DataFrame,
+        temporal_data: List[pd.DataFrame],
+        discrete_columns: Optional[List] = None,
+    ) -> "TimeSeriesBinEncoder":
+        """Fit the TimeSeriesBinEncoder"""
+
+        data = self._prepare(static_data, temporal_data)
+
+        self.encoder.fit(data, discrete_columns=discrete_columns)
+        return self
+
+    @validate_arguments(config=dict(arbitrary_types_allowed=True))
+    def transform(
+        self,
+        static_data: pd.DataFrame,
+        temporal_data: List[pd.DataFrame],
+    ) -> pd.DataFrame:
+        """Take raw data and output a matrix data."""
+        data = self._prepare(static_data, temporal_data)
+        return self.encoder.transform(data)
+
+    @validate_arguments(config=dict(arbitrary_types_allowed=True))
+    def fit_transform(
+        self, static: pd.DataFrame, temporal: List[pd.DataFrame]
+    ) -> pd.DataFrame:
+        return self.fit(static, temporal).transform(static, temporal)
