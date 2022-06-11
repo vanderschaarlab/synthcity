@@ -31,21 +31,23 @@ class Serializable:
             derived_module_path = path
             break
 
-        if derived_module_path is None:
-            raise RuntimeError(f"cannot find module path for {search_module}")
+        self.module_relative_path: Optional[Path] = None
 
-        relative_path = Path(
-            os.path.relpath(derived_module_path, start=module_path.parent)
-        )
-
-        if not (module_parent_path / relative_path).resolve().exists():
-            raise RuntimeError(
-                f"cannot find relative module path for {relative_path.resolve()}"
+        if derived_module_path is not None:
+            relative_path = Path(
+                os.path.relpath(derived_module_path, start=module_path.parent)
             )
 
-        self.module_relative_path = relative_path
+            if not (module_parent_path / relative_path).resolve().exists():
+                raise RuntimeError(
+                    f"cannot find relative module path for {relative_path.resolve()}"
+                )
+
+            self.module_relative_path = relative_path
+
         self.module_name = self.__class__.__module__
         self.class_name = self.__class__.__qualname__
+        self.raw_class = self.__class__
 
     def save_dict(self) -> dict:
         members: dict = {}
@@ -62,6 +64,7 @@ class Serializable:
             "data": members,
             "version": self.version(),
             "class_name": self.class_name,
+            "class": self.raw_class,
             "module_name": self.module_name,
             "module_relative_path": self.module_relative_path,
         }
@@ -84,22 +87,23 @@ class Serializable:
                 f"Invalid synthcity API version. Current version is {Serializable.version()}, but the object was serialized using version {representation['version']}"
             )
 
-        module_path = module_parent_path / representation["module_relative_path"]
+        if representation["module_relative_path"] is not None:
+            module_path = module_parent_path / representation["module_relative_path"]
 
-        if not module_path.exists():
-            raise RuntimeError(f"Unknown module path {module_path}")
+            if not module_path.exists():
+                raise RuntimeError(f"Unknown module path {module_path}")
 
-        spec = importlib.util.spec_from_file_location(
-            representation["module_name"], module_path
-        )
+            spec = importlib.util.spec_from_file_location(
+                representation["module_name"], module_path
+            )
 
-        if not isinstance(spec.loader, Loader):
-            raise RuntimeError("invalid synthcity object type")
+            if not isinstance(spec.loader, Loader):
+                raise RuntimeError("invalid synthcity object type")
 
-        mod = importlib.util.module_from_spec(spec)
-        spec.loader.exec_module(mod)
+            mod = importlib.util.module_from_spec(spec)
+            spec.loader.exec_module(mod)
 
-        cls = getattr(mod, representation["class_name"])
+        cls = representation["class"]
 
         obj = cls()
 
