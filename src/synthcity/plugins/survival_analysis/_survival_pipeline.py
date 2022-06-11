@@ -27,7 +27,7 @@ class SurvivalPipeline(Plugin):
     @validate_arguments(config=dict(arbitrary_types_allowed=True))
     def __init__(
         self,
-        method: str,
+        method: str = "adsgan",
         strategy: str = "survival_function",  # uncensoring, survival_function
         uncensoring_model: str = "survival_function_regression",
         device: Any = DEVICE,

@@ -20,6 +20,7 @@ from synthcity.plugins.core.dataloader import DataLoader
 from synthcity.plugins.core.distribution import Distribution
 from synthcity.plugins.core.plugin import Plugin
 from synthcity.plugins.core.schema import Schema
+from synthcity.plugins.core.serializable import Serializable
 from synthcity.utils.dp import dp_conditional_distribution
 from synthcity.utils.statistics import (
     cardinality,
@@ -30,7 +31,7 @@ from synthcity.utils.statistics import (
 APPair = namedtuple("APPair", ["attribute", "parents"])
 
 
-class PrivBayes:
+class PrivBayes(Serializable):
     """PrivBayes is a differentially private method for releasing high-dimensional data.
 
     Given a dataset D, PrivBayes first constructs a Bayesian network N , which
@@ -49,6 +50,7 @@ class PrivBayes:
         epsilon_split: float = 0.3,
         score_function: str = "R",
     ) -> None:
+        super().__init__()
         self.epsilon = epsilon
         self.theta_usefulness = theta_usefulness
         self.epsilon_split = epsilon_split  # also called Beta in paper
@@ -61,8 +63,10 @@ class PrivBayes:
         self.dtypes_fit_ = data.dtypes
 
         self._greedy_bayes(data)
-        self._compute_conditional_distributions(data)
-        self.model_ = BayesianNetwork.from_CPTs("PrivBayes", self.cpt_.values())
+        cpt_ = self._compute_conditional_distributions(data)
+        self.model_ = BayesianNetwork.from_CPTs(
+            "PrivBayesNetwork", cpt_.values()
+        ).as_dict()
         return self
 
     def sample(self, n_records: int) -> pd.DataFrame:
@@ -190,7 +194,7 @@ class PrivBayes:
 
     @validate_arguments(config=dict(arbitrary_types_allowed=True))
     def _compute_conditional_distributions(self, data: pd.DataFrame) -> Any:
-        self.cpt_ = dict()
+        cpt_ = dict()
 
         local_epsilon = self.epsilon * (1 - self.epsilon_split) / len(self.columns_)
 
@@ -203,8 +207,8 @@ class PrivBayes:
             dp_cpt = dp_conditional_distribution(
                 data[attributes], epsilon=local_epsilon
             )
-            self.cpt_[pair.attribute] = dp_cpt
-        return self
+            cpt_[pair.attribute] = dp_cpt
+        return cpt_
 
     @validate_arguments(config=dict(arbitrary_types_allowed=True))
     def _generate_data(self, n_records: int) -> np.ndarray:
@@ -225,7 +229,7 @@ class PrivBayes:
         """samples a value column for column by conditioning for parents"""
         record: Dict[str, list] = {}
         for col_idx, pair in enumerate(self.network_):
-            node = self.model_[pair.attribute]
+            node = BayesianNetwork.from_dict(self.model_)[pair.attribute]
             node_cpt = node.cpt
             node_states = node.states
 

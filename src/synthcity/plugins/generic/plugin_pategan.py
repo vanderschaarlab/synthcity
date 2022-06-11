@@ -32,9 +32,10 @@ from synthcity.plugins.core.distribution import (
 from synthcity.plugins.core.models import TabularGAN
 from synthcity.plugins.core.plugin import Plugin
 from synthcity.plugins.core.schema import Schema
+from synthcity.plugins.core.serializable import Serializable
 
 
-class Teachers:
+class Teachers(Serializable):
     @validate_arguments(config=dict(arbitrary_types_allowed=True))
     def __init__(
         self,
@@ -43,6 +44,8 @@ class Teachers:
         lamda: float = 1,  # PATE noise size
         template: str = "xgboost",
     ) -> None:
+        super().__init__()
+
         self.n_teachers = n_teachers
         self.partition_size = partition_size
         self.lamda = lamda
@@ -135,7 +138,7 @@ class Teachers:
         return n0, n1, out
 
 
-class PATEGAN:
+class PATEGAN(Serializable):
     """Basic PATE-GAN framework."""
 
     @validate_arguments(config=dict(arbitrary_types_allowed=True))
@@ -168,6 +171,8 @@ class PATEGAN:
         alpha: int = 20,
         encoder: Any = None,
     ) -> None:
+        super().__init__()
+
         self.max_iter = max_iter
         self.generator_n_layers_hidden = generator_n_layers_hidden
         self.generator_n_units_hidden = generator_n_units_hidden
