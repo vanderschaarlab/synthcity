@@ -36,7 +36,7 @@ class MockPlugin(Plugin):
 
 def test_mock_plugin_fail() -> None:
     with pytest.raises(TypeError):
-        AbstractMockPlugin()
+        AbstractMockPlugin()  # type: ignore
 
 
 def test_mock_plugin_ok() -> None:
@@ -46,3 +46,8 @@ def test_mock_plugin_ok() -> None:
     assert plugin.type() == "debug"
     assert plugin.fit(GenericDataLoader([1])) == plugin
     assert plugin.generate().values == [1]
+
+    buff = plugin.save()
+    reloaded = Plugin.load(buff)
+
+    assert reloaded.name() == plugin.name()

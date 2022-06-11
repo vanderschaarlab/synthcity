@@ -76,11 +76,12 @@ class DeephitSurvivalAnalysis(SurvivalAnalysisPlugin):
 
         y_train = labtrans.fit_transform(*get_target((T_train, E_train)))
         y_val = labtrans.transform(*get_target((T_val, E_val)))
+        self.duration_index = labtrans.cuts
 
         in_features = X_train.shape[1]
         out_features = labtrans.out_features
 
-        net = torch.nn.Sequential(
+        self.net = torch.nn.Sequential(
             torch.nn.Linear(in_features, self.dim_hidden),
             torch.nn.ReLU(),
             torch.nn.Dropout(self.dropout),
@@ -93,18 +94,17 @@ class DeephitSurvivalAnalysis(SurvivalAnalysisPlugin):
             torch.nn.Linear(self.dim_hidden, out_features),
         ).to(self.device)
 
-        self.model = DeepHitSingle(
-            net,
+        training_model = DeepHitSingle(
+            self.net,
             tt.optim.Adam,
             alpha=self.alpha,
             sigma=self.sigma,
-            duration_index=labtrans.cuts,
+            duration_index=self.duration_index,
         )
-
-        self.model.optimizer.set_lr(self.lr)
+        training_model.optimizer.set_lr(self.lr)
 
         callbacks = [tt.callbacks.EarlyStopping(patience=self.patience)]
-        self.model.fit(
+        training_model.fit(
             X_train,
             y_train,
             self.batch_size,
@@ -114,13 +114,20 @@ class DeephitSurvivalAnalysis(SurvivalAnalysisPlugin):
             verbose=False,
         )
 
+        self.net.eval()
+        self.model = DeepHitSingle(
+            self.net,
+            alpha=self.alpha,
+            sigma=self.sigma,
+            duration_index=self.duration_index,
+        )
+
         return self
 
     @validate_arguments(config=dict(arbitrary_types_allowed=True))
     def predict(self, X: pd.DataFrame, time_horizons: List) -> pd.DataFrame:
         "Predict risk"
 
-        self.model.net.eval()
         Xnp = np.asarray(X).astype("float32")
         surv = self.model.predict_surv_df(Xnp).T
 

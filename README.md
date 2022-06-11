@@ -24,12 +24,12 @@ The library can be installed using
 $ pip install .
 ```
 
-## :boom: Sample Usage
+## :boom: Sample Usage: Generic data
 List available generators
 ```python
 from synthcity.plugins import Plugins
 
-Plugins().list()
+Plugins(categories=["generic"]).list()
 ```
 
 Load and train a generator
@@ -55,9 +55,9 @@ Generate new synthetic data under some constraints
 # Constraint: target <= 100
 from synthcity.plugins.core.constraints import Constraints
 
-constraints = Constraints(rules = [("target", "<=", 100)])
+constraints = Constraints(rules=[("target", "<=", 100)])
 
-generated = syn_model.generate(count = 10, constraints = constraints)
+generated = syn_model.generate(count=10, constraints=constraints)
 
 assert (generated["target"] <= 100).any()
 ```
@@ -65,18 +65,77 @@ assert (generated["target"] <= 100).any()
 Benchmark the quality of the plugins
 ```python
 from synthcity.benchmark import Benchmarks
-constraints = Constraints(rules = [("target", "ge", 150)])
+from synthcity.plugins.core.dataloader import GenericDataLoader
+
+loader = GenericDataLoader(X, target_column="target", sensitive_columns=["sex"])
+
+constraints = Constraints(rules=[("target", "ge", 150)])
 
 score = Benchmarks.evaluate(
-    ["marginal_distributions", "pategan"],
-    X, y,
-    sensitive_columns = ["sex"],
-    synthetic_size = 1000,
-    synthetic_constraints = constraints,
-    repeats = 5,
+    ["marginal_distributions"],
+    loader,
+    synthetic_size=1000,
+    synthetic_constraints=constraints,
+    metrics={"performance": ["linear_model"]},
+    repeats=3,
 )
+Benchmarks.print(score)
 ```
 
+## :boom: Sample Usage: Survival analysis
+List available generators
+```python
+from synthcity.plugins import Plugins
+
+Plugins(categories=["survival_analysis"]).list()
+```
+Generate new data
+```python
+from lifelines.datasets import load_rossi
+from synthcity.plugins.core.dataloader import SurvivalAnalysisDataLoader
+from synthcity.plugins import Plugins
+
+X = load_rossi()
+data = SurvivalAnalysisDataLoader(
+    X,
+    target_column="arrest",
+    time_to_event_column="week",
+)
+
+syn_model = Plugins().get("marginal_distributions")
+
+syn_model.fit(data)
+
+syn_model.generate(count=10)
+```
+
+## :boom: Sample Usage: Time series
+List available generators
+```python
+from synthcity.plugins import Plugins
+
+Plugins(categories=["time_series"]).list()
+```
+
+Generate new data
+```python
+from synthcity.utils.datasets.time_series.google_stocks import GoogleStocksDataloader
+from synthcity.plugins.core.dataloader import TimeSeriesDataLoader
+from synthcity.plugins import Plugins
+
+static_data, temporal_data, outcome = GoogleStocksDataloader().load()
+data = TimeSeriesDataLoader(
+    temporal_data=temporal_data,
+    static_data=static_data,
+    outcome=outcome,
+)
+
+syn_model = Plugins().get("marginal_distributions")
+
+syn_model.fit(data)
+
+syn_model.generate(count=10)
+```
 ## 📓 Tutorials
  - [Tutorial 0: Basics](tutorials/tutorial0_basic_examples.ipynb)
  - [Tutorial 1: Write a new plugin](tutorials/tutorial1_add_a_new_plugin.ipynb)
@@ -111,6 +170,7 @@ score = Benchmarks.evaluate(
 |--- | --- | --- |
 |**marginal_distributions**| A differentially private method that samples from the marginal distributions of the training set|  --- |
 |**uniform_sampler**| A differentially private method that uniformly samples from the [min, max] ranges of each column.|  --- |
+|**dummy_sampler**| Resample data points from the training set|  --- |
 
 ### Normalizing Flows
 
@@ -118,10 +178,15 @@ score = Benchmarks.evaluate(
 |--- | --- | --- |
 |**nflow**| Normalizing Flows are generative models which produce tractable distributions where both sampling and density evaluation can be efficient and exact.| [Neural Spline Flows](https://arxiv.org/abs/1906.04032) |
 
-### Debug methods
+### Survival analysis methods
 | Method | Description | Reference |
-|--- | --- | --- |
-|**dummy_sampler**| Resample data points from the training set|  --- |
+|SurvivalGAN | --- | --- |
+
+### Time Series methods
+| Method | Description | Reference |
+| TimeGAN | --- | [Time-series Generative Adversarial Networks](https://proceedings.neurips.cc/paper/2019/file/c9efe5f26cd17ba6216bbe2a7d26d490-Paper.pdf) |
+| Fourier Flows | --- | [Generative Time-series Modeling with Fourier Flows](https://openreview.net/forum?id=PpshD0AXfA) |
+| Autoregressive Models | --- | --- |
 
 ## :zap: Evaluation metrics
 The following table contains the available evaluation metrics:

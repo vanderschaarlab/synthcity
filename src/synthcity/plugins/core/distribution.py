@@ -56,7 +56,7 @@ class Distribution(BaseModel, metaclass=ABCMeta):
             self.marginal_states(),
             count,
             p=self.marginal_probabilities(),
-        )
+        ).tolist()
 
     @abstractmethod
     def get(self) -> List[Any]:
@@ -125,7 +125,7 @@ class CategoricalDistribution(Distribution):
         if msamples is not None:
             return msamples
 
-        return np.random.choice(self.choices, count)
+        return np.random.choice(self.choices, count).tolist()
 
     def has(self, val: Any) -> bool:
         return val in self.choices
@@ -264,7 +264,7 @@ class IntegerDistribution(Distribution):
             return msamples
 
         choices = [val for val in range(self.low, self.high + 1, self.step)]
-        return np.random.choice(choices, count)
+        return np.random.choice(choices, count).tolist()
 
     def has(self, val: Any) -> bool:
         return self.low <= val and val <= self.high

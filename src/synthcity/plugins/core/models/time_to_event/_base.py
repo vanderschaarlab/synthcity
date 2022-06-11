@@ -9,9 +9,13 @@ from xgboost import XGBRegressor
 
 # synthcity absolute
 from synthcity.plugins.core.distribution import Distribution
+from synthcity.plugins.core.serializable import Serializable
 
 
-class TimeToEventPlugin(metaclass=ABCMeta):
+class TimeToEventPlugin(Serializable, metaclass=ABCMeta):
+    def __init__(self) -> None:
+        super().__init__()
+
     @abstractmethod
     @validate_arguments(config=dict(arbitrary_types_allowed=True))
     def fit(self, X: pd.DataFrame, T: pd.Series, Y: pd.Series) -> Any:

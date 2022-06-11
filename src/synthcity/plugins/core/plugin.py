@@ -1,8 +1,8 @@
 # stdlib
 import importlib.util
+import sys
 from abc import ABCMeta, abstractmethod
 from importlib.abc import Loader
-from os.path import basename
 from pathlib import Path
 from typing import Any, Callable, Dict, Generator, List, Optional, Type, Union
 
@@ -26,10 +26,11 @@ from synthcity.plugins.core.dataloader import (
 )
 from synthcity.plugins.core.distribution import Distribution
 from synthcity.plugins.core.schema import Schema
+from synthcity.plugins.core.serializable import Serializable
 from synthcity.utils.constants import DEVICE
 
 
-class Plugin(metaclass=ABCMeta):
+class Plugin(Serializable, metaclass=ABCMeta):
     """Base class for all plugins.
     Each derived class must implement the following methods:
         type() - a static method that returns the type of the plugin. e.g., debug, generative, bayesian, etc.
@@ -65,6 +66,7 @@ class Plugin(metaclass=ABCMeta):
                 If True, the generation process will raise an exception if the synthetic data doesn't satisfy the generation constraints. If False, the generation process will return only the valid rows under the constraint.
 
         """
+        super().__init__()
         self._schema: Optional[Schema] = None
         self.sampling_strategy = sampling_strategy
         self.sampling_patience = sampling_patience
@@ -319,7 +321,7 @@ class PluginLoader:
     """
 
     @validate_arguments
-    def __init__(self, plugins: list, expected_type: Type) -> None:
+    def __init__(self, plugins: list, expected_type: Type, categories: list) -> None:
         self._plugins: Dict[str, Type] = {}
         self._available_plugins = {}
         for plugin in plugins:
@@ -327,28 +329,38 @@ class PluginLoader:
             self._available_plugins[stem] = plugin
 
         self._expected_type = expected_type
+        self._categories = categories
 
     @validate_arguments
-    def _load_single_plugin(self, plugin: str) -> None:
+    def _load_single_plugin(self, plugin_name: str) -> None:
         """Helper for loading a single plugin"""
-        name = basename(plugin)
+        plugin = Path(plugin_name)
+        name = plugin.stem
+        ptype = plugin.parent.name
+
+        module_name = f"synthcity.plugins.{ptype}.{name}"
+
         failed = False
         for retry in range(2):
             try:
-                spec = importlib.util.spec_from_file_location(name, plugin)
-                if not isinstance(spec.loader, Loader):
-                    raise RuntimeError("invalid plugin type")
+                if module_name in sys.modules:
+                    mod = sys.modules[module_name]
+                else:
+                    spec = importlib.util.spec_from_file_location(module_name, plugin)
+                    if not isinstance(spec.loader, Loader):
+                        raise RuntimeError("invalid plugin type")
 
-                mod = importlib.util.module_from_spec(spec)
-                spec.loader.exec_module(mod)
+                    mod = importlib.util.module_from_spec(spec)
+                    if module_name not in sys.modules:
+                        sys.modules[module_name] = mod
 
+                    spec.loader.exec_module(mod)
                 cls = mod.plugin  # type: ignore
                 failed = False
                 break
             except BaseException as e:
                 log.critical(f"load failed: {e}")
                 failed = True
-                break
 
         if failed:
             log.critical(f"module {name} load failed")
@@ -357,12 +369,12 @@ class PluginLoader:
         log.debug(f"Loaded plugin {cls.type()} - {cls.name()}")
         self.add(cls.name(), cls)
 
-    def list(self, category: str = "generic") -> List[str]:
+    def list(self) -> List[str]:
         """Get all the available plugins."""
         all_plugins = list(self._plugins.keys()) + list(self._available_plugins.keys())
         plugins = []
         for plugin in all_plugins:
-            if self.get_type(plugin).type() == category:
+            if self.get_type(plugin).type() in self._categories:
                 plugins.append(plugin)
 
         return list(set(plugins))
@@ -384,6 +396,11 @@ class PluginLoader:
         self._plugins[name] = cls
 
         return self
+
+    @validate_arguments
+    def load(self, buff: bytes) -> Any:
+        """Load serialized plugin"""
+        return Plugin.load(buff)
 
     @validate_arguments
     def get(self, name: str, *args: Any, **kwargs: Any) -> Any:
