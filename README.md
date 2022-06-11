@@ -85,7 +85,7 @@ Benchmarks.print(score)
 ```
 
 ### Survival analysis
-* List available generators
+* List the available generators
 ```python
 from synthcity.plugins import Plugins
 
@@ -112,7 +112,7 @@ syn_model.generate(count=10)
 ```
 
 ### Time series
-* List available generators
+* List the available generators
 ```python
 from synthcity.plugins import Plugins
 
