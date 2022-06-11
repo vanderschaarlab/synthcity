@@ -24,15 +24,17 @@ The library can be installed using
 $ pip install .
 ```
 
-## :boom: Sample Usage: Generic data
-List available generators
+## :boom: Sample Usage
+
+### Generic data
+* List the available generators
 ```python
 from synthcity.plugins import Plugins
 
 Plugins(categories=["generic"]).list()
 ```
 
-Load and train a generator
+* Load and train a generator
 ```python
 from sklearn.datasets import load_diabetes
 from synthcity.plugins import Plugins
@@ -45,12 +47,12 @@ syn_model = Plugins().get("marginal_distributions")
 syn_model.fit(X)
 ```
 
-Generate new synthetic data
+* Generate new synthetic data
 ```python
 syn_model.generate(count = 10)
 ```
 
-Generate new synthetic data under some constraints
+* Generate new synthetic data under some constraints
 ```python
 # Constraint: target <= 100
 from synthcity.plugins.core.constraints import Constraints
@@ -62,7 +64,7 @@ generated = syn_model.generate(count=10, constraints=constraints)
 assert (generated["target"] <= 100).any()
 ```
 
-Benchmark the quality of the plugins
+* Benchmark the quality of the plugins
 ```python
 from synthcity.benchmark import Benchmarks
 from synthcity.plugins.core.dataloader import GenericDataLoader
@@ -82,14 +84,14 @@ score = Benchmarks.evaluate(
 Benchmarks.print(score)
 ```
 
-## :boom: Sample Usage: Survival analysis
-List available generators
+### Survival analysis
+* List the available generators
 ```python
 from synthcity.plugins import Plugins
 
 Plugins(categories=["survival_analysis"]).list()
 ```
-Generate new data
+* Generate new data
 ```python
 from lifelines.datasets import load_rossi
 from synthcity.plugins.core.dataloader import SurvivalAnalysisDataLoader
@@ -109,15 +111,15 @@ syn_model.fit(data)
 syn_model.generate(count=10)
 ```
 
-## :boom: Sample Usage: Time series
-List available generators
+### Time series
+* List the available generators
 ```python
 from synthcity.plugins import Plugins
 
 Plugins(categories=["time_series"]).list()
 ```
 
-Generate new data
+* Generate new data
 ```python
 from synthcity.utils.datasets.time_series.google_stocks import GoogleStocksDataloader
 from synthcity.plugins.core.dataloader import TimeSeriesDataLoader
@@ -136,6 +138,32 @@ syn_model.fit(data)
 
 syn_model.generate(count=10)
 ```
+### Serialization
+* Using save/load methods
+```python
+from synthcity.utils.serialization import save, load
+from synthcity.plugins import Plugins
+
+syn_model = Plugins().get("adsgan")
+
+buff = save(syn_model)
+reloaded = load(buff)
+
+assert syn_model.name() == reloaded.name()
+```
+
+* Using the Serializable interface
+```python
+from synthcity.plugins import Plugins
+
+syn_model = Plugins().get("adsgan")
+
+buff = syn_model.save()
+reloaded = Plugins().load(buff)
+
+assert syn_model.name() == reloaded.name()
+```
+
 ## 📓 Tutorials
  - [Tutorial 0: Basics](tutorials/tutorial0_basic_examples.ipynb)
  - [Tutorial 1: Write a new plugin](tutorials/tutorial1_add_a_new_plugin.ipynb)
