@@ -2,6 +2,7 @@
 from typing import Any, List
 
 # third party
+import numpy as np
 import pandas as pd
 import pgmpy.estimators as estimators
 from pgmpy.models import BayesianNetwork
@@ -10,6 +11,7 @@ from pgmpy.sampling import BayesianModelSampling
 # synthcity absolute
 from synthcity.plugins.core.dataloader import DataLoader
 from synthcity.plugins.core.distribution import CategoricalDistribution, Distribution
+from synthcity.plugins.core.models.tabular_encoder import TabularEncoder
 from synthcity.plugins.core.plugin import Plugin
 from synthcity.plugins.core.schema import Schema
 
@@ -32,6 +34,8 @@ class BayesianNetworkPlugin(Plugin):
         struct_learning_search_method: str = "tree_search",  # hillclimb, pc, tree_search, mmhc, exhaustive
         struct_learning_score: str = "k2",  # k2, bdeu, bic, bds
         struct_max_indegree: int = 4,
+        encoder_max_clusters: int = 10,
+        encoder_noise_scale: float = 0.1,
         **kwargs: Any,
     ) -> None:
         super().__init__(**kwargs)
@@ -40,6 +44,9 @@ class BayesianNetworkPlugin(Plugin):
         self.struct_learning_search_method = struct_learning_search_method
         self.struct_learning_score = struct_learning_score
         self.struct_max_indegree = struct_max_indegree
+
+        self.encoder = TabularEncoder(max_clusters=encoder_max_clusters)
+        self.encoder_noise_scale = encoder_noise_scale
 
     @staticmethod
     def name() -> str:
@@ -54,12 +61,28 @@ class BayesianNetworkPlugin(Plugin):
         return [
             CategoricalDistribution(
                 name="struct_learning_search_method",
-                choices=["hillclimb", "pc", "tree_search", "mmhc", "exhaustive"],
+                choices=["hillclimb", "pc", "tree_search"],
             ),
             CategoricalDistribution(
                 name="struct_learning_score", choices=["k2", "bdeu", "bic", "bds"]
             ),
         ]
+
+    def _encode_decode(self, data: pd.DataFrame) -> pd.DataFrame:
+        encoded = self.encoder.transform(data)
+
+        # add noise to the mixture means, but keep the continuous cluster
+        noise = np.random.normal(
+            loc=0, scale=self.encoder_noise_scale, size=len(encoded)
+        )
+        for col in encoded.columns:
+            if col.endswith(".normalized"):
+                encoded[col] += noise
+
+        decoded = self.encoder.inverse_transform(encoded)
+        decoded = decoded[data.columns]
+
+        return decoded
 
     def _get_structure_scorer(self) -> Any:
         return {
@@ -95,6 +118,7 @@ class BayesianNetworkPlugin(Plugin):
 
     def _fit(self, X: DataLoader, *args: Any, **kwargs: Any) -> "BayesianNetworkPlugin":
         df = X.dataframe()
+        self.encoder.fit(df)
 
         dag = self._get_dag(df)
 
@@ -108,7 +132,7 @@ class BayesianNetworkPlugin(Plugin):
         def _sample(count: int) -> pd.DataFrame:
             vals = self.model.forward_sample(size=count, show_progress=False)
 
-            return vals
+            return self._encode_decode(vals)
 
         return self._safe_generate(_sample, count, syn_schema)
 
