@@ -180,7 +180,10 @@ class ConditionalTimeGANPlugin(Plugin):
         static, temporal, outcome = X.unpack()
 
         self.conditional = TimeSeriesBinEncoder().fit_transform(
-            pd.concat([static, outcome], axis=1), temporal
+            pd.concat(
+                [static.reset_index(drop=True), outcome.reset_index(drop=True)], axis=1
+            ),
+            temporal,
         )
         n_units_conditional = self.conditional.shape[1]
 

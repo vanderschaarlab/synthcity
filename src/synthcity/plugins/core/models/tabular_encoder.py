@@ -531,7 +531,17 @@ class TimeSeriesBinEncoder(TransformerMixin, BaseEstimator):
         temporal_init = np.asarray(temporal_data)[:, 0, :].squeeze()
         temporal_init_df = pd.DataFrame(temporal_init, columns=temporal_data[0].columns)
 
-        return pd.concat([static_data, temporal_init_df], axis=1)
+        out = pd.concat(
+            [
+                static_data.reset_index(drop=True),
+                temporal_init_df.reset_index(drop=True),
+            ],
+            axis=1,
+        )
+        out.columns = np.asarray(range(len(out.columns)))
+        out.columns = out.columns.astype(str)
+
+        return out
 
     def fit(
         self,
