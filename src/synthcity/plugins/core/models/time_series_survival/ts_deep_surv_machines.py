@@ -20,7 +20,7 @@ from synthcity.utils.reproducibility import enable_reproducible_results
 from ._base import TimeSeriesSurvivalPlugin
 
 
-class DeepSurvivalMachinesTimeSeriesSurvival(TimeSeriesSurvivalPlugin):
+class DeepSurvivalMachinesTimeSeries(TimeSeriesSurvivalPlugin):
     """
     Args:
         k: int

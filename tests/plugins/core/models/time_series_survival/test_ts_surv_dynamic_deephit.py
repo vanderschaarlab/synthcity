@@ -6,20 +6,20 @@ from synthcity.plugins.core.models.time_series_survival.metrics import (
     evaluate_brier_score_ts,
     evaluate_c_index_ts,
 )
-from synthcity.plugins.core.models.time_series_survival.ts_deep_surv_machines import (
-    DeepSurvivalMachinesTimeSeries,
+from synthcity.plugins.core.models.time_series_survival.ts_surv_dynamic_deephit import (
+    DynamicDeephitTimeSeriesSurvival,
 )
 from synthcity.utils.datasets.time_series.pbc import PBCDataloader
 
 
 def test_sanity() -> None:
-    model = DeepSurvivalMachinesTimeSeries()
+    model = DynamicDeephitTimeSeriesSurvival()
 
-    assert model.name() == "deep_survival_machines"
+    assert model.name() == "dynamic_deephit"
 
 
 def test_hyperparams() -> None:
-    model = DeepSurvivalMachinesTimeSeries()
+    model = DynamicDeephitTimeSeriesSurvival()
 
     params = model.sample_hyperparameters()
 
@@ -42,26 +42,35 @@ def test_train_prediction() -> None:
         [t_[-1] for t_, e_ in zip(T, E) if e_[-1] == 1], horizons
     ).tolist()
 
-    model = DeepSurvivalMachinesTimeSeries()
+    model = DynamicDeephitTimeSeriesSurvival()
 
     model.fit(static_train, temporal_train, T_train, E_train)
 
     prediction = model.predict(static_test, temporal_test, time_horizons)
 
-    ss = 0
-    for item in temporal_test:
-        ss += len(item)
-
-    assert prediction.shape == (ss, len(time_horizons))
+    assert prediction.shape == (len(temporal_test), len(time_horizons))
     assert (prediction.columns == time_horizons).any()
 
     horizon = time_horizons[0]
     cindex = evaluate_c_index_ts(
-        T_train, E_train, prediction[horizon].values, T_test, E_test, horizon
+        T_train,
+        E_train,
+        prediction[horizon].values,
+        T_test,
+        E_test,
+        horizon,
+        use_last=True,
     )
     bs = evaluate_brier_score_ts(
-        T_train, E_train, prediction[horizon].values, T_test, E_test, horizon
+        T_train,
+        E_train,
+        prediction[horizon].values,
+        T_test,
+        E_test,
+        horizon,
+        use_last=True,
     )
     print(model.name(), cindex, bs)
+
     assert cindex > 0.7
     assert bs < 0.2

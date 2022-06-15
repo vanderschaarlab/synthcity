@@ -12,13 +12,17 @@ from synthcity.plugins.core.models.survival_analysis.metrics import (
 )
 
 
-def flatten(T: List[np.ndarray], E: List[np.ndarray]) -> Tuple:
+def flatten(T: List[np.ndarray], E: List[np.ndarray], use_last: bool = False) -> Tuple:
     T_flat = []
     E_flat = []
 
     for idx, item in enumerate(T):
-        T_flat.extend(item)
-        E_flat.extend(E[idx])
+        if use_last:
+            T_flat.append(item[-1])
+            E_flat.append(E[idx][-1])
+        else:
+            T_flat.extend(item)
+            E_flat.extend(E[idx])
     return T_flat, E_flat
 
 
@@ -30,10 +34,11 @@ def evaluate_c_index_ts(
     T_test: np.ndarray,
     Y_test: np.ndarray,
     Time: float,
+    use_last: bool = False,
 ) -> float:
     """Helper for evaluating the C-INDEX metric."""
-    T_train_flat, E_train_flat = flatten(T_train, Y_train)
-    T_test_flat, E_test_flat = flatten(T_test, Y_test)
+    T_train_flat, E_train_flat = flatten(T_train, Y_train, use_last=use_last)
+    T_test_flat, E_test_flat = flatten(T_test, Y_test, use_last=use_last)
 
     assert len(T_test_flat) == len(Prediction)
 
@@ -50,10 +55,11 @@ def evaluate_brier_score_ts(
     T_test: np.ndarray,
     Y_test: np.ndarray,
     Time: float,
+    use_last: bool = False,
 ) -> float:
     """Helper for evaluating the Brier score."""
-    T_train_flat, E_train_flat = flatten(T_train, Y_train)
-    T_test_flat, E_test_flat = flatten(T_test, Y_test)
+    T_train_flat, E_train_flat = flatten(T_train, Y_train, use_last=use_last)
+    T_test_flat, E_test_flat = flatten(T_test, Y_test, use_last=use_last)
 
     assert len(T_test_flat) == len(Prediction)
 
