@@ -78,26 +78,28 @@ class PBCDataloader:
         ]
         age = data["age"] + data["years"]
 
-        x1 = pd.get_dummies(dat_cat).values
-        x2 = dat_num.values
-        x3 = age.values.reshape(-1, 1)
-        x = np.hstack([x1, x2, x3])
+        x1 = pd.get_dummies(dat_cat)
+        x2 = dat_num
+        x3 = pd.Series(age, name="age")
+        x = pd.concat([x1, x2, x3], axis=1)
 
-        time = (data["years"] - data["year"]).values
-        event = data["status2"].values
+        time = data["years"] - data["year"]
+        event = data["status2"]
 
-        x = SimpleImputer(missing_values=np.nan, strategy="mean").fit_transform(x)
-        x_ = StandardScaler().fit_transform(x)
+        x = pd.DataFrame(
+            SimpleImputer(missing_values=np.nan, strategy="mean").fit_transform(x),
+            columns=x.columns,
+        )
 
-        if not sequential:
-            return x_, time, event
-        else:
-            x, t, e = [], [], []
-            for id_ in sorted(list(set(data["id"]))):
-                x.append(x_[data["id"] == id_])
-                t.append(time[data["id"] == id_])
-                e.append(event[data["id"] == id_])
-            return x, t, e
+        x_ = pd.DataFrame(StandardScaler().fit_transform(x), columns=x.columns)
+
+        x, t, e = [], [], []
+        for id_ in sorted(list(set(data["id"]))):
+            patient = x_[data["id"] == id_]
+            x.append(patient.values)
+            t.append(time[data["id"] == id_].values)
+            e.append(event[data["id"] == id_].values)
+        return x, t, e
 
     def load(
         self,
@@ -106,10 +108,12 @@ class PBCDataloader:
 
         temporal_data, t, e = self._load_pbc_dataset()
 
-        static_data = pd.DataFrame(np.zeros((len(temporal_data), 0)))
-        outcome = pd.concat(
-            [pd.Series(t, name="time_to_event"), pd.Series(e, name="event")], axis=1
-        )
+        t = np.array(t, dtype=object)
+        e = np.array(e, dtype=object)
+        temporal_data = np.array(temporal_data, dtype=object)
+
+        static_data = np.zeros((len(temporal_data), 0))
+        outcome = (t, e)
 
         if self.as_numpy:
             return (
