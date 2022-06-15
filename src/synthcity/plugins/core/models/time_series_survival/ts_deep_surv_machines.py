@@ -4,7 +4,7 @@ from typing import Any, List, Optional
 # third party
 import numpy as np
 import pandas as pd
-from auton_survival.models.cph import DeepRecurrentCoxPH
+from auton_survival.models.dsm import DeepRecurrentSurvivalMachines
 from pydantic import validate_arguments
 
 # synthcity absolute
@@ -20,9 +20,26 @@ from synthcity.utils.reproducibility import enable_reproducible_results
 from ._base import TimeSeriesSurvivalPlugin
 
 
-class CoxPHTimeSeriesSurvival(TimeSeriesSurvivalPlugin):
+class DeepSurvivalMachinesTimeSeriesSurvival(TimeSeriesSurvivalPlugin):
+    """
+    Args:
+        k: int
+            The number of underlying parametric distributions.
+        distribution: str
+            Choice of the underlying survival distributions. One of 'Weibull', 'LogNormal'. Default is 'Weibull'.
+        temp: float
+            The logits for the gate are rescaled with this value. Default is 1000.
+        discount: float
+            a float in [0,1] that determines how to discount the tail bias from the uncensored instances. Default is 1.
+
+    """
+
     def __init__(
         self,
+        k: int = 3,  # The number of underlying parametric distributions.
+        distribution: str = "Weibull",  # Weibull, LogNormal
+        temp: float = 1000,  # The logits for the gate are rescaled with this value. Default is 1000.
+        discount: float = 1.0,
         n_iter: int = 1000,
         batch_size: int = 100,
         lr: float = 1e-3,
@@ -39,9 +56,13 @@ class CoxPHTimeSeriesSurvival(TimeSeriesSurvivalPlugin):
         self.batch_size = batch_size
         self.n_iter = n_iter
 
-        self.model = DeepRecurrentCoxPH(
+        self.model = DeepRecurrentSurvivalMachines(
             layers=n_layers_hidden,
             hidden=n_units_hidden,
+            k=k,
+            distribution=distribution,
+            temp=temp,
+            discount=discount,
         )
 
     @validate_arguments(config=dict(arbitrary_types_allowed=True))
@@ -78,7 +99,7 @@ class CoxPHTimeSeriesSurvival(TimeSeriesSurvivalPlugin):
 
     @staticmethod
     def name() -> str:
-        return "deep_recurrent_coxph"
+        return "deep_survival_machines"
 
     @staticmethod
     def hyperparameter_space(*args: Any, **kwargs: Any) -> List[Distribution]:

@@ -6,20 +6,20 @@ from synthcity.plugins.core.models.time_series_survival.metrics import (
     evaluate_brier_score_ts,
     evaluate_c_index_ts,
 )
-from synthcity.plugins.core.models.time_series_survival.ts_surv_coxph import (
-    CoxPHTimeSeriesSurvival,
+from synthcity.plugins.core.models.time_series_survival.ts_deep_surv_machines import (
+    DeepSurvivalMachinesTimeSeriesSurvival,
 )
 from synthcity.utils.datasets.time_series.pbc import PBCDataloader
 
 
 def test_sanity() -> None:
-    model = CoxPHTimeSeriesSurvival()
+    model = DeepSurvivalMachinesTimeSeriesSurvival()
 
-    assert model.name() == "deep_recurrent_coxph"
+    assert model.name() == "deep_survival_machines"
 
 
 def test_hyperparams() -> None:
-    model = CoxPHTimeSeriesSurvival()
+    model = DeepSurvivalMachinesTimeSeriesSurvival()
 
     params = model.sample_hyperparameters()
 
@@ -42,7 +42,7 @@ def test_train_prediction() -> None:
         [t_[-1] for t_, e_ in zip(T, E) if e_[-1] == 1], horizons
     ).tolist()
 
-    model = CoxPHTimeSeriesSurvival()
+    model = DeepSurvivalMachinesTimeSeriesSurvival()
 
     model.fit(static_train, temporal_train, T_train, E_train)
 
@@ -63,6 +63,5 @@ def test_train_prediction() -> None:
         T_train, E_train, prediction[horizon].values, T_test, E_test, horizon
     )
     print(model.name(), cindex, bs)
-
     assert cindex > 0.7
     assert bs < 0.2
