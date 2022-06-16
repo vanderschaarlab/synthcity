@@ -44,7 +44,7 @@ def test_train_prediction() -> None:
     assert score["clf"]["brier_score"][0] < 0.3
 
 
-@pytest.mark.disabled
+@pytest.mark.skip
 def test_train_params() -> None:
     static, temporal, outcome = PBCDataloader(as_numpy=True).load()
     T, E, _, _ = outcome

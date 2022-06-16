@@ -15,11 +15,11 @@ def get_padded_features(
     padx = []
     for i in range(len(x)):
         if pad_size == len(x[i]):
-            padx.append(x[i])
+            padx.append(x[i].astype(float))
         elif pad_size > len(x[i]):
             pads = fill * np.ones((pad_size - len(x[i]),) + x[i].shape[1:])
-            padx.append(np.concatenate([x[i], pads]))
+            padx.append(np.concatenate([x[i], pads]).astype(float))
         else:
-            padx.append(x[i][:pad_size])
+            padx.append(x[i][:pad_size].astype(float))
 
-    return np.array(padx)
+    return np.asarray(padx)

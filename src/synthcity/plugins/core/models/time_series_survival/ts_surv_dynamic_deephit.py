@@ -281,13 +281,9 @@ class DynamicDeepHitModel(DeepRecurrentSurvivalMachines):
         x = _get_padded_features(x)
         x_train, t_train, e_train = x[idx], t[idx], e[idx]
 
-        x_train = torch.from_numpy(x_train).float().to(self.device)
-        t_train = (
-            torch.from_numpy(np.asarray(t_train).astype(float)).float().to(self.device)
-        )
-        e_train = (
-            torch.from_numpy(np.asarray(e_train).astype(int)).float().to(self.device)
-        )
+        x_train = torch.from_numpy(x_train.astype(float)).float().to(self.device)
+        t_train = torch.from_numpy(t_train.astype(float)).float().to(self.device)
+        e_train = torch.from_numpy(e_train.astype(int)).float().to(self.device)
 
         if val_data is None:
 
@@ -472,10 +468,14 @@ class DynamicDeepHitTorch(nn.Module):
         inputmask = torch.isnan(x[:, :, 0])
         x[inputmask] = -1
 
+        assert torch.isnan(x).sum() == 0
+
         hidden, _ = self.embedding(x)
+        assert torch.isnan(hidden).sum() == 0
 
         # Longitudinal modelling
         longitudinal_prediction = self.longitudinal(hidden)
+        assert torch.isnan(longitudinal_prediction).sum() == 0
 
         # Attention using last observation to predict weight of all previously observed
         # Extract last observation (the one used for predictions)
@@ -514,6 +514,7 @@ class DynamicDeepHitTorch(nn.Module):
         # Soft max for probability distribution
         outcomes_t = torch.cat(outcomes, dim=1)
         outcomes_t = self.soft(outcomes_t)
+        assert torch.isnan(outcomes_t).sum() == 0
 
         outcomes = [
             outcomes_t[:, i * self.output_dim : (i + 1) * self.output_dim]
