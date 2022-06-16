@@ -6,20 +6,20 @@ from synthcity.plugins.core.models.survival_analysis.metrics import (
     evaluate_brier_score,
     evaluate_c_index,
 )
-from synthcity.plugins.core.models.time_series_survival.ts_surv_dynamic_deephit import (
-    DynamicDeephitTimeSeriesSurvival,
+from synthcity.plugins.core.models.time_series_survival.ts_surv_xgb import (
+    XGBTimeSeriesSurvival,
 )
 from synthcity.utils.datasets.time_series.pbc import PBCDataloader
 
 
 def test_sanity() -> None:
-    model = DynamicDeephitTimeSeriesSurvival()
+    model = XGBTimeSeriesSurvival()
 
-    assert model.name() == "dynamic_deephit"
+    assert model.name() == "ts_xgb"
 
 
 def test_hyperparams() -> None:
-    model = DynamicDeephitTimeSeriesSurvival()
+    model = XGBTimeSeriesSurvival()
 
     params = model.sample_hyperparameters()
 
@@ -44,7 +44,7 @@ def test_train_prediction() -> None:
         [t_ for t_, e_ in zip(T, E) if e_ == 1], horizons
     ).tolist()
 
-    model = DynamicDeephitTimeSeriesSurvival()
+    model = XGBTimeSeriesSurvival()
 
     model.fit(static_train, temporal_train, T_ext_train, E_ext_train)
 

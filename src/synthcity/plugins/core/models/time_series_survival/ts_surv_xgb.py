@@ -1,0 +1,218 @@
+# stdlib
+from typing import Any, List, Optional, Tuple
+
+# third party
+import numpy as np
+import pandas as pd
+from pydantic import validate_arguments
+from xgbse import XGBSEDebiasedBCE, XGBSEKaplanNeighbors, XGBSEStackedWeibull
+from xgbse.converters import convert_to_structured
+
+# synthcity absolute
+from synthcity.plugins.core.distribution import (
+    CategoricalDistribution,
+    Distribution,
+    IntegerDistribution,
+)
+from synthcity.utils.constants import DEVICE
+from synthcity.utils.reproducibility import enable_reproducible_results
+
+# synthcity relative
+from ._base import TimeSeriesSurvivalPlugin
+
+
+def get_padded_features(
+    x: np.ndarray, pad_size: Optional[int] = None, fill: int = -1
+) -> np.ndarray:
+    """Helper function to pad variable length RNN inputs with nans."""
+    if pad_size is None:
+        pad_size = max([len(x_) for x_ in x])
+
+    padx = []
+    for i in range(len(x)):
+        pads = fill * np.ones((pad_size - len(x[i]),) + x[i].shape[1:])
+        padx.append(np.concatenate([x[i], pads]))
+    return np.array(padx)
+
+
+class XGBTimeSeriesSurvival(TimeSeriesSurvivalPlugin):
+    booster = ["gbtree", "gblinear", "dart"]
+
+    def __init__(
+        self,
+        n_estimators: int = 100,
+        colsample_bynode: float = 0.5,
+        max_depth: int = 5,
+        subsample: float = 0.5,
+        learning_rate: float = 5e-2,
+        min_child_weight: int = 50,
+        tree_method: str = "hist",
+        booster: int = 0,
+        random_state: int = 0,
+        objective: str = "aft",  # "aft", "cox"
+        strategy: str = "debiased_bce",  # "weibull", "debiased_bce", "km"
+        bce_n_iter: int = 1000,
+        time_points: int = 100,
+        seed: int = 0,
+        device: Any = DEVICE,
+        **kwargs: Any,
+    ) -> None:
+        super().__init__()
+        enable_reproducible_results(seed)
+
+        surv_params = {}
+        if objective == "aft":
+            surv_params = {
+                "objective": "survival:aft",
+                "eval_metric": "aft-nloglik",
+                "aft_loss_distribution": "normal",
+                "aft_loss_distribution_scale": 1.0,
+            }
+        else:
+            surv_params = {
+                "objective": "survival:cox",
+                "eval_metric": "cox-nloglik",
+            }
+        xgboost_params = {
+            # survival
+            **surv_params,
+            **kwargs,
+            # basic xgboost
+            "n_estimators": n_estimators,
+            "colsample_bynode": colsample_bynode,
+            "max_depth": max_depth,
+            "subsample": subsample,
+            "learning_rate": learning_rate,
+            "min_child_weight": min_child_weight,
+            "verbosity": 0,
+            "tree_method": tree_method,
+            "booster": XGBTimeSeriesSurvival.booster[booster],
+            "random_state": random_state,
+            "n_jobs": -1,
+        }
+        lr_params = {
+            "C": 1e-3,
+            "max_iter": bce_n_iter,
+        }
+
+        if strategy == "debiased_bce":
+            self.model = XGBSEDebiasedBCE(xgboost_params, lr_params)
+        elif strategy == "weibull":
+            self.model = XGBSEStackedWeibull(xgboost_params)
+        elif strategy == "km":
+            self.model = XGBSEKaplanNeighbors(xgboost_params)
+
+        self.time_points = time_points
+
+    def _merge_data(
+        self,
+        static: Optional[np.ndarray],
+        temporal: np.ndarray,
+        pad_size: int,
+    ) -> np.ndarray:
+        if static is None:
+            return temporal
+
+        merged = []
+        for idx, item in enumerate(temporal):
+            local_static = static[idx].reshape(1, -1)
+            local_static = np.repeat(local_static, len(temporal[idx]), axis=0)
+            tst = np.concatenate([temporal[idx], local_static], axis=1)
+            merged.append(tst)
+
+        out = np.array(merged, dtype=object)
+        out = get_padded_features(out, pad_size)
+
+        return out.reshape(len(out), -1)
+
+    def _merge_outcomes(self, T: np.ndarray, E: np.ndarray) -> Tuple:
+        out_T, out_E = [], []
+        for idx, events in enumerate(E):
+            times = T[idx]
+            evt = np.amax(events)
+            if evt == 0:
+                pos = np.max(np.where(events == evt))  # last censored
+            else:
+                pos = np.min(np.where(events == evt))  # first event
+
+            out_T.append(times[pos])
+            out_E.append(evt)
+
+        return np.asarray(out_T), np.asarray(out_E)
+
+    @validate_arguments(config=dict(arbitrary_types_allowed=True))
+    def fit(
+        self,
+        static: Optional[np.ndarray],
+        temporal: np.ndarray,
+        T: np.ndarray,
+        E: np.ndarray,
+    ) -> TimeSeriesSurvivalPlugin:
+        self.pad_size = max([len(x_) for x_ in temporal])
+
+        data = pd.DataFrame(self._merge_data(static, temporal, pad_size=self.pad_size))
+
+        T, E = self._merge_outcomes(T, E)
+
+        y = convert_to_structured(pd.Series(T), pd.Series(E))
+
+        censored_times = T[E == 0]
+        obs_times = T[E == 1]
+
+        lower_bound = max(censored_times.min(), obs_times.min()) + 1
+        if pd.isna(lower_bound):
+            lower_bound = T.min()
+        upper_bound = T.max()
+
+        time_bins = np.linspace(lower_bound, upper_bound, self.time_points, dtype=int)
+
+        self.model.fit(data, y, time_bins=time_bins)
+        return self
+
+    def _find_nearest(self, array: np.ndarray, value: float) -> float:
+        array = np.asarray(array)
+        idx = (np.abs(array - value)).argmin()
+        return array[idx]
+
+    @validate_arguments(config=dict(arbitrary_types_allowed=True))
+    def predict(
+        self,
+        static: Optional[np.ndarray],
+        temporal: np.ndarray,
+        time_horizons: List,
+    ) -> np.ndarray:
+        "Predict risk"
+
+        data = pd.DataFrame(self._merge_data(static, temporal, pad_size=self.pad_size))
+
+        chunks = int(len(data) / 1024) + 1
+
+        preds_ = []
+        for chunk in np.array_split(data, chunks):
+            local_preds_ = np.zeros([len(chunk), len(time_horizons)])
+            surv = self.model.predict(chunk)
+            surv = surv.loc[:, ~surv.columns.duplicated()]
+            time_bins = surv.columns
+            for t, eval_time in enumerate(time_horizons):
+                nearest = self._find_nearest(time_bins, eval_time)
+                local_preds_[:, t] = np.asarray(1 - surv[nearest])
+            preds_.append(local_preds_)
+        return pd.DataFrame(np.concatenate(preds_, axis=0), columns=time_horizons)
+
+    @staticmethod
+    def name() -> str:
+        return "ts_xgb"
+
+    @staticmethod
+    def hyperparameter_space(*args: Any, **kwargs: Any) -> List[Distribution]:
+        return [
+            IntegerDistribution(name="max_depth", low=2, high=6),
+            IntegerDistribution(name="min_child_weight", low=0, high=50),
+            CategoricalDistribution(name="objective", choices=["aft", "cox"]),
+            CategoricalDistribution(
+                name="strategy", choices=["weibull", "debiased_bce"]
+            ),
+            CategoricalDistribution(
+                name="strategy", choices=["weibull", "debiased_bce", "km"]
+            ),
+        ]

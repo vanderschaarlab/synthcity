@@ -36,15 +36,15 @@ class DeepSurvivalMachinesTimeSeries(TimeSeriesSurvivalPlugin):
 
     def __init__(
         self,
-        k: int = 3,  # The number of underlying parametric distributions.
+        k: int = 6,  # The number of underlying parametric distributions.
         distribution: str = "Weibull",  # Weibull, LogNormal
         temp: float = 1000,  # The logits for the gate are rescaled with this value. Default is 1000.
         discount: float = 1.0,
         n_iter: int = 1000,
         batch_size: int = 100,
         lr: float = 1e-3,
-        n_layers_hidden: int = 1,
-        n_units_hidden: int = 100,
+        n_layers_hidden: int = 2,
+        n_units_hidden: int = 300,
         seed: int = 0,
         device: Any = DEVICE,
         **kwargs: Any

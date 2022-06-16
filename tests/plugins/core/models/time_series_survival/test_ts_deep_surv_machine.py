@@ -32,14 +32,14 @@ def test_train_prediction() -> None:
 
     tr_size = int(len(temporal) * 0.80)
 
-    static_train, static_test = static[:tr_size], static[-tr_size:]
-    temporal_train, temporal_test = temporal[:tr_size], temporal[-tr_size:]
-    T_train, T_test = T[:tr_size], T[-tr_size:]
-    T_ext_train, _ = T_ext[:tr_size], T_ext[-tr_size:]
-    E_train, E_test = E[:tr_size], E[-tr_size:]
-    E_ext_train, _ = E_ext[:tr_size], E_ext[-tr_size:]
+    static_train, static_test = static[:tr_size], static[tr_size:]
+    temporal_train, temporal_test = temporal[:tr_size], temporal[tr_size:]
+    T_train, T_test = T[:tr_size], T[tr_size:]
+    T_ext_train, _ = T_ext[:tr_size], T_ext[tr_size:]
+    E_train, E_test = E[:tr_size], E[tr_size:]
+    E_ext_train, _ = E_ext[:tr_size], E_ext[tr_size:]
 
-    horizons = [0.25, 0.5, 0.75]
+    horizons = [0.85]
     time_horizons = np.quantile(
         [t_ for t_, e_ in zip(T, E) if e_ == 1], horizons
     ).tolist()

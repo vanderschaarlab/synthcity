@@ -26,8 +26,8 @@ class DeepCoxPHTimeSeriesSurvival(TimeSeriesSurvivalPlugin):
         n_iter: int = 1000,
         batch_size: int = 100,
         lr: float = 1e-3,
-        n_layers_hidden: int = 1,
-        n_units_hidden: int = 100,
+        n_layers_hidden: int = 2,
+        n_units_hidden: int = 300,
         seed: int = 0,
         device: Any = DEVICE,
         **kwargs: Any
