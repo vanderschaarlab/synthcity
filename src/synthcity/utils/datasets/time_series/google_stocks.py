@@ -1,12 +1,15 @@
 # stdlib
+import io
 from pathlib import Path
 from typing import List, Tuple
 
 # third party
 import numpy as np
 import pandas as pd
+import requests
 from sklearn.preprocessing import MinMaxScaler
 
+URL = "https://raw.githubusercontent.com/PacktPublishing/Learning-Pandas-Second-Edition/master/data/goog.csv"
 df_path = Path(__file__).parent / "data/goog.csv"
 
 
@@ -19,12 +22,19 @@ class GoogleStocksDataloader:
         self,
     ) -> Tuple[pd.DataFrame, List[pd.DataFrame], pd.DataFrame]:
         # Load Google Data
-        df = pd.read_csv(df_path)
+        if not df_path.exists():
+            s = requests.get(URL).content
+            df = pd.read_csv(io.StringIO(s.decode("utf-8")))
+
+            df.to_csv(df_path, index=None)
+        else:
+            df = pd.read_csv(df_path)
 
         # Flip the data to make chronological data
         df = pd.DataFrame(df.values[::-1], columns=df.columns)
-        df = df.drop(columns=["date"])
+        df = df.drop(columns=["Date"])
 
+        print(len(df))
         df = pd.DataFrame(MinMaxScaler().fit_transform(df), columns=df.columns)
         # Build dataset
         dataX = []
@@ -33,7 +43,7 @@ class GoogleStocksDataloader:
         # Cut data by sequence length
         for i in range(0, len(df) - self.seq_len - 1):
             df_seq = df.loc[i : i + self.seq_len - 1]
-            out = df["open"].loc[i + self.seq_len]
+            out = df["Open"].loc[i + self.seq_len]
 
             dataX.append(df_seq)
             outcome.append(out)
@@ -55,5 +65,5 @@ class GoogleStocksDataloader:
         return (
             pd.DataFrame(np.zeros((len(temporal_data), 0))),
             temporal_data,
-            pd.DataFrame(outcome, columns=["open_next"]),
+            pd.DataFrame(outcome, columns=["Open_next"]),
         )

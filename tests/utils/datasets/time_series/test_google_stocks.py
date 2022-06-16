@@ -8,6 +8,6 @@ def test_dataloader() -> None:
     _, temporal_data, outcome = loader.load()
 
     assert outcome.shape == (len(temporal_data), 1)
-    assert len(temporal_data) == 77
+    assert len(temporal_data) == 40
     for item in temporal_data:
-        assert item.shape == (20, 6)
+        assert item.shape == (20, 5)
