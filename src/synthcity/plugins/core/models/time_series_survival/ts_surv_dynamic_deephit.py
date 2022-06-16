@@ -59,6 +59,23 @@ class DynamicDeephitTimeSeriesSurvival(TimeSeriesSurvivalPlugin):
             sigma=sigma,
         )
 
+    def _merge_data(
+        self,
+        static: Optional[np.ndarray],
+        temporal: np.ndarray,
+    ) -> np.ndarray:
+        if static is None:
+            return temporal
+
+        merged = []
+        for idx, item in enumerate(temporal):
+            local_static = static[idx].reshape(1, -1)
+            local_static = np.repeat(local_static, len(temporal[idx]), axis=0)
+            tst = np.concatenate([temporal[idx], local_static], axis=1)
+            merged.append(tst)
+
+        return np.array(merged, dtype=object)
+
     @validate_arguments(config=dict(arbitrary_types_allowed=True))
     def fit(
         self,
@@ -67,9 +84,10 @@ class DynamicDeephitTimeSeriesSurvival(TimeSeriesSurvivalPlugin):
         T: np.ndarray,
         E: np.ndarray,
     ) -> TimeSeriesSurvivalPlugin:
+        data = self._merge_data(static, temporal)
 
         self.model.fit(
-            temporal,
+            data,
             T,
             E,
             batch_size=self.batch_size,
@@ -86,9 +104,10 @@ class DynamicDeephitTimeSeriesSurvival(TimeSeriesSurvivalPlugin):
         time_horizons: List,
     ) -> np.ndarray:
         "Predict risk"
+        data = self._merge_data(static, temporal)
 
         return pd.DataFrame(
-            self.model.predict_risk(temporal, time_horizons), columns=time_horizons
+            self.model.predict_risk(data, time_horizons), columns=time_horizons
         )
 
     @staticmethod

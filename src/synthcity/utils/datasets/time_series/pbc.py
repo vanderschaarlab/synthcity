@@ -95,15 +95,53 @@ class PBCDataloader:
 
         x_ = pd.DataFrame(StandardScaler().fit_transform(x), columns=x.columns)
 
-        x, t, e = [], [], []
+        x_static, x_temporal, t, e = [], [], [], []
         t_ext, e_ext = [], []
+
+        temporal_cols = [
+            "drug_D-penicil",
+            "drug_placebo",
+            "ascites_No",
+            "ascites_Yes",
+            "hepatomegaly_No",
+            "hepatomegaly_Yes",
+            "spiders_No",
+            "spiders_Yes",
+            "edema_No edema",
+            "edema_edema despite diuretics",
+            "edema_edema no diuretics",
+            "histologic_1",
+            "histologic_2",
+            "histologic_3",
+            "histologic_4",
+            "serBilir",
+            "serChol",
+            "albumin",
+            "alkaline",
+            "SGOT",
+            "platelets",
+            "prothrombin",
+            "age",
+        ]
+
+        static_cols = [
+            "sex_female",
+            "sex_male",
+        ]
+
         for id_ in sorted(list(set(data["id"]))):
             patient = x_[data["id"] == id_]
-            patient.index = time[data["id"] == id_].values
+
+            patient_static = patient[static_cols]
+            x_static.append(patient_static.values[0].squeeze().tolist())
+
+            patient_temporal = patient[temporal_cols]
+            patient_temporal.index = time[data["id"] == id_].values
+
             if self.as_numpy:
-                x.append(patient.values)
+                x_temporal.append(patient_temporal.values)
             else:
-                x.append(patient)
+                x_temporal.append(patient_temporal)
 
             events = event[data["id"] == id_].values
             times = time[data["id"] == id_].values
@@ -120,29 +158,30 @@ class PBCDataloader:
             e_ext.append(events)
 
         if self.as_numpy:
-            x = np.array(x, dtype=object)
+            x_static = np.asarray(x_static)
+            x_temporal = np.array(x_temporal, dtype=object)
             t = np.asarray(t)
             e = np.asarray(e)
         else:
+            x_static = pd.DataFrame(x_static, columns=static_cols)
             t = pd.Series(t, name="time_to_event")
             e = pd.Series(e, name="event")
 
-        return x, t, e, np.asarray(t_ext, dtype=object), np.asarray(e_ext, dtype=object)
+        return (
+            x_static,
+            x_temporal,
+            t,
+            e,
+            np.asarray(t_ext, dtype=object),
+            np.asarray(e_ext, dtype=object),
+        )
 
     def load(
         self,
     ) -> Tuple[pd.DataFrame, List[pd.DataFrame], pd.DataFrame]:
         # Initialize the output
 
-        temporal_data, t, e, t_ext, e_ext = self._load_pbc_dataset()
+        static_data, temporal_data, t, e, t_ext, e_ext = self._load_pbc_dataset()
         outcome = (t, e, t_ext, e_ext)
 
-        static_data = np.zeros((len(temporal_data), 0))
-        if self.as_numpy:
-            return (
-                static_data,
-                temporal_data,
-                outcome,
-            )
-
-        return pd.DataFrame(static_data), temporal_data, outcome
+        return static_data, temporal_data, outcome
