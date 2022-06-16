@@ -10,14 +10,15 @@ import torch.nn as nn
 from auton_survival.models.dsm import DeepRecurrentSurvivalMachines
 from auton_survival.models.dsm.utilities import _get_padded_features, get_optimizer
 from pydantic import validate_arguments
-from tqdm import tqdm
 
 # synthcity absolute
 from synthcity.plugins.core.distribution import (
     CategoricalDistribution,
     Distribution,
+    FloatDistribution,
     IntegerDistribution,
 )
+from synthcity.plugins.core.models.mlp import MLP
 from synthcity.utils.constants import DEVICE
 from synthcity.utils.reproducibility import enable_reproducible_results
 
@@ -31,15 +32,17 @@ class DynamicDeephitTimeSeriesSurvival(TimeSeriesSurvivalPlugin):
         n_iter: int = 1000,
         batch_size: int = 100,
         lr: float = 1e-3,
-        n_layers_hidden: int = 2,
-        n_units_hidden: int = 200,
+        n_layers_hidden: int = 1,
+        n_units_hidden: int = 40,
         split: int = 100,
         rnn_type: str = "GRU",
-        alpha: float = 0.1,
-        beta: float = 0.1,
-        sigma: float = 0.1,
+        alpha: float = 0.34,
+        beta: float = 0.27,
+        sigma: float = 0.21,
         seed: int = 0,
+        dropout: float = 0.06,
         device: Any = DEVICE,
+        patience: int = 20,
         **kwargs: Any
     ) -> None:
         super().__init__()
@@ -57,6 +60,8 @@ class DynamicDeephitTimeSeriesSurvival(TimeSeriesSurvivalPlugin):
             alpha=alpha,
             beta=beta,
             sigma=sigma,
+            dropout=dropout,
+            patience=patience,
         )
 
     def _merge_data(
@@ -121,6 +126,11 @@ class DynamicDeephitTimeSeriesSurvival(TimeSeriesSurvivalPlugin):
             IntegerDistribution(name="n_layers_hidden", low=1, high=4),
             CategoricalDistribution(name="batch_size", choices=[100, 200, 500]),
             CategoricalDistribution(name="lr", choices=[1e-2, 1e-3, 1e-4]),
+            CategoricalDistribution(name="rnn_type", choices=["LSTM", "GRU", "RNN"]),
+            FloatDistribution(name="alpha", low=0.0, high=0.5),
+            FloatDistribution(name="sigma", low=0.0, high=0.5),
+            FloatDistribution(name="beta", low=0.0, high=0.5),
+            FloatDistribution(name="dropout", low=0.0, high=0.2),
         ]
 
 
@@ -136,16 +146,15 @@ class DynamicDeepHitModel(DeepRecurrentSurvivalMachines):
     def __init__(
         self,
         split: int = 100,
-        layers_rnn: int = 1,
-        hidden_rnn: int = 10,
+        layers_rnn: int = 2,
+        hidden_rnn: int = 100,
         rnn_type: str = "LSTM",
-        long_param: dict = {},
-        att_param: dict = {},
-        cs_param: dict = {},
+        dropout: float = 0.1,
         alpha: float = 0.1,
         beta: float = 0.1,
         sigma: float = 0.1,
-        cuda: bool = False,
+        patience: int = 20,
+        device: Any = DEVICE,
     ) -> None:
 
         self.split = split
@@ -155,39 +164,34 @@ class DynamicDeepHitModel(DeepRecurrentSurvivalMachines):
         self.hidden_rnn = hidden_rnn
         self.rnn_type = rnn_type
 
-        self.long_param = long_param
-        self.att_param = att_param
-        self.cs_param = cs_param
-
         self.alpha = alpha
         self.beta = beta
         self.sigma = sigma
 
-        self.cuda = cuda
+        self.device = device
+        self.dropout = dropout
+
+        self.patience = patience
+
         self.torch_model: Optional[DynamicDeepHitTorch] = None
 
     def _gen_torch_model(self, inputdim: int, optimizer: Any, risks: Any) -> Any:
-        model = DynamicDeepHitTorch(
-            inputdim,
-            self.split,
-            self.layers_rnn,
-            self.hidden_rnn,
-            long_param=self.long_param,
-            att_param=self.att_param,
-            cs_param=self.cs_param,
-            rnn_type=self.rnn_type,
-            optimizer=optimizer,
-            risks=risks,
-        ).double()
-        if self.cuda:
-            model = model.cuda()
+        model = (
+            DynamicDeepHitTorch(
+                inputdim,
+                self.split,
+                self.layers_rnn,
+                self.hidden_rnn,
+                rnn_type=self.rnn_type,
+                optimizer=optimizer,
+                dropout=self.dropout,
+                risks=risks,
+                device=self.device,
+            )
+            .float()
+            .to(self.device)
+        )
         return model
-
-    def cpu(self) -> Any:
-        self.cuda = False
-        if self.torch_model:
-            self.torch_model = self.torch_model.cpu()
-        return self
 
     def fit(
         self,
@@ -204,7 +208,7 @@ class DynamicDeepHitModel(DeepRecurrentSurvivalMachines):
     ) -> Any:
         discretized_t, self.split_time = self.discretize(t, self.split, self.split_time)
         processed_data = self._preprocess_training_data(
-            x, last(discretized_t), last(e), vsize, val_data, random_state
+            x, discretized_t, e, vsize, val_data, random_state
         )
         x_train, t_train, e_train, x_val, t_val, e_val = processed_data
         inputdim = x_train.shape[-1]
@@ -226,11 +230,11 @@ class DynamicDeepHitModel(DeepRecurrentSurvivalMachines):
             n_iter=iters,
             lr=learning_rate,
             bs=batch_size,
-            cuda=self.cuda,
+            device=self.device,
+            train_patience=self.patience,
         )
 
         self.torch_model = model.eval()
-        self.cpu()
 
         return self
 
@@ -249,16 +253,14 @@ class DynamicDeepHitModel(DeepRecurrentSurvivalMachines):
                 List of Array: Disretized events time
         """
         if split_time is None:
-            _, split_time = np.histogram(np.concatenate(t), split - 1)
+            _, split_time = np.histogram(t, split - 1)
         t_discretized = np.array(
             [np.digitize(t_, split_time, right=True) - 1 for t_ in t], dtype=object
         )
         return t_discretized, split_time
 
     def _preprocess_test_data(self, x: np.ndarray) -> torch.Tensor:
-        data = torch.from_numpy(_get_padded_features(x))
-        if self.cuda:
-            data = data.cuda()
+        data = torch.from_numpy(_get_padded_features(x)).float()
         return data
 
     def _preprocess_training_data(
@@ -279,9 +281,13 @@ class DynamicDeepHitModel(DeepRecurrentSurvivalMachines):
         x = _get_padded_features(x)
         x_train, t_train, e_train = x[idx], t[idx], e[idx]
 
-        x_train = torch.from_numpy(x_train).double()
-        t_train = torch.from_numpy(t_train).double()
-        e_train = torch.from_numpy(e_train).double()
+        x_train = torch.from_numpy(x_train).float().to(self.device)
+        t_train = (
+            torch.from_numpy(np.asarray(t_train).astype(float)).float().to(self.device)
+        )
+        e_train = (
+            torch.from_numpy(np.asarray(e_train).astype(int)).float().to(self.device)
+        )
 
         if val_data is None:
 
@@ -300,9 +306,9 @@ class DynamicDeepHitModel(DeepRecurrentSurvivalMachines):
             x_val = _get_padded_features(x_val)
             t_val, _ = self.discretize(t_val, self.split, self.split_time)
 
-            x_val = torch.from_numpy(x_val).double()
-            t_val = torch.from_numpy(last(t_val)).double()
-            e_val = torch.from_numpy(last(e_val)).double()
+            x_val = torch.from_numpy(x_val).float()
+            t_val = torch.from_numpy(np.asarray(t_val).astype(float)).float()
+            e_val = torch.from_numpy(np.asarray(e_val).astype(int)).float()
 
         return (x_train, t_train, e_train, x_val, t_val, e_val)
 
@@ -314,9 +320,7 @@ class DynamicDeepHitModel(DeepRecurrentSurvivalMachines):
                 + "before calling `_eval_nll`."
             )
         discretized_t, _ = self.discretize(t, self.split, self.split_time)
-        processed_data = self._preprocess_training_data(
-            x, last(discretized_t), last(e), 0, None, 0
-        )
+        processed_data = self._preprocess_training_data(x, discretized_t, e, 0, None, 0)
         _, _, _, x_val, t_val, e_val = processed_data
         return total_loss(self.torch_model, x_val, t_val, e_val, 0, 1, 1).item()
 
@@ -328,6 +332,12 @@ class DynamicDeepHitModel(DeepRecurrentSurvivalMachines):
         all_step: bool = False,
         bs: int = 100,
     ) -> np.ndarray:
+        if self.torch_model is None:
+            raise Exception(
+                "The model has not been fitted yet. Please fit the "
+                + "model using the `fit` method on some training data "
+                + "before calling `predict_survival`."
+            )
         lens = [len(x_) for x_ in x]
 
         if all_step:
@@ -339,14 +349,6 @@ class DynamicDeepHitModel(DeepRecurrentSurvivalMachines):
         if not isinstance(t, list):
             t = [t]
         t = self.discretize([t], self.split, self.split_time)[0][0]
-
-        if self.torch_model is None:
-            raise Exception(
-                "The model has not been fitted yet. Please fit the "
-                + "model using the `fit` method on some training data "
-                + "before calling `predict_survival`."
-            )
-
         x = self._preprocess_test_data(x)
         batches = int(len(x) / bs) + 1
         scores: dict = {t_: [] for t_ in t}
@@ -358,6 +360,7 @@ class DynamicDeepHitModel(DeepRecurrentSurvivalMachines):
                     torch.cumsum(f[int(risk) - 1], dim=1)[:, t_]
                     .squeeze()
                     .detach()
+                    .cpu()
                     .numpy()
                     .tolist()
                 )
@@ -386,12 +389,11 @@ class DynamicDeepHitTorch(nn.Module):
         output_dim: int,
         layers_rnn: int,
         hidden_rnn: int,
-        long_param: dict = {},
-        att_param: dict = {},
-        cs_param: dict = {},
         rnn_type: str = "LSTM",
         optimizer: str = "Adam",
+        dropout: float = 0.1,
         risks: int = 1,
+        device: Any = DEVICE,
     ) -> None:
         super(DynamicDeepHitTorch, self).__init__()
 
@@ -400,6 +402,8 @@ class DynamicDeepHitTorch(nn.Module):
         self.optimizer = optimizer
         self.risks = risks
         self.rnn_type = rnn_type
+        self.device = device
+        self.dropout = dropout
 
         # RNN model for longitudinal data
         if self.rnn_type == "LSTM":
@@ -421,13 +425,23 @@ class DynamicDeepHitTorch(nn.Module):
             )
 
         # Longitudinal network
-        self.longitudinal = create_nn(
-            hidden_rnn, input_dim, no_activation_last=True, **long_param
+        self.longitudinal = MLP(
+            task_type="regression",
+            n_units_in=hidden_rnn,
+            n_units_out=input_dim,
+            n_layers_hidden=layers_rnn,
+            n_units_hidden=hidden_rnn,
+            dropout=self.dropout,
         )
 
         # Attention mechanism
-        self.attention = create_nn(
-            input_dim + hidden_rnn, 1, no_activation_last=True, **att_param
+        self.attention = MLP(
+            task_type="regression",
+            n_units_in=input_dim + hidden_rnn,
+            n_units_out=1,
+            dropout=self.dropout,
+            n_layers_hidden=layers_rnn,
+            n_units_hidden=hidden_rnn,
         )
         self.attention_soft = nn.Softmax(1)  # On temporal dimension
 
@@ -435,11 +449,13 @@ class DynamicDeepHitTorch(nn.Module):
         self.cause_specific = []
         for r in range(self.risks):
             self.cause_specific.append(
-                create_nn(
-                    input_dim + hidden_rnn,
-                    output_dim,
-                    no_activation_last=True,
-                    **cs_param
+                MLP(
+                    task_type="regression",
+                    n_units_in=input_dim + hidden_rnn,
+                    n_units_out=output_dim,
+                    dropout=self.dropout,
+                    n_layers_hidden=layers_rnn,
+                    n_units_hidden=hidden_rnn,
                 )
             )
         self.cause_specific = nn.ModuleList(self.cause_specific)
@@ -451,15 +467,11 @@ class DynamicDeepHitTorch(nn.Module):
         """
         The forward function that is called when data is passed through DynamicDeepHit.
         """
-        if x.is_cuda:
-            device = x.get_device()
-        else:
-            device = torch.device("cpu")
-
         # RNN representation - Nan values for not observed data
         x = x.clone()
         inputmask = torch.isnan(x[:, :, 0])
-        x[inputmask] = 0
+        x[inputmask] = -1
+
         hidden, _ = self.embedding(x)
 
         # Longitudinal modelling
@@ -469,7 +481,7 @@ class DynamicDeepHitTorch(nn.Module):
         # Extract last observation (the one used for predictions)
         last_observations = (~inputmask).sum(axis=1) - 1
         last_observations_idx = last_observations.unsqueeze(1).repeat(1, x.size(1))
-        index = torch.arange(x.size(1)).repeat(x.size(0), 1).to(device)
+        index = torch.arange(x.size(1)).repeat(x.size(0), 1).to(self.device)
 
         last = index == last_observations_idx
         x_last = x[last]
@@ -525,7 +537,8 @@ def train_ddh(
     lr: float = 1e-3,
     bs: int = 100,
     vbs: int = 500,
-    cuda: bool = False,
+    train_patience: int = 20,
+    device: Any = DEVICE,
 ) -> Any:
 
     optimizer = get_optimizer(model, lr)
@@ -534,7 +547,7 @@ def train_ddh(
     nbatches = int(x_train.shape[0] / bs) + 1
     valbatches = int(x_valid.shape[0] / vbs) + 1
 
-    for i in tqdm(range(n_iter)):
+    for i in range(n_iter):
         model.train()
         for j in range(nbatches):
             xb = x_train[j * bs : (j + 1) * bs]
@@ -544,11 +557,8 @@ def train_ddh(
             if xb.shape[0] == 0:
                 continue
 
-            if cuda:
-                xb, tb, eb = xb.cuda(), tb.cuda(), eb.cuda()
-
             optimizer.zero_grad()
-            loss = total_loss(model, xb, tb, eb, alpha, beta, sigma)
+            loss = total_loss(model, xb, tb, eb, alpha, beta, sigma, device=device)
             loss.backward()
             optimizer.step()
 
@@ -562,9 +572,6 @@ def train_ddh(
             if xb.shape[0] == 0:
                 continue
 
-            if cuda:
-                xb, tb, eb = xb.cuda(), tb.cuda(), eb.cuda()
-
             valid_loss += total_loss(model, xb, tb, eb, alpha, beta, sigma)
 
         valid_loss = valid_loss.item()
@@ -573,7 +580,7 @@ def train_ddh(
             old_loss = valid_loss
             best_param = deepcopy(model.state_dict())
         else:
-            if patience == 5:
+            if patience == train_patience:
                 break
             else:
                 patience += 1
@@ -582,41 +589,12 @@ def train_ddh(
     return model
 
 
-def create_nn(
-    inputdim: int,
-    outputdim: int,
-    dropout: float = 0.6,
-    layers: list = [100, 100],
-    activation: str = "ReLU",
-    no_activation_last: bool = False,
-) -> nn.Module:
-    modules = []
-    if dropout > 0:
-        modules.append(nn.Dropout(p=dropout))
-
-    if activation == "ReLU6":
-        act = nn.ReLU6()
-    elif activation == "ReLU":
-        act = nn.ReLU()
-    elif activation == "SeLU":
-        act = nn.SELU()
-    elif activation == "Tanh":
-        act = nn.Tanh()
-
-    prevdim = inputdim
-    for hidden in layers + [outputdim]:
-        modules.append(nn.Linear(prevdim, hidden, bias=True))
-        modules.append(act)
-        prevdim = hidden
-
-    if no_activation_last:
-        modules = modules[:-1]
-
-    return nn.Sequential(*modules)
-
-
 def negative_log_likelihood(
-    outcomes: list, cif: torch.Tensor, t: torch.Tensor, e: torch.Tensor
+    outcomes: list,
+    cif: torch.Tensor,
+    t: torch.Tensor,
+    e: torch.Tensor,
+    device: Any = DEVICE,
 ) -> torch.Tensor:
     """
     Compute the log likelihood loss
@@ -637,7 +615,11 @@ def negative_log_likelihood(
 
 
 def ranking_loss(
-    cif: torch.Tensor, t: torch.Tensor, e: torch.Tensor, sigma: float
+    cif: torch.Tensor,
+    t: torch.Tensor,
+    e: torch.Tensor,
+    sigma: float,
+    device: Any = DEVICE,
 ) -> torch.Tensor:
     """
     Penalize wrong ordering of probability
@@ -658,7 +640,7 @@ def ranking_loss(
 
 
 def longitudinal_loss(
-    longitudinal_prediction: torch.Tensor, x: torch.Tensor
+    longitudinal_prediction: torch.Tensor, x: torch.Tensor, device: Any = DEVICE
 ) -> torch.Tensor:
     """
     Penalize error in the longitudinal predictions
@@ -671,10 +653,6 @@ def longitudinal_loss(
     But take same for all (for ranking loss)
     """
     length = (~torch.isnan(x[:, :, 0])).sum(axis=1) - 1
-    if x.is_cuda:
-        device = x.get_device()
-    else:
-        device = torch.device("cpu")
 
     # Create a grid of the column index
     index = torch.arange(x.size(1)).repeat(x.size(0), 1).to(device)
@@ -699,19 +677,17 @@ def total_loss(
     alpha: float,
     beta: float,
     sigma: float,
+    device: Any = DEVICE,
 ) -> torch.Tensor:
-    longitudinal_prediction, outcomes = model(x)
+    longitudinal_prediction, outcomes = model(x.float())
     t, e = t.long(), e.int()
 
     # Compute cumulative function from prediced outcomes
     cif = [torch.cumsum(ok, 1) for ok in outcomes]
 
     return (
-        (1 - alpha - beta) * longitudinal_loss(longitudinal_prediction, x)
-        + alpha * ranking_loss(cif, t, e, sigma)
-        + beta * negative_log_likelihood(outcomes, cif, t, e)
+        (1 - alpha - beta)
+        * longitudinal_loss(longitudinal_prediction, x, device=device)
+        + alpha * ranking_loss(cif, t, e, sigma, device=device)
+        + beta * negative_log_likelihood(outcomes, cif, t, e, device=device)
     )
-
-
-def last(t: np.ndarray) -> np.ndarray:
-    return np.array([t_[-1] for t_ in t], dtype=float)

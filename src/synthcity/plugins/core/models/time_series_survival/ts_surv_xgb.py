@@ -1,5 +1,5 @@
 # stdlib
-from typing import Any, List, Optional, Tuple
+from typing import Any, List, Optional
 
 # third party
 import numpy as np
@@ -14,25 +14,12 @@ from synthcity.plugins.core.distribution import (
     Distribution,
     IntegerDistribution,
 )
+from synthcity.plugins.core.models.time_series_survival.utils import get_padded_features
 from synthcity.utils.constants import DEVICE
 from synthcity.utils.reproducibility import enable_reproducible_results
 
 # synthcity relative
 from ._base import TimeSeriesSurvivalPlugin
-
-
-def get_padded_features(
-    x: np.ndarray, pad_size: Optional[int] = None, fill: int = -1
-) -> np.ndarray:
-    """Helper function to pad variable length RNN inputs with nans."""
-    if pad_size is None:
-        pad_size = max([len(x_) for x_ in x])
-
-    padx = []
-    for i in range(len(x)):
-        pads = fill * np.ones((pad_size - len(x[i]),) + x[i].shape[1:])
-        padx.append(np.concatenate([x[i], pads]))
-    return np.array(padx)
 
 
 class XGBTimeSeriesSurvival(TimeSeriesSurvivalPlugin):
@@ -121,24 +108,9 @@ class XGBTimeSeriesSurvival(TimeSeriesSurvivalPlugin):
             merged.append(tst)
 
         out = np.array(merged, dtype=object)
-        out = get_padded_features(out, pad_size)
+        out = get_padded_features(out, pad_size, fill=-1)
 
         return out.reshape(len(out), -1)
-
-    def _merge_outcomes(self, T: np.ndarray, E: np.ndarray) -> Tuple:
-        out_T, out_E = [], []
-        for idx, events in enumerate(E):
-            times = T[idx]
-            evt = np.amax(events)
-            if evt == 0:
-                pos = np.max(np.where(events == evt))  # last censored
-            else:
-                pos = np.min(np.where(events == evt))  # first event
-
-            out_T.append(times[pos])
-            out_E.append(evt)
-
-        return np.asarray(out_T), np.asarray(out_E)
 
     @validate_arguments(config=dict(arbitrary_types_allowed=True))
     def fit(
@@ -151,8 +123,6 @@ class XGBTimeSeriesSurvival(TimeSeriesSurvivalPlugin):
         self.pad_size = max([len(x_) for x_ in temporal])
 
         data = pd.DataFrame(self._merge_data(static, temporal, pad_size=self.pad_size))
-
-        T, E = self._merge_outcomes(T, E)
 
         y = convert_to_structured(pd.Series(T), pd.Series(E))
 
