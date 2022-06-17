@@ -663,7 +663,7 @@ class TimeSeriesDataLoader(DataLoader):
         if as_numpy:
             return (
                 np.asarray(self.data["static_data"]),
-                np.asarray(self.data["temporal_data"], dtype=object),
+                np.asarray(self.data["temporal_data"]),
                 np.asarray(self.data["outcome"]),
             )
         return (
