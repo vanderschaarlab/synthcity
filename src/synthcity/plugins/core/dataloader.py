@@ -124,6 +124,10 @@ class DataLoader(metaclass=ABCMeta):
     def _repr_html_(self, *args: Any, **kwargs: Any) -> Any:
         return self.dataframe()._repr_html_(*args, **kwargs)
 
+    @abstractmethod
+    def fillna(self, value: Any) -> "DataLoader":
+        ...
+
 
 class GenericDataLoader(DataLoader):
     @validate_arguments(config=dict(arbitrary_types_allowed=True))
@@ -240,6 +244,10 @@ class GenericDataLoader(DataLoader):
             self.data, train_size=self.train_size, random_state=self.random_state
         )
         return self.decorate(test_data.reset_index(drop=True))
+
+    def fillna(self, value: Any) -> "DataLoader":
+        self.data = self.data.fillna(value)
+        return self
 
 
 class SurvivalAnalysisDataLoader(DataLoader):
@@ -385,6 +393,10 @@ class SurvivalAnalysisDataLoader(DataLoader):
             test_data.reset_index(drop=True),
         )
 
+    def fillna(self, value: Any) -> "DataLoader":
+        self.data = self.data.fillna(value)
+        return self
+
 
 class TimeSeriesDataLoader(DataLoader):
     @validate_arguments(config=dict(arbitrary_types_allowed=True))
@@ -396,6 +408,7 @@ class TimeSeriesDataLoader(DataLoader):
         sensitive_features: List[str] = [],
         random_state: int = 0,
         train_size: float = 0.8,
+        fill: Any = np.nan,
         **kwargs: Any,
     ) -> None:
         static_features = []
@@ -417,34 +430,9 @@ class TimeSeriesDataLoader(DataLoader):
                 raise ValueError("Temporal and outcome data mismatch")
             self.outcome_features = list(outcome.columns)
 
-        for idx, item in enumerate(temporal_data):
-            # handling missing features
-            for col in temporal_features:
-                if col not in item.columns:
-                    item[col] = np.nan
-            item = item[temporal_features]
-            if len(item) != max_seq_len:
-                pads = np.nan * np.ones(
-                    (max_seq_len - len(item), len(temporal_features))
-                )
-                start = max(item.index) + 1
-                pads_df = pd.DataFrame(
-                    pads,
-                    index=[start + i for i in range(len(pads))],
-                    columns=item.columns,
-                )
-
-                item = pd.concat([item, pads_df])
-
-            # handle missing time points
-            assert list(item.columns) == list(temporal_features)
-            assert len(item) == max_seq_len
-
-            temporal_data[idx] = item
-
         self.seq_len = max_seq_len
         grouped = TimeSeriesDataLoader.pack_raw_data(
-            static_data, temporal_data, outcome
+            static_data, temporal_data, outcome, fill=fill
         )
 
         super().__init__(
@@ -476,15 +464,39 @@ class TimeSeriesDataLoader(DataLoader):
         static_data: Optional[pd.DataFrame],
         temporal_data: List[pd.DataFrame],
         outcome: Optional[pd.DataFrame],
+        fill: Any = np.nan,
     ) -> pd.DataFrame:
         # Temporal data: (subjects, temporal_sequence, temporal_feature)
         ext_temporal_features = []
+        max_seq_len = max([len(t) for t in temporal_data])
         temporal_features = TimeSeriesDataLoader.unique_temporal_features(temporal_data)
 
         for feat in temporal_features:
             ext_temporal_features.extend(
-                [f"temporal_{feat}_t{idx}" for idx in range(len(temporal_data[0]))]
+                [f"temporal_{feat}_t{idx}" for idx in range(max_seq_len)]
             )
+
+        for idx, item in enumerate(temporal_data):
+            # handling missing features
+            for col in temporal_features:
+                if col not in item.columns:
+                    item[col] = fill
+            item = item[temporal_features]
+            if len(item) != max_seq_len:
+                pads = fill * np.ones((max_seq_len - len(item), len(temporal_features)))
+                start = max(item.index) + 1
+                pads_df = pd.DataFrame(
+                    pads,
+                    index=[start + i for i in range(len(pads))],
+                    columns=item.columns,
+                )
+                item = pd.concat([item, pads_df])
+
+            # handle missing time points
+            assert list(item.columns) == list(temporal_features)
+            assert len(item) == max_seq_len
+
+            temporal_data[idx] = item
 
         temporal_arr = np.asarray(temporal_data)
         temporal_arr = np.swapaxes(temporal_arr, 1, 2)
@@ -554,7 +566,7 @@ class TimeSeriesDataLoader(DataLoader):
                 local_df[feat] = local_df[feat].astype(
                     row[f"temporal_{feat}_t{seq}"].dtype
                 )
-            temporal_data.append(local_df[temporal_features])
+            temporal_data.append(local_df[temporal_features].dropna())
         return static_data, temporal_data, outcome
 
     @property
@@ -651,7 +663,7 @@ class TimeSeriesDataLoader(DataLoader):
         if as_numpy:
             return (
                 np.asarray(self.data["static_data"]),
-                np.asarray(self.data["temporal_data"]),
+                np.asarray(self.data["temporal_data"], dtype=object),
                 np.asarray(self.data["outcome"]),
             )
         return (
@@ -682,6 +694,18 @@ class TimeSeriesDataLoader(DataLoader):
         )
         return self.unpack_and_decorate(new_data)
 
+    def fillna(self, value: Any) -> "DataLoader":
+        for key in ["static_data", "outcome", "grouped_data"]:
+            if self.data[key] is not None:
+                self.data[key] = self.data[key].fillna(value)
+
+        for idx, item in enumerate(self.data["temporal_data"]):
+            self.data["temporal_data"][idx] = self.data["temporal_data"][idx].fillna(
+                value
+            )
+
+        return self
+
 
 class TimeSeriesSurvivalDataLoader(TimeSeriesDataLoader):
     @validate_arguments(config=dict(arbitrary_types_allowed=True))
@@ -692,13 +716,19 @@ class TimeSeriesSurvivalDataLoader(TimeSeriesDataLoader):
         E: pd.Series,
         static_data: Optional[pd.DataFrame] = None,
         sensitive_features: List[str] = [],
+        time_horizons: list = [],
         random_state: int = 0,
         train_size: float = 0.8,
+        fill: Any = np.nan,
         **kwargs: Any,
     ) -> None:
         outcome = pd.concat([T, E], axis=1)
         self.time_to_event_col = "time_to_event"
         self.event_col = "event"
+
+        if len(time_horizons) == 0:
+            time_horizons = np.linspace(T.min(), T.max(), num=5)[1:-1].tolist()
+        self.time_horizons = time_horizons
 
         super().__init__(
             temporal_data=temporal_data,
@@ -707,14 +737,18 @@ class TimeSeriesSurvivalDataLoader(TimeSeriesDataLoader):
             sensitive_features=sensitive_features,
             random_state=random_state,
             train_size=train_size,
+            fill=fill,
             **kwargs,
         )
         self.data_type = "time_series_survival"
+        self.fill = fill
 
     def info(self) -> dict:
         parent_info = super().info()
         parent_info["time_to_event_col"] = self.time_to_event_col
         parent_info["event_col"] = self.event_col
+        parent_info["time_horizons"] = self.time_horizons
+        parent_info["fill"] = self.fill
 
         return parent_info
 
@@ -736,19 +770,9 @@ class TimeSeriesSurvivalDataLoader(TimeSeriesDataLoader):
             E=outcome[self.event_col],
             sensitive_features=self.sensitive_features,
             random_state=self.random_state,
+            time_horizons=self.time_horizons,
             train_size=self.train_size,
         )
-
-    def unpack_and_decorate(self, data: pd.DataFrame) -> "DataLoader":
-        unpacked_data = TimeSeriesSurvivalDataLoader.unpack_raw_data(
-            data,
-            self.static_features,
-            self.temporal_features,
-            self.outcome_features,
-            self.seq_len,
-        )
-
-        return self.decorate(unpacked_data)
 
     @staticmethod
     def from_info(data: pd.DataFrame, info: dict) -> "DataLoader":
@@ -769,13 +793,14 @@ class TimeSeriesSurvivalDataLoader(TimeSeriesDataLoader):
             T=outcome[info["time_to_event_col"]],
             E=outcome[info["event_col"]],
             sensitive_features=info["sensitive_features"],
+            time_horizons=info["time_horizons"],
         )
 
     def unpack(self, as_numpy: bool = False) -> Any:
         if as_numpy:
             return (
                 np.asarray(self.data["static_data"]),
-                np.asarray(self.data["temporal_data"]),
+                np.asarray(self.data["temporal_data"], dtype=object),
                 np.asarray(self.data["outcome"][self.time_to_event_col]),
                 np.asarray(self.data["outcome"][self.event_col]),
             )
@@ -795,5 +820,7 @@ def create_from_info(data: pd.DataFrame, info: dict) -> "DataLoader":
         return SurvivalAnalysisDataLoader.from_info(data, info)
     elif info["data_type"] == "time_series":
         return TimeSeriesDataLoader.from_info(data, info)
+    elif info["data_type"] == "time_series_survival":
+        return TimeSeriesSurvivalDataLoader.from_info(data, info)
     else:
         raise RuntimeError(f"invalid datatype {info}")

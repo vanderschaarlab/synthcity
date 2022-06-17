@@ -112,10 +112,14 @@ class DeepCoxPHTimeSeriesSurvival(TimeSeriesSurvivalPlugin):
         data = self._merge_data(static, temporal)
         raw = self.model.predict_risk(data, time_horizons)
         out = []
+
         offset = -1
         for item in temporal:
             offset += len(item)
             out.append(raw[offset])
+
+        assert len(raw) == offset + 1
+
         return pd.DataFrame(out, columns=time_horizons)
 
     @staticmethod
@@ -253,15 +257,7 @@ class DeepRecurrentCoxPH(nn.Module):
         return self
 
     def predict_risk(self, x: np.ndarray, t: Optional[np.ndarray] = None) -> np.ndarray:
-
-        if self.fitted:
-            return 1 - self.predict_survival(x, t)
-        else:
-            raise Exception(
-                "The model has not been fitted yet. Please fit the "
-                + "model using the `fit` method on some training data "
-                + "before calling `predict_risk`."
-            )
+        return 1 - self.predict_survival(x, t)
 
     def predict_survival(
         self, x: np.ndarray, t: Optional[np.ndarray] = None

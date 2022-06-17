@@ -19,9 +19,11 @@ from synthcity.plugins.core.dataloader import (
     GenericDataLoader,
     SurvivalAnalysisDataLoader,
     TimeSeriesDataLoader,
+    TimeSeriesSurvivalDataLoader,
     create_from_info,
 )
 from synthcity.utils.datasets.time_series.google_stocks import GoogleStocksDataloader
+from synthcity.utils.datasets.time_series.pbc import PBCDataloader
 
 
 @pytest.mark.parametrize("test_plugin", [Plugins().get("marginal_distributions")])
@@ -264,3 +266,48 @@ def test_evaluate_performance_time_series(
     assert good_score["gt"] < 1
     assert good_score["syn_id"] > score["syn_id"]
     assert good_score["syn_ood"] > score["syn_ood"]
+
+
+@pytest.mark.parametrize("test_plugin", [Plugins().get("marginal_distributions")])
+@pytest.mark.parametrize(
+    "evaluator_t",
+    [
+        PerformanceEvaluatorLinear,
+        PerformanceEvaluatorMLP,
+    ],
+)
+def test_evaluate_performance_time_series_survival(
+    test_plugin: Plugin, evaluator_t: Type
+) -> None:
+    static_data, temporal_data, outcome = PBCDataloader().load()
+
+    T, E, _, _ = outcome
+
+    data = TimeSeriesSurvivalDataLoader(
+        temporal_data=temporal_data,
+        static_data=static_data,
+        T=T,
+        E=E,
+    )
+
+    test_plugin.fit(data)
+    data_gen = test_plugin.generate(len(temporal_data))
+
+    evaluator = evaluator_t(
+        task_type="time_series_survival",
+    )
+
+    good_score = evaluator.evaluate(
+        data,
+        data_gen,
+    )
+    assert "gt.c_index" in good_score
+    assert "gt.brier_score" in good_score
+    assert "syn_id.c_index" in good_score
+    assert "syn_id.brier_score" in good_score
+    assert "syn_ood.c_index" in good_score
+    assert "syn_ood.brier_score" in good_score
+    print(evaluator_t, good_score)
+
+    assert good_score["syn_id.c_index"] < 1
+    assert good_score["syn_ood.c_index"] < 1

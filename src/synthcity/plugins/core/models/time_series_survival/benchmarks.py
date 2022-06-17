@@ -15,6 +15,36 @@ from synthcity.plugins.core.models.survival_analysis.metrics import (
 )
 
 
+def search_hyperparams(
+    estimator: Any,
+    static: np.ndarray,
+    temporal: np.ndarray,
+    T: np.ndarray,
+    Y: np.ndarray,
+    time_horizons: List,
+    n_folds: int = 3,
+    metrics: List[str] = ["c_index", "brier_score"],
+    seed: int = 0,
+    pretrained: bool = False,
+    scenarios: int = 10,
+) -> dict:
+    params_list = []
+    for t in range(scenarios):
+        params_list.append(estimator.sample_hyperparameters())
+
+    best_c = 0
+    best_params = {}
+    for param in params_list:
+        model = estimator(n_iter=1, **param)
+        score = evaluate_ts_survival_model(model, static, temporal, T, Y, time_horizons)
+
+        if score["clf"]["c_index"][0] > best_c:
+            best_c = score["clf"]["c_index"][0]
+            best_params = param
+
+    return best_params
+
+
 def evaluate_ts_survival_model(
     estimator: Any,
     static: np.ndarray,
@@ -56,6 +86,11 @@ def evaluate_ts_survival_model(
 
     supported_metrics = ["c_index", "brier_score"]
     results = {}
+
+    static = np.asarray(static)
+    temporal = np.asarray(temporal)
+    T = np.asarray(T)
+    Y = np.asarray(Y)
 
     for metric in metrics:
         if metric not in supported_metrics:

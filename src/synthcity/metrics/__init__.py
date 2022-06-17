@@ -102,6 +102,7 @@ class Metrics:
             "regression",
             "survival_analysis",
             "time_series",
+            "time_series_survival",
         ]
         if task_type not in supported_tasks:
             raise ValueError(
@@ -119,6 +120,12 @@ class Metrics:
         if task_type == "survival_analysis":
             if X_gt.type() != "survival_analysis":
                 raise ValueError("Invalid dataloader for survival analysis")
+        elif task_type == "time_series":
+            if X_gt.type() != "time_series":
+                raise ValueError("Invalid dataloader for time series")
+        elif task_type == "time_series_survival":
+            if X_gt.type() != "time_series_survival":
+                raise ValueError("Invalid dataloader for time series survival analysis")
 
         if metrics is None:
             metrics = Metrics.list()

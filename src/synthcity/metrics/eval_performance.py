@@ -24,8 +24,20 @@ from synthcity.plugins.core.models.survival_analysis import (
     XGBSurvivalAnalysis,
     evaluate_survival_model,
 )
+from synthcity.plugins.core.models.time_series_survival.benchmarks import (
+    evaluate_ts_survival_model,
+    search_hyperparams,
+)
+from synthcity.plugins.core.models.time_series_survival.ts_surv_deep_coxph import (
+    DeepCoxPHTimeSeriesSurvival,
+)
+from synthcity.plugins.core.models.time_series_survival.ts_surv_dynamic_deephit import (
+    DynamicDeephitTimeSeriesSurvival,
+)
+from synthcity.plugins.core.models.time_series_survival.ts_surv_xgb import (
+    XGBTimeSeriesSurvival,
+)
 from synthcity.plugins.core.models.ts_rnn import TimeSeriesRNN
-from synthcity.utils.serialization import dataframe_hash
 
 
 class PerformanceEvaluator(MetricEvaluator):
@@ -210,7 +222,7 @@ class PerformanceEvaluator(MetricEvaluator):
 
         predictor_gt = model(**args)
         log.info(
-            f" Performance eval for df hash = {dataframe_hash(id_X_gt)} ood hash = {dataframe_hash(ood_X_gt)}"
+            f" Performance eval for df hash = {X_gt.train().hash()} ood hash = {X_gt.test().hash()}"
         )
         score_gt = evaluate_survival_model(
             predictor_gt,
@@ -375,6 +387,113 @@ class PerformanceEvaluator(MetricEvaluator):
             "syn_ood": float(self.reduction()(syn_scores_ood)),
         }
 
+    @validate_arguments(config=dict(arbitrary_types_allowed=True))
+    def _evaluate_time_series_survival_performance(
+        self,
+        model: Any,
+        args: Dict,
+        X_gt: DataLoader,
+        X_syn: DataLoader,
+    ) -> Dict:
+        """Train a time series survival model on the synthetic data and evaluate the performance on real test data. Returns the average performance discrepancy between training on real data vs on synthetic data.
+
+        Returns:
+            gt and syn performance scores
+        """
+        assert X_gt.type() == "time_series_survival"
+        assert X_syn.type() == "time_series_survival"
+
+        info = X_gt.info()
+        time_horizons = info["time_horizons"]
+
+        id_X_static_gt, id_X_temporal_gt, id_T_gt, id_E_gt = X_gt.train().unpack(
+            as_numpy=True
+        )
+        ood_X_static_gt, ood_X_temporal_gt, ood_T_gt, ood_E_gt = X_gt.test().unpack(
+            as_numpy=True
+        )
+        iter_X_static_syn, iter_X_temporal_syn, iter_T_syn, iter_E_syn = X_syn.unpack(
+            as_numpy=True
+        )
+
+        predictor_gt = model(**args)
+        log.info(
+            f" Performance eval for df hash = {X_gt.train().hash()} ood hash = {X_gt.test().hash()}"
+        )
+        score_gt = evaluate_ts_survival_model(
+            predictor_gt,
+            id_X_static_gt,
+            id_X_temporal_gt,
+            id_T_gt,
+            id_E_gt,
+            metrics=["c_index", "brier_score"],
+            n_folds=self._n_folds,
+            time_horizons=time_horizons,
+        )["clf"]
+
+        log.info(f"Baseline performance score: {score_gt}")
+
+        predictor_syn = model(**args)
+
+        fail_score = {
+            "c_index": (0, 0),
+            "brier_score": (1, 0),
+        }
+        try:
+            predictor_syn.fit(
+                iter_X_static_syn, iter_X_temporal_syn, iter_T_syn, iter_E_syn
+            )
+            score_syn_id = evaluate_ts_survival_model(
+                [predictor_syn] * self._n_folds,
+                id_X_static_gt,
+                id_X_temporal_gt,
+                id_T_gt,
+                id_E_gt,
+                metrics=["c_index", "brier_score"],
+                n_folds=self._n_folds,
+                time_horizons=time_horizons,
+                pretrained=True,
+            )["clf"]
+        except BaseException as e:
+            log.error(
+                f"Failed to evaluate synthetic ID performance. {model.name()}: {e}"
+            )
+            score_syn_id = fail_score
+
+        log.info(f"Synthetic ID performance score: {score_syn_id}")
+
+        try:
+            predictor_syn.fit(
+                iter_X_static_syn, iter_X_temporal_syn, iter_T_syn, iter_E_syn
+            )
+            score_syn_ood = evaluate_ts_survival_model(
+                [predictor_syn] * self._n_folds,
+                ood_X_static_gt,
+                ood_X_temporal_gt,
+                ood_T_gt,
+                ood_E_gt,
+                metrics=["c_index", "brier_score"],
+                n_folds=self._n_folds,
+                time_horizons=time_horizons,
+                pretrained=True,
+            )["clf"]
+        except BaseException as e:
+            log.error(
+                f"Failed to evaluate synthetic OOD performance. {model.name()}: {e}"
+            )
+            score_syn_ood = fail_score
+
+        log.info(f"Synthetic OOD performance score: {score_syn_ood}")
+
+        return {
+            "gt.c_index": float(score_gt["c_index"][0]),
+            "gt.brier_score": float(score_gt["brier_score"][0]),
+            "syn_id.c_index": float(score_syn_id["c_index"][0]),
+            "syn_id.brier_score": float(score_syn_id["brier_score"][0]),
+            "syn_ood.c_index": float(score_syn_ood["c_index"][0]),
+            "syn_ood.brier_score": float(score_syn_ood["brier_score"][0]),
+        }
+
 
 class PerformanceEvaluatorXGB(PerformanceEvaluator):
     """Train an XGBoost classifier or regressor on the synthetic data and evaluate the performance on real test data. Returns the average performance discrepancy between training on real data vs on synthetic data.
@@ -425,6 +544,19 @@ class PerformanceEvaluatorXGB(PerformanceEvaluator):
                 X_gt,
                 X_syn,
             )
+        elif self._task_type == "time_series_survival":
+            return self._evaluate_time_series_survival_performance(
+                XGBTimeSeriesSurvival,
+                {
+                    "n_jobs": -1,
+                    "verbosity": 0,
+                    "depth": 3,
+                    "strategy": "debiased_bce",  # "weibull", "debiased_bce"
+                    "random_state": self._random_seed,
+                },
+                X_gt,
+                X_syn,
+            )
         else:
             raise RuntimeError(f"Unuspported task type {self._task_type}")
 
@@ -457,6 +589,26 @@ class PerformanceEvaluatorLinear(PerformanceEvaluator):
                 {},
                 X_gt,
                 X_syn,
+            )
+        elif self._task_type == "time_series_survival":
+            static, temporal, T, E = X_gt.unpack()
+
+            info = X_gt.info()
+            time_horizons = info["time_horizons"]
+
+            args = search_hyperparams(
+                DeepCoxPHTimeSeriesSurvival,
+                static,
+                temporal,
+                T,
+                E,
+                time_horizons=time_horizons,
+            )
+            log.info(
+                f"Performance evaluation using DeepCoxPHTimeSeriesSurvival and {args}"
+            )
+            return self._evaluate_time_series_survival_performance(
+                DeepCoxPHTimeSeriesSurvival, args, X_gt, X_syn
             )
         else:
             raise RuntimeError(f"Unuspported task type {self._task_type}")
@@ -514,6 +666,26 @@ class PerformanceEvaluatorMLP(PerformanceEvaluator):
             }
             return self._evaluate_time_series_performance(
                 TimeSeriesRNN, args, X_gt, X_syn
+            )
+        elif self._task_type == "time_series_survival":
+            static, temporal, T, E = X_gt.unpack()
+
+            info = X_gt.info()
+            time_horizons = info["time_horizons"]
+
+            args = search_hyperparams(
+                DynamicDeephitTimeSeriesSurvival,
+                static,
+                temporal,
+                T,
+                E,
+                time_horizons=time_horizons,
+            )
+            log.info(
+                f"Performance evaluation using DynamicDeephitTimeSeriesSurvival and {args}"
+            )
+            return self._evaluate_time_series_survival_performance(
+                DynamicDeephitTimeSeriesSurvival, args, X_gt, X_syn
             )
 
         else:

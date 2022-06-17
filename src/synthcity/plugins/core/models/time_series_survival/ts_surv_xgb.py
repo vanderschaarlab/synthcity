@@ -42,10 +42,14 @@ class XGBTimeSeriesSurvival(TimeSeriesSurvivalPlugin):
         time_points: int = 100,
         seed: int = 0,
         device: Any = DEVICE,
+        n_iter: Optional[int] = None,
         **kwargs: Any,
     ) -> None:
         super().__init__()
         enable_reproducible_results(seed)
+
+        if n_iter is not None:
+            n_estimators = n_iter
 
         surv_params = {}
         if objective == "aft":

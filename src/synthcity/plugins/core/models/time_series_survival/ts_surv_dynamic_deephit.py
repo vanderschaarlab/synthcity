@@ -152,6 +152,7 @@ class DynamicDeepHitModel:
         device: Any = DEVICE,
         val_size: float = 0.1,
         random_seed: int = 0,
+        clipping_value: int = 1,
     ) -> None:
 
         self.split = split
@@ -171,6 +172,7 @@ class DynamicDeepHitModel:
         self.n_iter = n_iter
         self.batch_size = batch_size
         self.val_size = val_size
+        self.clipping_value = clipping_value
 
         self.patience = patience
         self.random_seed = random_seed
@@ -226,6 +228,12 @@ class DynamicDeepHitModel:
                 optimizer.zero_grad()
                 loss = self.total_loss(xb, tb, eb)
                 loss.backward()
+
+                if self.clipping_value > 0:
+                    torch.nn.utils.clip_grad_norm_(
+                        self.model.parameters(), self.clipping_value
+                    )
+
                 optimizer.step()
 
             self.model.eval()
@@ -448,6 +456,8 @@ class DynamicDeepHitModel:
             raise RuntimeError("Invalid model for loss")
 
         longitudinal_prediction, outcomes = self.model(x.float())
+        assert torch.isnan(longitudinal_prediction).sum() == 0
+
         t, e = t.long(), e.int()
 
         # Compute cumulative function from prediced outcomes
@@ -547,7 +557,7 @@ class DynamicDeepHitLayers(nn.Module):
         # RNN representation - Nan values for not observed data
         x = x.clone()
         inputmask = torch.isnan(x[:, :, 0])
-        x[inputmask] = -1
+        x[torch.isnan(x)] = -1
 
         assert torch.isnan(x).sum() == 0
 

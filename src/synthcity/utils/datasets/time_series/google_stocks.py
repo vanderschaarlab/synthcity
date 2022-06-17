@@ -34,7 +34,6 @@ class GoogleStocksDataloader:
         df = pd.DataFrame(df.values[::-1], columns=df.columns)
         df = df.drop(columns=["Date"])
 
-        print(len(df))
         df = pd.DataFrame(MinMaxScaler().fit_transform(df), columns=df.columns)
         # Build dataset
         dataX = []

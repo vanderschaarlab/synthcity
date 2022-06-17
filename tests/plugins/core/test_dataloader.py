@@ -280,7 +280,7 @@ def test_time_series_pack_unpack(source: Any, repack: bool) -> None:
     assert len(unp_temporal) == len(temporal_data)
     for idx, item in enumerate(temporal_data):
         assert unp_temporal[idx].shape == item.shape
-        assert (unp_temporal[idx].columns == sorted(item.columns)).all()
+        assert sorted(unp_temporal[idx].columns) == sorted(item.columns)
         cols = list(unp_temporal[idx].columns)
         assert (unp_temporal[idx].values == item[cols].values).all()
 
@@ -301,7 +301,7 @@ def test_time_series_survival_dataloader_sanity() -> None:
     max_seq_len = max([len(t) for t in temporal_data])
     max_feats = max([len(t.columns) for t in temporal_data])
 
-    feat_cnt = max_feats * max_seq_len
+    feat_cnt = max_seq_len * max_feats
     if static_data is not None:
         feat_cnt += static_data.shape[1]
     # outcome
@@ -313,8 +313,8 @@ def test_time_series_survival_dataloader_sanity() -> None:
 
     train_len = int(0.8 * (len(temporal_data)))
     assert loader.train().shape == (train_len, feat_cnt)
-    assert loader.test().shape == (len(temporal_data) - train_len, feat_cnt)
-    assert loader.sample(10).shape == (10, feat_cnt)
+    assert loader.test().shape[0] == len(temporal_data) - train_len
+    assert loader.sample(100).shape[0] == 100
 
     assert loader.hash() != ""
 
@@ -368,6 +368,10 @@ def test_time_series_survival_pack_unpack() -> None:
         E=E,
     )
 
+    _, unp_temporal, _, _ = loader.unpack()
+    for idx, item in enumerate(unp_temporal):
+        assert len(unp_temporal[idx]) == len(temporal_data[idx])
+
     (
         unp_static_data,
         unp_temporal,
@@ -379,8 +383,6 @@ def test_time_series_survival_pack_unpack() -> None:
         loader.outcome_features,
         loader.seq_len,
     )
-
-    max_seq_len = max([len(t) for t in temporal_data])
 
     temporal_features = []
     for item in temporal_data:
@@ -401,5 +403,26 @@ def test_time_series_survival_pack_unpack() -> None:
 
     assert len(unp_temporal) == len(temporal_data)
     for idx, item in enumerate(temporal_data):
-        assert unp_temporal[idx].shape == (max_seq_len, len(temporal_features))
-        assert (unp_temporal[idx].columns == temporal_features).all()
+        assert unp_temporal[idx].shape == (len(item), len(item.columns))
+        assert sorted(unp_temporal[idx].columns) == sorted(item.columns)
+
+
+def test_time_series_survival_pack_unpack_numpy() -> None:
+    static_data, temporal_data, outcome = PBCDataloader().load()
+    T, E, _, _ = outcome
+
+    loader = TimeSeriesSurvivalDataLoader(
+        temporal_data=temporal_data,
+        static_data=static_data,
+        T=T,
+        E=E,
+    )
+
+    unp_static, unp_temporal, unp_T, unp_E = loader.unpack(as_numpy=True)
+    for idx, item in enumerate(unp_temporal):
+        assert len(unp_temporal[idx]) == len(temporal_data[idx])
+
+    assert isinstance(unp_static, np.ndarray)
+    assert unp_static.shape == static_data.shape
+    assert len(unp_T) == len(T)
+    assert len(unp_E) == len(E)
