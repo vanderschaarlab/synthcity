@@ -115,9 +115,14 @@ class DataLoader(metaclass=ABCMeta):
     def test(self) -> "DataLoader":
         ...
 
-    @abstractmethod
     def hash(self) -> str:
-        ...
+        return dataframe_hash(self.dataframe())
+
+    def __repr__(self, *args: Any, **kwargs: Any) -> str:
+        return self.dataframe().__repr__(*args, **kwargs)
+
+    def _repr_html_(self, *args: Any, **kwargs: Any) -> Any:
+        return self.dataframe()._repr_html_(*args, **kwargs)
 
 
 class GenericDataLoader(DataLoader):
@@ -235,9 +240,6 @@ class GenericDataLoader(DataLoader):
             self.data, train_size=self.train_size, random_state=self.random_state
         )
         return self.decorate(test_data.reset_index(drop=True))
-
-    def hash(self) -> str:
-        return dataframe_hash(self.data)
 
 
 class SurvivalAnalysisDataLoader(DataLoader):
@@ -383,9 +385,6 @@ class SurvivalAnalysisDataLoader(DataLoader):
             test_data.reset_index(drop=True),
         )
 
-    def hash(self) -> str:
-        return dataframe_hash(self.data)
-
 
 class TimeSeriesDataLoader(DataLoader):
     @validate_arguments(config=dict(arbitrary_types_allowed=True))
@@ -400,14 +399,14 @@ class TimeSeriesDataLoader(DataLoader):
         **kwargs: Any,
     ) -> None:
         static_features = []
-        temporal_features = []
         self.outcome_features = []
 
         if len(temporal_data) == 0:
             raise ValueError("Empty temporal data")
 
-        temporal_features = list(temporal_data[0].columns)
+        temporal_features = TimeSeriesDataLoader.unique_temporal_features(temporal_data)
 
+        max_seq_len = max([len(t) for t in temporal_data])
         if static_data is not None:
             if len(static_data) != len(temporal_data):
                 raise ValueError("Static and temporal data mismatch")
@@ -418,13 +417,32 @@ class TimeSeriesDataLoader(DataLoader):
                 raise ValueError("Temporal and outcome data mismatch")
             self.outcome_features = list(outcome.columns)
 
-        for item in temporal_data:
-            # TODO: handling missing features
-            # TODO: handle missing time points
-            assert list(item.columns) == list(temporal_features)
-            assert len(item) == len(temporal_data[0])
+        for idx, item in enumerate(temporal_data):
+            # handling missing features
+            for col in temporal_features:
+                if col not in item.columns:
+                    item[col] = np.nan
+            item = item[temporal_features]
+            if len(item) != max_seq_len:
+                pads = np.nan * np.ones(
+                    (max_seq_len - len(item), len(temporal_features))
+                )
+                start = max(item.index) + 1
+                pads_df = pd.DataFrame(
+                    pads,
+                    index=[start + i for i in range(len(pads))],
+                    columns=item.columns,
+                )
 
-        self.seq_len = len(temporal_data[0])
+                item = pd.concat([item, pads_df])
+
+            # handle missing time points
+            assert list(item.columns) == list(temporal_features)
+            assert len(item) == max_seq_len
+
+            temporal_data[idx] = item
+
+        self.seq_len = max_seq_len
         grouped = TimeSeriesDataLoader.pack_raw_data(
             static_data, temporal_data, outcome
         )
@@ -446,6 +464,13 @@ class TimeSeriesDataLoader(DataLoader):
         )
 
     @staticmethod
+    def unique_temporal_features(temporal_data: List[pd.DataFrame]) -> List:
+        temporal_features = []
+        for item in temporal_data:
+            temporal_features.extend(item.columns)
+        return sorted(np.unique(temporal_features).tolist())
+
+    @staticmethod
     @validate_arguments(config=dict(arbitrary_types_allowed=True))
     def pack_raw_data(
         static_data: Optional[pd.DataFrame],
@@ -454,7 +479,7 @@ class TimeSeriesDataLoader(DataLoader):
     ) -> pd.DataFrame:
         # Temporal data: (subjects, temporal_sequence, temporal_feature)
         ext_temporal_features = []
-        temporal_features = temporal_data[0].columns
+        temporal_features = TimeSeriesDataLoader.unique_temporal_features(temporal_data)
 
         for feat in temporal_features:
             ext_temporal_features.extend(
@@ -529,7 +554,7 @@ class TimeSeriesDataLoader(DataLoader):
                 local_df[feat] = local_df[feat].astype(
                     row[f"temporal_{feat}_t{seq}"].dtype
                 )
-            temporal_data.append(local_df)
+            temporal_data.append(local_df[temporal_features])
         return static_data, temporal_data, outcome
 
     @property
@@ -657,14 +682,109 @@ class TimeSeriesDataLoader(DataLoader):
         )
         return self.unpack_and_decorate(new_data)
 
-    def hash(self) -> str:
-        return dataframe_hash(self.data["grouped_data"])
 
-    def __repr__(self, *args: Any, **kwargs: Any) -> str:
-        return self.dataframe().__repr__(*args, **kwargs)
+class TimeSeriesSurvivalDataLoader(TimeSeriesDataLoader):
+    @validate_arguments(config=dict(arbitrary_types_allowed=True))
+    def __init__(
+        self,
+        temporal_data: List[pd.DataFrame],
+        T: pd.Series,
+        E: pd.Series,
+        static_data: Optional[pd.DataFrame] = None,
+        sensitive_features: List[str] = [],
+        random_state: int = 0,
+        train_size: float = 0.8,
+        **kwargs: Any,
+    ) -> None:
+        outcome = pd.concat([T, E], axis=1)
+        self.time_to_event_col = "time_to_event"
+        self.event_col = "event"
 
-    def _repr_html_(self, *args: Any, **kwargs: Any) -> Any:
-        return self.dataframe()._repr_html_(*args, **kwargs)
+        super().__init__(
+            temporal_data=temporal_data,
+            outcome=outcome,
+            static_data=static_data,
+            sensitive_features=sensitive_features,
+            random_state=random_state,
+            train_size=train_size,
+            **kwargs,
+        )
+        self.data_type = "time_series_survival"
+
+    def info(self) -> dict:
+        parent_info = super().info()
+        parent_info["time_to_event_col"] = self.time_to_event_col
+        parent_info["event_col"] = self.event_col
+
+        return parent_info
+
+    def decorate(self, data: Any) -> "DataLoader":
+        static_data, temporal_data, outcome = data
+        if self.time_to_event_col not in outcome:
+            raise ValueError(
+                f"Survival outcome is missing tte column {self.time_to_event_col}"
+            )
+        if self.event_col not in outcome:
+            raise ValueError(
+                f"Survival outcome is missing event column {self.event_col}"
+            )
+
+        return TimeSeriesSurvivalDataLoader(
+            temporal_data,
+            static_data=static_data,
+            T=outcome[self.time_to_event_col],
+            E=outcome[self.event_col],
+            sensitive_features=self.sensitive_features,
+            random_state=self.random_state,
+            train_size=self.train_size,
+        )
+
+    def unpack_and_decorate(self, data: pd.DataFrame) -> "DataLoader":
+        unpacked_data = TimeSeriesSurvivalDataLoader.unpack_raw_data(
+            data,
+            self.static_features,
+            self.temporal_features,
+            self.outcome_features,
+            self.seq_len,
+        )
+
+        return self.decorate(unpacked_data)
+
+    @staticmethod
+    def from_info(data: pd.DataFrame, info: dict) -> "DataLoader":
+        (
+            static_data,
+            temporal_data,
+            outcome,
+        ) = TimeSeriesSurvivalDataLoader.unpack_raw_data(
+            data,
+            static_features=info["static_features"],
+            temporal_features=info["temporal_features"],
+            outcome_features=info["outcome_features"],
+            seq_len=info["seq_len"],
+        )
+        return TimeSeriesSurvivalDataLoader(
+            temporal_data,
+            static_data=static_data,
+            T=outcome[info["time_to_event_col"]],
+            E=outcome[info["event_col"]],
+            sensitive_features=info["sensitive_features"],
+        )
+
+    def unpack(self, as_numpy: bool = False) -> Any:
+        if as_numpy:
+            return (
+                np.asarray(self.data["static_data"]),
+                np.asarray(self.data["temporal_data"]),
+                np.asarray(self.data["outcome"][self.time_to_event_col]),
+                np.asarray(self.data["outcome"][self.event_col]),
+            )
+        return (
+            self.data["static_data"],
+            self.data["temporal_data"],
+            self.data["outcome"][self.time_to_event_col],
+            self.data["outcome"][self.event_col],
+        )
 
 
 @validate_arguments(config=dict(arbitrary_types_allowed=True))
