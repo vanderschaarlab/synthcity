@@ -274,6 +274,7 @@ def test_evaluate_performance_time_series(
     [
         PerformanceEvaluatorLinear,
         PerformanceEvaluatorMLP,
+        PerformanceEvaluatorXGB,
     ],
 )
 def test_evaluate_performance_time_series_survival(
