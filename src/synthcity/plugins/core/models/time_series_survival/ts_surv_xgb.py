@@ -37,7 +37,7 @@ class XGBTimeSeriesSurvival(TimeSeriesSurvivalPlugin):
         booster: int = 0,
         random_state: int = 0,
         objective: str = "aft",  # "aft", "cox"
-        strategy: str = "debiased_bce",  # "weibull", "debiased_bce", "km"
+        strategy: str = "km",  # "weibull", "debiased_bce", "km"
         bce_n_iter: int = 1000,
         time_points: int = 100,
         seed: int = 0,

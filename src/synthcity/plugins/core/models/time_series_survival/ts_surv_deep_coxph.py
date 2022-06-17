@@ -9,7 +9,6 @@ from pydantic import validate_arguments
 from sklearn.utils import shuffle
 from sksurv.linear_model.coxph import BreslowEstimator
 from torch import nn
-from tqdm import tqdm
 
 # synthcity absolute
 import synthcity.logger as log
@@ -34,14 +33,13 @@ class DeepCoxPHTimeSeriesSurvival(TimeSeriesSurvivalPlugin):
         n_iter: int = 1000,
         batch_size: int = 100,
         lr: float = 1e-3,
-        n_layers_hidden: int = 3,
-        n_units_hidden: int = 30,
+        n_layers_hidden: int = 4,
+        n_units_hidden: int = 50,
         seed: int = 0,
-        dropout: float = 0.12,
-        patience: int = 10,
-        rnn_type: str = "RNN",
+        dropout: float = 0.17,
+        patience: int = 20,
+        rnn_type: str = "LSTM",
         device: Any = DEVICE,
-        **kwargs: Any,
     ) -> None:
         super().__init__()
         enable_reproducible_results(seed)
@@ -229,7 +227,7 @@ class DeepRecurrentCoxPH(nn.Module):
 
         losses = []
 
-        for epoch in tqdm(range(self.n_iter)):
+        for epoch in range(self.n_iter):
             _ = self.train_step(x_train, t_train, e_train, optimizer)
             valcn = self.test_step(x_val, t_val_, e_val_)
 

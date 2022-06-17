@@ -8,7 +8,7 @@ import numpy as np
 import pandas as pd
 import requests
 from sklearn.impute import SimpleImputer
-from sklearn.preprocessing import StandardScaler
+from sklearn.preprocessing import LabelEncoder, StandardScaler
 
 URL = "https://raw.githubusercontent.com/autonlab/auton-survival/cf583e598ec9ab92fa5d510a0ca72d46dfe0706f/dsm/datasets/pbc2.csv"
 df_path = Path(__file__).parent / "data/pbc2.csv"
@@ -66,7 +66,7 @@ class PBCDataloader:
         data["histologic"] = data["histologic"].astype(str)
         dat_cat = data[
             ["drug", "sex", "ascites", "hepatomegaly", "spiders", "edema", "histologic"]
-        ]
+        ].copy()
         dat_num = data[
             [
                 "serBilir",
@@ -80,7 +80,10 @@ class PBCDataloader:
         ]
         age = data["age"] + data["years"]
 
-        x1 = pd.get_dummies(dat_cat)
+        for col in dat_cat.columns:
+            dat_cat[col] = LabelEncoder().fit_transform(dat_cat[col])
+
+        x1 = dat_cat
         x2 = dat_num
         x3 = pd.Series(age, name="age")
         x = pd.concat([x1, x2, x3], axis=1)
@@ -99,21 +102,12 @@ class PBCDataloader:
         t_ext, e_ext = [], []
 
         temporal_cols = [
-            "drug_D-penicil",
-            "drug_placebo",
-            "ascites_No",
-            "ascites_Yes",
-            "hepatomegaly_No",
-            "hepatomegaly_Yes",
-            "spiders_No",
-            "spiders_Yes",
-            "edema_No edema",
-            "edema_edema despite diuretics",
-            "edema_edema no diuretics",
-            "histologic_1",
-            "histologic_2",
-            "histologic_3",
-            "histologic_4",
+            "drug",
+            "ascites",
+            "hepatomegaly",
+            "spiders",
+            "edema",
+            "histologic",
             "serBilir",
             "serChol",
             "albumin",
@@ -125,15 +119,14 @@ class PBCDataloader:
         ]
 
         static_cols = [
-            "sex_female",
-            "sex_male",
+            "sex",
         ]
 
         for id_ in sorted(list(set(data["id"]))):
             patient = x_[data["id"] == id_]
 
             patient_static = patient[static_cols]
-            x_static.append(patient_static.values[0].squeeze().tolist())
+            x_static.append(patient_static.values[0].tolist())
 
             patient_temporal = patient[temporal_cols]
             patient_temporal.index = time[data["id"] == id_].values

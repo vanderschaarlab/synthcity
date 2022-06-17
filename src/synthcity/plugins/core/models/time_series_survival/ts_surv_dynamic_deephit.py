@@ -7,8 +7,6 @@ import numpy as np
 import pandas as pd
 import torch
 import torch.nn as nn
-from auton_survival.models.dsm import DeepRecurrentSurvivalMachines
-from auton_survival.models.dsm.utilities import _get_padded_features, get_optimizer
 from pydantic import validate_arguments
 
 # synthcity absolute
@@ -19,6 +17,7 @@ from synthcity.plugins.core.distribution import (
     IntegerDistribution,
 )
 from synthcity.plugins.core.models.mlp import MLP
+from synthcity.plugins.core.models.time_series_survival.utils import get_padded_features
 from synthcity.utils.constants import DEVICE
 from synthcity.utils.reproducibility import enable_reproducible_results
 
@@ -48,10 +47,6 @@ class DynamicDeephitTimeSeriesSurvival(TimeSeriesSurvivalPlugin):
         super().__init__()
         enable_reproducible_results(seed)
 
-        self.lr = lr
-        self.batch_size = batch_size
-        self.n_iter = n_iter
-
         self.model = DynamicDeepHitModel(
             split=split,
             layers_rnn=n_layers_hidden,
@@ -62,6 +57,9 @@ class DynamicDeephitTimeSeriesSurvival(TimeSeriesSurvivalPlugin):
             sigma=sigma,
             dropout=dropout,
             patience=patience,
+            lr=lr,
+            batch_size=batch_size,
+            n_iter=n_iter,
         )
 
     def _merge_data(
@@ -95,9 +93,6 @@ class DynamicDeephitTimeSeriesSurvival(TimeSeriesSurvivalPlugin):
             data,
             T,
             E,
-            batch_size=self.batch_size,
-            learning_rate=self.lr,
-            iters=self.n_iter,
         )
         return self
 
@@ -134,13 +129,10 @@ class DynamicDeephitTimeSeriesSurvival(TimeSeriesSurvivalPlugin):
         ]
 
 
-class DynamicDeepHitModel(DeepRecurrentSurvivalMachines):
+class DynamicDeepHitModel:
     """
     This implementation considers that the last event happen at the same time for each patient
     The CIF is therefore simplified
-
-    Args:
-            DeepRecurrentSurvivalMachines
     """
 
     def __init__(
@@ -154,7 +146,12 @@ class DynamicDeepHitModel(DeepRecurrentSurvivalMachines):
         beta: float = 0.1,
         sigma: float = 0.1,
         patience: int = 20,
+        lr: float = 1e-3,
+        batch_size: int = 100,
+        n_iter: int = 1000,
         device: Any = DEVICE,
+        val_size: float = 0.1,
+        random_seed: int = 0,
     ) -> None:
 
         self.split = split
@@ -170,20 +167,24 @@ class DynamicDeepHitModel(DeepRecurrentSurvivalMachines):
 
         self.device = device
         self.dropout = dropout
+        self.lr = lr
+        self.n_iter = n_iter
+        self.batch_size = batch_size
+        self.val_size = val_size
 
         self.patience = patience
+        self.random_seed = random_seed
 
-        self.torch_model: Optional[DynamicDeepHitTorch] = None
+        self.model: Optional[DynamicDeepHitLayers] = None
 
-    def _gen_torch_model(self, inputdim: int, optimizer: Any, risks: Any) -> Any:
-        model = (
-            DynamicDeepHitTorch(
+    def _setup_model(self, inputdim: int, risks: int) -> "DynamicDeepHitLayers":
+        return (
+            DynamicDeepHitLayers(
                 inputdim,
                 self.split,
                 self.layers_rnn,
                 self.hidden_rnn,
                 rnn_type=self.rnn_type,
-                optimizer=optimizer,
                 dropout=self.dropout,
                 risks=risks,
                 device=self.device,
@@ -191,50 +192,67 @@ class DynamicDeepHitModel(DeepRecurrentSurvivalMachines):
             .float()
             .to(self.device)
         )
-        return model
 
     def fit(
         self,
         x: np.ndarray,
         t: np.ndarray,
         e: np.ndarray,
-        vsize: float = 0.15,
-        val_data: Optional[Tuple] = None,
-        iters: int = 1,
-        learning_rate: float = 1e-3,
-        batch_size: int = 100,
-        optimizer: str = "Adam",
-        random_state: int = 100,
     ) -> Any:
         discretized_t, self.split_time = self.discretize(t, self.split, self.split_time)
-        processed_data = self._preprocess_training_data(
-            x, discretized_t, e, vsize, val_data, random_state
-        )
+        processed_data = self._preprocess_training_data(x, discretized_t, e)
         x_train, t_train, e_train, x_val, t_val, e_val = processed_data
         inputdim = x_train.shape[-1]
 
         maxrisk = int(np.nanmax(e_train.cpu().numpy()))
 
-        model = self._gen_torch_model(inputdim, optimizer, risks=maxrisk)
-        model = train_ddh(
-            model,
-            x_train,
-            t_train,
-            e_train,
-            x_val,
-            t_val,
-            e_val,
-            self.alpha,
-            self.beta,
-            self.sigma,
-            n_iter=iters,
-            lr=learning_rate,
-            bs=batch_size,
-            device=self.device,
-            train_patience=self.patience,
-        )
+        self.model = self._setup_model(inputdim, risks=maxrisk)
+        optimizer = torch.optim.Adam(self.model.parameters(), lr=self.lr)
 
-        self.torch_model = model.eval()
+        patience, old_loss = 0, np.inf
+        nbatches = int(x_train.shape[0] / self.batch_size) + 1
+        valbatches = int(x_val.shape[0] / self.batch_size) + 1
+
+        for i in range(self.n_iter):
+            self.model.train()
+            for j in range(nbatches):
+                xb = x_train[j * self.batch_size : (j + 1) * self.batch_size]
+                tb = t_train[j * self.batch_size : (j + 1) * self.batch_size]
+                eb = e_train[j * self.batch_size : (j + 1) * self.batch_size]
+
+                if xb.shape[0] == 0:
+                    continue
+
+                optimizer.zero_grad()
+                loss = self.total_loss(xb, tb, eb)
+                loss.backward()
+                optimizer.step()
+
+            self.model.eval()
+            valid_loss: torch.Tensor = 0
+            for j in range(valbatches):
+                xb = x_val[j * self.batch_size : (j + 1) * self.batch_size]
+                tb = t_val[j * self.batch_size : (j + 1) * self.batch_size]
+                eb = e_val[j * self.batch_size : (j + 1) * self.batch_size]
+
+                if xb.shape[0] == 0:
+                    continue
+
+                valid_loss += self.total_loss(xb, tb, eb)
+
+            valid_loss = valid_loss.item()
+            if valid_loss < old_loss:
+                patience = 0
+                old_loss = valid_loss
+                best_param = deepcopy(self.model.state_dict())
+            else:
+                patience += 1
+
+            if patience == self.patience:
+                break
+
+        self.model.load_state_dict(best_param)
+        self.model.eval()
 
         return self
 
@@ -260,7 +278,7 @@ class DynamicDeepHitModel(DeepRecurrentSurvivalMachines):
         return t_discretized, split_time
 
     def _preprocess_test_data(self, x: np.ndarray) -> torch.Tensor:
-        data = torch.from_numpy(_get_padded_features(x)).float()
+        data = torch.from_numpy(get_padded_features(x)).float()
         return data
 
     def _preprocess_training_data(
@@ -268,57 +286,29 @@ class DynamicDeepHitModel(DeepRecurrentSurvivalMachines):
         x: np.ndarray,
         t: np.ndarray,
         e: np.ndarray,
-        vsize: float,
-        val_data: Optional[Tuple],
-        random_state: int,
     ) -> Tuple:
         """RNNs require different preprocessing for variable length sequences"""
 
         idx = list(range(x.shape[0]))
-        np.random.seed(random_state)
+        np.random.seed(self.random_seed)
         np.random.shuffle(idx)
 
-        x = _get_padded_features(x)
+        x = get_padded_features(x)
         x_train, t_train, e_train = x[idx], t[idx], e[idx]
 
         x_train = torch.from_numpy(x_train.astype(float)).float().to(self.device)
         t_train = torch.from_numpy(t_train.astype(float)).float().to(self.device)
         e_train = torch.from_numpy(e_train.astype(int)).float().to(self.device)
 
-        if val_data is None:
+        vsize = int(self.val_size * x_train.shape[0])
 
-            vsize = int(vsize * x_train.shape[0])
+        x_val, t_val, e_val = x_train[-vsize:], t_train[-vsize:], e_train[-vsize:]
 
-            x_val, t_val, e_val = x_train[-vsize:], t_train[-vsize:], e_train[-vsize:]
-
-            x_train = x_train[:-vsize]
-            t_train = t_train[:-vsize]
-            e_train = e_train[:-vsize]
-
-        else:
-
-            x_val, t_val, e_val = val_data
-
-            x_val = _get_padded_features(x_val)
-            t_val, _ = self.discretize(t_val, self.split, self.split_time)
-
-            x_val = torch.from_numpy(x_val).float()
-            t_val = torch.from_numpy(np.asarray(t_val).astype(float)).float()
-            e_val = torch.from_numpy(np.asarray(e_val).astype(int)).float()
+        x_train = x_train[:-vsize]
+        t_train = t_train[:-vsize]
+        e_train = e_train[:-vsize]
 
         return (x_train, t_train, e_train, x_val, t_val, e_val)
-
-    def compute_nll(self, x: torch.Tensor, t: torch.Tensor, e: torch.Tensor) -> float:
-        if self.torch_model is None:
-            raise Exception(
-                "The model has not been fitted yet. Please fit the "
-                + "model using the `fit` method on some training data "
-                + "before calling `_eval_nll`."
-            )
-        discretized_t, _ = self.discretize(t, self.split, self.split_time)
-        processed_data = self._preprocess_training_data(x, discretized_t, e, 0, None, 0)
-        _, _, _, x_val, t_val, e_val = processed_data
-        return total_loss(self.torch_model, x_val, t_val, e_val, 0, 1, 1).item()
 
     def predict_survival(
         self,
@@ -328,7 +318,7 @@ class DynamicDeepHitModel(DeepRecurrentSurvivalMachines):
         all_step: bool = False,
         bs: int = 100,
     ) -> np.ndarray:
-        if self.torch_model is None:
+        if self.model is None:
             raise Exception(
                 "The model has not been fitted yet. Please fit the "
                 + "model using the `fit` method on some training data "
@@ -349,8 +339,8 @@ class DynamicDeepHitModel(DeepRecurrentSurvivalMachines):
         batches = int(len(x) / bs) + 1
         scores: dict = {t_: [] for t_ in t}
         for j in range(batches):
-            xb = x[j * bs : (j + 1) * bs]
-            _, f = self.torch_model(xb)
+            xb = x[j * self.batch_size : (j + 1) * self.batch_size]
+            _, f = self.model(xb)
             for t_ in t:
                 scores[t_].extend(
                     torch.cumsum(f[int(risk) - 1], dim=1)[:, t_]
@@ -368,17 +358,110 @@ class DynamicDeepHitModel(DeepRecurrentSurvivalMachines):
         return 1 - np.asarray(output).T
 
     def predict_risk(self, x: np.ndarray, t: np.ndarray, **args: Any) -> np.ndarray:
-        if self.torch_model is not None:
-            return 1 - self.predict_survival(x, t, **args)
+        return 1 - self.predict_survival(x, t, **args)
 
-        raise Exception(
-            "The model has not been fitted yet. Please fit the "
-            + "model using the `fit` method on some training data "
-            + "before calling `predict_risk`."
+    def negative_log_likelihood(
+        self,
+        outcomes: torch.Tensor,
+        cif: torch.Tensor,
+        t: torch.Tensor,
+        e: torch.Tensor,
+    ) -> torch.Tensor:
+        """
+        Compute the log likelihood loss
+        This function is used to compute the survival loss
+        """
+        loss, censored_cif = 0, 0
+        for k, ok in enumerate(outcomes):
+            # Censored cif
+            censored_cif += cif[k][e == 0][:, t[e == 0]]
+
+            # Uncensored
+            selection = e == (k + 1)
+            loss += torch.sum(torch.log(ok[selection][:, t[selection]] + 1e-10))
+
+        # Censored loss
+        loss += torch.sum(torch.log(1 - censored_cif + 1e-10))
+        return -loss / len(outcomes)
+
+    def ranking_loss(
+        self,
+        cif: torch.Tensor,
+        t: torch.Tensor,
+        e: torch.Tensor,
+    ) -> torch.Tensor:
+        """
+        Penalize wrong ordering of probability
+        Equivalent to a C Index
+        This function is used to penalize wrong ordering in the survival prediction
+        """
+        loss = 0
+        # Data ordered by time
+        for k, cifk in enumerate(cif):
+            for ci, ti in zip(cifk[e - 1 == k], t[e - 1 == k]):
+                # For all events: all patients that didn't experience event before
+                # must have a lower risk for that cause
+                if torch.sum(t > ti) > 0:
+                    # TODO: When data are sorted in time -> wan we make it even faster ?
+                    loss += torch.mean(
+                        torch.exp((cifk[t > ti][:, ti] - ci[ti])) / self.sigma
+                    )
+
+        return loss / len(cif)
+
+    def longitudinal_loss(
+        self, longitudinal_prediction: torch.Tensor, x: torch.Tensor
+    ) -> torch.Tensor:
+        """
+        Penalize error in the longitudinal predictions
+        This function is used to compute the error made by the RNN
+
+        NB: In the paper, they seem to use different losses for continuous and categorical
+        But this was not reflected in the code associated (therefore we compute MSE for all)
+
+        NB: Original paper mentions possibility of different alphas for each risk
+        But take same for all (for ranking loss)
+        """
+        length = (~torch.isnan(x[:, :, 0])).sum(axis=1) - 1
+
+        # Create a grid of the column index
+        index = torch.arange(x.size(1)).repeat(x.size(0), 1).to(self.device)
+
+        # Select all predictions until the last observed
+        prediction_mask = index <= (length - 1).unsqueeze(1).repeat(1, x.size(1))
+
+        # Select all observations that can be predicted
+        observation_mask = index <= length.unsqueeze(1).repeat(1, x.size(1))
+        observation_mask[:, 0] = False  # Remove first observation
+
+        return torch.nn.MSELoss(reduction="mean")(
+            longitudinal_prediction[prediction_mask], x[observation_mask]
+        )
+
+    def total_loss(
+        self,
+        x: torch.Tensor,
+        t: torch.Tensor,
+        e: torch.Tensor,
+    ) -> torch.Tensor:
+        if self.model is None:
+            raise RuntimeError("Invalid model for loss")
+
+        longitudinal_prediction, outcomes = self.model(x.float())
+        t, e = t.long(), e.int()
+
+        # Compute cumulative function from prediced outcomes
+        cif = [torch.cumsum(ok, 1) for ok in outcomes]
+
+        return (
+            (1 - self.alpha - self.beta)
+            * self.longitudinal_loss(longitudinal_prediction, x)
+            + self.alpha * self.ranking_loss(cif, t, e)
+            + self.beta * self.negative_log_likelihood(outcomes, cif, t, e)
         )
 
 
-class DynamicDeepHitTorch(nn.Module):
+class DynamicDeepHitLayers(nn.Module):
     def __init__(
         self,
         input_dim: int,
@@ -386,16 +469,14 @@ class DynamicDeepHitTorch(nn.Module):
         layers_rnn: int,
         hidden_rnn: int,
         rnn_type: str = "LSTM",
-        optimizer: str = "Adam",
         dropout: float = 0.1,
         risks: int = 1,
         device: Any = DEVICE,
     ) -> None:
-        super(DynamicDeepHitTorch, self).__init__()
+        super(DynamicDeepHitLayers, self).__init__()
 
         self.input_dim = input_dim
         self.output_dim = output_dim
-        self.optimizer = optimizer
         self.risks = risks
         self.rnn_type = rnn_type
         self.device = device
@@ -521,174 +602,3 @@ class DynamicDeepHitTorch(nn.Module):
             for i in range(self.risks)
         ]
         return longitudinal_prediction, outcomes
-
-
-def train_ddh(
-    model: Any,
-    x_train: torch.Tensor,
-    t_train: torch.Tensor,
-    e_train: torch.Tensor,
-    x_valid: torch.Tensor,
-    t_valid: torch.Tensor,
-    e_valid: torch.Tensor,
-    alpha: float,
-    beta: float,
-    sigma: float,
-    n_iter: int = 10000,
-    lr: float = 1e-3,
-    bs: int = 100,
-    vbs: int = 500,
-    train_patience: int = 20,
-    device: Any = DEVICE,
-) -> Any:
-
-    optimizer = get_optimizer(model, lr)
-
-    patience, old_loss = 0, np.inf
-    nbatches = int(x_train.shape[0] / bs) + 1
-    valbatches = int(x_valid.shape[0] / vbs) + 1
-
-    for i in range(n_iter):
-        model.train()
-        for j in range(nbatches):
-            xb = x_train[j * bs : (j + 1) * bs]
-            tb = t_train[j * bs : (j + 1) * bs]
-            eb = e_train[j * bs : (j + 1) * bs]
-
-            if xb.shape[0] == 0:
-                continue
-
-            optimizer.zero_grad()
-            loss = total_loss(model, xb, tb, eb, alpha, beta, sigma, device=device)
-            loss.backward()
-            optimizer.step()
-
-        model.eval()
-        valid_loss: torch.Tensor = 0
-        for j in range(valbatches):
-            xb = x_valid[j * bs : (j + 1) * bs]
-            tb = t_valid[j * bs : (j + 1) * bs]
-            eb = e_valid[j * bs : (j + 1) * bs]
-
-            if xb.shape[0] == 0:
-                continue
-
-            valid_loss += total_loss(model, xb, tb, eb, alpha, beta, sigma)
-
-        valid_loss = valid_loss.item()
-        if valid_loss < old_loss:
-            patience = 0
-            old_loss = valid_loss
-            best_param = deepcopy(model.state_dict())
-        else:
-            if patience == train_patience:
-                break
-            else:
-                patience += 1
-
-    model.load_state_dict(best_param)
-    return model
-
-
-def negative_log_likelihood(
-    outcomes: list,
-    cif: torch.Tensor,
-    t: torch.Tensor,
-    e: torch.Tensor,
-    device: Any = DEVICE,
-) -> torch.Tensor:
-    """
-    Compute the log likelihood loss
-    This function is used to compute the survival loss
-    """
-    loss, censored_cif = 0, 0
-    for k, ok in enumerate(outcomes):
-        # Censored cif
-        censored_cif += cif[k][e == 0][:, t[e == 0]]
-
-        # Uncensored
-        selection = e == (k + 1)
-        loss += torch.sum(torch.log(ok[selection][:, t[selection]] + 1e-10))
-
-    # Censored loss
-    loss += torch.sum(torch.log(1 - censored_cif + 1e-10))
-    return -loss / len(outcomes)
-
-
-def ranking_loss(
-    cif: torch.Tensor,
-    t: torch.Tensor,
-    e: torch.Tensor,
-    sigma: float,
-    device: Any = DEVICE,
-) -> torch.Tensor:
-    """
-    Penalize wrong ordering of probability
-    Equivalent to a C Index
-    This function is used to penalize wrong ordering in the survival prediction
-    """
-    loss = 0
-    # Data ordered by time
-    for k, cifk in enumerate(cif):
-        for ci, ti in zip(cifk[e - 1 == k], t[e - 1 == k]):
-            # For all events: all patients that didn't experience event before
-            # must have a lower risk for that cause
-            if torch.sum(t > ti) > 0:
-                # TODO: When data are sorted in time -> wan we make it even faster ?
-                loss += torch.mean(torch.exp((cifk[t > ti][:, ti] - ci[ti])) / sigma)
-
-    return loss / len(cif)
-
-
-def longitudinal_loss(
-    longitudinal_prediction: torch.Tensor, x: torch.Tensor, device: Any = DEVICE
-) -> torch.Tensor:
-    """
-    Penalize error in the longitudinal predictions
-    This function is used to compute the error made by the RNN
-
-    NB: In the paper, they seem to use different losses for continuous and categorical
-    But this was not reflected in the code associated (therefore we compute MSE for all)
-
-    NB: Original paper mentions possibility of different alphas for each risk
-    But take same for all (for ranking loss)
-    """
-    length = (~torch.isnan(x[:, :, 0])).sum(axis=1) - 1
-
-    # Create a grid of the column index
-    index = torch.arange(x.size(1)).repeat(x.size(0), 1).to(device)
-
-    # Select all predictions until the last observed
-    prediction_mask = index <= (length - 1).unsqueeze(1).repeat(1, x.size(1))
-
-    # Select all observations that can be predicted
-    observation_mask = index <= length.unsqueeze(1).repeat(1, x.size(1))
-    observation_mask[:, 0] = False  # Remove first observation
-
-    return torch.nn.MSELoss(reduction="mean")(
-        longitudinal_prediction[prediction_mask], x[observation_mask]
-    )
-
-
-def total_loss(
-    model: nn.Module,
-    x: torch.Tensor,
-    t: torch.Tensor,
-    e: torch.Tensor,
-    alpha: float,
-    beta: float,
-    sigma: float,
-    device: Any = DEVICE,
-) -> torch.Tensor:
-    longitudinal_prediction, outcomes = model(x.float())
-    t, e = t.long(), e.int()
-
-    # Compute cumulative function from prediced outcomes
-    cif = [torch.cumsum(ok, 1) for ok in outcomes]
-
-    return (
-        (1 - alpha - beta)
-        * longitudinal_loss(longitudinal_prediction, x, device=device)
-        + alpha * ranking_loss(cif, t, e, sigma, device=device)
-        + beta * negative_log_likelihood(outcomes, cif, t, e, device=device)
-    )

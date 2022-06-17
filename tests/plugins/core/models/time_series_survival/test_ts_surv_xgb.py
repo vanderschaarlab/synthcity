@@ -29,7 +29,7 @@ def test_train_prediction() -> None:
     static, temporal, outcome = PBCDataloader(as_numpy=True).load()
     T, E, _, _ = outcome
 
-    horizons = [0.85]
+    horizons = [0.25, 0.5, 0.75]
     time_horizons = np.quantile(
         [t_ for t_, e_ in zip(T, E) if e_ == 1], horizons
     ).tolist()
