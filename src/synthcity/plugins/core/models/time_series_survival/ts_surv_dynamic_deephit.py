@@ -38,14 +38,14 @@ class DynamicDeephitTimeSeriesSurvival(TimeSeriesSurvivalPlugin):
         alpha: float = 0.34,
         beta: float = 0.27,
         sigma: float = 0.21,
-        seed: int = 0,
+        random_state: int = 0,
         dropout: float = 0.06,
         device: Any = DEVICE,
         patience: int = 20,
-        **kwargs: Any
+        **kwargs: Any,
     ) -> None:
         super().__init__()
-        enable_reproducible_results(seed)
+        enable_reproducible_results(random_state)
 
         self.model = DynamicDeepHitModel(
             split=split,
@@ -111,22 +111,41 @@ class DynamicDeephitTimeSeriesSurvival(TimeSeriesSurvivalPlugin):
             self.model.predict_risk(data, time_horizons), columns=time_horizons
         )
 
+    @validate_arguments(config=dict(arbitrary_types_allowed=True))
+    def predict_emb(
+        self,
+        static: Optional[np.ndarray],
+        temporal: np.ndarray,
+    ) -> np.ndarray:
+        "Predict embeddings"
+        data = self._merge_data(static, temporal)
+
+        return self.model.predict_emb(data).detach().cpu().numpy()
+
     @staticmethod
     def name() -> str:
         return "dynamic_deephit"
 
     @staticmethod
-    def hyperparameter_space(*args: Any, **kwargs: Any) -> List[Distribution]:
+    def hyperparameter_space(
+        *args: Any, prefix: str = "", **kwargs: Any
+    ) -> List[Distribution]:
         return [
-            IntegerDistribution(name="n_units_hidden", low=10, high=100, step=10),
-            IntegerDistribution(name="n_layers_hidden", low=1, high=4),
-            CategoricalDistribution(name="batch_size", choices=[100, 200, 500]),
-            CategoricalDistribution(name="lr", choices=[1e-2, 1e-3, 1e-4]),
-            CategoricalDistribution(name="rnn_type", choices=["LSTM", "GRU", "RNN"]),
-            FloatDistribution(name="alpha", low=0.0, high=0.5),
-            FloatDistribution(name="sigma", low=0.0, high=0.5),
-            FloatDistribution(name="beta", low=0.0, high=0.5),
-            FloatDistribution(name="dropout", low=0.0, high=0.2),
+            IntegerDistribution(
+                name=f"{prefix}_n_units_hidden", low=10, high=100, step=10
+            ),
+            IntegerDistribution(name=f"{prefix}_n_layers_hidden", low=1, high=4),
+            CategoricalDistribution(
+                name=f"{prefix}_batch_size", choices=[100, 200, 500]
+            ),
+            CategoricalDistribution(name="f{prefix}_lr", choices=[1e-2, 1e-3, 1e-4]),
+            CategoricalDistribution(
+                name=f"{prefix}_rnn_type", choices=["LSTM", "GRU", "RNN"]
+            ),
+            FloatDistribution(name=f"{prefix}_alpha", low=0.0, high=0.5),
+            FloatDistribution(name=f"{prefix}_sigma", low=0.0, high=0.5),
+            FloatDistribution(name=f"{prefix}_beta", low=0.0, high=0.5),
+            FloatDistribution(name=f"{prefix}_dropout", low=0.0, high=0.2),
         ]
 
 
@@ -152,7 +171,7 @@ class DynamicDeepHitModel:
         n_iter: int = 1000,
         device: Any = DEVICE,
         val_size: float = 0.1,
-        random_seed: int = 0,
+        random_state: int = 0,
         clipping_value: int = 1,
     ) -> None:
 
@@ -176,7 +195,7 @@ class DynamicDeepHitModel:
         self.clipping_value = clipping_value
 
         self.patience = patience
-        self.random_seed = random_seed
+        self.random_state = random_state
 
         self.model: Optional[DynamicDeepHitLayers] = None
 
@@ -287,7 +306,11 @@ class DynamicDeepHitModel:
         return t_discretized, split_time
 
     def _preprocess_test_data(self, x: np.ndarray) -> torch.Tensor:
-        data = torch.from_numpy(get_padded_features(x)).float().to(self.device)
+        data = (
+            torch.from_numpy(get_padded_features(x, pad_size=self.pad_size))
+            .float()
+            .to(self.device)
+        )
         return data
 
     def _preprocess_training_data(
@@ -299,10 +322,11 @@ class DynamicDeepHitModel:
         """RNNs require different preprocessing for variable length sequences"""
 
         idx = list(range(x.shape[0]))
-        np.random.seed(self.random_seed)
+        np.random.seed(self.random_state)
         np.random.shuffle(idx)
 
         x = get_padded_features(x)
+        self.pad_size = x.shape[1]
         x_train, t_train, e_train = x[idx], t[idx], e[idx]
 
         x_train = torch.from_numpy(x_train.astype(float)).float().to(self.device)
@@ -318,6 +342,20 @@ class DynamicDeepHitModel:
         e_train = e_train[:-vsize]
 
         return (x_train, t_train, e_train, x_val, t_val, e_val)
+
+    def predict_emb(
+        self,
+        x: np.ndarray,
+    ) -> np.ndarray:
+        if self.model is None:
+            raise Exception(
+                "The model has not been fitted yet. Please fit the "
+                + "model using the `fit` method on some training data "
+                + "before calling `predict_survival`."
+            )
+        x = self._preprocess_test_data(x)
+
+        return self.model.forward_emb(x)
 
     def predict_survival(
         self,
@@ -550,6 +588,18 @@ class DynamicDeepHitLayers(nn.Module):
 
         # Probability
         self.soft = nn.Softmax(dim=-1)  # On all observed output
+
+    def forward_emb(self, x: torch.Tensor) -> torch.Tensor:
+        # RNN representation - Nan values for not observed data
+        x = x.clone()
+        x[torch.isnan(x)] = -1
+
+        assert torch.isnan(x).sum() == 0
+
+        hidden, _ = self.embedding(x)
+        assert torch.isnan(hidden).sum() == 0
+
+        return hidden
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         """

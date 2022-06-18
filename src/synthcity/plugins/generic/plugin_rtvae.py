@@ -49,8 +49,8 @@ class RTVAEPlugin(Plugin):
             l2 (ridge) penalty for the weights.
         batch_size: int
             Batch size
-        seed: int
-            Seed used
+        random_state: int
+            random_state used
         clipping_value: int, default 1
             Gradients clipping value
         encoder_max_clusters: int
@@ -72,7 +72,7 @@ class RTVAEPlugin(Plugin):
         lr: float = 1e-4,
         weight_decay: float = 1e-3,
         batch_size: int = 100,
-        seed: int = 0,
+        random_state: int = 0,
         clipping_value: int = 1,
         loss_strategy: str = "robust_divergence",
         decoder_n_layers_hidden: int = 2,
@@ -101,7 +101,7 @@ class RTVAEPlugin(Plugin):
         self.lr = lr
         self.weight_decay = weight_decay
         self.batch_size = batch_size
-        self.seed = seed
+        self.random_state = random_state
         self.clipping_value = clipping_value
         self.data_encoder_max_clusters = data_encoder_max_clusters
         self.loss_strategy = loss_strategy

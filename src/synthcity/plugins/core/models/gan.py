@@ -58,8 +58,8 @@ class GAN(nn.Module):
             Batch size
         n_iter_print: int
             Number of iterations after which to print updates and check the validation loss.
-        seed: int
-            Seed used
+        random_state: int
+            random_state used
         n_iter_min: int
             Minimum number of iterations to go through before starting early stopping
         clipping_value: int, default 0
@@ -105,7 +105,7 @@ class GAN(nn.Module):
         ],  # "gradient_penalty", "identifiability_penalty"
         batch_size: int = 64,
         n_iter_print: int = 10,
-        seed: int = 0,
+        random_state: int = 0,
         n_iter_min: int = 100,
         clipping_value: int = 0,
         lambda_gradient_penalty: float = 10,
@@ -146,7 +146,7 @@ class GAN(nn.Module):
             batch_norm=generator_batch_norm,
             dropout=generator_dropout,
             loss=generator_loss,
-            seed=seed,
+            random_state=random_state,
             lr=generator_lr,
             residual=generator_residual,
             opt_betas=generator_opt_betas,
@@ -165,7 +165,7 @@ class GAN(nn.Module):
             batch_norm=discriminator_batch_norm,
             dropout=discriminator_dropout,
             loss=discriminator_loss,
-            seed=seed,
+            random_state=random_state,
             lr=discriminator_lr,
             opt_betas=discriminator_opt_betas,
             device=device,
@@ -182,8 +182,8 @@ class GAN(nn.Module):
         self.lambda_gradient_penalty = lambda_gradient_penalty
         self.lambda_identifiability_penalty = lambda_identifiability_penalty
 
-        self.seed = seed
-        enable_reproducible_results(seed)
+        self.random_state = random_state
+        enable_reproducible_results(random_state)
 
         def gen_fake_labels(X: torch.Tensor) -> torch.Tensor:
             return torch.zeros((len(X),), device=self.device)

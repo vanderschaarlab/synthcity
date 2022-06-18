@@ -64,8 +64,8 @@ class TimeSeriesTabularGAN(torch.nn.Module):
             Batch size
         n_iter_print: int
             Number of iterations after which to print updates and check the validation loss.
-        seed: int
-            Seed used
+        random_state: int
+            random_state used
         clipping_value: int, default 0
             Gradients clipping value
         encoder_max_clusters: int
@@ -111,7 +111,7 @@ class TimeSeriesTabularGAN(torch.nn.Module):
         discriminator_weight_decay: float = 1e-3,
         batch_size: int = 64,
         n_iter_print: int = 50,
-        seed: int = 0,
+        random_state: int = 0,
         clipping_value: int = 0,
         mode: str = "RNN",
         encoder_max_clusters: int = 20,
@@ -170,7 +170,7 @@ class TimeSeriesTabularGAN(torch.nn.Module):
             mode=mode,
             clipping_value=clipping_value,
             n_iter_print=n_iter_print,
-            seed=seed,
+            random_state=random_state,
             dataloader_sampler=dataloader_sampler,
             device=device,
             gamma_penalty=gamma_penalty,

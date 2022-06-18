@@ -159,7 +159,7 @@ class PATEGAN(Serializable):
         lr: float = 1e-4,
         weight_decay: float = 1e-3,
         batch_size: int = 500,
-        seed: int = 0,
+        random_state: int = 0,
         clipping_value: int = 0,
         encoder_max_clusters: int = 20,
         # Privacy
@@ -187,7 +187,7 @@ class PATEGAN(Serializable):
         self.lr = lr
         self.weight_decay = weight_decay
         self.batch_size = batch_size
-        self.seed = seed
+        self.random_state = random_state
         self.clipping_value = clipping_value
         # Privacy
         self.n_teachers = n_teachers
@@ -371,8 +371,8 @@ class PATEGANPlugin(Plugin):
             l2 (ridge) penalty for the weights.
         batch_size: int
             Batch size
-        seed: int
-            Seed used
+        random_state: int
+            random_state used
         clipping_value: int, default 0
             Gradients clipping value. Zero disables the feature
         n_teachers: int
@@ -416,7 +416,7 @@ class PATEGANPlugin(Plugin):
         lr: float = 1e-4,
         weight_decay: float = 1e-3,
         batch_size: int = 500,
-        seed: int = 0,
+        random_state: int = 0,
         clipping_value: int = 0,
         encoder_max_clusters: int = 20,
         # Privacy
@@ -446,7 +446,7 @@ class PATEGANPlugin(Plugin):
             lr=lr,
             weight_decay=weight_decay,
             batch_size=batch_size,
-            seed=seed,
+            random_state=random_state,
             clipping_value=clipping_value,
             encoder_max_clusters=encoder_max_clusters,
             encoder=encoder,

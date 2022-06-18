@@ -44,7 +44,7 @@ def test_network_config() -> None:
         # Training
         batch_size=64,
         n_iter_print=100,
-        seed=77,
+        random_state=77,
         clipping_value=1,
         gamma_penalty=2,
         moments_penalty=2,
@@ -57,7 +57,7 @@ def test_network_config() -> None:
     assert net.batch_size == 64
     assert net.generator_n_iter == 1001
     assert net.discriminator_n_iter == 1002
-    assert net.seed == 77
+    assert net.random_state == 77
     assert net.gamma_penalty == 2
     assert net.moments_penalty == 2
     assert net.embedding_penalty == 2

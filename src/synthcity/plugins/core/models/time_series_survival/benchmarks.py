@@ -89,7 +89,7 @@ def search_hyperparams(
     time_horizons: List,
     n_folds: int = 3,
     metrics: List[str] = ["c_index", "brier_score"],
-    seed: int = 0,
+    random_state: int = 0,
     pretrained: bool = False,
     n_trials: int = 50,
     timeout: int = 100,
@@ -144,7 +144,7 @@ def evaluate_ts_survival_model(
     time_horizons: List,
     n_folds: int = 3,
     metrics: List[str] = ["c_index", "brier_score"],
-    seed: int = 0,
+    random_state: int = 0,
     pretrained: bool = False,
 ) -> Dict:
     """Helper for evaluating survival analysis tasks.
@@ -168,8 +168,8 @@ def evaluate_ts_survival_model(
             Number of folds for cross validation
         metrics: list
             Available metrics: "c_index", "brier_score"
-        seed: int
-            Random seed
+        random_state: int
+            Random random_state
         pretrained: bool
             If the estimator was trained or not
     """
@@ -246,7 +246,7 @@ def evaluate_ts_survival_model(
             T_test,
             Y_train,
             Y_test,
-        ) = train_test_split(static, temporal, T, Y, random_state=seed)
+        ) = train_test_split(static, temporal, T, Y, random_state=random_state)
         local_time_horizons = [t for t in time_horizons if t > np.min(T_test)]
 
         c_index, brier_score = _get_surv_metrics(
@@ -268,7 +268,7 @@ def evaluate_ts_survival_model(
                 results[metric][cv_idx] = brier_score
 
     else:
-        skf = StratifiedKFold(n_splits=n_folds, shuffle=True, random_state=seed)
+        skf = StratifiedKFold(n_splits=n_folds, shuffle=True, random_state=random_state)
 
         cv_idx = 0
         for train_index, test_index in skf.split(temporal, Y):

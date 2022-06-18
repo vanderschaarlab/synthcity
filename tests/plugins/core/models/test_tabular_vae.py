@@ -31,7 +31,7 @@ def test_network_config() -> None:
         # Training
         batch_size=64,
         n_iter_print=100,
-        seed=77,
+        random_state=77,
         clipping_value=1,
         encoder_max_clusters=5,
     )
@@ -40,7 +40,7 @@ def test_network_config() -> None:
     assert len(net.model.encoder.model) == 3
     assert net.model.batch_size == 64
     assert net.model.n_iter == 1001
-    assert net.model.seed == 77
+    assert net.model.random_state == 77
     assert net.encoder is not None
 
 

@@ -30,7 +30,7 @@ def test_network_config() -> None:
         weight_decay=1e-3,
         batch_size=64,
         n_iter_print=100,
-        seed=77,
+        random_state=77,
         clipping_value=1,
     )
 

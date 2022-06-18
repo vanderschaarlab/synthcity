@@ -71,8 +71,8 @@ class TimeSeriesGAN(nn.Module):
             Batch size
         n_iter_print: int
             Number of iterations after which to print updates and check the validation loss.
-        seed: int
-            Seed used
+        random_state: int
+            random_state used
         clipping_value: int, default 0
             Gradients clipping value. Zero disables the feature
     """
@@ -109,7 +109,7 @@ class TimeSeriesGAN(nn.Module):
         discriminator_weight_decay: float = 1e-3,
         batch_size: int = 64,
         n_iter_print: int = 10,
-        seed: int = 0,
+        random_state: int = 0,
         clipping_value: int = 1,
         gamma_penalty: float = 1,
         moments_penalty: float = 100,
@@ -121,7 +121,7 @@ class TimeSeriesGAN(nn.Module):
     ) -> None:
         super(TimeSeriesGAN, self).__init__()
 
-        enable_reproducible_results(seed)
+        enable_reproducible_results(random_state)
 
         log.debug(f"Training GAN on device {device}")
         self.device = device
@@ -146,7 +146,7 @@ class TimeSeriesGAN(nn.Module):
             batch_norm=generator_batch_norm,
             dropout=generator_dropout,
             loss=generator_loss,
-            seed=seed,
+            random_state=random_state,
             lr=generator_lr,
             residual=generator_residual,
             device=device,
@@ -163,7 +163,7 @@ class TimeSeriesGAN(nn.Module):
             "n_iter": generator_n_iter,
             "dropout": generator_dropout,
             "loss": generator_loss,
-            "seed": seed,
+            "random_state": random_state,
             "lr": generator_lr,
             "device": device,
         }
@@ -221,7 +221,7 @@ class TimeSeriesGAN(nn.Module):
             n_iter=discriminator_n_iter,
             dropout=discriminator_dropout,
             loss=discriminator_loss,
-            seed=seed,
+            random_state=random_state,
             lr=discriminator_lr,
             device=device,
         ).to(self.device)
@@ -238,7 +238,7 @@ class TimeSeriesGAN(nn.Module):
         self.moments_penalty = moments_penalty
         self.embedding_penalty = embedding_penalty
 
-        self.seed = seed
+        self.random_state = random_state
 
         self.dataloader_sampler = dataloader_sampler
 

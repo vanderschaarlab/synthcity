@@ -52,7 +52,7 @@ class TimeEventNN(nn.Module):
         opt_betas: tuple = (0.9, 0.999),
         batch_size: int = 500,
         n_iter_print: int = 50,
-        seed: int = 0,
+        random_state: int = 0,
         n_iter_min: int = 100,
         clipping_value: int = 0,
         patience: int = 5,
@@ -83,7 +83,7 @@ class TimeEventNN(nn.Module):
             n_iter=n_iter,
             batch_norm=batch_norm,
             dropout=dropout,
-            seed=seed,
+            random_state=random_state,
             lr=lr,
             residual=residual,
             opt_betas=opt_betas,
@@ -97,8 +97,8 @@ class TimeEventNN(nn.Module):
         self.batch_size = batch_size
         self.clipping_value = clipping_value
 
-        self.seed = seed
-        enable_reproducible_results(seed)
+        self.random_state = random_state
+        enable_reproducible_results(random_state)
 
     def fit(
         self,
@@ -137,7 +137,7 @@ class TimeEventNN(nn.Module):
             T.cpu(),
             E.cpu(),
             stratify=E.cpu(),
-            random_state=self.seed,
+            random_state=self.random_state,
         )
 
         train_dataset = TensorDataset(

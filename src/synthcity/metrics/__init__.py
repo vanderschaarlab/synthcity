@@ -96,6 +96,7 @@ class Metrics:
         n_histogram_bins: int = 10,
         metrics: Optional[Dict] = None,
         task_type: str = "classification",
+        random_state: int = 0,
     ) -> pd.DataFrame:
         supported_tasks = [
             "classification",
@@ -144,6 +145,7 @@ class Metrics:
                     reduction=reduction,
                     n_histogram_bins=n_histogram_bins,
                     task_type=task_type,
+                    random_state=random_state,
                 ),
                 X_gt.sample(eval_cnt),
                 X_syn.sample(eval_cnt),

@@ -8,7 +8,9 @@ from pydantic import validate_arguments
 
 # synthcity absolute
 from synthcity.plugins.core.distribution import Distribution
-from synthcity.plugins.core.models.survival_analysis.surv_xgb import XGBSurvivalAnalysis
+from synthcity.plugins.core.models.survival_analysis.surv_coxph import (
+    CoxPHSurvivalAnalysis,
+)
 from synthcity.utils.constants import DEVICE
 from synthcity.utils.reproducibility import enable_reproducible_results
 
@@ -21,19 +23,8 @@ class XGBTimeSeriesSurvival(TimeSeriesSurvivalPlugin):
     def __init__(
         self,
         # prediction
-        n_estimators: int = 100,
-        colsample_bynode: float = 0.5,
-        max_depth: int = 5,
-        subsample: float = 0.5,
-        learning_rate: float = 5e-2,
-        min_child_weight: int = 50,
-        tree_method: str = "hist",
-        booster: int = 0,
-        random_state: int = 0,
-        objective: str = "aft",  # "aft", "cox"
-        strategy: str = "km",  # "weibull", "debiased_bce", "km"
-        bce_n_iter: int = 1000,
-        time_points: int = 100,
+        alpha: float = 0,
+        penalizer: float = 0.1,
         device: Any = DEVICE,
         # embeddings
         emb_n_iter: int = 1000,
@@ -50,13 +41,13 @@ class XGBTimeSeriesSurvival(TimeSeriesSurvivalPlugin):
         emb_patience: int = 20,
         # hyperopt helper
         n_iter: Optional[int] = None,
+        random_state: int = 0,
         **kwargs: Any,
     ) -> None:
         super().__init__()
         enable_reproducible_results(random_state)
 
         if n_iter is not None:
-            n_estimators = n_iter
             emb_n_iter = n_iter
 
         self.emb_model = DynamicDeephitTimeSeriesSurvival(
@@ -74,21 +65,9 @@ class XGBTimeSeriesSurvival(TimeSeriesSurvivalPlugin):
             patience=emb_patience,
             random_state=random_state,
         )
-        self.pred_model = XGBSurvivalAnalysis(
-            n_estimators=n_estimators,
-            colsample_bynode=colsample_bynode,
-            max_depth=max_depth,
-            subsample=subsample,
-            learning_rate=learning_rate,
-            min_child_weight=min_child_weight,
-            tree_method=tree_method,
-            booster=booster,
-            random_state=random_state,
-            objective=objective,
-            strategy=strategy,
-            time_points=time_points,
-            bce_n_iter=bce_n_iter,
-            device=device,
+        self.pred_model = CoxPHSurvivalAnalysis(
+            alpha=alpha,
+            penalizer=penalizer,
         )
 
     @validate_arguments(config=dict(arbitrary_types_allowed=True))
@@ -127,6 +106,6 @@ class XGBTimeSeriesSurvival(TimeSeriesSurvivalPlugin):
     @staticmethod
     def hyperparameter_space(*args: Any, **kwargs: Any) -> List[Distribution]:
         return (
-            XGBSurvivalAnalysis.hyperparameter_space()
+            CoxPHSurvivalAnalysis.hyperparameter_space()
             + DynamicDeephitTimeSeriesSurvival.hyperparameter_space(prefix="emb")
         )

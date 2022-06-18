@@ -27,7 +27,7 @@ def test_network_config() -> None:
         batch_norm=True,
         nonlin="elu",
         patience=66,
-        seed=77,
+        random_state=77,
     )
 
     assert len(net.model) == 3
@@ -35,7 +35,7 @@ def test_network_config() -> None:
     assert net.n_iter == 34
     assert net.lr == 1e-2
     assert net.patience == 66
-    assert net.seed == 77
+    assert net.random_state == 77
 
 
 @pytest.mark.parametrize("task_type", ["regression", "classification"])

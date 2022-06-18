@@ -159,8 +159,8 @@ class MLP(nn.Module):
         Batch size
     n_iter_print: int
         Number of iterations after which to print updates and check the validation loss.
-    seed: int
-        Seed used
+    random_state: int
+        random_state used
     patience: int
         Number of iterations to wait before early stopping after decrease in validation loss
     n_iter_min: int
@@ -195,7 +195,7 @@ class MLP(nn.Module):
         n_iter: int = 1000,
         batch_size: int = 500,
         n_iter_print: int = 100,
-        seed: int = 0,
+        random_state: int = 0,
         patience: int = 10,
         n_iter_min: int = 100,
         dropout: float = 0.1,
@@ -211,10 +211,10 @@ class MLP(nn.Module):
         assert n_units_in >= 0
         assert n_units_out >= 0
 
-        enable_reproducible_results(seed)
+        enable_reproducible_results(random_state)
         self.device = device
         self.task_type = task_type
-        self.seed = seed
+        self.random_state = random_state
 
         if residual:
             block = ResidualLayer

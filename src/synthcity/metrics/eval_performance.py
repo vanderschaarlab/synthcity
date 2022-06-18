@@ -155,7 +155,7 @@ class PerformanceEvaluator(MetricEvaluator):
         if len(id_y_gt.unique()) < 5:
             eval_cbk = self._evaluate_performance_classification
             skf = StratifiedKFold(
-                n_splits=self._n_folds, shuffle=True, random_state=self._random_seed
+                n_splits=self._n_folds, shuffle=True, random_state=self._random_state
             )
             model = clf_model
             model_args = clf_args
@@ -164,7 +164,7 @@ class PerformanceEvaluator(MetricEvaluator):
             model = regression_model
             model_args = regression_args
             skf = KFold(
-                n_splits=self._n_folds, shuffle=True, random_state=self._random_seed
+                n_splits=self._n_folds, shuffle=True, random_state=self._random_state
             )
 
         real_scores = []
@@ -314,7 +314,7 @@ class PerformanceEvaluator(MetricEvaluator):
         static_syn, temporal_syn, outcome_syn = X_syn.unpack(as_numpy=True)
 
         skf = KFold(
-            n_splits=self._n_folds, shuffle=True, random_state=self._random_seed
+            n_splits=self._n_folds, shuffle=True, random_state=self._random_state
         )
 
         real_scores = []
@@ -521,7 +521,7 @@ class PerformanceEvaluatorXGB(PerformanceEvaluator):
                     "verbosity": 0,
                     "depth": 3,
                     "strategy": "debiased_bce",  # "weibull", "debiased_bce"
-                    "random_state": self._random_seed,
+                    "random_state": self._random_state,
                 },
                 X_gt,
                 X_syn,
@@ -531,7 +531,7 @@ class PerformanceEvaluatorXGB(PerformanceEvaluator):
                 "n_jobs": -1,
                 "verbosity": 0,
                 "depth": 3,
-                "random_state": self._random_seed,
+                "random_state": self._random_state,
             }
 
             xgb_reg_args = copy.deepcopy(xgb_clf_args)
@@ -552,7 +552,7 @@ class PerformanceEvaluatorXGB(PerformanceEvaluator):
                     "verbosity": 0,
                     "depth": 3,
                     "strategy": "debiased_bce",  # "weibull", "debiased_bce"
-                    "random_state": self._random_seed,
+                    "random_state": self._random_state,
                 },
                 X_gt,
                 X_syn,
@@ -584,7 +584,7 @@ class PerformanceEvaluatorLinear(PerformanceEvaluator):
         elif self._task_type == "classification" or self._task_type == "regression":
             return self._evaluate_standard_performance(
                 LogisticRegression,
-                {"random_state": self._random_seed},
+                {"random_state": self._random_state},
                 LinearRegression,
                 {},
                 X_gt,
@@ -641,7 +641,7 @@ class PerformanceEvaluatorMLP(PerformanceEvaluator):
             mlp_args = {
                 "n_units_in": X_gt.shape[1] - 1,
                 "n_units_out": 1,
-                "seed": self._random_seed,
+                "random_state": self._random_state,
             }
             clf_args = copy.deepcopy(mlp_args)
             clf_args["task_type"] = "classification"

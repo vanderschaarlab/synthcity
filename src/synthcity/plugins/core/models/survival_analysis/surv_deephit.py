@@ -37,12 +37,12 @@ class DeephitSurvivalAnalysis(SurvivalAnalysisPlugin):
         dropout: float = 0.2,
         patience: int = 20,
         batch_norm: bool = False,
-        seed: int = 0,
+        random_state: int = 0,
         device: Any = DEVICE,
         **kwargs: Any
     ) -> None:
         super().__init__()
-        enable_reproducible_results(seed)
+        enable_reproducible_results(random_state)
 
         self.device = device
         self.num_durations = num_durations

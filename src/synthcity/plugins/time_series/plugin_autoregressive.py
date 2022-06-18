@@ -44,7 +44,7 @@ class ARModel:
         residual: bool = True,
         batch_size: int = 64,
         n_iter_print: int = 10,
-        seed: int = 0,
+        random_state: int = 0,
         clipping_value: int = 0,
         encoder_max_clusters: int = 20,
         encoder: Any = None,
@@ -66,7 +66,7 @@ class ARModel:
         self.residual = residual
         self.batch_size = batch_size
         self.n_iter_print = n_iter_print
-        self.seed = seed
+        self.random_state = random_state
         self.clipping_value = clipping_value
         self.mode = mode
         self.encoder_max_clusters = encoder_max_clusters
@@ -212,8 +212,8 @@ class AutoregressivePlugin(Plugin):
             Batch size
         n_iter_print: int
             Number of iterations after which to print updates and check the validation loss.
-        seed: int
-            Seed used
+        random_state: int
+            random_state used
         clipping_value: int, default 0
             Gradients clipping value
         encoder_max_clusters: int
@@ -257,7 +257,7 @@ class AutoregressivePlugin(Plugin):
         residual: bool = True,
         batch_size: int = 64,
         n_iter_print: int = 10,
-        seed: int = 0,
+        random_state: int = 0,
         clipping_value: int = 0,
         encoder_max_clusters: int = 20,
         device: Any = DEVICE,
@@ -280,7 +280,7 @@ class AutoregressivePlugin(Plugin):
         self.residual = residual
         self.batch_size = batch_size
         self.n_iter_print = n_iter_print
-        self.seed = seed
+        self.random_state = random_state
         self.clipping_value = clipping_value
         self.mode = mode
         self.encoder_max_clusters = encoder_max_clusters

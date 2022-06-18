@@ -56,8 +56,8 @@ class TabularGAN(torch.nn.Module):
             Batch size
         n_iter_print: int
             Number of iterations after which to print updates and check the validation loss.
-        seed: int
-            Seed used
+        random_state: int
+            random_state used
         n_iter_min: int
             Minimum number of iterations to go through before starting early stopping
         clipping_value: int, default 0
@@ -107,7 +107,7 @@ class TabularGAN(torch.nn.Module):
         ],  # "identifiability_penalty", "gradient_penalty"
         batch_size: int = 64,
         n_iter_print: int = 50,
-        seed: int = 0,
+        random_state: int = 0,
         n_iter_min: int = 100,
         clipping_value: int = 0,
         lambda_gradient_penalty: float = 10,
@@ -160,7 +160,7 @@ class TabularGAN(torch.nn.Module):
             lambda_identifiability_penalty=lambda_identifiability_penalty,
             clipping_value=clipping_value,
             n_iter_print=n_iter_print,
-            seed=seed,
+            random_state=random_state,
             n_iter_min=n_iter_min,
             dataloader_sampler=dataloader_sampler,
             device=device,

@@ -66,8 +66,8 @@ class TimeGANPlugin(Plugin):
             Batch size
         n_iter_print: int
             Number of iterations after which to print updates and check the validation loss.
-        seed: int
-            Seed used
+        random_state: int
+            random_state used
         clipping_value: int, default 0
             Gradients clipping value
         encoder_max_clusters: int
@@ -125,7 +125,7 @@ class TimeGANPlugin(Plugin):
         discriminator_weight_decay: float = 1e-3,
         batch_size: int = 64,
         n_iter_print: int = 10,
-        seed: int = 0,
+        random_state: int = 0,
         clipping_value: int = 0,
         encoder_max_clusters: int = 20,
         encoder: Any = None,
@@ -161,7 +161,7 @@ class TimeGANPlugin(Plugin):
         self.discriminator_weight_decay = discriminator_weight_decay
         self.batch_size = batch_size
         self.n_iter_print = n_iter_print
-        self.seed = seed
+        self.random_state = random_state
         self.clipping_value = clipping_value
         self.mode = mode
         self.encoder_max_clusters = encoder_max_clusters
@@ -252,7 +252,7 @@ class TimeGANPlugin(Plugin):
             discriminator_weight_decay=self.discriminator_weight_decay,
             batch_size=self.batch_size,
             n_iter_print=self.n_iter_print,
-            seed=self.seed,
+            random_state=self.random_state,
             clipping_value=self.clipping_value,
             mode=self.mode,
             encoder_max_clusters=self.encoder_max_clusters,

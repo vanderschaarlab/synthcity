@@ -35,14 +35,14 @@ class DeepCoxPHTimeSeriesSurvival(TimeSeriesSurvivalPlugin):
         lr: float = 1e-3,
         n_layers_hidden: int = 4,
         n_units_hidden: int = 50,
-        seed: int = 0,
+        random_state: int = 0,
         dropout: float = 0.17,
         patience: int = 20,
         rnn_type: str = "LSTM",
         device: Any = DEVICE,
     ) -> None:
         super().__init__()
-        enable_reproducible_results(seed)
+        enable_reproducible_results(random_state)
 
         self.lr = lr
         self.batch_size = batch_size
@@ -52,7 +52,7 @@ class DeepCoxPHTimeSeriesSurvival(TimeSeriesSurvivalPlugin):
         self.dropout = dropout
         self.rnn_type = rnn_type
         self.patience = patience
-        self.seed = seed
+        self.random_state = random_state
         self.device = device
 
     def _merge_data(
@@ -89,7 +89,7 @@ class DeepCoxPHTimeSeriesSurvival(TimeSeriesSurvivalPlugin):
             lr=self.lr,
             n_iter=self.n_iter,
             rnn_type=self.rnn_type,
-            seed=self.seed,
+            random_state=self.random_state,
             patience=self.patience,
             dropout=self.dropout,
             device=self.device,
@@ -151,7 +151,7 @@ class DeepRecurrentCoxPH(nn.Module):
         n_iter: int = 1000,
         n_iter_print: int = 10,
         val_size: float = 0.1,
-        seed: int = 0,
+        random_state: int = 0,
         batch_size: int = 100,
         lr: float = 1e-3,
         patience: int = 10,
@@ -162,7 +162,7 @@ class DeepRecurrentCoxPH(nn.Module):
 
         self.rnn_type = rnn_type
         self.optimizer = optimizer
-        self.random_seed = seed
+        self.random_state = random_state
         self.n_iter = n_iter
         self.n_iter_print = n_iter_print
         self.val_size = val_size
@@ -383,7 +383,7 @@ class DeepRecurrentCoxPH(nn.Module):
         self, x: torch.Tensor, t: torch.Tensor, e: torch.Tensor, optimizer: Any
     ) -> float:
 
-        x, t, e = shuffle(x, t, e, random_state=self.random_seed)
+        x, t, e = shuffle(x, t, e, random_state=self.random_state)
 
         n = x.shape[0]
 

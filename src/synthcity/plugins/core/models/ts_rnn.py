@@ -83,11 +83,11 @@ class TimeSeriesRNN(nn.Module):
         loss: Optional[Callable] = None,
         dropout: float = 0,
         nonlin: Optional[str] = "relu",
-        seed: int = 0,
+        random_state: int = 0,
     ) -> None:
         super(TimeSeriesRNN, self).__init__()
 
-        enable_reproducible_results(seed)
+        enable_reproducible_results(random_state)
 
         assert task_type in ["classification", "regression"]
         assert len(output_shape) > 0

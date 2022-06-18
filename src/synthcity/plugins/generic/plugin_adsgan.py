@@ -61,8 +61,8 @@ class AdsGANPlugin(Plugin):
             l2 (ridge) penalty for the weights.
         batch_size: int
             Batch size
-        seed: int
-            Seed used
+        random_state: int
+            random seed to use
         clipping_value: int, default 0
             Gradients clipping value. Zero disables the feature
         encoder_max_clusters: int
@@ -97,7 +97,7 @@ class AdsGANPlugin(Plugin):
         lr: float = 1e-3,
         weight_decay: float = 1e-3,
         batch_size: int = 500,
-        seed: int = 0,
+        random_state: int = 0,
         clipping_value: int = 0,
         lambda_gradient_penalty: float = 10,
         lambda_identifiability_penalty: float = 0.1,
@@ -126,7 +126,7 @@ class AdsGANPlugin(Plugin):
         self.lr = lr
         self.weight_decay = weight_decay
         self.batch_size = batch_size
-        self.seed = seed
+        self.random_state = random_state
         self.clipping_value = clipping_value
         self.lambda_gradient_penalty = lambda_gradient_penalty
         self.lambda_identifiability_penalty = lambda_identifiability_penalty
