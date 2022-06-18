@@ -53,6 +53,7 @@ class DeepCoxPHTimeSeriesSurvival(TimeSeriesSurvivalPlugin):
         self.rnn_type = rnn_type
         self.patience = patience
         self.seed = seed
+        self.device = device
 
     def _merge_data(
         self,
@@ -91,6 +92,7 @@ class DeepCoxPHTimeSeriesSurvival(TimeSeriesSurvivalPlugin):
             seed=self.seed,
             patience=self.patience,
             dropout=self.dropout,
+            device=self.device,
         )
 
         self.model.fit(
@@ -154,6 +156,7 @@ class DeepRecurrentCoxPH(nn.Module):
         lr: float = 1e-3,
         patience: int = 10,
         dropout: float = 0.1,
+        device: Any = DEVICE,
     ) -> None:
         super().__init__()
 
@@ -177,6 +180,7 @@ class DeepRecurrentCoxPH(nn.Module):
             dropout=dropout,
             n_layers_hidden=n_layers_hidden,
             n_units_hidden=n_units_hidden,
+            device=device,
         )
 
         rnn_params = {
@@ -194,8 +198,11 @@ class DeepRecurrentCoxPH(nn.Module):
         if self.rnn_type == "GRU":
             self.embedding = nn.GRU(**rnn_params)
 
+        self.embedding.to(device)
+        self.device = device
+
     def forward(self, x: torch.Tensor) -> torch.Tensor:
-        x = x.detach().clone()
+        x = x.detach().clone().to(self.device)
         inputmask = ~torch.isnan(x[:, :, 0]).reshape(-1)
         x[torch.isnan(x)] = -1
 
@@ -287,7 +294,7 @@ class DeepRecurrentCoxPH(nn.Module):
             if not isinstance(t, list):
                 t = [t]
 
-        lrisks = self(x).detach().numpy()
+        lrisks = self(x).detach().cpu().numpy()
 
         unique_times = self.breslow_spline.baseline_survival_.x
 

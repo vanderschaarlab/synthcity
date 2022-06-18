@@ -33,7 +33,7 @@ class XGBSurvivalAnalysis(SurvivalAnalysisPlugin):
         learning_rate: float = 5e-2,
         min_child_weight: int = 50,
         tree_method: str = "hist",
-        booster: int = 2,
+        booster: int = 0,
         random_state: int = 0,
         objective: str = "aft",  # "aft", "cox"
         strategy: str = "debiased_bce",  # "weibull", "debiased_bce", "km"

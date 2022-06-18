@@ -8,7 +8,7 @@ import optuna
 import synthcity.logger as log
 from synthcity.utils.redis_wrapper import backend
 
-threshold = 10
+threshold = 20
 
 
 class EarlyStoppingExceeded(optuna.exceptions.OptunaError):

@@ -135,7 +135,7 @@ def objective_meta(
         try:
             full_score, _ = evaluate_model(model_name, args, X, T, E, n_folds=n_folds)
         except BaseException as e:
-            log.error("model search failed", template, e)
+            log.error(f"model search failed {e}")
             return 0
 
         score = full_score[metric][0]

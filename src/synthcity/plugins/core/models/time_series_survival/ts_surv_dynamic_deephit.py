@@ -60,6 +60,7 @@ class DynamicDeephitTimeSeriesSurvival(TimeSeriesSurvivalPlugin):
             lr=lr,
             batch_size=batch_size,
             n_iter=n_iter,
+            device=device,
         )
 
     def _merge_data(
@@ -286,7 +287,7 @@ class DynamicDeepHitModel:
         return t_discretized, split_time
 
     def _preprocess_test_data(self, x: np.ndarray) -> torch.Tensor:
-        data = torch.from_numpy(get_padded_features(x)).float()
+        data = torch.from_numpy(get_padded_features(x)).float().to(self.device)
         return data
 
     def _preprocess_training_data(

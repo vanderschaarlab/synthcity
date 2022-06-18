@@ -1,18 +1,83 @@
 # stdlib
 import copy
+import hashlib
 from typing import Any, Callable, Dict, List
 
 # third party
 import numpy as np
+import optuna
 from sklearn.model_selection import StratifiedKFold, train_test_split
 
 # synthcity absolute
+import synthcity.logger as log
 from synthcity.plugins.core.models.survival_analysis.metrics import (
     evaluate_brier_score,
     evaluate_c_index,
     generate_score,
     print_score,
 )
+from synthcity.utils.optimizer import (
+    EarlyStoppingExceeded,
+    ParamRepeatPruner,
+    create_study,
+)
+
+
+def _trial_params(estimator_name: str, trial: optuna.Trial, param_space: List) -> Dict:
+    out = {}
+
+    for param in param_space:
+        key = f"{estimator_name}::{param.name}"
+        if hasattr(param, "choices"):
+            out[param.name] = trial.suggest_categorical(key, choices=param.choices)
+        elif hasattr(param, "step"):
+            out[param.name] = trial.suggest_int(key, param.low, param.high, param.step)
+        else:
+            out[param.name] = trial.suggest_float(key, param.low, param.high)
+
+    return out
+
+
+def _normalize_params(estimator_name: str, args: dict) -> dict:
+    prefix = f"{estimator_name}::"
+
+    out = {}
+
+    for key in args:
+        norm = key.split(prefix)[-1]
+        out[norm] = args[key]
+
+    return out
+
+
+def _search_objective_meta(
+    estimator: Any,
+    static: np.ndarray,
+    temporal: np.ndarray,
+    T: np.ndarray,
+    Y: np.ndarray,
+    time_horizons: List,
+    pruner: ParamRepeatPruner,
+    n_folds: int = 3,
+) -> Callable:
+    def objective(trial: optuna.Trial) -> float:
+        args = _trial_params(estimator.name(), trial, estimator.hyperparameter_space())
+        pruner.check_trial(trial)
+        try:
+            model = estimator(n_iter=10, **args)
+            raw_score = evaluate_ts_survival_model(
+                model, static, temporal, T, Y, time_horizons
+            )
+        except BaseException as e:
+            log.error(f"model search failed {e}")
+            return 0
+
+        score = raw_score["clf"]["c_index"][0] - raw_score["clf"]["brier_score"][0]
+        pruner.report_score(score)
+
+        return score
+
+    return objective
 
 
 def search_hyperparams(
@@ -26,23 +91,48 @@ def search_hyperparams(
     metrics: List[str] = ["c_index", "brier_score"],
     seed: int = 0,
     pretrained: bool = False,
-    scenarios: int = 10,
+    n_trials: int = 50,
+    timeout: int = 100,
 ) -> dict:
-    params_list = []
-    for t in range(scenarios):
-        params_list.append(estimator.sample_hyperparameters())
+    temporal_total = 0
+    for item in temporal:
+        temporal_total += item.sum()
+    data = str((static.sum(), temporal_total, T.sum(), Y.sum())).encode("utf-8")
+    data_str = hashlib.md5(data).hexdigest()
+    study, pruner = create_study(
+        study_name=f"ts_survival_eval_{data_str}_{estimator.name()}",
+        direction="maximize",
+    )
 
-    best_c = 0
-    best_params = {}
-    for param in params_list:
-        model = estimator(n_iter=1, **param)
-        score = evaluate_ts_survival_model(model, static, temporal, T, Y, time_horizons)
+    try:
+        study.optimize(
+            _search_objective_meta(
+                estimator,
+                static,
+                temporal,
+                T,
+                Y,
+                time_horizons,
+                pruner,
+                n_folds=n_folds,
+            ),
+            n_trials=n_trials,
+            timeout=timeout,
+        )
 
-        if score["clf"]["c_index"][0] > best_c:
-            best_c = score["clf"]["c_index"][0]
-            best_params = param
+    except EarlyStoppingExceeded:
+        pass
+    except BaseException as e:
+        log.error(f"model {estimator.name()} failed: {e}")
+        return {}
 
-    return best_params
+    score = study.best_trial.value
+    args = _normalize_params(estimator.name(), study.best_trial.params)
+    log.info(
+        f"[select_ts_survival] model = {estimator.name()} score = {score} args = {args}"
+    )
+
+    return args
 
 
 def evaluate_ts_survival_model(

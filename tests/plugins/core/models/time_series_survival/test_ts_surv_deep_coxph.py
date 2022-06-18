@@ -4,6 +4,7 @@ import numpy as np
 # synthcity absolute
 from synthcity.plugins.core.models.time_series_survival.benchmarks import (
     evaluate_ts_survival_model,
+    search_hyperparams,
 )
 from synthcity.plugins.core.models.time_series_survival.ts_surv_deep_coxph import (
     DeepCoxPHTimeSeriesSurvival,
@@ -34,19 +35,12 @@ def test_train_prediction() -> None:
         [t_ for t_, e_ in zip(T, E) if e_ == 1], horizons
     ).tolist()
 
-    params_list = []
-    for t in range(20):
-        params_list.append(DeepCoxPHTimeSeriesSurvival.sample_hyperparameters())
+    args = search_hyperparams(
+        DeepCoxPHTimeSeriesSurvival, static, temporal, T, E, time_horizons
+    )
 
-    best_c = 0
-    for param in params_list:
-        model = DeepCoxPHTimeSeriesSurvival(n_iter=1, **param)
-        score = evaluate_ts_survival_model(model, static, temporal, T, E, time_horizons)
+    model = DeepCoxPHTimeSeriesSurvival(**args)
+    score = evaluate_ts_survival_model(model, static, temporal, T, E, time_horizons)
 
-        if score["clf"]["c_index"][0] > best_c:
-            best_c = score["clf"]["c_index"][0]
-
-        if best_c > 0.5:
-            break
-
-    assert best_c > 0.5
+    print("Perf", model.name(), args, score["str"])
+    assert score["clf"]["c_index"][0] > 0.5
