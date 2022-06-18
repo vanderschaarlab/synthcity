@@ -1,5 +1,6 @@
 # third party
 import numpy as np
+import pytest
 
 # synthcity absolute
 from synthcity.plugins.core.models.time_series_survival.benchmarks import (
@@ -26,6 +27,7 @@ def test_hyperparams() -> None:
     assert len(params.keys()) == 13
 
 
+@pytest.mark.slow
 def test_train_prediction() -> None:
     static, temporal, outcome = PBCDataloader(as_numpy=True).load()
     T, E, _, _ = outcome
