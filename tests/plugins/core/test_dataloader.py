@@ -285,6 +285,40 @@ def test_time_series_pack_unpack(source: Any, repack: bool) -> None:
         assert (unp_temporal[idx].values == item[cols].values).all()
 
 
+@pytest.mark.parametrize("source", [SineDataloader, GoogleStocksDataloader])
+def test_time_series_sequential_view(source: Any) -> None:
+    static_data, temporal_data, outcome = source().load()
+
+    temporal_cols = TimeSeriesDataLoader.unique_temporal_features(temporal_data)
+    temporal_cols = [f"temporal_{col}" for col in temporal_cols]
+
+    total_events = 0
+    for item in temporal_data:
+        total_events += len(item)
+
+    loader = TimeSeriesDataLoader(
+        temporal_data=temporal_data,
+        static_data=static_data,
+        outcome=outcome,
+    )
+
+    seq_df, info = loader.sequential_view()
+    id_col = info["id_feature"]
+    time_col = info["time_feature"]
+    static_cols = info["static_features"]
+    out_cols = info["outcome_features"]
+
+    assert (
+        seq_df.columns.values.tolist()
+        == [id_col, time_col] + static_cols + temporal_cols + out_cols
+    )
+    assert len(seq_df) == total_events
+
+    reloader = TimeSeriesDataLoader.from_sequential_view(seq_df, info)
+
+    assert (loader.dataframe().values == reloader.dataframe().values).all()
+
+
 def test_time_series_survival_dataloader_sanity() -> None:
     static_data, temporal_data, outcome = PBCDataloader().load()
     T, E, _, _ = outcome
@@ -426,3 +460,41 @@ def test_time_series_survival_pack_unpack_numpy() -> None:
     assert unp_static.shape == static_data.shape
     assert len(unp_T) == len(T)
     assert len(unp_E) == len(E)
+
+
+def test_time_series_survival_sequential_view() -> None:
+    static_data, temporal_data, outcome = PBCDataloader().load()
+    T, E, _, _ = outcome
+
+    loader = TimeSeriesSurvivalDataLoader(
+        temporal_data=temporal_data,
+        static_data=static_data,
+        T=T,
+        E=E,
+    )
+
+    temporal_cols = TimeSeriesSurvivalDataLoader.unique_temporal_features(temporal_data)
+    temporal_cols = [f"temporal_{col}" for col in temporal_cols]
+
+    total_events = 0
+    for item in temporal_data:
+        total_events += len(item)
+
+    seq_df, info = loader.sequential_view()
+    id_col = info["id_feature"]
+    time_col = info["time_feature"]
+    static_cols = info["static_features"]
+    out_cols = info["outcome_features"]
+
+    assert (
+        seq_df.columns.values.tolist()
+        == [id_col, time_col] + static_cols + temporal_cols + out_cols
+    )
+    assert len(seq_df) == total_events
+
+    reloader = TimeSeriesSurvivalDataLoader.from_sequential_view(seq_df, info)
+
+    assert (loader.dataframe().columns == reloader.dataframe().columns).all()
+    assert np.allclose(
+        loader.dataframe().values, reloader.dataframe().values, equal_nan=True
+    )

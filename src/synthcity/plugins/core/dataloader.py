@@ -128,6 +128,15 @@ class DataLoader(metaclass=ABCMeta):
     def fillna(self, value: Any) -> "DataLoader":
         ...
 
+    def sequential_view(
+        self,
+    ) -> Tuple[pd.DataFrame, dict]:  # sequential dataframe, info
+        raise NotImplementedError()
+
+    @staticmethod
+    def from_sequential_view(seq_df: pd.DataFrame, info: dict) -> "DataLoader":
+        raise NotImplementedError()
+
 
 class GenericDataLoader(DataLoader):
     @validate_arguments(config=dict(arbitrary_types_allowed=True))
@@ -431,6 +440,8 @@ class TimeSeriesDataLoader(DataLoader):
             self.outcome_features = list(outcome.columns)
 
         self.seq_len = max_seq_len
+        self.fill = fill
+
         grouped = TimeSeriesDataLoader.pack_raw_data(
             static_data, temporal_data, outcome, fill=fill
         )
@@ -599,6 +610,9 @@ class TimeSeriesDataLoader(DataLoader):
             / len(self.data["outcome"]),
             "seq_len": self.seq_len,
             "sensitive_features": self.sensitive_features,
+            "random_state": self.random_state,
+            "train_size": self.train_size,
+            "fill": self.fill,
         }
 
     def __len__(self) -> int:
@@ -706,6 +720,104 @@ class TimeSeriesDataLoader(DataLoader):
 
         return self
 
+    def sequential_view(
+        self,
+    ) -> Tuple[pd.DataFrame, dict]:  # sequential dataframe, loader info
+        id_col = "id"
+        time_col = "time_id"
+        static_features = [f"static_{col}" for col in self.static_features]
+        outcome_features = [f"out_{col}" for col in self.outcome_features]
+        temporal_features = [f"temporal_{col}" for col in self.temporal_features]
+        cols = (
+            [id_col, time_col] + static_features + temporal_features + outcome_features
+        )
+
+        seq = []
+        for sidx, static_item in self.data["static_data"].iterrows():
+            for tidx, temporal_item in self.data["temporal_data"][sidx].iterrows():
+                local_seq_data = (
+                    [sidx, tidx]
+                    + static_item[self.static_features].values.tolist()
+                    + temporal_item[self.temporal_features].values.tolist()
+                    + self.data["outcome"]
+                    .loc[sidx, self.outcome_features]
+                    .values.tolist()
+                )
+                seq.append(local_seq_data)
+
+        seq_df = pd.DataFrame(seq, columns=cols)
+        info = self.info()
+        info["id_feature"] = id_col
+        info["time_feature"] = time_col
+        info["static_features"] = static_features
+        info["temporal_features"] = temporal_features
+        info["outcome_features"] = outcome_features
+
+        return seq_df, info
+
+    @staticmethod
+    def from_sequential_view_prepare(
+        seq_df: pd.DataFrame,
+        info: dict,
+    ) -> Tuple:
+        id_col = info["id_feature"]
+        time_col = info["time_feature"]
+
+        static_cols = info["static_features"]
+        new_static_cols = [feat.split("static_")[1] for feat in static_cols]
+
+        temporal_cols = info["temporal_features"]
+        new_temporal_cols = [feat.split("temporal_")[1] for feat in temporal_cols]
+
+        outcome_cols = info["outcome_features"]
+        new_outcome_cols = [feat.split("out_")[1] for feat in outcome_cols]
+
+        ids = sorted(list(set(seq_df[id_col])))
+
+        static_data = []
+        temporal_data = []
+        outcome_data = []
+
+        for item_id in ids:
+            item_data = seq_df[seq_df[id_col] == item_id]
+
+            static_data.append(item_data[static_cols].head(1).values.squeeze().tolist())
+            outcome_data.append(
+                item_data[outcome_cols].head(1).values.squeeze().tolist()
+            )
+            local_temporal_data = item_data[temporal_cols].copy()
+            local_temporal_data.index = item_data[time_col]
+            local_temporal_data.columns = new_temporal_cols
+            local_temporal_data = local_temporal_data.dropna()
+
+            temporal_data.append(local_temporal_data)
+
+        static_df = pd.DataFrame(static_data, columns=new_static_cols, index=ids)
+        outcome_df = pd.DataFrame(outcome_data, columns=new_outcome_cols, index=ids)
+
+        return static_df, temporal_data, outcome_df
+
+    @staticmethod
+    def from_sequential_view(
+        seq_df: pd.DataFrame,
+        info: dict,
+    ) -> "DataLoader":
+        (
+            static_df,
+            temporal_data,
+            outcome_df,
+        ) = TimeSeriesDataLoader.from_sequential_view_prepare(seq_df, info)
+
+        return TimeSeriesDataLoader(
+            temporal_data=temporal_data,
+            outcome=outcome_df,
+            static_data=static_df,
+            sensitive_features=info["sensitive_features"],
+            random_state=info["random_state"],
+            train_size=info["train_size"],
+            fill=info["fill"],
+        )
+
 
 class TimeSeriesSurvivalDataLoader(TimeSeriesDataLoader):
     @validate_arguments(config=dict(arbitrary_types_allowed=True))
@@ -809,6 +921,29 @@ class TimeSeriesSurvivalDataLoader(TimeSeriesDataLoader):
             self.data["temporal_data"],
             self.data["outcome"][self.time_to_event_col],
             self.data["outcome"][self.event_col],
+        )
+
+    @staticmethod
+    def from_sequential_view(
+        seq_df: pd.DataFrame,
+        info: dict,
+    ) -> "DataLoader":
+        (
+            static_df,
+            temporal_data,
+            outcome_df,
+        ) = TimeSeriesSurvivalDataLoader.from_sequential_view_prepare(seq_df, info)
+
+        return TimeSeriesSurvivalDataLoader(
+            temporal_data=temporal_data,
+            T=outcome_df[info["time_to_event_col"]],
+            E=outcome_df[info["event_col"]],
+            static_data=static_df,
+            sensitive_features=info["sensitive_features"],
+            time_horizons=info["time_horizons"],
+            random_state=info["random_state"],
+            train_size=info["train_size"],
+            fill=info["fill"],
         )
 
 
