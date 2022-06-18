@@ -355,7 +355,9 @@ class DynamicDeepHitModel:
             )
         x = self._preprocess_test_data(x)
 
-        return self.model.forward_emb(x)
+        _, emb = self.model.forward_emb(x)
+
+        return emb
 
     def predict_survival(
         self,
@@ -590,18 +592,6 @@ class DynamicDeepHitLayers(nn.Module):
         self.soft = nn.Softmax(dim=-1)  # On all observed output
 
     def forward_emb(self, x: torch.Tensor) -> torch.Tensor:
-        # RNN representation - Nan values for not observed data
-        x = x.clone()
-        x[torch.isnan(x)] = -1
-
-        assert torch.isnan(x).sum() == 0
-
-        hidden, _ = self.embedding(x)
-        assert torch.isnan(hidden).sum() == 0
-
-        return hidden
-
-    def forward(self, x: torch.Tensor) -> torch.Tensor:
         """
         The forward function that is called when data is passed through DynamicDeepHit.
         """
@@ -646,10 +636,20 @@ class DynamicDeepHitLayers(nn.Module):
         # Risk networks
         # The original paper is not clear on how the last observation is
         # combined with the temporal sum, other code was concatenating them
-        outcomes = []
         attention = attention.unsqueeze(2).repeat(1, 1, hidden.size(2))
         hidden_attentive = torch.sum(attention * hidden, axis=1)
         hidden_attentive = torch.cat([hidden_attentive, x_last], 1)
+
+        return longitudinal_prediction, hidden_attentive
+
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
+        """
+        The forward function that is called when data is passed through DynamicDeepHit.
+        """
+        # RNN representation - Nan values for not observed data
+        longitudinal_prediction, hidden_attentive = self.forward_emb(x)
+
+        outcomes = []
         for cs_nn in self.cause_specific:
             outcomes.append(cs_nn(hidden_attentive))
 

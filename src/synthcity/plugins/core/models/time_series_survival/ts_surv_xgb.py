@@ -101,7 +101,7 @@ class XGBTimeSeriesSurvival(TimeSeriesSurvivalPlugin):
     ) -> TimeSeriesSurvivalPlugin:
 
         self.emb_model.fit(static, temporal, T, E)
-        embeddings = self.emb_model.predict_emb(static, temporal).reshape(len(T), -1)
+        embeddings = self.emb_model.predict_emb(static, temporal)
         self.pred_model.fit(pd.DataFrame(embeddings), pd.Series(T), pd.Series(E))
 
         return self
@@ -115,9 +115,7 @@ class XGBTimeSeriesSurvival(TimeSeriesSurvivalPlugin):
     ) -> np.ndarray:
         "Predict risk"
 
-        embeddings = self.emb_model.predict_emb(static, temporal).reshape(
-            len(temporal), -1
-        )
+        embeddings = self.emb_model.predict_emb(static, temporal)
         return self.pred_model.predict(pd.DataFrame(embeddings), time_horizons)
 
     @staticmethod

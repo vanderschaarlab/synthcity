@@ -32,9 +32,7 @@ def test_train_prediction() -> None:
     T, E, _, _ = outcome
 
     horizons = [0.25, 0.5, 0.75]
-    time_horizons = np.quantile(
-        [t_ for t_, e_ in zip(T, E) if e_ == 1], horizons
-    ).tolist()
+    time_horizons = np.quantile(T, horizons).tolist()
 
     model = CoxTimeSeriesSurvival()
     score = evaluate_ts_survival_model(model, static, temporal, T, E, time_horizons)
