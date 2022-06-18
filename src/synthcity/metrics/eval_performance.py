@@ -28,8 +28,8 @@ from synthcity.plugins.core.models.time_series_survival.benchmarks import (
     evaluate_ts_survival_model,
     search_hyperparams,
 )
-from synthcity.plugins.core.models.time_series_survival.ts_surv_deep_coxph import (
-    DeepCoxPHTimeSeriesSurvival,
+from synthcity.plugins.core.models.time_series_survival.ts_surv_coxph import (
+    CoxTimeSeriesSurvival,
 )
 from synthcity.plugins.core.models.time_series_survival.ts_surv_dynamic_deephit import (
     DynamicDeephitTimeSeriesSurvival,
@@ -597,18 +597,16 @@ class PerformanceEvaluatorLinear(PerformanceEvaluator):
             time_horizons = info["time_horizons"]
 
             args = search_hyperparams(
-                DeepCoxPHTimeSeriesSurvival,
+                CoxTimeSeriesSurvival,
                 static,
                 temporal,
                 T,
                 E,
                 time_horizons=time_horizons,
             )
-            log.info(
-                f"Performance evaluation using DeepCoxPHTimeSeriesSurvival and {args}"
-            )
+            log.info(f"Performance evaluation using CoxTimeSeriesSurvival and {args}")
             return self._evaluate_time_series_survival_performance(
-                DeepCoxPHTimeSeriesSurvival, args, X_gt, X_syn
+                CoxTimeSeriesSurvival, args, X_gt, X_syn
             )
         else:
             raise RuntimeError(f"Unuspported task type {self._task_type}")
