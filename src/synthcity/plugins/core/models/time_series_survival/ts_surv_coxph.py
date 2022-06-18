@@ -19,11 +19,11 @@ from ._base import TimeSeriesSurvivalPlugin
 from .ts_surv_dynamic_deephit import DynamicDeephitTimeSeriesSurvival
 
 
-class XGBTimeSeriesSurvival(TimeSeriesSurvivalPlugin):
+class CoxTimeSeriesSurvival(TimeSeriesSurvivalPlugin):
     def __init__(
         self,
         # prediction
-        alpha: float = 0,
+        alpha: float = 0.05,
         penalizer: float = 0.1,
         device: Any = DEVICE,
         # embeddings
@@ -101,7 +101,7 @@ class XGBTimeSeriesSurvival(TimeSeriesSurvivalPlugin):
 
     @staticmethod
     def name() -> str:
-        return "ts_xgb"
+        return "ts_coxph"
 
     @staticmethod
     def hyperparameter_space(*args: Any, **kwargs: Any) -> List[Distribution]:

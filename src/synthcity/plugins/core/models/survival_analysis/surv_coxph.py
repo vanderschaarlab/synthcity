@@ -73,6 +73,6 @@ class CoxPHSurvivalAnalysis(SurvivalAnalysisPlugin):
     @staticmethod
     def hyperparameter_space(**kwargs: Any) -> List[Distribution]:
         return [
-            FloatDistribution(name="alpha", low=0.0, high=0.1),
+            FloatDistribution(name="alpha", low=0.05, high=0.1),
             FloatDistribution(name="penalizer", low=0, high=0.2),
         ]

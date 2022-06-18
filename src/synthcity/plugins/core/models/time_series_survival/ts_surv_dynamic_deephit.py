@@ -138,7 +138,7 @@ class DynamicDeephitTimeSeriesSurvival(TimeSeriesSurvivalPlugin):
             CategoricalDistribution(
                 name=f"{prefix}_batch_size", choices=[100, 200, 500]
             ),
-            CategoricalDistribution(name="f{prefix}_lr", choices=[1e-2, 1e-3, 1e-4]),
+            CategoricalDistribution(name=f"{prefix}_lr", choices=[1e-2, 1e-3, 1e-4]),
             CategoricalDistribution(
                 name=f"{prefix}_rnn_type", choices=["LSTM", "GRU", "RNN"]
             ),

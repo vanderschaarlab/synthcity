@@ -24,11 +24,27 @@ def test_hyperparams() -> None:
 
     params = model.sample_hyperparameters()
 
-    assert len(params.keys()) == 13
+    assert len(params.keys()) == 22
+
+
+def test_train_prediction() -> None:
+    static, temporal, outcome = PBCDataloader(as_numpy=True).load()
+    T, E, _, _ = outcome
+
+    horizons = [0.25, 0.5, 0.75]
+    time_horizons = np.quantile(
+        [t_ for t_, e_ in zip(T, E) if e_ == 1], horizons
+    ).tolist()
+
+    model = XGBTimeSeriesSurvival()
+    score = evaluate_ts_survival_model(model, static, temporal, T, E, time_horizons)
+
+    print("Perf", model.name(), score["str"])
+    assert score["clf"]["c_index"][0] > 0.5
 
 
 @pytest.mark.slow
-def test_train_prediction() -> None:
+def test_hyperparam_search() -> None:
     static, temporal, outcome = PBCDataloader(as_numpy=True).load()
     T, E, _, _ = outcome
 

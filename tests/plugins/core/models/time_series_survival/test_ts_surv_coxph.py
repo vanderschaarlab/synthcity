@@ -7,24 +7,24 @@ from synthcity.plugins.core.models.time_series_survival.benchmarks import (
     evaluate_ts_survival_model,
     search_hyperparams,
 )
-from synthcity.plugins.core.models.time_series_survival.ts_surv_deep_coxph import (
-    DeepCoxPHTimeSeriesSurvival,
+from synthcity.plugins.core.models.time_series_survival.ts_surv_coxph import (
+    CoxTimeSeriesSurvival,
 )
 from synthcity.utils.datasets.time_series.pbc import PBCDataloader
 
 
 def test_sanity() -> None:
-    model = DeepCoxPHTimeSeriesSurvival()
+    model = CoxTimeSeriesSurvival()
 
-    assert model.name() == "deep_recurrent_coxph"
+    assert model.name() == "ts_coxph"
 
 
 def test_hyperparams() -> None:
-    model = DeepCoxPHTimeSeriesSurvival()
+    model = CoxTimeSeriesSurvival()
 
     params = model.sample_hyperparameters()
 
-    assert len(params.keys()) == 6
+    assert len(params.keys()) == 11
 
 
 def test_train_prediction() -> None:
@@ -36,15 +36,15 @@ def test_train_prediction() -> None:
         [t_ for t_, e_ in zip(T, E) if e_ == 1], horizons
     ).tolist()
 
-    model = DeepCoxPHTimeSeriesSurvival()
+    model = CoxTimeSeriesSurvival()
     score = evaluate_ts_survival_model(model, static, temporal, T, E, time_horizons)
 
     print("Perf", model.name(), score["str"])
-    assert score["clf"]["c_index"][0] > 0
+    assert score["clf"]["c_index"][0] > 0.5
 
 
 @pytest.mark.slow
-def test_hyperparams_search() -> None:
+def test_hyperparam_search() -> None:
     static, temporal, outcome = PBCDataloader(as_numpy=True).load()
     T, E, _, _ = outcome
 
@@ -54,11 +54,11 @@ def test_hyperparams_search() -> None:
     ).tolist()
 
     args = search_hyperparams(
-        DeepCoxPHTimeSeriesSurvival, static, temporal, T, E, time_horizons
+        CoxTimeSeriesSurvival, static, temporal, T, E, time_horizons
     )
 
-    model = DeepCoxPHTimeSeriesSurvival(**args)
+    model = CoxTimeSeriesSurvival(**args)
     score = evaluate_ts_survival_model(model, static, temporal, T, E, time_horizons)
 
     print("Perf", model.name(), args, score["str"])
-    assert score["clf"]["c_index"][0] > 0
+    assert score["clf"]["c_index"][0] > 0.5
