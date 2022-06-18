@@ -202,7 +202,7 @@ class VAE(nn.Module):
         self.dataloader_sampler = dataloader_sampler
 
         self.random_state = random_state
-        torch.manual_random_state(self.random_state)
+        torch.manual_seed(self.random_state)
 
         self.encoder = Encoder(
             n_features,
