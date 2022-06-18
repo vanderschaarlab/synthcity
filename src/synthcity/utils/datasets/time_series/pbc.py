@@ -171,10 +171,10 @@ class PBCDataloader:
 
     def load(
         self,
-    ) -> Tuple[pd.DataFrame, List[pd.DataFrame], pd.DataFrame]:
+    ) -> Tuple[pd.DataFrame, List[pd.DataFrame], List, pd.DataFrame]:
         # Initialize the output
 
         static_data, temporal_data, t, e, t_ext, e_ext = self._load_pbc_dataset()
-        outcome = (t, e, t_ext, e_ext)
+        outcome = (t, e)
 
-        return static_data, temporal_data, outcome
+        return static_data, temporal_data, t_ext, outcome
