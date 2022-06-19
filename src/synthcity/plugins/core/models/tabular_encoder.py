@@ -494,7 +494,7 @@ class TimeSeriesTabularEncoder(TransformerMixin, BaseEstimator):
 
         horizons_decoded = self.temporal_horizons_encoder.inverse_transform(
             temporal_horizons
-        )
+        ).tolist()
         return static_decoded, temporal_decoded, horizons_decoded
 
     def layout(self) -> Tuple[List, List]:

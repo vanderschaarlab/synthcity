@@ -73,9 +73,8 @@ class ARModel:
         self.encoder = encoder
         self.device = device
 
-        self.static_model: Optional[Plugin] = None
         self.static_model_name = static_model
-        self.temporal_init_model = GenericPlugins().get(
+        self.static_generator = GenericPlugins().get(
             self.static_model_name, device=self.device, n_iter=self.n_iter
         )
 
@@ -83,16 +82,23 @@ class ARModel:
             max_clusters=encoder_max_clusters
         )
 
-    def fit(self, static: pd.DataFrame, temporal: List[pd.DataFrame]) -> "ARModel":
-        self.temporal_encoder.fit(static, temporal)
-        static_enc, temporal_enc = self.temporal_encoder.transform(static, temporal)
+    def fit(
+        self,
+        static: pd.DataFrame,
+        temporal: List[pd.DataFrame],
+        temporal_horizons: List,
+    ) -> "ARModel":
+        self.temporal_encoder.fit(static, temporal, temporal_horizons)
+        (
+            static_enc,
+            temporal_enc,
+            temporal_horizons_enc,
+        ) = self.temporal_encoder.transform(static, temporal, temporal_horizons)
 
         self.temporal_encoded_columns = temporal_enc[0].columns
         self.static_encoded_columns = static_enc.columns
-
         self.temporal_columns = temporal[0].columns
         self.static_columns = static.columns
-
         self.temporal_len = len(temporal[0])
 
         temporal_enc = np.asarray(temporal_enc)
@@ -102,19 +108,16 @@ class ARModel:
         temporal_enc = temporal_enc[:, :-1, :]
 
         # static generator
-        if np.prod(static.shape) != 0:
-            self.static_model = (
-                GenericPlugins()
-                .get(self.static_model_name, device=self.device, n_iter=self.n_iter)
-                .fit(static)
-            )
-        # temporal init point generator
         temporal_init = temporal_enc[:, 0, :].squeeze()
-        temporal_init_df = pd.DataFrame(
-            temporal_init, columns=self.temporal_encoded_columns
+        static_data_with_horizons = np.concatenate(
+            [static_enc, np.asarray(temporal_horizons_enc), temporal_init], axis=1
         )
-        self.temporal_init_model.fit(temporal_init_df)
 
+        self.static_generator = (
+            GenericPlugins()
+            .get(self.static_model_name, device=self.device, n_iter=self.n_iter)
+            .fit(pd.DataFrame(static_data_with_horizons))
+        )
         # temporal forecaster
         _, temporal_nonlin = self.temporal_encoder.activation_layout(
             discrete_activation="softmax",
@@ -145,13 +148,15 @@ class ARModel:
         return self
 
     def generate(self, count: int) -> Tuple:
-        if self.static_model is None:
-            static_enc = pd.DataFrame(np.zeros((count, 0)))
-        else:
-            static_enc = self.static_model.generate(count).numpy()
+        static_data_with_horizons = self.static_generator.generate(count).numpy()
+        static_enc = static_data_with_horizons[:, : len(self.static_columns)]
+        temporal_horizons_enc = static_data_with_horizons[
+            :, len(self.static_columns) : len(self.static_columns) + self.temporal_len
+        ]
+        temporal_init = static_data_with_horizons[
+            :, len(self.static_columns) + self.temporal_len :
+        ]
 
-        # temporal init generator
-        temporal_init = self.temporal_init_model.generate(count).numpy()
         temporal_enc = np.expand_dims(temporal_init, axis=1)
 
         # Temporal generation
@@ -172,8 +177,12 @@ class ARModel:
                 pd.DataFrame(item, columns=self.temporal_encoded_columns)
             )
 
-        static_raw, temporal_raw = self.temporal_encoder.inverse_transform(
-            static_enc, temporal_enc_df
+        (
+            static_raw,
+            temporal_raw,
+            temporal_horizons,
+        ) = self.temporal_encoder.inverse_transform(
+            static_enc, temporal_enc_df, temporal_horizons_enc.tolist()
         )
 
         static = pd.DataFrame(static_raw, columns=self.static_columns)
@@ -181,7 +190,7 @@ class ARModel:
         for item in temporal_raw:
             temporal.append(pd.DataFrame(item, columns=self.temporal_columns))
 
-        return static, temporal
+        return static, temporal, temporal_horizons
 
 
 class AutoregressivePlugin(Plugin):
@@ -337,7 +346,7 @@ class AutoregressivePlugin(Plugin):
         static, temporal, temporal_horizons, outcome = X.unpack()
 
         # Train the static and temporal generator
-        self.ar_model.fit(static, temporal)
+        self.ar_model.fit(static, temporal, temporal_horizons)
 
         # Outcome generation
         self.outcome_encoder.fit(outcome)
@@ -376,7 +385,7 @@ class AutoregressivePlugin(Plugin):
     def _generate(self, count: int, syn_schema: Schema, **kwargs: Any) -> pd.DataFrame:
         def _sample(count: int) -> Tuple:
             # Static and Temporal generation
-            static, temporal = self.ar_model.generate(count)
+            static, temporal, temporal_horizons = self.ar_model.generate(count)
 
             # Outcome generation
             outcome_enc = pd.DataFrame(
@@ -390,7 +399,6 @@ class AutoregressivePlugin(Plugin):
                 outcome_raw, columns=self.data_info["outcome_features"]
             )
 
-            temporal_horizons = [list(range(len(temporal[i]))) for i in range(count)]
             return static, temporal, temporal_horizons, outcome
 
         return self._safe_generate_time_series(_sample, count, syn_schema)
