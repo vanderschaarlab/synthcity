@@ -59,15 +59,19 @@ class DeepCoxPHTimeSeriesSurvival(TimeSeriesSurvivalPlugin):
         self,
         static: Optional[np.ndarray],
         temporal: np.ndarray,
+        temporal_horizons: np.ndarray,
     ) -> np.ndarray:
         if static is None:
-            return temporal
+            static = np.zeros((len(temporal), 0))
 
         merged = []
         for idx, item in enumerate(temporal):
             local_static = static[idx].reshape(1, -1)
             local_static = np.repeat(local_static, len(temporal[idx]), axis=0)
-            tst = np.concatenate([temporal[idx], local_static], axis=1)
+            tst = np.concatenate(
+                [temporal[idx], local_static, temporal_horizons[idx].reshape(-1, 1)],
+                axis=1,
+            )
             merged.append(tst)
 
         return np.array(merged, dtype=object)
@@ -81,7 +85,8 @@ class DeepCoxPHTimeSeriesSurvival(TimeSeriesSurvivalPlugin):
         T: np.ndarray,
         E: np.ndarray,
     ) -> TimeSeriesSurvivalPlugin:
-        data = self._merge_data(static, temporal)
+        data = self._merge_data(static, temporal, temporal_horizons)
+
         self.model = DeepRecurrentCoxPH(
             data[0].shape[-1],
             n_layers_hidden=self.n_layers_hidden,
@@ -113,7 +118,8 @@ class DeepCoxPHTimeSeriesSurvival(TimeSeriesSurvivalPlugin):
     ) -> np.ndarray:
         "Predict risk"
 
-        data = self._merge_data(static, temporal)
+        data = self._merge_data(static, temporal, temporal_horizons)
+
         raw = self.model.predict_risk(data, time_horizons)
         out = []
 
@@ -313,6 +319,7 @@ class DeepRecurrentCoxPH(nn.Module):
     def _preprocess_test_data(self, x: np.ndarray) -> torch.Tensor:
         if isinstance(x, pd.DataFrame):
             x = x.values
+
         return torch.from_numpy(get_padded_features(x)).float()
 
     def _preprocess_training_data(
