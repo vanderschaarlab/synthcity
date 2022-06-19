@@ -223,11 +223,12 @@ class TimeGANPlugin(Plugin):
             cond = kwargs["cond"]
 
         # Static and temporal generation
-        static, temporal, outcome = X.unpack()
+        static, temporal, temporal_horizons, outcome = X.unpack()
 
         self.cov_model = TimeSeriesTabularGAN(
             static_data=static,
             temporal_data=temporal,
+            temporal_horizons=temporal_horizons,
             generator_n_iter=self.n_iter,
             n_units_conditional=self.n_units_conditional,
             generator_n_layers_hidden=self.generator_n_layers_hidden,
@@ -262,7 +263,7 @@ class TimeGANPlugin(Plugin):
             moments_penalty=self.moments_penalty,
             embedding_penalty=self.embedding_penalty,
         )
-        self.cov_model.fit(static, temporal, cond=cond)
+        self.cov_model.fit(static, temporal, temporal_horizons, cond=cond)
 
         # Outcome generation
         self.outcome_encoder.fit(outcome)
@@ -271,7 +272,7 @@ class TimeGANPlugin(Plugin):
 
         self.outcome_model = TimeSeriesRNN(
             task_type="regression",
-            n_static_units_in=static.shape[-1],
+            n_static_units_in=static.shape[-1] + len(temporal[0]),
             n_temporal_units_in=temporal[0].shape[-1],
             output_shape=outcome_enc.shape[1:],
             n_static_units_hidden=self.generator_n_units_hidden,
@@ -294,7 +295,9 @@ class TimeGANPlugin(Plugin):
             ),
         )
         self.outcome_model.fit(
-            np.asarray(static), np.asarray(temporal), np.asarray(outcome_enc)
+            np.concatenate([np.asarray(static), np.asarray(temporal_horizons)], axis=1),
+            np.asarray(temporal),
+            np.asarray(outcome_enc),
         )
 
         return self
@@ -305,10 +308,17 @@ class TimeGANPlugin(Plugin):
             cond = kwargs["cond"]
 
         def _sample(count: int) -> Tuple:
-            static, temporal = self.cov_model.generate(count, cond=cond)
+            static, temporal, temporal_horizons = self.cov_model.generate(
+                count, cond=cond
+            )
 
             outcome_enc = pd.DataFrame(
-                self.outcome_model.predict(np.asarray(static), np.asarray(temporal)),
+                self.outcome_model.predict(
+                    np.concatenate(
+                        [np.asarray(static), np.asarray(temporal_horizons)], axis=1
+                    ),
+                    np.asarray(temporal),
+                ),
                 columns=self.outcome_encoded_columns,
             )
             outcome_raw = self.outcome_encoder.inverse_transform(outcome_enc)
@@ -316,7 +326,6 @@ class TimeGANPlugin(Plugin):
                 outcome_raw, columns=self.data_info["outcome_features"]
             )
 
-            temporal_horizons = [list(range(len(temporal[i]))) for i in range(count)]
             return static, temporal, temporal_horizons, outcome
 
         return self._safe_generate_time_series(_sample, count, syn_schema)

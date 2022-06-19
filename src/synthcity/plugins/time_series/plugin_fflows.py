@@ -2,7 +2,7 @@
 Fourier-Flows method based on " Generative Time-series Modeling with Fourier Flows", Ahmed Alaa, Alex Chan, and Mihaela van der Schaar.
 """
 # stdlib
-from typing import Any, List, Optional, Tuple
+from typing import Any, List, Tuple
 
 # third party
 import numpy as np
@@ -65,6 +65,8 @@ class FourierFlowsPlugin(Plugin):
         **kwargs: Any
     ) -> None:
         super().__init__(**kwargs)
+        self.static_model_name = static_model
+        self.device = device
 
         self.train_args = {
             "epochs": n_iter,
@@ -79,10 +81,11 @@ class FourierFlowsPlugin(Plugin):
             flip=flip,
             normalize=normalize,
         ).to(device)
-        self.static_model: Optional[Plugin] = None
-        self.static_model_name = static_model
 
-        self.device = device
+        self.static_model = GenericPlugins().get(
+            self.static_model_name, device=self.device
+        )
+
         self.temporal_encoder = TimeSeriesTabularEncoder(
             max_clusters=encoder_max_clusters
         )
@@ -119,15 +122,17 @@ class FourierFlowsPlugin(Plugin):
         # Train static generator
         static, temporal, temporal_horizons, outcome = X.unpack()
 
-        self.temporal_encoder.fit(static, temporal)
-        static_enc, temporal_enc = self.temporal_encoder.transform(static, temporal)
+        self.temporal_encoder.fit(static, temporal, temporal_horizons)
+        (
+            static_enc,
+            temporal_enc,
+            temporal_horizons_enc,
+        ) = self.temporal_encoder.transform(static, temporal, temporal_horizons)
 
-        if np.prod(static.shape) != 0:
-            self.static_model = (
-                GenericPlugins()
-                .get(self.static_model_name, device=self.device)
-                .fit(static_enc)
-            )
+        static_data_with_horizons = np.concatenate(
+            [np.asarray(static_enc), np.asarray(temporal_horizons_enc)], axis=1
+        )
+        self.static_model.fit(pd.DataFrame(static_data_with_horizons))
 
         # Train temporal generator
         self.temporal_model.fit(temporal_enc, **self.train_args)
@@ -163,10 +168,14 @@ class FourierFlowsPlugin(Plugin):
     def _generate(self, count: int, syn_schema: Schema, **kwargs: Any) -> pd.DataFrame:
         def _sample(count: int) -> Tuple:
             # Static generation
-            if self.static_model is None:
-                static_enc = pd.DataFrame(np.zeros((count, 0)))
-            else:
-                static_enc = self.static_model.generate(count).numpy()
+            static_data_with_horizons = self.static_model.generate(count).numpy()
+            static_enc = pd.DataFrame(
+                static_data_with_horizons[:, : len(self.static_encoded_columns)],
+                columns=self.static_encoded_columns,
+            )
+            temporal_horizons_enc = static_data_with_horizons[
+                :, len(self.static_encoded_columns) :
+            ]
 
             # Temporal generation
             temporal_enc_raw = self.temporal_model.sample(count)
@@ -184,8 +193,12 @@ class FourierFlowsPlugin(Plugin):
                 columns=self.outcome_encoded_columns,
             )
 
-            static_raw, temporal_raw = self.temporal_encoder.inverse_transform(
-                static_enc, temporal_enc
+            (
+                static_raw,
+                temporal_raw,
+                temporal_horizons,
+            ) = self.temporal_encoder.inverse_transform(
+                static_enc, temporal_enc, temporal_horizons_enc.tolist()
             )
             outcome_raw = self.outcome_encoder.inverse_transform(outcome_enc)
 
@@ -199,7 +212,6 @@ class FourierFlowsPlugin(Plugin):
             )
             static = pd.DataFrame(static_raw, columns=self.data_info["static_features"])
 
-            temporal_horizons = [list(range(len(temporal[i]))) for i in range(count)]
             return static, temporal, temporal_horizons, outcome
 
         return self._safe_generate_time_series(_sample, count, syn_schema)

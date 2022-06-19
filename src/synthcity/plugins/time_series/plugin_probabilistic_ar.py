@@ -78,6 +78,8 @@ class ProbabilisticAutoregressivePlugin(Plugin):
         static_cols = info["static_features"]
         out_cols = info["outcome_features"]
 
+        seq_df["par_bkp_time"] = seq_df[time_col]
+
         # Train the static and temporal generator
         self.model.fit(
             data=seq_df,
@@ -93,9 +95,11 @@ class ProbabilisticAutoregressivePlugin(Plugin):
             # Static and Temporal generation
             data = self.model.sample(num_entities=count)
             time_col = self.info["time_feature"]
+            bkp_time_col = "par_bkp_time"
 
             # Decoding
-            data[time_col] = list(range(len(data)))
+            data[time_col] = data[bkp_time_col]
+            data = data.drop(columns=[bkp_time_col])
             loader = TimeSeriesDataLoader.from_sequential_view(data, self.info)
 
             return loader.unpack()

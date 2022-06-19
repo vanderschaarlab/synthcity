@@ -177,13 +177,14 @@ class ConditionalTimeGANPlugin(Plugin):
     ) -> "ConditionalTimeGANPlugin":
         assert X.type() == "time_series"
 
-        static, temporal, outcome = X.unpack()
+        static, temporal, temporal_horizons, outcome = X.unpack()
 
         self.conditional = TimeSeriesBinEncoder().fit_transform(
             pd.concat(
                 [static.reset_index(drop=True), outcome.reset_index(drop=True)], axis=1
             ),
             temporal,
+            temporal_horizons,
         )
         n_units_conditional = self.conditional.shape[1]
 

@@ -149,12 +149,14 @@ class ARModel:
 
     def generate(self, count: int) -> Tuple:
         static_data_with_horizons = self.static_generator.generate(count).numpy()
-        static_enc = static_data_with_horizons[:, : len(self.static_columns)]
+        static_enc = static_data_with_horizons[:, : len(self.static_encoded_columns)]
         temporal_horizons_enc = static_data_with_horizons[
-            :, len(self.static_columns) : len(self.static_columns) + self.temporal_len
+            :,
+            len(self.static_encoded_columns) : len(self.static_encoded_columns)
+            + self.temporal_len,
         ]
         temporal_init = static_data_with_horizons[
-            :, len(self.static_columns) + self.temporal_len :
+            :, len(self.static_encoded_columns) + self.temporal_len :
         ]
 
         temporal_enc = np.expand_dims(temporal_init, axis=1)
