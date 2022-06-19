@@ -183,17 +183,21 @@ def test_survival_dataloader_pack_unpack() -> None:
 
 @pytest.mark.parametrize("source", [SineDataloader, GoogleStocksDataloader])
 def test_time_series_dataloader_sanity(source: Any) -> None:
-    static_data, temporal_data, outcome = source().load()
+    static_data, temporal_data, temporal_horizons, outcome = source().load()
 
     loader = TimeSeriesDataLoader(
         temporal_data=temporal_data,
+        temporal_horizons=temporal_horizons,
         static_data=static_data,
         outcome=outcome,
         train_size=0.8,
     )
 
-    assert len(loader.raw()) == 4
-    feat_cnt = temporal_data[0].shape[0] * temporal_data[0].shape[1]
+    assert len(loader.raw()) == 5
+    feat_cnt = (
+        temporal_data[0].shape[0] * temporal_data[0].shape[1]
+        + temporal_data[0].shape[0]
+    )
     if static_data is not None:
         feat_cnt += static_data.shape[1]
     if outcome is not None:
@@ -213,10 +217,11 @@ def test_time_series_dataloader_sanity(source: Any) -> None:
 
 @pytest.mark.parametrize("source", [SineDataloader, GoogleStocksDataloader])
 def test_time_series_dataloader_info(source: Any) -> None:
-    static_data, temporal_data, outcome = source().load()
+    static_data, temporal_data, temporal_horizons, outcome = source().load()
 
     loader = TimeSeriesDataLoader(
         temporal_data=temporal_data,
+        temporal_horizons=temporal_horizons,
         static_data=static_data,
         outcome=outcome,
         train_size=0.8,
@@ -244,16 +249,22 @@ def test_time_series_dataloader_info(source: Any) -> None:
 @pytest.mark.parametrize("source", [SineDataloader, GoogleStocksDataloader])
 @pytest.mark.parametrize("repack", [True, False])
 def test_time_series_pack_unpack(source: Any, repack: bool) -> None:
-    static_data, temporal_data, outcome = source().load()
+    static_data, temporal_data, temporal_horizons, outcome = source().load()
 
     loader = TimeSeriesDataLoader(
         temporal_data=temporal_data,
+        temporal_horizons=temporal_horizons,
         static_data=static_data,
         outcome=outcome,
     )
 
     if repack:
-        unp_static_data, unp_temporal, unp_out = TimeSeriesDataLoader.unpack_raw_data(
+        (
+            unp_static_data,
+            unp_temporal,
+            unp_temporal_horizons,
+            unp_out,
+        ) = TimeSeriesDataLoader.unpack_raw_data(
             loader.dataframe(),
             loader.static_features,
             loader.temporal_features,
@@ -261,7 +272,7 @@ def test_time_series_pack_unpack(source: Any, repack: bool) -> None:
             loader.seq_len,
         )
     else:
-        unp_static_data, unp_temporal, unp_out = loader.unpack()
+        unp_static_data, unp_temporal, unp_temporal_horizons, unp_out = loader.unpack()
 
     if static_data is not None:
         assert unp_static_data.shape == static_data.shape
@@ -280,6 +291,7 @@ def test_time_series_pack_unpack(source: Any, repack: bool) -> None:
     assert len(unp_temporal) == len(temporal_data)
     for idx, item in enumerate(temporal_data):
         assert unp_temporal[idx].shape == item.shape
+        assert len(unp_temporal_horizons[idx]) == len(temporal_horizons[idx])
         assert sorted(unp_temporal[idx].columns) == sorted(item.columns)
         cols = list(unp_temporal[idx].columns)
         assert (unp_temporal[idx].values == item[cols].values).all()
@@ -287,7 +299,7 @@ def test_time_series_pack_unpack(source: Any, repack: bool) -> None:
 
 @pytest.mark.parametrize("source", [SineDataloader, GoogleStocksDataloader])
 def test_time_series_sequential_view(source: Any) -> None:
-    static_data, temporal_data, outcome = source().load()
+    static_data, temporal_data, temporal_horizons, outcome = source().load()
 
     temporal_cols = TimeSeriesDataLoader.unique_temporal_features(temporal_data)
     temporal_cols = [f"temporal_{col}" for col in temporal_cols]
@@ -298,6 +310,7 @@ def test_time_series_sequential_view(source: Any) -> None:
 
     loader = TimeSeriesDataLoader(
         temporal_data=temporal_data,
+        temporal_horizons=temporal_horizons,
         static_data=static_data,
         outcome=outcome,
     )
@@ -320,22 +333,23 @@ def test_time_series_sequential_view(source: Any) -> None:
 
 
 def test_time_series_survival_dataloader_sanity() -> None:
-    static_data, temporal_data, outcome = PBCDataloader().load()
-    T, E, _, _ = outcome
+    static_data, temporal_data, temporal_horizons, outcome = PBCDataloader().load()
+    T, E = outcome
 
     loader = TimeSeriesSurvivalDataLoader(
         temporal_data=temporal_data,
+        temporal_horizons=temporal_horizons,
         static_data=static_data,
         T=T,
         E=E,
         train_size=0.8,
     )
 
-    assert len(loader.raw()) == 4
+    assert len(loader.raw()) == 5
     max_seq_len = max([len(t) for t in temporal_data])
     max_feats = max([len(t.columns) for t in temporal_data])
 
-    feat_cnt = max_seq_len * max_feats
+    feat_cnt = max_seq_len * max_feats + max_seq_len
     if static_data is not None:
         feat_cnt += static_data.shape[1]
     # outcome
@@ -354,11 +368,12 @@ def test_time_series_survival_dataloader_sanity() -> None:
 
 
 def test_time_series_survival_dataloader_info() -> None:
-    static_data, temporal_data, outcome = PBCDataloader().load()
-    T, E, _, _ = outcome
+    static_data, temporal_data, temporal_horizons, outcome = PBCDataloader().load()
+    T, E = outcome
 
     loader = TimeSeriesSurvivalDataLoader(
         temporal_data=temporal_data,
+        temporal_horizons=temporal_horizons,
         static_data=static_data,
         T=T,
         E=E,
@@ -392,23 +407,26 @@ def test_time_series_survival_dataloader_info() -> None:
 
 
 def test_time_series_survival_pack_unpack() -> None:
-    static_data, temporal_data, outcome = PBCDataloader().load()
-    T, E, _, _ = outcome
+    static_data, temporal_data, temporal_horizons, outcome = PBCDataloader().load()
+    T, E = outcome
 
     loader = TimeSeriesSurvivalDataLoader(
         temporal_data=temporal_data,
+        temporal_horizons=temporal_horizons,
         static_data=static_data,
         T=T,
         E=E,
     )
 
-    _, unp_temporal, _, _ = loader.unpack()
+    _, unp_temporal, unp_temporal_horizons, _, _ = loader.unpack()
     for idx, item in enumerate(unp_temporal):
         assert len(unp_temporal[idx]) == len(temporal_data[idx])
+        assert len(unp_temporal_horizons[idx]) == len(temporal_data[idx])
 
     (
         unp_static_data,
         unp_temporal,
+        unp_temporal_horizons,
         unp_out,
     ) = TimeSeriesSurvivalDataLoader.unpack_raw_data(
         loader.dataframe(),
@@ -438,23 +456,28 @@ def test_time_series_survival_pack_unpack() -> None:
     assert len(unp_temporal) == len(temporal_data)
     for idx, item in enumerate(temporal_data):
         assert unp_temporal[idx].shape == (len(item), len(item.columns))
+        assert len(unp_temporal_horizons[idx]) == len(item)
         assert sorted(unp_temporal[idx].columns) == sorted(item.columns)
 
 
 def test_time_series_survival_pack_unpack_numpy() -> None:
-    static_data, temporal_data, outcome = PBCDataloader().load()
-    T, E, _, _ = outcome
+    static_data, temporal_data, temporal_horizons, outcome = PBCDataloader().load()
+    T, E = outcome
 
     loader = TimeSeriesSurvivalDataLoader(
         temporal_data=temporal_data,
+        temporal_horizons=temporal_horizons,
         static_data=static_data,
         T=T,
         E=E,
     )
 
-    unp_static, unp_temporal, unp_T, unp_E = loader.unpack(as_numpy=True)
+    unp_static, unp_temporal, unp_temporal_horizons, unp_T, unp_E = loader.unpack(
+        as_numpy=True
+    )
     for idx, item in enumerate(unp_temporal):
         assert len(unp_temporal[idx]) == len(temporal_data[idx])
+        assert len(unp_temporal_horizons[idx]) == len(temporal_data[idx])
 
     assert isinstance(unp_static, np.ndarray)
     assert unp_static.shape == static_data.shape
@@ -463,11 +486,12 @@ def test_time_series_survival_pack_unpack_numpy() -> None:
 
 
 def test_time_series_survival_sequential_view() -> None:
-    static_data, temporal_data, outcome = PBCDataloader().load()
-    T, E, _, _ = outcome
+    static_data, temporal_data, temporal_horizons, outcome = PBCDataloader().load()
+    T, E = outcome
 
     loader = TimeSeriesSurvivalDataLoader(
         temporal_data=temporal_data,
+        temporal_horizons=temporal_horizons,
         static_data=static_data,
         T=T,
         E=E,

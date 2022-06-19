@@ -165,8 +165,8 @@ class PBCDataloader:
             x_temporal,
             t,
             e,
-            np.asarray(t_ext, dtype=object),
-            np.asarray(e_ext, dtype=object),
+            t_ext,
+            e_ext,
         )
 
     def load(
