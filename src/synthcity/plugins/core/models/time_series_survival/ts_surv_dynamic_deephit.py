@@ -77,7 +77,11 @@ class DynamicDeephitTimeSeriesSurvival(TimeSeriesSurvivalPlugin):
             local_static = static[idx].reshape(1, -1)
             local_static = np.repeat(local_static, len(temporal[idx]), axis=0)
             tst = np.concatenate(
-                [temporal[idx], local_static, temporal_horizons[idx].reshape(-1, 1)],
+                [
+                    temporal[idx],
+                    local_static,
+                    np.asarray(temporal_horizons[idx]).reshape(-1, 1),
+                ],
                 axis=1,
             )
             merged.append(tst)
