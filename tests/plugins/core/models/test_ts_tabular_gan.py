@@ -109,7 +109,7 @@ def test_ts_gan_generation_schema(source: Any) -> None:
 
     gen_data = TimeSeriesDataLoader(
         temporal_data=temporal_gen,
-        temporal_horizons=temporal_horizons_gen.tolist(),
+        temporal_horizons=temporal_horizons_gen,
         static_data=static_gen,
     )
 
