@@ -245,7 +245,12 @@ def test_ts_encoder_inverse_transform(source: Any) -> None:
     assert (static_reversed.index == static.index).all()
     assert static_reversed.shape == static.shape
     assert (static_reversed.columns == static.columns).all()
-    assert np.abs(temporal_horizons - horizons_reversed).sum().sum() < 1
+    assert (
+        np.abs(np.asarray(temporal_horizons) - np.asarray(horizons_reversed))
+        .sum()
+        .sum()
+        < 1
+    )
     assert np.abs(static - static_reversed).sum().sum() < 5
 
     assert len(temporal) == len(temporal_reversed)

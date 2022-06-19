@@ -43,9 +43,6 @@ def sanity_check(original: Any, reloaded: Any, generate: bool = False) -> None:
     for key in original.__dict__:
         assert key in reloaded.__dict__
 
-    if generate:
-        reloaded.generate(1000)
-
 
 def verify_serialization(model: Any, generate: bool = False) -> None:
     # pickle test
