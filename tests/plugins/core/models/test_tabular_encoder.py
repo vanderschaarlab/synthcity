@@ -145,10 +145,10 @@ def test_bin_encoder() -> None:
 def test_ts_encoder_fit(source: Any) -> None:
     max_clusters = 5
     categorical_limit = 10
-    static, temporal, _ = source().load()
+    static, temporal, temporal_horizons, _ = source().load()
     net = TimeSeriesTabularEncoder(
         max_clusters=max_clusters, categorical_limit=categorical_limit
-    ).fit(static, temporal)
+    ).fit(static, temporal, temporal_horizons)
 
     static_layout, temporal_layout = net.layout()
 
@@ -169,7 +169,7 @@ def test_ts_encoder_fit(source: Any) -> None:
                 temporal[0][column.column_name].unique()
             )
         else:
-            assert len(temporal[0][column.column_name].unique()) >= categorical_limit
+            assert len(temporal[0][column.column_name].unique()) > 0
             assert column.output_dimensions <= 1 + max_clusters
 
 
@@ -177,13 +177,15 @@ def test_ts_encoder_fit(source: Any) -> None:
 def test_ts_encoder_fit_transform(source: Any) -> None:
     max_clusters = 5
     categorical_limit = 10
-    static, temporal, _ = source().load()
+    static, temporal, temporal_horizons, _ = source().load()
     net = TimeSeriesTabularEncoder(
         max_clusters=max_clusters, categorical_limit=categorical_limit
-    ).fit(static, temporal)
+    ).fit(static, temporal, temporal_horizons)
 
     static_layout, temporal_layout = net.layout()
-    static_encoded, temporal_encoded = net.fit_transform(static, temporal)
+    static_encoded, temporal_encoded, horizons_encoded = net.fit_transform(
+        static, temporal, temporal_horizons
+    )
 
     assert (static.index == static_encoded.index).all()
     for column in static_layout:
@@ -204,7 +206,8 @@ def test_ts_encoder_fit_transform(source: Any) -> None:
 
     assert len(temporal) == len(temporal_encoded)
 
-    for item in temporal_encoded:
+    for idx, item in enumerate(temporal_encoded):
+        assert len(item) == len(horizons_encoded[idx])
         for column in temporal_layout:
             if column.column_type == "discrete":
                 for val in temporal[0][column.column_name].unique():
@@ -226,20 +229,23 @@ def test_ts_encoder_fit_transform(source: Any) -> None:
 def test_ts_encoder_inverse_transform(source: Any) -> None:
     max_clusters = 5
     categorical_limit = 10
-    static, temporal, _ = source().load()
+    static, temporal, temporal_horizons, _ = source().load()
     net = TimeSeriesTabularEncoder(
         max_clusters=max_clusters, categorical_limit=categorical_limit
-    ).fit(static, temporal)
+    ).fit(static, temporal, temporal_horizons)
 
     static_layout, temporal_layout = net.layout()
-    static_encoded, temporal_encoded = net.fit_transform(static, temporal)
-    static_reversed, temporal_reversed = net.inverse_transform(
-        static_encoded, temporal_encoded
+    static_encoded, temporal_encoded, horizons_encoded = net.fit_transform(
+        static, temporal, temporal_horizons
+    )
+    static_reversed, temporal_reversed, horizons_reversed = net.inverse_transform(
+        static_encoded, temporal_encoded, horizons_encoded
     )
 
     assert (static_reversed.index == static.index).all()
     assert static_reversed.shape == static.shape
     assert (static_reversed.columns == static.columns).all()
+    assert np.abs(temporal_horizons - horizons_reversed).sum().sum() < 1
     assert np.abs(static - static_reversed).sum().sum() < 5
 
     assert len(temporal) == len(temporal_reversed)
@@ -253,10 +259,10 @@ def test_ts_encoder_inverse_transform(source: Any) -> None:
 def test_ts_encoder_activation_layout(source: Any) -> None:
     max_clusters = 5
     categorical_limit = 10
-    static, temporal, _ = source().load()
+    static, temporal, horizons, _ = source().load()
     net = TimeSeriesTabularEncoder(
         max_clusters=max_clusters, categorical_limit=categorical_limit
-    ).fit(static, temporal)
+    ).fit(static, temporal, horizons)
 
     static_act_layout, temporal_act_layout = net.activation_layout(
         discrete_activation="softmax", continuous_activation="tanh"

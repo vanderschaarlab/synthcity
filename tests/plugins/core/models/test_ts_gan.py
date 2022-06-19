@@ -109,7 +109,7 @@ def test_basic_network(
 
 @pytest.mark.parametrize("source", [SineDataloader, GoogleStocksDataloader])
 def test_ts_gan_generation(source: Any) -> None:
-    static, temporal, _ = source(as_numpy=True).load()
+    static, temporal, temporal_horizons, _ = source(as_numpy=True).load()
 
     model = TimeSeriesGAN(
         n_static_units=static.shape[-1],
@@ -119,18 +119,19 @@ def test_ts_gan_generation(source: Any) -> None:
         n_temporal_units_latent=temporal.shape[-1],
         generator_n_iter=10,
     )
-    model.fit(static, temporal)
+    model.fit(static, temporal, temporal_horizons)
 
-    static_gen, temporal_gen = model.generate(10)
+    static_gen, temporal_gen, temporal_horizons_gen = model.generate(10)
 
     assert static_gen.shape == (10, static.shape[1])
     assert temporal_gen.shape == (10, temporal.shape[1], temporal.shape[2])
+    assert temporal_horizons_gen.shape == (10, temporal.shape[1])
 
 
 @pytest.mark.slow
 @pytest.mark.parametrize("source", [GoogleStocksDataloader])
 def test_ts_gan_generation_schema(source: Any) -> None:
-    static, temporal, _ = source().load()
+    static, temporal, temporal_horizons, _ = source().load()
 
     model = TimeSeriesGAN(
         n_static_units=static.shape[-1],
@@ -140,12 +141,13 @@ def test_ts_gan_generation_schema(source: Any) -> None:
         n_temporal_units_latent=temporal[0].shape[-1],
         generator_n_iter=100,
     )
-    model.fit(static, temporal)
+    model.fit(static, temporal, temporal_horizons)
 
-    static_gen, temporal_gen = model.generate(1000)
+    static_gen, temporal_gen, temporal_horizons_gen = model.generate(1000)
 
     reference_data = TimeSeriesDataLoader(
         temporal_data=temporal,
+        temporal_horizons=temporal_horizons,
         static_data=static,
     )
     reference_schema = Schema(data=reference_data)
@@ -155,6 +157,7 @@ def test_ts_gan_generation_schema(source: Any) -> None:
         temporal_list.append(pd.DataFrame(item, columns=temporal[0].columns))
     gen_data = TimeSeriesDataLoader(
         temporal_data=temporal_list,
+        temporal_horizons=temporal_horizons_gen.tolist(),
         static_data=pd.DataFrame(static_gen, columns=static.columns),
     )
 
@@ -163,7 +166,7 @@ def test_ts_gan_generation_schema(source: Any) -> None:
 
 @pytest.mark.parametrize("source", [SineDataloader, GoogleStocksDataloader])
 def test_ts_gan_conditional(source: Any) -> None:
-    static, temporal, outcome = source(as_numpy=True).load()
+    static, temporal, temporal_horizons, outcome = source(as_numpy=True).load()
 
     model = TimeSeriesGAN(
         n_static_units=static.shape[-1],
@@ -174,12 +177,16 @@ def test_ts_gan_conditional(source: Any) -> None:
         n_units_conditional=1,
         generator_n_iter=10,
     )
-    model.fit(static, temporal, cond=outcome)
+    model.fit(static, temporal, temporal_horizons, cond=outcome)
 
-    static_gen, temporal_gen = model.generate(10)
+    static_gen, temporal_gen, temporal_horizons_gen = model.generate(10)
     assert static_gen.shape == (10, static.shape[1])
     assert temporal_gen.shape == (10, temporal.shape[1], temporal.shape[2])
+    assert temporal_horizons_gen.shape == (10, temporal.shape[1])
 
-    static_gen, temporal_gen = model.generate(5, np.ones([5, *outcome.shape[1:]]))
+    static_gen, temporal_gen, temporal_horizons_gen = model.generate(
+        5, np.ones([5, *outcome.shape[1:]])
+    )
     assert static_gen.shape == (5, static.shape[1])
     assert temporal_gen.shape == (5, temporal.shape[1], temporal.shape[2])
+    assert temporal_horizons_gen.shape == (5, temporal.shape[1])

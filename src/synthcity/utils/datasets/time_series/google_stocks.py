@@ -32,7 +32,9 @@ class GoogleStocksDataloader:
 
         # Flip the data to make chronological data
         df = pd.DataFrame(df.values[::-1], columns=df.columns)
-        T = df["Date"]
+        T = pd.to_datetime(df["Date"], infer_datetime_format=True).astype(int) / 10**9
+        T = pd.Series(MinMaxScaler().fit_transform(T.values.reshape(-1, 1)).squeeze())
+
         df = df.drop(columns=["Date"])
 
         df = pd.DataFrame(MinMaxScaler().fit_transform(df), columns=df.columns)

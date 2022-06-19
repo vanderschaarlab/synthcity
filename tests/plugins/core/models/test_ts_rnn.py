@@ -48,7 +48,7 @@ def test_rnn_sanity(mode: str, task_type: str) -> None:
 @pytest.mark.parametrize("mode", ["LSTM", "RNN", "GRU"])
 @pytest.mark.parametrize("source", [SineDataloader, GoogleStocksDataloader])
 def test_rnn_regression_fit_predict(mode: str, source: Any) -> None:
-    static, temporal, outcome = source(as_numpy=True).load()
+    static, temporal, _, outcome = source(as_numpy=True).load()
     outcome = outcome.reshape(-1, 1)
 
     outlen = len(outcome.reshape(-1)) / len(outcome)
@@ -76,7 +76,7 @@ def test_rnn_regression_fit_predict(mode: str, source: Any) -> None:
 @pytest.mark.parametrize("mode", ["LSTM", "RNN", "GRU"])
 @pytest.mark.parametrize("source", [SineDataloader, GoogleStocksDataloader])
 def test_rnn_classification_fit_predict(mode: str, source: Any) -> None:
-    static, temporal, outcome = source(as_numpy=True).load()
+    static, temporal, _, outcome = source(as_numpy=True).load()
     static_fake, temporal_fake = np.random.randn(*static.shape), np.random.randn(
         *temporal.shape
     )

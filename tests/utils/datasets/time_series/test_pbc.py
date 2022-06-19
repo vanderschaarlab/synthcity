@@ -16,7 +16,7 @@ def test_dataloader(as_numpy: bool) -> None:
     assert static_data.shape == (len(temporal_data), 1)
     assert t.shape == (len(temporal_data),)
     assert e.shape == (len(temporal_data),)
-    assert temporal_horizons.shape == (len(temporal_data),)
+    assert len(temporal_horizons) == len(temporal_data)
 
     for idx, item in enumerate(temporal_data):
         assert item.shape[1] == 14

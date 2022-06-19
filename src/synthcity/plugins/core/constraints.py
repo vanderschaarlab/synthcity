@@ -102,7 +102,7 @@ class Constraints(BaseModel):
             )
             if res.sum() < prev:
                 log.error(
-                    f"[{feature}] quality loss for constraints {op} = {thresh}. Original dtype {X[feature].dtype} ",
+                    f"[{feature}] quality loss for constraints {op} = {thresh} = {res.sum()}. Original dtype {X[feature].dtype} ",
                 )
         return res
 
