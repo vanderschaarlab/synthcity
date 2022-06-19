@@ -77,6 +77,7 @@ class DeepCoxPHTimeSeriesSurvival(TimeSeriesSurvivalPlugin):
         self,
         static: Optional[np.ndarray],
         temporal: np.ndarray,
+        temporal_horizons: np.ndarray,
         T: np.ndarray,
         E: np.ndarray,
     ) -> TimeSeriesSurvivalPlugin:
@@ -107,6 +108,7 @@ class DeepCoxPHTimeSeriesSurvival(TimeSeriesSurvivalPlugin):
         self,
         static: Optional[np.ndarray],
         temporal: np.ndarray,
+        temporal_horizons: np.ndarray,
         time_horizons: List,
     ) -> np.ndarray:
         "Predict risk"

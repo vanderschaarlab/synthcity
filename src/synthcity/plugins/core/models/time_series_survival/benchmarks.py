@@ -54,6 +54,7 @@ def _search_objective_meta(
     estimator: Any,
     static: np.ndarray,
     temporal: np.ndarray,
+    temporal_horizons: np.ndarray,
     T: np.ndarray,
     Y: np.ndarray,
     time_horizons: List,
@@ -66,7 +67,7 @@ def _search_objective_meta(
         try:
             model = estimator(n_iter=10, **args)
             raw_score = evaluate_ts_survival_model(
-                model, static, temporal, T, Y, time_horizons
+                model, static, temporal, temporal_horizons, T, Y, time_horizons
             )
         except BaseException as e:
             log.error(f"model search failed {e}")
@@ -84,6 +85,7 @@ def search_hyperparams(
     estimator: Any,
     static: np.ndarray,
     temporal: np.ndarray,
+    temporal_horizons: np.ndarray,
     T: np.ndarray,
     Y: np.ndarray,
     time_horizons: List,
@@ -110,6 +112,7 @@ def search_hyperparams(
                 estimator,
                 static,
                 temporal,
+                temporal_horizons,
                 T,
                 Y,
                 time_horizons,
@@ -139,6 +142,7 @@ def evaluate_ts_survival_model(
     estimator: Any,
     static: np.ndarray,
     temporal: np.ndarray,
+    temporal_horizons: np.ndarray,
     T: np.ndarray,
     Y: np.ndarray,
     time_horizons: List,
@@ -158,6 +162,8 @@ def evaluate_ts_survival_model(
             The static covariates
         temporal: np.ndarray
             The temporal covariates
+        temporal_horizons: np.ndarray
+            The temporal points
         T: np.ndarray
             time to event
         Y: np.ndarray
@@ -179,6 +185,7 @@ def evaluate_ts_survival_model(
 
     static = np.asarray(static)
     temporal = np.asarray(temporal)
+    temporal_horizons = np.asarray(temporal_horizons)
     T = np.asarray(T)
     Y = np.asarray(Y)
 
@@ -194,6 +201,8 @@ def evaluate_ts_survival_model(
         static_test: np.ndarray,
         temporal_train: np.ndarray,
         temporal_test: np.ndarray,
+        temporal_horizons_train: np.ndarray,
+        temporal_horizons_test: np.ndarray,
         T_train: np.ndarray,
         T_test: np.ndarray,
         Y_train: np.ndarray,
@@ -208,9 +217,13 @@ def evaluate_ts_survival_model(
         else:
             model = copy.deepcopy(estimator)
 
-            model.fit(static_train, temporal_train, T_train, Y_train)
+            model.fit(
+                static_train, temporal_train, temporal_horizons_train, T_train, Y_train
+            )
         try:
-            pred = model.predict(static_test, temporal_test, time_horizons).to_numpy()
+            pred = model.predict(
+                static_test, temporal_test, temporal_horizons_test, time_horizons
+            ).to_numpy()
         except BaseException as e:
             raise e
 
@@ -242,11 +255,15 @@ def evaluate_ts_survival_model(
             static_test,
             temporal_train,
             temporal_test,
+            temporal_horizons_train,
+            temporal_horizons_test,
             T_train,
             T_test,
             Y_train,
             Y_test,
-        ) = train_test_split(static, temporal, T, Y, random_state=random_state)
+        ) = train_test_split(
+            static, temporal, temporal_horizons, T, Y, random_state=random_state
+        )
         local_time_horizons = [t for t in time_horizons if t > np.min(T_test)]
 
         c_index, brier_score = _get_surv_metrics(
@@ -255,6 +272,8 @@ def evaluate_ts_survival_model(
             static_test,
             temporal_train,
             temporal_test,
+            temporal_horizons_train,
+            temporal_horizons_test,
             T_train,
             T_test,
             Y_train,
@@ -274,11 +293,13 @@ def evaluate_ts_survival_model(
         for train_index, test_index in skf.split(temporal, Y):
             static_train = static[train_index]
             temporal_train = temporal[train_index]
+            temporal_horizons_train = temporal_horizons[train_index]
             Y_train = Y[train_index]
             T_train = T[train_index]
 
             static_test = static[test_index]
             temporal_test = temporal[test_index]
+            temporal_horizons_test = temporal_horizons[test_index]
             Y_test = Y[test_index]
             T_test = T[test_index]
 
@@ -290,6 +311,8 @@ def evaluate_ts_survival_model(
                 static_test,
                 temporal_train,
                 temporal_test,
+                temporal_horizons_train,
+                temporal_horizons_test,
                 T_train,
                 T_test,
                 Y_train,

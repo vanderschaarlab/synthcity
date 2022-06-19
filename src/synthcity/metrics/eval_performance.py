@@ -406,15 +406,27 @@ class PerformanceEvaluator(MetricEvaluator):
         info = X_gt.info()
         time_horizons = info["time_horizons"]
 
-        id_X_static_gt, id_X_temporal_gt, id_T_gt, id_E_gt = X_gt.train().unpack(
-            as_numpy=True
-        )
-        ood_X_static_gt, ood_X_temporal_gt, ood_T_gt, ood_E_gt = X_gt.test().unpack(
-            as_numpy=True
-        )
-        iter_X_static_syn, iter_X_temporal_syn, iter_T_syn, iter_E_syn = X_syn.unpack(
-            as_numpy=True
-        )
+        (
+            id_X_static_gt,
+            id_X_temporal_gt,
+            id_X_temporal_horizons_gt,
+            id_T_gt,
+            id_E_gt,
+        ) = X_gt.train().unpack(as_numpy=True)
+        (
+            ood_X_static_gt,
+            ood_X_temporal_gt,
+            ood_X_temporal_horizons_gt,
+            ood_T_gt,
+            ood_E_gt,
+        ) = X_gt.test().unpack(as_numpy=True)
+        (
+            iter_X_static_syn,
+            iter_X_temporal_syn,
+            iter_X_temporal_horizons_syn,
+            iter_T_syn,
+            iter_E_syn,
+        ) = X_syn.unpack(as_numpy=True)
 
         predictor_gt = model(**args)
         log.info(
@@ -424,6 +436,7 @@ class PerformanceEvaluator(MetricEvaluator):
             predictor_gt,
             id_X_static_gt,
             id_X_temporal_gt,
+            id_X_temporal_horizons_gt,
             id_T_gt,
             id_E_gt,
             metrics=["c_index", "brier_score"],
@@ -441,12 +454,17 @@ class PerformanceEvaluator(MetricEvaluator):
         }
         try:
             predictor_syn.fit(
-                iter_X_static_syn, iter_X_temporal_syn, iter_T_syn, iter_E_syn
+                iter_X_static_syn,
+                iter_X_temporal_syn,
+                iter_X_temporal_horizons_syn,
+                iter_T_syn,
+                iter_E_syn,
             )
             score_syn_id = evaluate_ts_survival_model(
                 [predictor_syn] * self._n_folds,
                 id_X_static_gt,
                 id_X_temporal_gt,
+                id_X_temporal_horizons_gt,
                 id_T_gt,
                 id_E_gt,
                 metrics=["c_index", "brier_score"],
@@ -464,12 +482,17 @@ class PerformanceEvaluator(MetricEvaluator):
 
         try:
             predictor_syn.fit(
-                iter_X_static_syn, iter_X_temporal_syn, iter_T_syn, iter_E_syn
+                iter_X_static_syn,
+                iter_X_temporal_syn,
+                iter_X_temporal_horizons_syn,
+                iter_T_syn,
+                iter_E_syn,
             )
             score_syn_ood = evaluate_ts_survival_model(
                 [predictor_syn] * self._n_folds,
                 ood_X_static_gt,
                 ood_X_temporal_gt,
+                ood_X_temporal_horizons_gt,
                 ood_T_gt,
                 ood_E_gt,
                 metrics=["c_index", "brier_score"],
@@ -591,7 +614,7 @@ class PerformanceEvaluatorLinear(PerformanceEvaluator):
                 X_syn,
             )
         elif self._task_type == "time_series_survival":
-            static, temporal, T, E = X_gt.unpack()
+            static, temporal, temporal_horizons, T, E = X_gt.unpack()
 
             info = X_gt.info()
             time_horizons = info["time_horizons"]
@@ -600,6 +623,7 @@ class PerformanceEvaluatorLinear(PerformanceEvaluator):
                 CoxTimeSeriesSurvival,
                 static,
                 temporal,
+                temporal_horizons,
                 T,
                 E,
                 time_horizons=time_horizons,
@@ -666,7 +690,7 @@ class PerformanceEvaluatorMLP(PerformanceEvaluator):
                 TimeSeriesRNN, args, X_gt, X_syn
             )
         elif self._task_type == "time_series_survival":
-            static, temporal, T, E = X_gt.unpack()
+            static, temporal, temporal_horizons, T, E = X_gt.unpack()
 
             info = X_gt.info()
             time_horizons = info["time_horizons"]
@@ -675,6 +699,7 @@ class PerformanceEvaluatorMLP(PerformanceEvaluator):
                 DynamicDeephitTimeSeriesSurvival,
                 static,
                 temporal,
+                temporal_horizons,
                 T,
                 E,
                 time_horizons=time_horizons,

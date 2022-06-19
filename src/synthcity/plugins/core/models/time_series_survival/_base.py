@@ -21,6 +21,7 @@ class TimeSeriesSurvivalPlugin(Serializable, metaclass=ABCMeta):
         self,
         static: Optional[np.ndarray],
         temporal: np.ndarray,
+        temporal_horizons: np.ndarray,
         T: np.ndarray,
         Y: np.ndarray,
     ) -> Any:
@@ -30,7 +31,11 @@ class TimeSeriesSurvivalPlugin(Serializable, metaclass=ABCMeta):
     @abstractmethod
     @validate_arguments(config=dict(arbitrary_types_allowed=True))
     def predict(
-        self, static: Optional[np.ndarray], temporal: np.ndarray, time_horizons: List
+        self,
+        static: Optional[np.ndarray],
+        temporal: np.ndarray,
+        temporal_horizons: np.ndarray,
+        time_horizons: List,
     ) -> np.ndarray:
         "Predict risk"
         ...

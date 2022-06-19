@@ -85,6 +85,7 @@ class DynamicDeephitTimeSeriesSurvival(TimeSeriesSurvivalPlugin):
         self,
         static: Optional[np.ndarray],
         temporal: np.ndarray,
+        temporal_horizons: np.ndarray,
         T: np.ndarray,
         E: np.ndarray,
     ) -> TimeSeriesSurvivalPlugin:
@@ -102,6 +103,7 @@ class DynamicDeephitTimeSeriesSurvival(TimeSeriesSurvivalPlugin):
         self,
         static: Optional[np.ndarray],
         temporal: np.ndarray,
+        temporal_horizons: np.ndarray,
         time_horizons: List,
     ) -> np.ndarray:
         "Predict risk"
@@ -116,6 +118,7 @@ class DynamicDeephitTimeSeriesSurvival(TimeSeriesSurvivalPlugin):
         self,
         static: Optional[np.ndarray],
         temporal: np.ndarray,
+        temporal_horizons: np.ndarray,
     ) -> np.ndarray:
         "Predict embeddings"
         data = self._merge_data(static, temporal)

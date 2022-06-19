@@ -28,14 +28,16 @@ def test_hyperparams() -> None:
 
 
 def test_train_prediction() -> None:
-    static, temporal, outcome = PBCDataloader(as_numpy=True).load()
-    T, E, _, _ = outcome
+    static, temporal, temporal_horizons, outcome = PBCDataloader(as_numpy=True).load()
+    T, E = outcome
 
     horizons = [0.25, 0.5, 0.75]
     time_horizons = np.quantile(T, horizons).tolist()
 
     model = DeepCoxPHTimeSeriesSurvival()
-    score = evaluate_ts_survival_model(model, static, temporal, T, E, time_horizons)
+    score = evaluate_ts_survival_model(
+        model, static, temporal, temporal_horizons, T, E, time_horizons
+    )
 
     print("Perf", model.name(), score["str"])
     assert score["clf"]["c_index"][0] > 0
@@ -43,8 +45,8 @@ def test_train_prediction() -> None:
 
 @pytest.mark.slow
 def test_hyperparams_search() -> None:
-    static, temporal, outcome = PBCDataloader(as_numpy=True).load()
-    T, E, _, _ = outcome
+    static, temporal, temporal_horizons, outcome = PBCDataloader(as_numpy=True).load()
+    T, E = outcome
 
     horizons = [0.25, 0.5, 0.75]
     time_horizons = np.quantile(
@@ -52,11 +54,19 @@ def test_hyperparams_search() -> None:
     ).tolist()
 
     args = search_hyperparams(
-        DeepCoxPHTimeSeriesSurvival, static, temporal, T, E, time_horizons
+        DeepCoxPHTimeSeriesSurvival,
+        static,
+        temporal,
+        temporal_horizons,
+        T,
+        E,
+        time_horizons,
     )
 
     model = DeepCoxPHTimeSeriesSurvival(**args)
-    score = evaluate_ts_survival_model(model, static, temporal, T, E, time_horizons)
+    score = evaluate_ts_survival_model(
+        model, static, temporal, temporal_horizons, T, E, time_horizons
+    )
 
     print("Perf", model.name(), args, score["str"])
     assert score["clf"]["c_index"][0] > 0
