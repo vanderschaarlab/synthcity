@@ -227,9 +227,15 @@ def test_evaluate_performance_custom_labels(
 def test_evaluate_performance_time_series(
     test_plugin: Plugin, evaluator_t: Type
 ) -> None:
-    static_data, temporal_data, outcome = GoogleStocksDataloader().load()
+    (
+        static_data,
+        temporal_data,
+        temporal_horizons,
+        outcome,
+    ) = GoogleStocksDataloader().load()
     data = TimeSeriesDataLoader(
         temporal_data=temporal_data,
+        temporal_horizons=temporal_horizons,
         static_data=static_data,
         outcome=outcome,
     )
@@ -280,12 +286,13 @@ def test_evaluate_performance_time_series(
 def test_evaluate_performance_time_series_survival(
     test_plugin: Plugin, evaluator_t: Type
 ) -> None:
-    static_data, temporal_data, outcome = PBCDataloader().load()
+    static_data, temporal_data, temporal_horizons, outcome = PBCDataloader().load()
 
-    T, E, _, _ = outcome
+    T, E = outcome
 
     data = TimeSeriesSurvivalDataLoader(
         temporal_data=temporal_data,
+        temporal_horizons=temporal_horizons,
         static_data=static_data,
         T=T,
         E=E,

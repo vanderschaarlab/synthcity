@@ -307,11 +307,13 @@ class PerformanceEvaluator(MetricEvaluator):
         assert X_gt.type() == "time_series"
         assert X_syn.type() == "time_series"
 
-        id_static_gt, id_temporal_gt, id_outcome_gt = X_gt.train().unpack(as_numpy=True)
-        ood_static_gt, ood_temporal_gt, ood_outcome_gt = X_gt.test().unpack(
+        id_static_gt, id_temporal_gt, _, id_outcome_gt = X_gt.train().unpack(
             as_numpy=True
         )
-        static_syn, temporal_syn, outcome_syn = X_syn.unpack(as_numpy=True)
+        ood_static_gt, ood_temporal_gt, _, ood_outcome_gt = X_gt.test().unpack(
+            as_numpy=True
+        )
+        static_syn, temporal_syn, _, outcome_syn = X_syn.unpack(as_numpy=True)
 
         skf = KFold(
             n_splits=self._n_folds, shuffle=True, random_state=self._random_state
