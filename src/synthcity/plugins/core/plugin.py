@@ -251,9 +251,12 @@ class Plugin(Serializable, metaclass=ABCMeta):
         data_synth = pd.DataFrame([], columns=self.schema().features())
         for it in range(self.sampling_patience):
             # sample
-            static, temporal, outcome = gen_cbk(count, **kwargs)
+            static, temporal, temporal_horizons, outcome = gen_cbk(count, **kwargs)
             loader = TimeSeriesDataLoader(
-                temporal_data=temporal, static_data=static, outcome=outcome
+                temporal_data=temporal,
+                temporal_horizons=temporal_horizons,
+                static_data=static,
+                outcome=outcome,
             )
             iter_samples_df = loader.dataframe()
 

@@ -390,7 +390,8 @@ class AutoregressivePlugin(Plugin):
                 outcome_raw, columns=self.data_info["outcome_features"]
             )
 
-            return static, temporal, outcome
+            temporal_horizons = [len(temporal[i]) for i in range(count)]
+            return static, temporal, temporal_horizons, outcome
 
         return self._safe_generate_time_series(_sample, count, syn_schema)
 

@@ -117,7 +117,7 @@ class FourierFlowsPlugin(Plugin):
         assert X.type() == "time_series"
 
         # Train static generator
-        static, temporal, outcome = X.unpack()
+        static, temporal, temporal_horizons, outcome = X.unpack()
 
         self.temporal_encoder.fit(static, temporal)
         static_enc, temporal_enc = self.temporal_encoder.transform(static, temporal)
@@ -199,7 +199,8 @@ class FourierFlowsPlugin(Plugin):
             )
             static = pd.DataFrame(static_raw, columns=self.data_info["static_features"])
 
-            return static, temporal, outcome
+            temporal_horizons = [len(temporal[i]) for i in range(count)]
+            return static, temporal, temporal_horizons, outcome
 
         return self._safe_generate_time_series(_sample, count, syn_schema)
 
