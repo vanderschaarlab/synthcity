@@ -334,7 +334,7 @@ class AutoregressivePlugin(Plugin):
     def _fit(self, X: DataLoader, *args: Any, **kwargs: Any) -> "AutoregressivePlugin":
         assert X.type() == "time_series"
 
-        static, temporal, outcome = X.unpack()
+        static, temporal, temporal_horizons, outcome = X.unpack()
 
         # Train the static and temporal generator
         self.ar_model.fit(static, temporal)
@@ -390,7 +390,7 @@ class AutoregressivePlugin(Plugin):
                 outcome_raw, columns=self.data_info["outcome_features"]
             )
 
-            temporal_horizons = [len(temporal[i]) for i in range(count)]
+            temporal_horizons = [list(range(len(temporal[i]))) for i in range(count)]
             return static, temporal, temporal_horizons, outcome
 
         return self._safe_generate_time_series(_sample, count, syn_schema)
