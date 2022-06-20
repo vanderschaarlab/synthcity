@@ -485,6 +485,36 @@ def test_time_series_survival_pack_unpack_numpy() -> None:
     assert len(unp_E) == len(E)
 
 
+@pytest.mark.parametrize("as_numpy", [True, False])
+def test_time_series_survival_pack_unpack_padding(as_numpy: bool) -> None:
+    static_data, temporal_data, temporal_horizons, outcome = PBCDataloader().load()
+    T, E = outcome
+
+    loader = TimeSeriesSurvivalDataLoader(
+        temporal_data=temporal_data,
+        temporal_horizons=temporal_horizons,
+        static_data=static_data,
+        T=T,
+        E=E,
+    )
+
+    max_seq_len = max([len(t) for t in temporal_data])
+    temporal_features = TimeSeriesDataLoader.unique_temporal_features(temporal_data)
+
+    unp_static, unp_temporal, unp_temporal_horizons, unp_T, unp_E = loader.unpack(
+        pad=True,
+        as_numpy=as_numpy,
+    )
+    assert len(unp_temporal) == len(temporal_data)
+    assert unp_temporal[0].shape == (max_seq_len, len(temporal_features))
+    assert len(unp_temporal_horizons) == len(temporal_data)
+    assert len(unp_temporal_horizons[0]) == max_seq_len
+
+    for idx, item in enumerate(unp_temporal):
+        assert len(unp_temporal[idx]) == max_seq_len
+        assert len(unp_temporal_horizons[idx]) == max_seq_len
+
+
 def test_time_series_survival_sequential_view() -> None:
     static_data, temporal_data, temporal_horizons, outcome = PBCDataloader().load()
     T, E = outcome

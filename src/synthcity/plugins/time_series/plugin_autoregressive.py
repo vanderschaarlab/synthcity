@@ -343,9 +343,16 @@ class AutoregressivePlugin(Plugin):
         ]
 
     def _fit(self, X: DataLoader, *args: Any, **kwargs: Any) -> "AutoregressivePlugin":
-        assert X.type() == "time_series"
+        assert X.type() in ["time_series", "time_series_survival"]
 
-        static, temporal, temporal_horizons, outcome = X.unpack()
+        self.data_type = X.type()
+
+        if self.data_type == "time_series":
+            static, temporal, temporal_horizons, outcome = X.unpack()
+        else:
+            static, temporal, temporal_horizons, T, E = X.unpack()
+            outcome = pd.concat([pd.Series(T), pd.Series(E)], axis=1)
+            outcome.columns = ["time_to_event", "event"]
 
         # Train the static and temporal generator
         self.ar_model.fit(static, temporal, temporal_horizons)

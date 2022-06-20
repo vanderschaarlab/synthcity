@@ -40,7 +40,9 @@ class DataLoader(metaclass=ABCMeta):
         return self.data
 
     @abstractmethod
-    def unpack(self, as_numpy: bool = False) -> Any:
+    def unpack(
+        self, as_numpy: bool = False, pad: bool = False, fill: Any = np.nan
+    ) -> Any:
         ...
 
     @abstractmethod
@@ -178,9 +180,11 @@ class GenericDataLoader(DataLoader):
     def columns(self) -> list:
         return list(self.data.columns)
 
-    def unpack(self, as_numpy: bool = False) -> Any:
-        X = self.data.drop(columns=[self.target_column])
-        y = self.data[self.target_column]
+    def unpack(
+        self, as_numpy: bool = False, pad: bool = False, fill: Any = np.nan
+    ) -> Any:
+        X = self.data.drop(columns=[self.target_column]).fillna(fill)
+        y = self.data[self.target_column].fillna(fill)
 
         if as_numpy:
             return np.asarray(X), np.asarray(y)
@@ -308,10 +312,18 @@ class SurvivalAnalysisDataLoader(DataLoader):
     def columns(self) -> list:
         return list(self.data.columns)
 
-    def unpack(self, as_numpy: bool = False) -> Any:
-        X = self.data.drop(columns=[self.target_column, self.time_to_event_column])
-        T = self.data[self.time_to_event_column]
-        E = self.data[self.target_column]
+    def unpack(
+        self, as_numpy: bool = False, pad: bool = False, fill: Any = np.nan
+    ) -> Any:
+        X = self.data.drop(
+            columns=[self.target_column, self.time_to_event_column]
+        ).fillna(fill)
+        T = self.data[self.time_to_event_column].fillna(fill)
+        E = self.data[self.target_column].fillna(fill)
+
+        X = X[T > 0]
+        E = E[T > 0]
+        T = T[T > 0]
 
         if as_numpy:
             return np.asarray(X), np.asarray(T), np.asarray(E)
@@ -705,20 +717,72 @@ class TimeSeriesDataLoader(DataLoader):
             sensitive_features=info["sensitive_features"],
         )
 
-    def unpack(self, as_numpy: bool = False) -> Any:
+    def unpack(
+        self, as_numpy: bool = False, pad: bool = False, fill: Any = np.nan
+    ) -> Any:
+        if pad:
+            static_data, temporal_data, temporal_horizons, outcome = self.pad(fill=fill)
+        else:
+            static_data, temporal_data, temporal_horizons, outcome = (
+                self.data["static_data"],
+                self.data["temporal_data"],
+                self.data["temporal_horizons"],
+                self.data["outcome"],
+            )
         if as_numpy:
             return (
-                np.asarray(self.data["static_data"]),
-                np.asarray(self.data["temporal_data"]),
-                np.asarray(self.data["temporal_horizons"]),
-                np.asarray(self.data["outcome"]),
+                np.asarray(static_data),
+                np.asarray(temporal_data),
+                np.asarray(temporal_horizons),
+                np.asarray(outcome),
             )
         return (
-            self.data["static_data"],
-            self.data["temporal_data"],
-            self.data["temporal_horizons"],
-            self.data["outcome"],
+            static_data,
+            temporal_data,
+            temporal_horizons,
+            outcome,
         )
+
+    def pad(self, fill: Any = np.nan) -> Any:
+        static_data = self.data["static_data"]
+        temporal_data = self.data["temporal_data"].copy()
+        temporal_horizons = self.data["temporal_horizons"].copy()
+        outcome = self.data["outcome"]
+
+        max_seq_len = max([len(t) for t in temporal_data])
+        temporal_features = TimeSeriesDataLoader.unique_temporal_features(temporal_data)
+
+        for idx, item in enumerate(temporal_data):
+            # handling missing features
+            for col in temporal_features:
+                if col not in item.columns:
+                    item[col] = fill
+            item = item[temporal_features]
+            if len(item) != max_seq_len:
+                pads = fill * np.ones((max_seq_len - len(item), len(temporal_features)))
+                start = max(item.index) + 1
+                pads_df = pd.DataFrame(
+                    pads,
+                    index=[start + i for i in range(len(pads))],
+                    columns=item.columns,
+                )
+                item = pd.concat([item, pads_df])
+
+            # handle missing time points
+            assert list(item.columns) == list(temporal_features)
+            assert len(item) == max_seq_len
+
+            temporal_data[idx] = item
+
+        temporal_horizons_padded = []
+        for idx, item in enumerate(temporal_horizons):
+            item = list(item)
+            if len(item) != max_seq_len:
+                pads = np.nan * np.ones(max_seq_len - len(item))
+                item.extend(pads.tolist())
+            temporal_horizons_padded.append(item)
+
+        return static_data, temporal_data, temporal_horizons_padded, outcome
 
     def __getitem__(self, feature: Union[str, list]) -> Any:
         return self.data["grouped_data"][feature]
@@ -864,9 +928,9 @@ class TimeSeriesSurvivalDataLoader(TimeSeriesDataLoader):
     def __init__(
         self,
         temporal_data: List[pd.DataFrame],
-        temporal_horizons: List,
-        T: pd.Series,
-        E: pd.Series,
+        temporal_horizons: Union[List, np.ndarray, pd.Series],
+        T: Union[pd.Series, np.ndarray, pd.Series],
+        E: Union[pd.Series, np.ndarray, pd.Series],
         static_data: Optional[pd.DataFrame] = None,
         sensitive_features: List[str] = [],
         time_horizons: list = [],
@@ -875,7 +939,7 @@ class TimeSeriesSurvivalDataLoader(TimeSeriesDataLoader):
         fill: Any = np.nan,
         **kwargs: Any,
     ) -> None:
-        outcome = pd.concat([T, E], axis=1)
+        outcome = pd.concat([pd.Series(T), pd.Series(E)], axis=1)
         self.time_to_event_col = "time_to_event"
         self.event_col = "event"
 
@@ -953,21 +1017,33 @@ class TimeSeriesSurvivalDataLoader(TimeSeriesDataLoader):
             time_horizons=info["time_horizons"],
         )
 
-    def unpack(self, as_numpy: bool = False) -> Any:
+    def unpack(
+        self, as_numpy: bool = False, pad: bool = False, fill: Any = np.nan
+    ) -> Any:
+        if pad:
+            static_data, temporal_data, temporal_horizons, outcome = self.pad(fill=fill)
+        else:
+            static_data, temporal_data, temporal_horizons, outcome = (
+                self.data["static_data"],
+                self.data["temporal_data"],
+                self.data["temporal_horizons"],
+                self.data["outcome"],
+            )
+
         if as_numpy:
             return (
-                np.asarray(self.data["static_data"]),
-                np.asarray(self.data["temporal_data"], dtype=object),
-                np.asarray(self.data["temporal_horizons"], dtype=object),
-                np.asarray(self.data["outcome"][self.time_to_event_col]),
-                np.asarray(self.data["outcome"][self.event_col]),
+                np.asarray(static_data),
+                np.asarray(temporal_data, dtype=object),
+                np.asarray(temporal_horizons, dtype=object),
+                np.asarray(outcome[self.time_to_event_col]),
+                np.asarray(outcome[self.event_col]),
             )
         return (
-            self.data["static_data"],
-            self.data["temporal_data"],
-            self.data["temporal_horizons"],
-            self.data["outcome"][self.time_to_event_col],
-            self.data["outcome"][self.event_col],
+            static_data,
+            temporal_data,
+            temporal_horizons,
+            outcome[self.time_to_event_col],
+            outcome[self.event_col],
         )
 
     @staticmethod

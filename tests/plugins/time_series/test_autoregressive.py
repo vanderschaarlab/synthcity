@@ -1,12 +1,17 @@
 # third party
+import numpy as np
 import pytest
 from ts_helpers import generate_fixtures
 
 # synthcity absolute
 from synthcity.plugins import Plugin
-from synthcity.plugins.core.dataloader import TimeSeriesDataLoader
+from synthcity.plugins.core.dataloader import (
+    TimeSeriesDataLoader,
+    TimeSeriesSurvivalDataLoader,
+)
 from synthcity.plugins.time_series.plugin_autoregressive import plugin
 from synthcity.utils.datasets.time_series.google_stocks import GoogleStocksDataloader
+from synthcity.utils.datasets.time_series.pbc import PBCDataloader
 
 static_data, temporal_data, temporal_horizons, outcome = GoogleStocksDataloader().load()
 data = TimeSeriesDataLoader(
@@ -67,3 +72,37 @@ def test_sample_hyperparams() -> None:
         args = plugin.sample_hyperparameters()
 
         assert plugin(**args) is not None
+
+
+def test_plugin_generate_survival() -> None:
+    (
+        static_surv,
+        temporal_surv,
+        temporal_surv_horizons,
+        outcome_surv,
+    ) = PBCDataloader().load()
+    T, E = outcome_surv
+
+    horizons = [0.25, 0.5, 0.75]
+    time_horizons = np.quantile(T, horizons).tolist()
+
+    survival_data = TimeSeriesSurvivalDataLoader(
+        temporal_data=temporal_surv,
+        temporal_horizons=temporal_surv_horizons,
+        static_data=static_surv,
+        T=T,
+        E=E,
+        time_horizons=time_horizons,
+    )
+
+    test_plugin = plugin(
+        n_iter=10,
+    )
+    test_plugin.fit(survival_data)
+
+    X_gen = test_plugin.generate()
+
+    assert X_gen.type() == "time_series_survival"
+    assert len(X_gen) == len(survival_data)
+    assert test_plugin.schema_includes(X_gen)
+    assert list(X_gen.columns) == list(data.columns)
