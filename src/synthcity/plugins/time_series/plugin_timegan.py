@@ -214,7 +214,7 @@ class TimeGANPlugin(Plugin):
         ]
 
     def _fit(self, X: DataLoader, *args: Any, **kwargs: Any) -> "TimeGANPlugin":
-        assert X.type() == "time_series"
+        assert X.type() in ["time_series", "time_series_survival"]
 
         cond: Optional[Union[pd.DataFrame, pd.Series]] = None
         if self.n_units_conditional > 0:
@@ -223,7 +223,12 @@ class TimeGANPlugin(Plugin):
             cond = kwargs["cond"]
 
         # Static and temporal generation
-        static, temporal, temporal_horizons, outcome = X.unpack()
+        if X.type() == "time_series":
+            static, temporal, temporal_horizons, outcome = X.unpack(pad=True, fill=-1)
+        elif X.type() == "time_series_survival":
+            static, temporal, temporal_horizons, T, E = X.unpack(pad=True, fill=-1)
+            outcome = pd.concat([pd.Series(T), pd.Series(E)], axis=1)
+            outcome.columns = ["time_to_event", "event"]
 
         self.cov_model = TimeSeriesTabularGAN(
             static_data=static,
@@ -272,7 +277,7 @@ class TimeGANPlugin(Plugin):
 
         self.outcome_model = TimeSeriesRNN(
             task_type="regression",
-            n_static_units_in=static.shape[-1] + len(temporal[0]),
+            n_static_units_in=static.shape[-1],
             n_temporal_units_in=temporal[0].shape[-1],
             output_shape=outcome_enc.shape[1:],
             n_static_units_hidden=self.generator_n_units_hidden,

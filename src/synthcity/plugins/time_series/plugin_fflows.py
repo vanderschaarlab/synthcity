@@ -117,7 +117,7 @@ class FourierFlowsPlugin(Plugin):
         ]
 
     def _fit(self, X: DataLoader, *args: Any, **kwargs: Any) -> "FourierFlowsPlugin":
-        assert X.type() == "time_series"
+        assert X.type() in ["time_series", "time_series_survival"]
 
         # Train static generator
         static, temporal, temporal_horizons, outcome = X.unpack()
