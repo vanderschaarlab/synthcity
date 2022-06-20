@@ -119,9 +119,14 @@ class FourierFlowsPlugin(Plugin):
     def _fit(self, X: DataLoader, *args: Any, **kwargs: Any) -> "FourierFlowsPlugin":
         assert X.type() in ["time_series", "time_series_survival"]
 
-        # Train static generator
-        static, temporal, temporal_horizons, outcome = X.unpack()
+        if X.type() == "time_series":
+            static, temporal, temporal_horizons, outcome = X.unpack(pad=True)
+        elif X.type() == "time_series_survival":
+            static, temporal, temporal_horizons, T, E = X.unpack(pad=True)
+            outcome = pd.concat([pd.Series(T), pd.Series(E)], axis=1)
+            outcome.columns = ["time_to_event", "event"]
 
+        # Train static generator
         self.temporal_encoder.fit(static, temporal, temporal_horizons)
         (
             static_enc,

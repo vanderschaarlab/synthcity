@@ -178,9 +178,6 @@ class ARModel:
         assert np.isnan(np.asarray(static_data)).sum() == 0
         # Temporal generation
         for horizon in range(1, self.temporal_len):
-            assert np.isnan(np.asarray(temporal_enc)).sum() == 0, horizon
-            assert np.isnan(np.asarray(temporal_horizons_enc)).sum() == 0, horizon
-
             next_point = self.temporal_model.predict(
                 np.asarray(static_data), temporal_enc, temporal_horizons_enc
             )
@@ -196,6 +193,8 @@ class ARModel:
                 ],
                 axis=1,
             )
+            assert np.isnan(np.asarray(temporal_enc)).sum() == 0, horizon
+            assert np.isnan(np.asarray(temporal_horizons_enc)).sum() == 0, horizon
 
         assert temporal_enc.shape[1] == self.temporal_len
         # Decoding
@@ -214,8 +213,10 @@ class ARModel:
         )
 
         temporal = []
-        for item in temporal_raw:
-            temporal.append(pd.DataFrame(item, columns=self.temporal_columns))
+        for idx, item in enumerate(temporal_raw):
+            # TODO: debug fillna
+            item = pd.DataFrame(item, columns=self.temporal_columns).fillna(0)
+            temporal.append(item)
 
         return static_data, temporal, temporal_horizons
 
@@ -299,7 +300,7 @@ class AutoregressivePlugin(Plugin):
         device: Any = DEVICE,
         mode: str = "RNN",
         static_model: str = "ctgan",
-        **kwargs: Any
+        **kwargs: Any,
     ) -> None:
         super().__init__()
         self.n_iter = n_iter
@@ -408,9 +409,9 @@ class AutoregressivePlugin(Plugin):
             ),
         )
         self.outcome_model.fit(
-            np.asarray(static),
-            np.asarray(temporal),
-            np.asarray(temporal_horizons),
+            np.asarray(static).astype(float),
+            np.asarray(temporal).astype(float),
+            np.asarray(temporal_horizons).astype(float),
             np.asarray(outcome_enc),
         )
         self.outcome_encoded_columns = outcome_enc.columns
@@ -423,12 +424,14 @@ class AutoregressivePlugin(Plugin):
             static, temporal, temporal_horizons = self.ar_model.generate(count)
 
             # Outcome generation
+            outcome_raw = self.outcome_model.predict(
+                np.asarray(static).astype(float),
+                np.asarray(temporal).astype(float),
+                np.asarray(temporal_horizons).astype(float),
+            )
+
             outcome_enc = pd.DataFrame(
-                self.outcome_model.predict(
-                    np.asarray(static),
-                    np.asarray(temporal),
-                    np.asarray(temporal_horizons),
-                ),
+                outcome_raw,
                 columns=self.outcome_encoded_columns,
             )
 

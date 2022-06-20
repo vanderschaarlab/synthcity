@@ -40,9 +40,7 @@ class DataLoader(metaclass=ABCMeta):
         return self.data
 
     @abstractmethod
-    def unpack(
-        self, as_numpy: bool = False, pad: bool = False, fill: Any = np.nan
-    ) -> Any:
+    def unpack(self, as_numpy: bool = False, pad: bool = False) -> Any:
         ...
 
     @abstractmethod
@@ -133,7 +131,7 @@ class DataLoader(metaclass=ABCMeta):
     def sequential_view(
         self,
     ) -> Tuple[pd.DataFrame, dict]:  # sequential dataframe, info
-        raise NotImplementedError()
+        return self.dataframe(), self.info()
 
     @staticmethod
     def from_sequential_view(seq_df: pd.DataFrame, info: dict) -> "DataLoader":
@@ -180,11 +178,9 @@ class GenericDataLoader(DataLoader):
     def columns(self) -> list:
         return list(self.data.columns)
 
-    def unpack(
-        self, as_numpy: bool = False, pad: bool = False, fill: Any = np.nan
-    ) -> Any:
-        X = self.data.drop(columns=[self.target_column]).fillna(fill)
-        y = self.data[self.target_column].fillna(fill)
+    def unpack(self, as_numpy: bool = False, pad: bool = False) -> Any:
+        X = self.data.drop(columns=[self.target_column])
+        y = self.data[self.target_column]
 
         if as_numpy:
             return np.asarray(X), np.asarray(y)
@@ -209,9 +205,6 @@ class GenericDataLoader(DataLoader):
     def __len__(self) -> int:
         return len(self.data)
 
-    def satisfies(self, constraints: Constraints) -> bool:
-        return constraints.is_valid(self.data)
-
     def decorate(self, data: Any) -> "DataLoader":
         return GenericDataLoader(
             data,
@@ -220,6 +213,9 @@ class GenericDataLoader(DataLoader):
             random_state=self.random_state,
             train_size=self.train_size,
         )
+
+    def satisfies(self, constraints: Constraints) -> bool:
+        return constraints.is_valid(self.data)
 
     def match(self, constraints: Constraints) -> "DataLoader":
         return self.decorate(constraints.match(self.data))
@@ -312,14 +308,10 @@ class SurvivalAnalysisDataLoader(DataLoader):
     def columns(self) -> list:
         return list(self.data.columns)
 
-    def unpack(
-        self, as_numpy: bool = False, pad: bool = False, fill: Any = np.nan
-    ) -> Any:
-        X = self.data.drop(
-            columns=[self.target_column, self.time_to_event_column]
-        ).fillna(fill)
-        T = self.data[self.time_to_event_column].fillna(fill)
-        E = self.data[self.target_column].fillna(fill)
+    def unpack(self, as_numpy: bool = False, pad: bool = False) -> Any:
+        X = self.data.drop(columns=[self.target_column, self.time_to_event_column])
+        T = self.data[self.time_to_event_column]
+        E = self.data[self.target_column]
 
         X = X[T > 0]
         E = E[T > 0]
@@ -351,9 +343,6 @@ class SurvivalAnalysisDataLoader(DataLoader):
     def __len__(self) -> int:
         return len(self.data)
 
-    def satisfies(self, constraints: Constraints) -> bool:
-        return constraints.is_valid(self.data)
-
     def decorate(self, data: Any) -> "DataLoader":
         return SurvivalAnalysisDataLoader(
             data,
@@ -364,6 +353,9 @@ class SurvivalAnalysisDataLoader(DataLoader):
             random_state=self.random_state,
             train_size=self.train_size,
         )
+
+    def satisfies(self, constraints: Constraints) -> bool:
+        return constraints.is_valid(self.data)
 
     def match(self, constraints: Constraints) -> "DataLoader":
         return self.decorate(
@@ -430,7 +422,7 @@ class TimeSeriesDataLoader(DataLoader):
         sensitive_features: List[str] = [],
         random_state: int = 0,
         train_size: float = 0.8,
-        fill: Any = np.nan,
+        fill: Any = -1,
         **kwargs: Any,
     ) -> None:
         static_features = []
@@ -490,11 +482,11 @@ class TimeSeriesDataLoader(DataLoader):
         temporal_data: List[pd.DataFrame],
         temporal_horizons: List,
         outcome: Optional[pd.DataFrame],
-        fill: Any = np.nan,
+        fill: Any = 0,
     ) -> pd.DataFrame:
         # Temporal data: (subjects, temporal_sequence, temporal_feature)
         ext_temporal_features = []
-        max_seq_len = max([len(t) for t in temporal_data])
+        max_seq_len = max([len(t) for t in temporal_horizons])
         temporal_features = TimeSeriesDataLoader.unique_temporal_features(temporal_data)
 
         for feat in temporal_features:
@@ -522,7 +514,7 @@ class TimeSeriesDataLoader(DataLoader):
             assert list(item.columns) == list(temporal_features)
             assert len(item) == max_seq_len
 
-            temporal_data[idx] = item
+            temporal_data[idx] = item.fillna(fill)
 
         temporal_arr = np.asarray(temporal_data)
         temporal_arr = np.swapaxes(temporal_arr, 1, 2)
@@ -536,7 +528,7 @@ class TimeSeriesDataLoader(DataLoader):
         for idx, item in enumerate(temporal_horizons):
             item = list(item)
             if len(item) != max_seq_len:
-                pads = np.nan * np.ones(max_seq_len - len(item))
+                pads = fill * np.ones(max_seq_len - len(item))
                 item.extend(pads.tolist())
             temporal_horizons_padded.append(item)
         out_df[temporal_horizon_cols] = temporal_horizons_padded
@@ -680,12 +672,15 @@ class TimeSeriesDataLoader(DataLoader):
         return self.decorate(unpacked_data)
 
     def satisfies(self, constraints: Constraints) -> bool:
-        return constraints.is_valid(self.data["grouped_data"])
+        seq_df, _ = self.sequential_view()
+
+        return constraints.is_valid(seq_df)
 
     def match(self, constraints: Constraints) -> "DataLoader":
-        new_data = constraints.match(self.data["grouped_data"])
+        seq_df, seq_info = self.sequential_view()
+        new_data = constraints.match(seq_df)
 
-        return self.unpack_and_decorate(new_data)
+        return TimeSeriesDataLoader.from_sequential_view(new_data, seq_info)
 
     def sample(self, count: int) -> "DataLoader":
         new_data = self.data["grouped_data"].sample(count)
@@ -717,9 +712,7 @@ class TimeSeriesDataLoader(DataLoader):
             sensitive_features=info["sensitive_features"],
         )
 
-    def unpack(
-        self, as_numpy: bool = False, pad: bool = False, fill: Any = np.nan
-    ) -> Any:
+    def unpack(self, as_numpy: bool = False, pad: bool = False) -> Any:
         if pad:
             static_data, temporal_data, temporal_horizons, outcome = self.pad()
         else:
@@ -744,7 +737,6 @@ class TimeSeriesDataLoader(DataLoader):
         )
 
     def pad(self) -> Any:
-        fill = np.nan
         static_data = self.data["static_data"]
         temporal_data = self.data["temporal_data"].copy()
         temporal_horizons = self.data["temporal_horizons"].copy()
@@ -757,10 +749,12 @@ class TimeSeriesDataLoader(DataLoader):
             # handling missing features
             for col in temporal_features:
                 if col not in item.columns:
-                    item[col] = fill
+                    item[col] = self.fill
             item = item[temporal_features]
             if len(item) != max_seq_len:
-                pads = fill * np.ones((max_seq_len - len(item), len(temporal_features)))
+                pads = self.fill * np.ones(
+                    (max_seq_len - len(item), len(temporal_features))
+                )
                 start = max(item.index) + 1
                 pads_df = pd.DataFrame(
                     pads,
@@ -773,13 +767,13 @@ class TimeSeriesDataLoader(DataLoader):
             assert list(item.columns) == list(temporal_features)
             assert len(item) == max_seq_len
 
-            temporal_data[idx] = item
+            temporal_data[idx] = item.fillna(self.fill)
 
         temporal_horizons_padded = []
         for idx, item in enumerate(temporal_horizons):
             item = list(item)
             if len(item) != max_seq_len:
-                pads = fill * np.ones(max_seq_len - len(item))
+                pads = self.fill * np.ones(max_seq_len - len(item))
                 item.extend(pads.tolist())
             temporal_horizons_padded.append(item)
 
@@ -895,8 +889,8 @@ class TimeSeriesDataLoader(DataLoader):
             temporal_data.append(local_temporal_data)
             temporal_horizons.append(local_temporal_horizons)
 
-        static_df = pd.DataFrame(static_data, columns=new_static_cols, index=ids)
-        outcome_df = pd.DataFrame(outcome_data, columns=new_outcome_cols, index=ids)
+        static_df = pd.DataFrame(static_data, columns=new_static_cols)
+        outcome_df = pd.DataFrame(outcome_data, columns=new_outcome_cols)
 
         return static_df, temporal_data, temporal_horizons, outcome_df
 
@@ -937,7 +931,7 @@ class TimeSeriesSurvivalDataLoader(TimeSeriesDataLoader):
         time_horizons: list = [],
         random_state: int = 0,
         train_size: float = 0.8,
-        fill: Any = np.nan,
+        fill: Any = 0,
         **kwargs: Any,
     ) -> None:
         outcome = pd.concat([pd.Series(T), pd.Series(E)], axis=1)
@@ -1018,9 +1012,7 @@ class TimeSeriesSurvivalDataLoader(TimeSeriesDataLoader):
             time_horizons=info["time_horizons"],
         )
 
-    def unpack(
-        self, as_numpy: bool = False, pad: bool = False, fill: Any = np.nan
-    ) -> Any:
+    def unpack(self, as_numpy: bool = False, pad: bool = False) -> Any:
         if pad:
             static_data, temporal_data, temporal_horizons, outcome = self.pad()
         else:
@@ -1072,6 +1064,12 @@ class TimeSeriesSurvivalDataLoader(TimeSeriesDataLoader):
             fill=info["fill"],
         )
 
+    def match(self, constraints: Constraints) -> "DataLoader":
+        seq_df, seq_info = self.sequential_view()
+        new_data = constraints.match(seq_df)
+
+        return TimeSeriesSurvivalDataLoader.from_sequential_view(new_data, seq_info)
+
 
 @validate_arguments(config=dict(arbitrary_types_allowed=True))
 def create_from_info(data: pd.DataFrame, info: dict) -> "DataLoader":
@@ -1083,5 +1081,19 @@ def create_from_info(data: pd.DataFrame, info: dict) -> "DataLoader":
         return TimeSeriesDataLoader.from_info(data, info)
     elif info["data_type"] == "time_series_survival":
         return TimeSeriesSurvivalDataLoader.from_info(data, info)
+    else:
+        raise RuntimeError(f"invalid datatype {info}")
+
+
+@validate_arguments(config=dict(arbitrary_types_allowed=True))
+def create_from_sequential_view(data: pd.DataFrame, info: dict) -> "DataLoader":
+    if info["data_type"] == "generic":
+        return GenericDataLoader.from_sequential_view(data, info)
+    elif info["data_type"] == "survival_analysis":
+        return SurvivalAnalysisDataLoader.from_sequential_view(data, info)
+    elif info["data_type"] == "time_series":
+        return TimeSeriesDataLoader.from_sequential_view(data, info)
+    elif info["data_type"] == "time_series_survival":
+        return TimeSeriesSurvivalDataLoader.from_sequential_view(data, info)
     else:
         raise RuntimeError(f"invalid datatype {info}")

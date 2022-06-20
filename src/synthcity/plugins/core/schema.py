@@ -33,7 +33,7 @@ class Schema(BaseModel):
         feature_domain = {}
         raw = values["data"]
         if isinstance(raw, DataLoader):
-            X = raw.dataframe()
+            X, _ = raw.sequential_view()
         elif isinstance(raw, pd.DataFrame):
             X = raw
         else:

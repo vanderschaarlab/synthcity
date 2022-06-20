@@ -24,6 +24,7 @@ from synthcity.plugins.core.dataloader import (
     TimeSeriesDataLoader,
     TimeSeriesSurvivalDataLoader,
     create_from_info,
+    create_from_sequential_view,
 )
 from synthcity.plugins.core.distribution import Distribution
 from synthcity.plugins.core.schema import Schema
@@ -243,6 +244,8 @@ class Plugin(Serializable, metaclass=ABCMeta):
         constraints = syn_schema.as_constraints()
 
         data_synth = pd.DataFrame([], columns=self.schema().features())
+        data_info = self.data_info
+        seq_data_info = {}
         for it in range(self.sampling_patience):
             # sample
             if self.data_info["data_type"] == "time_series":
@@ -263,7 +266,7 @@ class Plugin(Serializable, metaclass=ABCMeta):
                     E=E,
                 )
 
-            iter_samples_df = loader.dataframe()
+            iter_samples_df, seq_data_info = loader.sequential_view()
 
             # validate schema
             iter_samples_df = self.schema().adapt_dtypes(iter_samples_df)
@@ -277,8 +280,10 @@ class Plugin(Serializable, metaclass=ABCMeta):
                 break
 
         data_synth = self.schema().adapt_dtypes(data_synth).head(count)
+        for key in seq_data_info:
+            data_info[key] = seq_data_info[key]
 
-        return create_from_info(data_synth, self.data_info)
+        return create_from_sequential_view(data_synth, data_info)
 
     @validate_arguments(config=dict(arbitrary_types_allowed=True))
     def schema_includes(self, other: Union[DataLoader, pd.DataFrame]) -> bool:
