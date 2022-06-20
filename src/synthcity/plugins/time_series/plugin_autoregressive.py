@@ -95,6 +95,8 @@ class ARModel:
             temporal_horizons_enc,
         ) = self.temporal_encoder.transform(static, temporal, temporal_horizons)
 
+        temporal_horizons_enc = np.asarray(temporal_horizons_enc)
+
         self.temporal_encoded_columns = temporal_enc[0].columns
         self.static_encoded_columns = static_enc.columns
         self.temporal_columns = temporal[0].columns
@@ -105,12 +107,20 @@ class ARModel:
         static_enc = np.asarray(static_enc)
 
         outcome_enc = temporal_enc[:, -1, :].squeeze()
+        outcome_horizons_enc = temporal_horizons_enc[:, -1]
+        outcome_enc = np.concatenate(
+            [outcome_enc, np.expand_dims(outcome_horizons_enc, axis=1)], axis=1
+        )
+
         temporal_enc = temporal_enc[:, :-1, :]
+        temporal_horizons_enc = temporal_horizons_enc[:, :-1]
 
         # static generator
         temporal_init = temporal_enc[:, 0, :].squeeze()
+        temporal_horizons_init = temporal_horizons_enc[:, 0].squeeze()
         static_data_with_horizons = np.concatenate(
-            [static_enc, np.asarray(temporal_horizons_enc), temporal_init], axis=1
+            [static_enc, temporal_init, np.expand_dims(temporal_horizons_init, axis=1)],
+            axis=1,
         )
 
         self.static_generator = (
@@ -123,12 +133,13 @@ class ARModel:
             discrete_activation="softmax",
             continuous_activation="tanh",
         )
+        temporal_nonlin.append(("tanh", 1))  # + horizon
 
         self.temporal_model = TimeSeriesRNN(
             task_type="regression",
             n_static_units_in=static_enc.shape[-1],
             n_temporal_units_in=temporal_enc[0].shape[-1],
-            output_shape=outcome_enc.shape[1:],
+            output_shape=outcome_enc.shape[1:],  # outcome + time horizon
             n_static_units_hidden=self.n_units_hidden,
             n_static_layers_hidden=self.n_layers_hidden,
             n_temporal_units_hidden=self.n_units_hidden,
@@ -144,31 +155,39 @@ class ARModel:
             nonlin=self.nonlin,
             nonlin_out=temporal_nonlin,
         )
-        self.temporal_model.fit(static_enc, temporal_enc, outcome_enc)
+        self.temporal_model.fit(
+            static_enc, temporal_enc, temporal_horizons_enc, outcome_enc
+        )
         return self
 
     def generate(self, count: int) -> Tuple:
-        static_data_with_horizons = self.static_generator.generate(count).numpy()
-        static_enc = static_data_with_horizons[:, : len(self.static_encoded_columns)]
-        temporal_horizons_enc = static_data_with_horizons[
-            :,
-            len(self.static_encoded_columns) : len(self.static_encoded_columns)
-            + self.temporal_len,
+        static_data_with_temporal_init = self.static_generator.generate(count).numpy()
+        static_enc = static_data_with_temporal_init[
+            :, : len(self.static_encoded_columns)
         ]
-        temporal_init = static_data_with_horizons[
-            :, len(self.static_encoded_columns) + self.temporal_len :
-        ]
+        temporal_enc = static_data_with_temporal_init[:, :-1].squeeze()
+        temporal_horizons_enc = static_data_with_temporal_init[:, -1]
 
-        temporal_enc = np.expand_dims(temporal_init, axis=1)
+        temporal_enc = np.expand_dims(temporal_enc, axis=1)
+        temporal_horizons_enc = np.expand_dims(temporal_horizons_enc, axis=1)
 
         # Temporal generation
         for horizon in range(1, self.temporal_len):
-            next_temporal_enc = self.temporal_model.predict(
-                np.asarray(static_enc), temporal_enc
+            next_point = self.temporal_model.predict(
+                np.asarray(static_enc), temporal_enc, temporal_horizons_enc
             )
+            next_temporal_enc = next_point[:, :-1]
             next_temporal_enc = np.expand_dims(next_temporal_enc, axis=1)
+            next_temporal_horizon_enc = next_point[:, -1]
 
             temporal_enc = np.concatenate([temporal_enc, next_temporal_enc], axis=1)
+            temporal_horizons_enc = np.concatenate(
+                [
+                    temporal_horizons_enc,
+                    np.expand_dims(next_temporal_horizon_enc, axis=1),
+                ],
+                axis=1,
+            )
 
         assert temporal_enc.shape[1] == self.temporal_len
         # Decoding
@@ -348,9 +367,9 @@ class AutoregressivePlugin(Plugin):
         self.data_type = X.type()
 
         if self.data_type == "time_series":
-            static, temporal, temporal_horizons, outcome = X.unpack()
+            static, temporal, temporal_horizons, outcome = X.unpack(pad=True, fill=-1)
         else:
-            static, temporal, temporal_horizons, T, E = X.unpack()
+            static, temporal, temporal_horizons, T, E = X.unpack(pad=True, fill=-1)
             outcome = pd.concat([pd.Series(T), pd.Series(E)], axis=1)
             outcome.columns = ["time_to_event", "event"]
 
@@ -385,7 +404,10 @@ class AutoregressivePlugin(Plugin):
             ),
         )
         self.outcome_model.fit(
-            np.asarray(static), np.asarray(temporal), np.asarray(outcome_enc)
+            np.asarray(static),
+            np.asarray(temporal),
+            np.asarray(temporal_horizons),
+            np.asarray(outcome_enc),
         )
         self.outcome_encoded_columns = outcome_enc.columns
 
@@ -398,7 +420,11 @@ class AutoregressivePlugin(Plugin):
 
             # Outcome generation
             outcome_enc = pd.DataFrame(
-                self.outcome_model.predict(np.asarray(static), np.asarray(temporal)),
+                self.outcome_model.predict(
+                    np.asarray(static),
+                    np.asarray(temporal),
+                    np.asarray(temporal_horizons),
+                ),
                 columns=self.outcome_encoded_columns,
             )
 

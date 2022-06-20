@@ -191,7 +191,7 @@ class TimeSeriesGAN(nn.Module):
         # Embedding network between original feature space to latent space: (X_static, recovered_temporal_data) -> temporal_embeddings
         self.temporal_embedder = TimeSeriesRNN(
             task_type="regression",
-            n_static_units_in=n_static_units + n_units_conditional + n_temporal_window,
+            n_static_units_in=n_static_units + n_units_conditional,
             n_temporal_units_in=n_temporal_units,
             output_shape=[n_temporal_window, n_temporal_units_latent],
             **rnn_generator_extra_args,
@@ -200,7 +200,7 @@ class TimeSeriesGAN(nn.Module):
         # Recovery network from latent space to original space: (X_static, temporal_embeddings) -> recovered_temporal_data
         self.temporal_recovery = TimeSeriesRNN(
             task_type="regression",
-            n_static_units_in=n_static_units + n_units_conditional + n_temporal_window,
+            n_static_units_in=n_static_units + n_units_conditional,
             n_temporal_units_in=n_temporal_units_latent,
             output_shape=[n_temporal_window, n_temporal_units],
             nonlin_out=generator_temporal_nonlin_out,
@@ -210,7 +210,7 @@ class TimeSeriesGAN(nn.Module):
         # Temporal generator from the latent space: Z_temporal -> E_temporal
         self.temporal_generator = TimeSeriesRNN(
             task_type="regression",
-            n_static_units_in=n_static_units + n_units_conditional + n_temporal_window,
+            n_static_units_in=n_static_units + n_units_conditional,
             n_temporal_units_in=n_temporal_units_latent,
             output_shape=[n_temporal_window, n_temporal_units_latent],
             **rnn_generator_extra_args,
@@ -219,7 +219,7 @@ class TimeSeriesGAN(nn.Module):
         # Temporal supervisor: Generate the next sequence: E_temporal -> fake_next_temporal_embeddings_temporal
         self.temporal_supervisor = TimeSeriesRNN(
             task_type="regression",
-            n_static_units_in=n_static_units + n_units_conditional + n_temporal_window,
+            n_static_units_in=n_static_units + n_units_conditional,
             n_temporal_units_in=n_temporal_units_latent,
             output_shape=[n_temporal_window, n_temporal_units_latent],
             **rnn_generator_extra_args,
@@ -228,7 +228,7 @@ class TimeSeriesGAN(nn.Module):
         # Discriminate the original and synthetic time-series data.
         self.discriminator = TimeSeriesRNN(
             task_type="regression",
-            n_static_units_in=n_static_units + n_units_conditional + n_temporal_window,
+            n_static_units_in=n_static_units + n_units_conditional,
             n_temporal_units_in=n_temporal_units,
             output_shape=[1],
             n_static_layers_hidden=discriminator_n_layers_hidden,
@@ -246,6 +246,7 @@ class TimeSeriesGAN(nn.Module):
             lr=discriminator_lr,
             device=device,
         ).to(self.device)
+
         self.discriminator_horizons = MLP(
             task_type="regression",
             n_units_in=n_temporal_window,
@@ -381,17 +382,14 @@ class TimeSeriesGAN(nn.Module):
             static_data_with_cond_and_temporal_noise
         )
 
-        static_data_with_cond_and_horizons = self._append_optional_cond(
-            static_data_with_cond, temporal_horizons
-        )
         temporal_latent_data = self.temporal_generator(
-            static_data_with_cond_and_horizons, temporal_noise
+            static_data_with_cond, temporal_noise, temporal_horizons
         )
         fake_next_temporal_embeddings = self.temporal_supervisor(
-            static_data_with_cond_and_horizons, temporal_latent_data
+            static_data_with_cond, temporal_latent_data, temporal_horizons
         )
         temporal_data = self.temporal_recovery(
-            static_data_with_cond_and_horizons, fake_next_temporal_embeddings
+            static_data_with_cond, fake_next_temporal_embeddings, temporal_horizons
         )
 
         return static_data, temporal_data, temporal_horizons
@@ -428,9 +426,6 @@ class TimeSeriesGAN(nn.Module):
         real_static_data = self._append_optional_cond(real_static_data, cond)
 
         real_temporal_horizons = temporal_horizons.to(self.device)
-        real_static_data_with_horizons = self._append_optional_cond(
-            real_static_data, real_temporal_horizons
-        )
 
         # Prepare the fake batch
         static_noise = torch.randn(
@@ -456,43 +451,43 @@ class TimeSeriesGAN(nn.Module):
             fake_static_data_with_temporal_noise
         )
 
-        fake_static_data_with_horizons = self._append_optional_cond(
-            fake_static_data, fake_temporal_horizons
-        )
-
         # Embedder & Recovery
         temporal_embeddings = self.temporal_embedder(
-            real_static_data_with_horizons, temporal_data
+            real_static_data, temporal_data, real_temporal_horizons
         )
         recovered_temporal_data = self.temporal_recovery(
-            real_static_data_with_horizons, temporal_embeddings
+            real_static_data, temporal_embeddings, real_temporal_horizons
         )
 
         # Generator
         temporal_latent_data = self.temporal_generator(
-            fake_static_data_with_horizons, temporal_noise
+            fake_static_data, temporal_noise, fake_temporal_horizons
         )
         fake_next_temporal_embeddings = self.temporal_supervisor(
-            fake_static_data_with_horizons, temporal_latent_data
+            fake_static_data, temporal_latent_data, fake_temporal_horizons
         )
         next_temporal_embeddings = self.temporal_supervisor(
-            fake_static_data_with_horizons, temporal_embeddings
+            fake_static_data, temporal_embeddings, fake_temporal_horizons
         )
 
         # Synthetic data
         fake_temporal_data = self.temporal_recovery(
-            fake_static_data_with_horizons, fake_next_temporal_embeddings
+            fake_static_data,
+            fake_next_temporal_embeddings,
+            fake_temporal_horizons,
         )
 
         # Discriminator
         outcome_fake = self.discriminator(
-            fake_static_data_with_horizons, fake_next_temporal_embeddings
+            fake_static_data,
+            fake_next_temporal_embeddings,
+            fake_temporal_horizons,
         ).squeeze()
         outcome_real = self.discriminator(
-            real_static_data_with_horizons, temporal_embeddings
+            real_static_data, temporal_embeddings, real_temporal_horizons
         ).squeeze()
         outcome_latent = self.discriminator(
-            fake_static_data_with_horizons, temporal_latent_data
+            fake_static_data, temporal_latent_data, fake_temporal_horizons
         ).squeeze()
         horizons_d_fake = self.discriminator_horizons(fake_temporal_horizons).squeeze()
         horizons_d_real = self.discriminator_horizons(real_temporal_horizons).squeeze()

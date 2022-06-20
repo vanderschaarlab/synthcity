@@ -118,7 +118,7 @@ class TimeSeriesRNN(nn.Module):
         self.n_units_out = np.prod(self.output_shape)
 
         temporal_params = {
-            "input_size": self.n_temporal_units_in,
+            "input_size": self.n_temporal_units_in + 1,
             "hidden_size": self.n_temporal_units_hidden,
             "num_layers": self.n_temporal_layers_hidden,
             "dropout": 0 if self.n_temporal_layers_hidden == 1 else dropout,
@@ -173,11 +173,19 @@ class TimeSeriesRNN(nn.Module):
 
     @validate_arguments(config=dict(arbitrary_types_allowed=True))
     def forward(
-        self, static_data: torch.Tensor, temporal_data: torch.Tensor
+        self,
+        static_data: torch.Tensor,
+        temporal_data: torch.Tensor,
+        temporal_horizons: torch.Tensor,
     ) -> torch.Tensor:
         # x shape (batch, time_step, input_size)
         # r_out shape (batch, time_step, output_size)
-        X_interm, _ = self.temporal_layer(temporal_data)
+
+        temporal_data_merged = torch.cat(
+            [temporal_data, temporal_horizons.unsqueeze(2)], dim=2
+        )
+
+        X_interm, _ = self.temporal_layer(temporal_data_merged)
         # choose r_out at the last <window size> steps
         pred = self.out(static_data, X_interm)
 
@@ -190,13 +198,19 @@ class TimeSeriesRNN(nn.Module):
         return pred
 
     @validate_arguments(config=dict(arbitrary_types_allowed=True))
-    def predict(self, static_data: np.ndarray, temporal_data: np.ndarray) -> np.ndarray:
+    def predict(
+        self,
+        static_data: np.ndarray,
+        temporal_data: np.ndarray,
+        temporal_horizons: np.ndarray,
+    ) -> np.ndarray:
         self.eval()
         with torch.no_grad():
             temporal_data_t = self._check_tensor(temporal_data).float()
+            temporal_horizons_t = self._check_tensor(temporal_horizons).float()
             static_data_t = self._check_tensor(static_data).float()
 
-            yt = self(static_data_t, temporal_data_t)
+            yt = self(static_data_t, temporal_data_t, temporal_horizons_t)
 
             if self.task_type == "classification":
                 return np.argmax(yt.cpu().numpy(), -1)
@@ -207,9 +221,10 @@ class TimeSeriesRNN(nn.Module):
         self,
         static_data: np.ndarray,
         temporal_data: np.ndarray,
+        temporal_horizons: np.ndarray,
         outcome: np.ndarray,
     ) -> float:
-        y_pred = self.predict(static_data, temporal_data)
+        y_pred = self.predict(static_data, temporal_data, temporal_horizons)
         if self.task_type == "classification":
             return np.mean(y_pred == outcome)
         else:
@@ -220,24 +235,29 @@ class TimeSeriesRNN(nn.Module):
         self,
         static_data: np.ndarray,
         temporal_data: np.ndarray,
+        temporal_horizons: np.ndarray,
         outcome: np.ndarray,
     ) -> Any:
         temporal_data_t = self._check_tensor(temporal_data).float()
+        temporal_horizons_t = self._check_tensor(temporal_horizons).float()
         static_data_t = self._check_tensor(static_data).float()
         outcome_t = self._check_tensor(outcome).float()
         if self.task_type == "classification":
             outcome_t = outcome_t.long()
 
-        return self._train(static_data_t, temporal_data_t, outcome_t)
+        return self._train(
+            static_data_t, temporal_data_t, temporal_horizons_t, outcome_t
+        )
 
     @validate_arguments(config=dict(arbitrary_types_allowed=True))
     def _train(
         self,
         static_data: Optional[torch.Tensor],
         temporal_data: torch.Tensor,
+        temporal_horizons: torch.Tensor,
         outcome: torch.Tensor,
     ) -> Any:
-        loader = self.dataloader(static_data, temporal_data, outcome)
+        loader = self.dataloader(static_data, temporal_data, temporal_horizons, outcome)
         # training and testing
         for it in range(self.n_iter):
             loss = self._train_epoch(loader)
@@ -248,10 +268,10 @@ class TimeSeriesRNN(nn.Module):
 
     def _train_epoch(self, loader: DataLoader) -> float:
         losses = []
-        for step, (static_mb, temporal_mb, y_mb) in enumerate(loader):
+        for step, (static_mb, temporal_mb, horizons_mb, y_mb) in enumerate(loader):
             self.optimizer.zero_grad()  # clear gradients for this training step
 
-            pred = self(static_mb, temporal_mb)  # rnn output
+            pred = self(static_mb, temporal_mb, horizons_mb)  # rnn output
             loss = self.loss(pred, y_mb)
 
             loss.backward()  # backpropagation, compute gradients
@@ -265,9 +285,10 @@ class TimeSeriesRNN(nn.Module):
         self,
         static_data: torch.Tensor,
         temporal_data: torch.Tensor,
+        temporal_horizons: torch.Tensor,
         outcome: torch.Tensor,
     ) -> DataLoader:
-        dataset = TensorDataset(static_data, temporal_data, outcome)
+        dataset = TensorDataset(static_data, temporal_data, temporal_horizons, outcome)
 
         return DataLoader(
             dataset,

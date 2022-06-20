@@ -307,13 +307,21 @@ class PerformanceEvaluator(MetricEvaluator):
         assert X_gt.type() == "time_series"
         assert X_syn.type() == "time_series"
 
-        id_static_gt, id_temporal_gt, _, id_outcome_gt = X_gt.train().unpack(
+        (
+            id_static_gt,
+            id_temporal_gt,
+            id_temporal_horizons_gt,
+            id_outcome_gt,
+        ) = X_gt.train().unpack(as_numpy=True)
+        (
+            ood_static_gt,
+            ood_temporal_gt,
+            ood_temporal_horizons_gt,
+            ood_outcome_gt,
+        ) = X_gt.test().unpack(as_numpy=True)
+        static_syn, temporal_syn, temporal_horizons_syn, outcome_syn = X_syn.unpack(
             as_numpy=True
         )
-        ood_static_gt, ood_temporal_gt, _, ood_outcome_gt = X_gt.test().unpack(
-            as_numpy=True
-        )
-        static_syn, temporal_syn, _, outcome_syn = X_syn.unpack(as_numpy=True)
 
         skf = KFold(
             n_splits=self._n_folds, shuffle=True, random_state=self._random_state
@@ -326,16 +334,20 @@ class PerformanceEvaluator(MetricEvaluator):
         def ts_eval_cbk(
             static_train: np.ndarray,
             temporal_train: np.ndarray,
+            temporal_horizons_train: np.ndarray,
             outcome_train: np.ndarray,
             static_test: np.ndarray,
             temporal_test: np.ndarray,
+            temporal_horizons_test: np.ndarray,
             outcome_test: np.ndarray,
         ) -> float:
             try:
                 estimator = model(**model_args).fit(
-                    static_train, temporal_train, outcome_train
+                    static_train, temporal_train, temporal_horizons_train, outcome_train
                 )
-                preds = estimator.predict(static_test, temporal_test)
+                preds = estimator.predict(
+                    static_test, temporal_test, temporal_horizons_test
+                )
 
                 score = mean_squared_error(outcome_test, preds)
             except BaseException as e:
@@ -348,34 +360,42 @@ class PerformanceEvaluator(MetricEvaluator):
         for train_idx, test_idx in skf.split(id_static_gt):
             static_train_data = id_static_gt[train_idx]
             temporal_train_data = id_temporal_gt[train_idx]
+            temporal_horizons_train_data = id_temporal_horizons_gt[train_idx]
             outcome_train_data = id_outcome_gt[train_idx]
 
             static_test_data = id_static_gt[test_idx]
             temporal_test_data = id_temporal_gt[test_idx]
+            temporal_horizons_test_data = id_temporal_horizons_gt[test_idx]
             outcome_test_data = id_outcome_gt[test_idx]
 
             real_score = ts_eval_cbk(
                 static_train_data,
                 temporal_train_data,
+                temporal_horizons_train_data,
                 outcome_train_data,
                 static_test_data,
                 temporal_test_data,
+                temporal_horizons_test_data,
                 outcome_test_data,
             )
             synth_score_id = ts_eval_cbk(
                 static_syn,
                 temporal_syn,
+                temporal_horizons_syn,
                 outcome_syn,
                 static_test_data,
                 temporal_test_data,
+                temporal_horizons_test_data,
                 outcome_test_data,
             )
             synth_score_ood = ts_eval_cbk(
                 static_syn,
                 temporal_syn,
+                temporal_horizons_syn,
                 outcome_syn,
                 ood_static_gt,
                 ood_temporal_gt,
+                ood_temporal_horizons_gt,
                 ood_outcome_gt,
             )
 

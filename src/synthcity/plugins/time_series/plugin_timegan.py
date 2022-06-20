@@ -295,8 +295,9 @@ class TimeGANPlugin(Plugin):
             ),
         )
         self.outcome_model.fit(
-            np.concatenate([np.asarray(static), np.asarray(temporal_horizons)], axis=1),
+            np.asarray(static),
             np.asarray(temporal),
+            np.asarray(temporal_horizons),
             np.asarray(outcome_enc),
         )
 
@@ -314,10 +315,9 @@ class TimeGANPlugin(Plugin):
 
             outcome_enc = pd.DataFrame(
                 self.outcome_model.predict(
-                    np.concatenate(
-                        [np.asarray(static), np.asarray(temporal_horizons)], axis=1
-                    ),
+                    np.asarray(static),
                     np.asarray(temporal),
+                    np.asarray(temporal_horizons),
                 ),
                 columns=self.outcome_encoded_columns,
             )

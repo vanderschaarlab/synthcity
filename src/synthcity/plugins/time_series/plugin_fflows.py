@@ -156,7 +156,10 @@ class FourierFlowsPlugin(Plugin):
             ),
         )
         self.outcome_model.fit(
-            np.asarray(static_enc), np.asarray(temporal_enc), np.asarray(outcome_enc)
+            np.asarray(static_enc),
+            np.asarray(temporal_enc),
+            np.asarray(temporal_horizons_enc),
+            np.asarray(outcome_enc),
         )
 
         self.temporal_encoded_columns = temporal_enc[0].columns
@@ -188,7 +191,9 @@ class FourierFlowsPlugin(Plugin):
             # Outcome generation
             outcome_enc = pd.DataFrame(
                 self.outcome_model.predict(
-                    np.asarray(static_enc), np.asarray(temporal_enc)
+                    np.asarray(static_enc),
+                    np.asarray(temporal_enc),
+                    np.asarray(temporal_horizons_enc),
                 ),
                 columns=self.outcome_encoded_columns,
             )

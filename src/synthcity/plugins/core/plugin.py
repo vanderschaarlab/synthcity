@@ -23,6 +23,7 @@ from synthcity.plugins.core.dataloader import (
     DataLoader,
     GenericDataLoader,
     TimeSeriesDataLoader,
+    TimeSeriesSurvivalDataLoader,
     create_from_info,
 )
 from synthcity.plugins.core.distribution import Distribution
@@ -244,20 +245,31 @@ class Plugin(Serializable, metaclass=ABCMeta):
     def _safe_generate_time_series(
         self, gen_cbk: Callable, count: int, syn_schema: Schema, **kwargs: Any
     ) -> DataLoader:
-        assert self.data_info["data_type"] == "time_series"
+        assert self.data_info["data_type"] in ["time_series", "time_series_survival"]
 
         constraints = syn_schema.as_constraints()
 
         data_synth = pd.DataFrame([], columns=self.schema().features())
         for it in range(self.sampling_patience):
             # sample
-            static, temporal, temporal_horizons, outcome = gen_cbk(count, **kwargs)
-            loader = TimeSeriesDataLoader(
-                temporal_data=temporal,
-                temporal_horizons=temporal_horizons,
-                static_data=static,
-                outcome=outcome,
-            )
+            if self.data_info["data_type"] == "time_series":
+                static, temporal, temporal_horizons, outcome = gen_cbk(count, **kwargs)
+                loader = TimeSeriesDataLoader(
+                    temporal_data=temporal,
+                    temporal_horizons=temporal_horizons,
+                    static_data=static,
+                    outcome=outcome,
+                )
+            elif self.data_info["data_type"] == "time_series_survival":
+                static, temporal, temporal_horizons, T, E = gen_cbk(count, **kwargs)
+                loader = TimeSeriesSurvivalDataLoader(
+                    temporal_data=temporal,
+                    temporal_horizons=temporal_horizons,
+                    static_data=static,
+                    T=T,
+                    E=E,
+                )
+
             iter_samples_df = loader.dataframe()
 
             # validate schema
