@@ -721,7 +721,7 @@ class TimeSeriesDataLoader(DataLoader):
         self, as_numpy: bool = False, pad: bool = False, fill: Any = np.nan
     ) -> Any:
         if pad:
-            static_data, temporal_data, temporal_horizons, outcome = self.pad(fill=fill)
+            static_data, temporal_data, temporal_horizons, outcome = self.pad()
         else:
             static_data, temporal_data, temporal_horizons, outcome = (
                 self.data["static_data"],
@@ -743,7 +743,8 @@ class TimeSeriesDataLoader(DataLoader):
             outcome,
         )
 
-    def pad(self, fill: Any = np.nan) -> Any:
+    def pad(self) -> Any:
+        fill = np.nan
         static_data = self.data["static_data"]
         temporal_data = self.data["temporal_data"].copy()
         temporal_horizons = self.data["temporal_horizons"].copy()
@@ -778,7 +779,7 @@ class TimeSeriesDataLoader(DataLoader):
         for idx, item in enumerate(temporal_horizons):
             item = list(item)
             if len(item) != max_seq_len:
-                pads = np.nan * np.ones(max_seq_len - len(item))
+                pads = fill * np.ones(max_seq_len - len(item))
                 item.extend(pads.tolist())
             temporal_horizons_padded.append(item)
 
@@ -963,8 +964,8 @@ class TimeSeriesSurvivalDataLoader(TimeSeriesDataLoader):
 
     def info(self) -> dict:
         parent_info = super().info()
-        parent_info["time_to_event_col"] = self.time_to_event_col
-        parent_info["event_col"] = self.event_col
+        parent_info["time_to_event_column"] = self.time_to_event_col
+        parent_info["event_column"] = self.event_col
         parent_info["time_horizons"] = self.time_horizons
         parent_info["fill"] = self.fill
 
@@ -1011,8 +1012,8 @@ class TimeSeriesSurvivalDataLoader(TimeSeriesDataLoader):
             temporal_data,
             temporal_horizons=temporal_horizons,
             static_data=static_data,
-            T=outcome[info["time_to_event_col"]],
-            E=outcome[info["event_col"]],
+            T=outcome[info["time_to_event_column"]],
+            E=outcome[info["event_column"]],
             sensitive_features=info["sensitive_features"],
             time_horizons=info["time_horizons"],
         )
@@ -1021,7 +1022,7 @@ class TimeSeriesSurvivalDataLoader(TimeSeriesDataLoader):
         self, as_numpy: bool = False, pad: bool = False, fill: Any = np.nan
     ) -> Any:
         if pad:
-            static_data, temporal_data, temporal_horizons, outcome = self.pad(fill=fill)
+            static_data, temporal_data, temporal_horizons, outcome = self.pad()
         else:
             static_data, temporal_data, temporal_horizons, outcome = (
                 self.data["static_data"],
@@ -1061,8 +1062,8 @@ class TimeSeriesSurvivalDataLoader(TimeSeriesDataLoader):
         return TimeSeriesSurvivalDataLoader(
             temporal_data=temporal_data,
             temporal_horizons=temporal_horizons,
-            T=outcome_df[info["time_to_event_col"]],
-            E=outcome_df[info["event_col"]],
+            T=outcome_df[info["time_to_event_column"]],
+            E=outcome_df[info["event_column"]],
             static_data=static_df,
             sensitive_features=info["sensitive_features"],
             time_horizons=info["time_horizons"],

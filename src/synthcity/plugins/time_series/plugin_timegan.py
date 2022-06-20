@@ -224,9 +224,9 @@ class TimeGANPlugin(Plugin):
 
         # Static and temporal generation
         if X.type() == "time_series":
-            static, temporal, temporal_horizons, outcome = X.unpack(pad=True, fill=-1)
+            static, temporal, temporal_horizons, outcome = X.unpack(pad=True)
         elif X.type() == "time_series_survival":
-            static, temporal, temporal_horizons, T, E = X.unpack(pad=True, fill=-1)
+            static, temporal, temporal_horizons, T, E = X.unpack(pad=True)
             outcome = pd.concat([pd.Series(T), pd.Series(E)], axis=1)
             outcome.columns = ["time_to_event", "event"]
 
@@ -331,7 +331,18 @@ class TimeGANPlugin(Plugin):
                 outcome_raw, columns=self.data_info["outcome_features"]
             )
 
-            return static, temporal, temporal_horizons, outcome
+            if self.data_info["data_type"] == "time_series":
+                return static, temporal, temporal_horizons, outcome
+            elif self.data_info["data_type"] == "time_series_survival":
+                return (
+                    static,
+                    temporal,
+                    temporal_horizons,
+                    outcome[self.data_info["time_to_event_column"]],
+                    outcome[self.data_info["event_column"]],
+                )
+            else:
+                raise RuntimeError("unknow data type")
 
         return self._safe_generate_time_series(_sample, count, syn_schema)
 

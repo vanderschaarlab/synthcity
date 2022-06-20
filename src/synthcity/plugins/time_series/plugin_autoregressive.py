@@ -88,23 +88,20 @@ class ARModel:
         temporal: List[pd.DataFrame],
         temporal_horizons: List,
     ) -> "ARModel":
-        self.temporal_encoder.fit(static, temporal, temporal_horizons)
+        self.temporal_encoder.fit_temporal(temporal, temporal_horizons)
         (
-            static_enc,
             temporal_enc,
             temporal_horizons_enc,
-        ) = self.temporal_encoder.transform(static, temporal, temporal_horizons)
+        ) = self.temporal_encoder.transform_temporal(temporal, temporal_horizons)
 
         temporal_horizons_enc = np.asarray(temporal_horizons_enc)
 
         self.temporal_encoded_columns = temporal_enc[0].columns
-        self.static_encoded_columns = static_enc.columns
         self.temporal_columns = temporal[0].columns
         self.static_columns = static.columns
         self.temporal_len = len(temporal[0])
 
         temporal_enc = np.asarray(temporal_enc)
-        static_enc = np.asarray(static_enc)
 
         outcome_enc = temporal_enc[:, -1, :].squeeze()
         outcome_horizons_enc = temporal_horizons_enc[:, -1]
@@ -119,7 +116,11 @@ class ARModel:
         temporal_init = temporal_enc[:, 0, :].squeeze()
         temporal_horizons_init = temporal_horizons_enc[:, 0].squeeze()
         static_data_with_horizons = np.concatenate(
-            [static_enc, temporal_init, np.expand_dims(temporal_horizons_init, axis=1)],
+            [
+                static.values,
+                temporal_init,
+                np.expand_dims(temporal_horizons_init, axis=1),
+            ],
             axis=1,
         )
 
@@ -129,7 +130,7 @@ class ARModel:
             .fit(pd.DataFrame(static_data_with_horizons))
         )
         # temporal forecaster
-        _, temporal_nonlin = self.temporal_encoder.activation_layout(
+        temporal_nonlin = self.temporal_encoder.activation_layout_temporal(
             discrete_activation="softmax",
             continuous_activation="tanh",
         )
@@ -137,7 +138,7 @@ class ARModel:
 
         self.temporal_model = TimeSeriesRNN(
             task_type="regression",
-            n_static_units_in=static_enc.shape[-1],
+            n_static_units_in=static.shape[-1],
             n_temporal_units_in=temporal_enc[0].shape[-1],
             output_shape=outcome_enc.shape[1:],  # outcome + time horizon
             n_static_units_hidden=self.n_units_hidden,
@@ -156,25 +157,32 @@ class ARModel:
             nonlin_out=temporal_nonlin,
         )
         self.temporal_model.fit(
-            static_enc, temporal_enc, temporal_horizons_enc, outcome_enc
+            np.asarray(static),
+            np.asarray(temporal_enc),
+            np.asarray(temporal_horizons_enc),
+            np.asarray(outcome_enc),
         )
         return self
 
     def generate(self, count: int) -> Tuple:
         static_data_with_temporal_init = self.static_generator.generate(count).numpy()
-        static_enc = static_data_with_temporal_init[
-            :, : len(self.static_encoded_columns)
-        ]
-        temporal_enc = static_data_with_temporal_init[:, :-1].squeeze()
+        static_data = static_data_with_temporal_init[:, : len(self.static_columns)]
+        temporal_enc = static_data_with_temporal_init[
+            :, len(self.static_columns) : -1
+        ].squeeze()
         temporal_horizons_enc = static_data_with_temporal_init[:, -1]
 
         temporal_enc = np.expand_dims(temporal_enc, axis=1)
         temporal_horizons_enc = np.expand_dims(temporal_horizons_enc, axis=1)
 
+        assert np.isnan(np.asarray(static_data)).sum() == 0
         # Temporal generation
         for horizon in range(1, self.temporal_len):
+            assert np.isnan(np.asarray(temporal_enc)).sum() == 0, horizon
+            assert np.isnan(np.asarray(temporal_horizons_enc)).sum() == 0, horizon
+
             next_point = self.temporal_model.predict(
-                np.asarray(static_enc), temporal_enc, temporal_horizons_enc
+                np.asarray(static_data), temporal_enc, temporal_horizons_enc
             )
             next_temporal_enc = next_point[:, :-1]
             next_temporal_enc = np.expand_dims(next_temporal_enc, axis=1)
@@ -191,7 +199,7 @@ class ARModel:
 
         assert temporal_enc.shape[1] == self.temporal_len
         # Decoding
-        static_enc = pd.DataFrame(static_enc, columns=self.static_encoded_columns)
+        static_data = pd.DataFrame(static_data, columns=self.static_columns)
         temporal_enc_df = []
         for item in temporal_enc:
             temporal_enc_df.append(
@@ -199,19 +207,17 @@ class ARModel:
             )
 
         (
-            static_raw,
             temporal_raw,
             temporal_horizons,
-        ) = self.temporal_encoder.inverse_transform(
-            static_enc, temporal_enc_df, temporal_horizons_enc.tolist()
+        ) = self.temporal_encoder.inverse_transform_temporal(
+            temporal_enc_df, temporal_horizons_enc.tolist()
         )
 
-        static = pd.DataFrame(static_raw, columns=self.static_columns)
         temporal = []
         for item in temporal_raw:
             temporal.append(pd.DataFrame(item, columns=self.temporal_columns))
 
-        return static, temporal, temporal_horizons
+        return static_data, temporal, temporal_horizons
 
 
 class AutoregressivePlugin(Plugin):
@@ -365,9 +371,9 @@ class AutoregressivePlugin(Plugin):
         assert X.type() in ["time_series", "time_series_survival"]
 
         if X.type() == "time_series":
-            static, temporal, temporal_horizons, outcome = X.unpack(pad=True, fill=-1)
+            static, temporal, temporal_horizons, outcome = X.unpack(pad=True)
         elif X.type() == "time_series_survival":
-            static, temporal, temporal_horizons, T, E = X.unpack(pad=True, fill=-1)
+            static, temporal, temporal_horizons, T, E = X.unpack(pad=True)
             outcome = pd.concat([pd.Series(T), pd.Series(E)], axis=1)
             outcome.columns = ["time_to_event", "event"]
 
@@ -432,7 +438,18 @@ class AutoregressivePlugin(Plugin):
                 outcome_raw, columns=self.data_info["outcome_features"]
             )
 
-            return static, temporal, temporal_horizons, outcome
+            if self.data_info["data_type"] == "time_series":
+                return static, temporal, temporal_horizons, outcome
+            elif self.data_info["data_type"] == "time_series_survival":
+                return (
+                    static,
+                    temporal,
+                    temporal_horizons,
+                    outcome[self.data_info["time_to_event_column"]],
+                    outcome[self.data_info["event_column"]],
+                )
+            else:
+                raise RuntimeError("unknow data type")
 
         return self._safe_generate_time_series(_sample, count, syn_schema)
 

@@ -1,5 +1,4 @@
 # stdlib
-import copy
 import importlib.util
 import sys
 from abc import ABCMeta, abstractmethod
@@ -58,7 +57,6 @@ class Plugin(Serializable, metaclass=ABCMeta):
         sampling_patience: int = 500,
         strict: bool = True,
         device: Any = DEVICE,
-        fill_value: Any = -1,
     ) -> None:
         """
 
@@ -75,7 +73,6 @@ class Plugin(Serializable, metaclass=ABCMeta):
         self.sampling_patience = sampling_patience
         self.strict = strict
         self.device = device
-        self.fill_value = fill_value
 
     @staticmethod
     @abstractmethod
@@ -125,10 +122,6 @@ class Plugin(Serializable, metaclass=ABCMeta):
         """
         if isinstance(X, (pd.DataFrame)):
             X = GenericDataLoader(X)
-
-        # TODO: fix hardcoding
-        X = copy.deepcopy(X)
-        X.fillna(self.fill_value)
 
         self.data_info = X.info()
         self._schema = Schema(

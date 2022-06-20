@@ -84,6 +84,7 @@ class TimeSeriesRNN(nn.Module):
         dropout: float = 0,
         nonlin: Optional[str] = "relu",
         random_state: int = 0,
+        clipping_value: int = 1,
     ) -> None:
         super(TimeSeriesRNN, self).__init__()
 
@@ -116,6 +117,7 @@ class TimeSeriesRNN(nn.Module):
         self.lr = lr
         self.output_shape = output_shape
         self.n_units_out = np.prod(self.output_shape)
+        self.clipping_value = clipping_value
 
         temporal_params = {
             "input_size": self.n_temporal_units_in + 1,
@@ -181,11 +183,18 @@ class TimeSeriesRNN(nn.Module):
         # x shape (batch, time_step, input_size)
         # r_out shape (batch, time_step, output_size)
 
+        assert torch.isnan(static_data).sum() == 0
+        assert torch.isnan(temporal_data).sum() == 0
+        assert torch.isnan(temporal_horizons).sum() == 0
+
         temporal_data_merged = torch.cat(
             [temporal_data, temporal_horizons.unsqueeze(2)], dim=2
         )
+        assert torch.isnan(temporal_data_merged).sum() == 0
 
         X_interm, _ = self.temporal_layer(temporal_data_merged)
+        assert torch.isnan(X_interm).sum() == 0
+
         # choose r_out at the last <window size> steps
         pred = self.out(static_data, X_interm)
 
@@ -275,6 +284,8 @@ class TimeSeriesRNN(nn.Module):
             loss = self.loss(pred, y_mb)
 
             loss.backward()  # backpropagation, compute gradients
+            if self.clipping_value > 0:
+                torch.nn.utils.clip_grad_norm_(self.parameters(), self.clipping_value)
             self.optimizer.step()  # apply gradients
 
             losses.append(loss.detach().cpu())
