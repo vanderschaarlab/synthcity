@@ -210,6 +210,7 @@ class ARModel:
 
         temporal = []
         for idx, item in enumerate(temporal_raw):
+            # TODO: debug fillna
             item = pd.DataFrame(item, columns=self.temporal_columns).fillna(0)
             for col in item.columns:
                 assert (
@@ -301,7 +302,7 @@ class AutoregressivePlugin(Plugin):
         static_model: str = "ctgan",
         **kwargs: Any,
     ) -> None:
-        super().__init__()
+        super().__init__(sequential_schema_view=True)
         self.n_iter = n_iter
         self.n_layers_hidden = n_layers_hidden
         self.n_units_hidden = n_units_hidden

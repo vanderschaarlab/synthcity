@@ -79,11 +79,15 @@ class DataLoader(metaclass=ABCMeta):
         ...
 
     @abstractmethod
-    def satisfies(self, constraints: Constraints) -> bool:
+    def satisfies(
+        self, constraints: Constraints, sequential_view: bool = False
+    ) -> bool:
         ...
 
     @abstractmethod
-    def match(self, constraints: Constraints) -> "DataLoader":
+    def match(
+        self, constraints: Constraints, sequential_view: bool = False
+    ) -> "DataLoader":
         ...
 
     @staticmethod
@@ -220,10 +224,14 @@ class GenericDataLoader(DataLoader):
             train_size=self.train_size,
         )
 
-    def satisfies(self, constraints: Constraints) -> bool:
+    def satisfies(
+        self, constraints: Constraints, sequential_view: bool = False
+    ) -> bool:
         return constraints.is_valid(self.data)
 
-    def match(self, constraints: Constraints) -> "DataLoader":
+    def match(
+        self, constraints: Constraints, sequential_view: bool = False
+    ) -> "DataLoader":
         return self.decorate(constraints.match(self.data))
 
     def sample(self, count: int) -> "DataLoader":
@@ -360,10 +368,14 @@ class SurvivalAnalysisDataLoader(DataLoader):
             train_size=self.train_size,
         )
 
-    def satisfies(self, constraints: Constraints) -> bool:
+    def satisfies(
+        self, constraints: Constraints, sequential_view: bool = False
+    ) -> bool:
         return constraints.is_valid(self.data)
 
-    def match(self, constraints: Constraints) -> "DataLoader":
+    def match(
+        self, constraints: Constraints, sequential_view: bool = False
+    ) -> "DataLoader":
         return self.decorate(
             constraints.match(self.data),
         )
@@ -428,7 +440,7 @@ class TimeSeriesDataLoader(DataLoader):
         sensitive_features: List[str] = [],
         random_state: int = 0,
         train_size: float = 0.8,
-        fill: Any = np.nan,
+        fill: Any = 0,
         seq_offset: int = 0,
         **kwargs: Any,
     ) -> None:
@@ -494,7 +506,7 @@ class TimeSeriesDataLoader(DataLoader):
         temporal_data: List[pd.DataFrame],
         temporal_horizons: List,
         outcome: Optional[pd.DataFrame],
-        fill: Any = np.nan,
+        fill: Any = 0,
     ) -> pd.DataFrame:
         # Temporal data: (subjects, temporal_sequence, temporal_feature)
         ext_temporal_features = []
@@ -685,16 +697,28 @@ class TimeSeriesDataLoader(DataLoader):
 
         return self.decorate(unpacked_data)
 
-    def satisfies(self, constraints: Constraints) -> bool:
-        seq_df, _ = self.sequential_view()
+    def satisfies(
+        self, constraints: Constraints, sequential_view: bool = False
+    ) -> bool:
+        if sequential_view:
+            seq_df, _ = self.sequential_view()
+        else:
+            seq_df = self.dataframe()
 
         return constraints.is_valid(seq_df)
 
-    def match(self, constraints: Constraints) -> "DataLoader":
-        seq_df, seq_info = self.sequential_view()
-        new_data = constraints.match(seq_df)
+    def match(
+        self, constraints: Constraints, sequential_view: bool = False
+    ) -> "DataLoader":
+        if sequential_view:
+            seq_df, seq_info = self.sequential_view()
+            new_data = constraints.match(seq_df)
 
-        return TimeSeriesDataLoader.from_sequential_view(new_data, seq_info)
+            return TimeSeriesDataLoader.from_sequential_view(new_data, seq_info)
+        else:
+            return self.unpack_and_decorate(
+                constraints.match(self.dataframe()),
+            )
 
     def sample(self, count: int) -> "DataLoader":
         new_data = self.data["grouped_data"].sample(count)
@@ -951,7 +975,7 @@ class TimeSeriesSurvivalDataLoader(TimeSeriesDataLoader):
         time_horizons: list = [],
         random_state: int = 0,
         train_size: float = 0.8,
-        fill: Any = np.nan,
+        fill: Any = 0,
         seq_offset: int = 0,
         **kwargs: Any,
     ) -> None:
@@ -1089,11 +1113,18 @@ class TimeSeriesSurvivalDataLoader(TimeSeriesDataLoader):
             seq_offset=info["seq_offset"],
         )
 
-    def match(self, constraints: Constraints) -> "DataLoader":
-        seq_df, seq_info = self.sequential_view()
-        new_data = constraints.match(seq_df)
+    def match(
+        self, constraints: Constraints, sequential_view: bool = False
+    ) -> "DataLoader":
+        if sequential_view:
+            seq_df, seq_info = self.sequential_view()
+            new_data = constraints.match(seq_df)
 
-        return TimeSeriesSurvivalDataLoader.from_sequential_view(new_data, seq_info)
+            return TimeSeriesSurvivalDataLoader.from_sequential_view(new_data, seq_info)
+        else:
+            return self.unpack_and_decorate(
+                constraints.match(self.dataframe()),
+            )
 
 
 @validate_arguments(config=dict(arbitrary_types_allowed=True))

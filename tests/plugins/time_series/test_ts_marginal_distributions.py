@@ -76,4 +76,4 @@ def test_plugin_generate_survival() -> None:
     assert X_gen.type() == "time_series_survival"
     assert len(X_gen) == 10
     assert test_plugin.schema_includes(X_gen)
-    assert list(X_gen.columns) == list(survival_data.columns)
+    assert list(X_gen.sequential_columns) == list(survival_data.sequential_columns)

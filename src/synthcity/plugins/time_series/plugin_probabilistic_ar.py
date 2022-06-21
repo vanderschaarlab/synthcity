@@ -52,7 +52,7 @@ class ProbabilisticAutoregressivePlugin(Plugin):
         encoder_max_clusters: int = 10,
         **kwargs: Any
     ) -> None:
-        super().__init__()
+        super().__init__(sequential_schema_view=True)
 
         self.model = PARModel(epochs=n_iter, sample_size=sample_size, verbose=False)
         self.encoder = TabularEncoder(

@@ -125,7 +125,7 @@ class ConditionalTimeGANPlugin(Plugin):
         embedding_penalty: float = 10,
         **kwargs: Any
     ) -> None:
-        super().__init__()
+        super().__init__(sequential_schema_view=True)
 
         self.n_iter = n_iter
         self.generator_n_layers_hidden = generator_n_layers_hidden

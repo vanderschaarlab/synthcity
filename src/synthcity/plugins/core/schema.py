@@ -22,6 +22,7 @@ class Schema(BaseModel):
     """Utility class for defining the schema of a Dataset."""
 
     sampling_strategy: str = "marginal"  # uniform or marginal
+    sequential_view: bool = False
     data: Any = None
     domain: Dict = {}
 
@@ -33,8 +34,13 @@ class Schema(BaseModel):
         feature_domain = {}
         raw = values["data"]
         protected_cols = ["seq_id", "seq_time_id"]
+        sequential_view = values["sequential_view"]
+
         if isinstance(raw, DataLoader):
-            X, _ = raw.sequential_view()
+            if sequential_view:
+                X, _ = raw.sequential_view()
+            else:
+                X = raw.dataframe()
         elif isinstance(raw, pd.DataFrame):
             X = raw
         else:
@@ -163,7 +169,9 @@ class Schema(BaseModel):
         return constraints
 
     @classmethod
-    def from_constraints(cls, constraints: Constraints) -> "Schema":
+    def from_constraints(
+        cls, constraints: Constraints, sequential_view: bool = False
+    ) -> "Schema":
         """Create a schema from a list of Constraints."""
 
         features = constraints.features()
@@ -173,4 +181,4 @@ class Schema(BaseModel):
             dist = constraint_to_distribution(constraints, feature)
             feature_domain[feature] = dist
 
-        return cls(domain=feature_domain)
+        return cls(sequential_view=sequential_view, domain=feature_domain)

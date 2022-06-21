@@ -57,6 +57,7 @@ class Plugin(Serializable, metaclass=ABCMeta):
         sampling_strategy: str = "marginal",  # uniform, marginal
         sampling_patience: int = 500,
         strict: bool = True,
+        sequential_schema_view: bool = False,
         device: Any = DEVICE,
     ) -> None:
         """
@@ -74,6 +75,7 @@ class Plugin(Serializable, metaclass=ABCMeta):
         self.sampling_patience = sampling_patience
         self.strict = strict
         self.device = device
+        self.sequential_schema_view = sequential_schema_view
 
     @staticmethod
     @abstractmethod
@@ -128,6 +130,7 @@ class Plugin(Serializable, metaclass=ABCMeta):
         self._schema = Schema(
             data=X,
             sampling_strategy=self.sampling_strategy,
+            sequential_view=self.sequential_schema_view,
         )
 
         return self._fit(X, *args, **kwargs)
@@ -173,17 +176,26 @@ class Plugin(Serializable, metaclass=ABCMeta):
         if constraints is not None:
             gen_constraints = gen_constraints.extend(constraints)
 
-        syn_schema = Schema.from_constraints(gen_constraints)
+        syn_schema = Schema.from_constraints(
+            gen_constraints, sequential_view=self.sequential_schema_view
+        )
 
         X_syn = self._generate(count=count, syn_schema=syn_schema, **kwargs)
 
-        if not X_syn.satisfies(gen_constraints) and self.strict:
+        if (
+            not X_syn.satisfies(
+                gen_constraints, sequential_view=self.sequential_schema_view
+            )
+            and self.strict
+        ):
             raise RuntimeError(
                 f"Plugin {self.name()} failed to meet the synthetic constraints."
             )
 
         if self.strict:
-            return X_syn.match(gen_constraints)
+            return X_syn.match(
+                gen_constraints, sequential_view=self.sequential_schema_view
+            )
 
         return X_syn
 
@@ -311,7 +323,7 @@ class Plugin(Serializable, metaclass=ABCMeta):
             bool, if the schema includes the dataset or not.
 
         """
-        other_schema = Schema(data=other)
+        other_schema = Schema(data=other, sequential_view=self.sequential_schema_view)
         return self.schema().includes(other_schema)
 
     def schema(self) -> Schema:

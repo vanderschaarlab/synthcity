@@ -64,7 +64,7 @@ class FourierFlowsPlugin(Plugin):
         encoder_max_clusters: int = 10,
         **kwargs: Any
     ) -> None:
-        super().__init__(**kwargs)
+        super().__init__(sequential_schema_view=True)
         self.static_model_name = static_model
         self.device = device
 
