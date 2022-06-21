@@ -105,21 +105,16 @@ class ARModel:
 
         outcome_enc = temporal_enc[:, -1, :].squeeze()
         outcome_horizons_enc = temporal_horizons_enc[:, -1]
-        outcome_enc = np.concatenate(
-            [outcome_enc, np.expand_dims(outcome_horizons_enc, axis=1)], axis=1
-        )
 
         temporal_enc = temporal_enc[:, :-1, :]
-        temporal_horizons_enc = temporal_horizons_enc[:, :-1]
 
         # static generator
         temporal_init = temporal_enc[:, 0, :].squeeze()
-        temporal_horizons_init = temporal_horizons_enc[:, 0].squeeze()
         static_data_with_horizons = np.concatenate(
             [
                 static.values,
                 temporal_init,
-                np.expand_dims(temporal_horizons_init, axis=1),
+                temporal_horizons_enc,
             ],
             axis=1,
         )
@@ -134,11 +129,10 @@ class ARModel:
             discrete_activation="softmax",
             continuous_activation="tanh",
         )
-        temporal_nonlin.append(("tanh", 1))  # + horizon
 
         self.temporal_model = TimeSeriesRNN(
             task_type="regression",
-            n_static_units_in=static.shape[-1],
+            n_static_units_in=static.shape[-1] + 1,
             n_temporal_units_in=temporal_enc[0].shape[-1],
             output_shape=outcome_enc.shape[1:],  # outcome + time horizon
             n_static_units_hidden=self.n_units_hidden,
@@ -157,9 +151,12 @@ class ARModel:
             nonlin_out=temporal_nonlin,
         )
         self.temporal_model.fit(
-            np.asarray(static),
+            np.concatenate(
+                [np.asarray(static), np.expand_dims(outcome_horizons_enc, axis=1)],
+                axis=1,
+            ),
             np.asarray(temporal_enc),
-            np.asarray(temporal_horizons_enc),
+            np.asarray(temporal_horizons_enc)[:, :-1],
             np.asarray(outcome_enc),
         )
         return self
@@ -168,35 +165,34 @@ class ARModel:
         static_data_with_temporal_init = self.static_generator.generate(count).numpy()
         static_data = static_data_with_temporal_init[:, : len(self.static_columns)]
         temporal_enc = static_data_with_temporal_init[
-            :, len(self.static_columns) : -1
-        ].squeeze()
-        temporal_horizons_enc = static_data_with_temporal_init[:, -1]
-
+            :, len(self.static_columns) : -self.temporal_len
+        ]
+        temporal_horizons_enc = static_data_with_temporal_init[:, -self.temporal_len :]
         temporal_enc = np.expand_dims(temporal_enc, axis=1)
-        temporal_horizons_enc = np.expand_dims(temporal_horizons_enc, axis=1)
 
         assert np.isnan(np.asarray(static_data)).sum() == 0
         # Temporal generation
         for horizon in range(1, self.temporal_len):
-            next_point = self.temporal_model.predict(
-                np.asarray(static_data), temporal_enc, temporal_horizons_enc
+            next_temporal_enc = self.temporal_model.predict(
+                np.concatenate(
+                    [
+                        np.asarray(static_data),
+                        np.expand_dims(temporal_horizons_enc[:, horizon], axis=1),
+                    ],
+                    axis=1,
+                ),
+                temporal_enc,
+                temporal_horizons_enc[:, :horizon],
             )
-            next_temporal_enc = next_point[:, :-1]
             next_temporal_enc = np.expand_dims(next_temporal_enc, axis=1)
-            next_temporal_horizon_enc = next_point[:, -1]
 
             temporal_enc = np.concatenate([temporal_enc, next_temporal_enc], axis=1)
-            temporal_horizons_enc = np.concatenate(
-                [
-                    temporal_horizons_enc,
-                    np.expand_dims(next_temporal_horizon_enc, axis=1),
-                ],
-                axis=1,
-            )
             assert np.isnan(np.asarray(temporal_enc)).sum() == 0, horizon
             assert np.isnan(np.asarray(temporal_horizons_enc)).sum() == 0, horizon
 
         assert temporal_enc.shape[1] == self.temporal_len
+        assert temporal_horizons_enc.shape[-1] == self.temporal_len
+
         # Decoding
         static_data = pd.DataFrame(static_data, columns=self.static_columns)
         temporal_enc_df = []
@@ -214,8 +210,11 @@ class ARModel:
 
         temporal = []
         for idx, item in enumerate(temporal_raw):
-            # TODO: debug fillna
             item = pd.DataFrame(item, columns=self.temporal_columns).fillna(0)
+            for col in item.columns:
+                assert (
+                    np.isnan(item[col]).sum() == 0
+                ), f"Found Nans in the generated data from {col} - {item[col].unique()}"
             temporal.append(item)
 
         return static_data, temporal, temporal_horizons

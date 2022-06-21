@@ -28,6 +28,7 @@ class SineDataloader:
         static_dim: int = 4,
         freq_scale: float = 1,
         as_numpy: bool = False,
+        with_missing: bool = False,
     ) -> None:
         self.no = no
         self.seq_len = seq_len
@@ -35,6 +36,7 @@ class SineDataloader:
         self.static_dim = static_dim
         self.freq_scale = freq_scale
         self.as_numpy = as_numpy
+        self.with_missing = with_missing
 
     def load(
         self,
@@ -56,6 +58,11 @@ class SineDataloader:
             local = list()
 
             # For each feature
+            if self.with_missing:
+                seq_len = np.random.randint(2, self.seq_len, 1)[0]
+            else:
+                seq_len = self.seq_len
+
             for k in range(self.temporal_dim):
 
                 # Randomly drawn frequency and phase
@@ -64,8 +71,7 @@ class SineDataloader:
 
                 # Generate sine signal based on the drawn frequency and phase
                 temp_data = [
-                    np.sin(self.freq_scale * freq * j + phase)
-                    for j in range(self.seq_len)
+                    np.sin(self.freq_scale * freq * j + phase) for j in range(seq_len)
                 ]
 
                 local.append(temp_data)
@@ -77,7 +83,7 @@ class SineDataloader:
 
             # Stack the generated data
             temporal_data.append(local_data)
-            temporal_horizons.append(list(range(self.seq_len)))
+            temporal_horizons.append(list(range(seq_len)))
 
         if self.as_numpy:
             return (

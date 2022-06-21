@@ -32,6 +32,7 @@ class Schema(BaseModel):
 
         feature_domain = {}
         raw = values["data"]
+        protected_cols = ["seq_id", "seq_time_id"]
         if isinstance(raw, DataLoader):
             X, _ = raw.sequential_view()
         elif isinstance(raw, pd.DataFrame):
@@ -46,6 +47,9 @@ class Schema(BaseModel):
 
         if sampling_strategy == "marginal":
             for col in X.columns:
+                if col in protected_cols:
+                    continue
+
                 if X[col].dtype == "object" or len(X[col].unique()) < 10:
                     feature_domain[col] = CategoricalDistribution(name=col, data=X[col])
                 elif X[col].dtype in ["int", "int32", "int64", "uint32", "uint64"]:
@@ -56,6 +60,9 @@ class Schema(BaseModel):
                     raise ValueError("unsupported format ", col)
         elif sampling_strategy == "uniform":
             for col in X.columns:
+                if col in protected_cols:
+                    continue
+
                 if X[col].dtype == "object" or len(X[col].unique()) < 10:
                     feature_domain[col] = CategoricalDistribution(
                         name=col, choices=list(X[col].unique())

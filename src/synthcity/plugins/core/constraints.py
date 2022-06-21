@@ -90,8 +90,7 @@ class Constraints(BaseModel):
         res = pd.Series([True] * len(X), index=X.index)
         for feature, op, thresh in self.rules:
             if feature not in X:
-                res &= False
-                continue
+                raise RuntimeError(f"Unseen feature = {feature}")
 
             prev = res.sum()
             res &= self._eval(
@@ -102,7 +101,7 @@ class Constraints(BaseModel):
             )
             if res.sum() < prev:
                 log.error(
-                    f"[{feature}] quality loss for constraints {op} = {thresh} = {res.sum()}. Original dtype {X[feature].dtype} ",
+                    f"[{feature}] quality loss for constraints {op} = {thresh}. Remaining {res.sum()}. prev length {prev}. Original dtype {X[feature].dtype} ",
                 )
         return res
 

@@ -222,7 +222,18 @@ class FourierFlowsPlugin(Plugin):
             )
             static = pd.DataFrame(static_raw, columns=self.data_info["static_features"])
 
-            return static, temporal, temporal_horizons, outcome
+            if self.data_info["data_type"] == "time_series":
+                return static, temporal, temporal_horizons, outcome
+            elif self.data_info["data_type"] == "time_series_survival":
+                return (
+                    static,
+                    temporal,
+                    temporal_horizons,
+                    outcome[self.data_info["time_to_event_column"]],
+                    outcome[self.data_info["event_column"]],
+                )
+            else:
+                raise RuntimeError("unknow data type")
 
         return self._safe_generate_time_series(_sample, count, syn_schema)
 

@@ -137,6 +137,12 @@ class DataLoader(metaclass=ABCMeta):
     def from_sequential_view(seq_df: pd.DataFrame, info: dict) -> "DataLoader":
         raise NotImplementedError()
 
+    @property
+    def sequential_columns(self) -> list:
+        df, _ = self.sequential_view()
+
+        return df.columns
+
 
 class GenericDataLoader(DataLoader):
     @validate_arguments(config=dict(arbitrary_types_allowed=True))
@@ -422,7 +428,8 @@ class TimeSeriesDataLoader(DataLoader):
         sensitive_features: List[str] = [],
         random_state: int = 0,
         train_size: float = 0.8,
-        fill: Any = -1,
+        fill: Any = 0,
+        seq_offset: int = 0,
         **kwargs: Any,
     ) -> None:
         static_features = []
@@ -446,6 +453,7 @@ class TimeSeriesDataLoader(DataLoader):
 
         self.seq_len = max_seq_len
         self.fill = fill
+        self.seq_offset = seq_offset
 
         grouped = TimeSeriesDataLoader.pack_raw_data(
             static_data, temporal_data, temporal_horizons, outcome, fill=fill
@@ -642,6 +650,7 @@ class TimeSeriesDataLoader(DataLoader):
             "random_state": self.random_state,
             "train_size": self.train_size,
             "fill": self.fill,
+            "seq_offset": self.seq_offset,
         }
 
     def __len__(self) -> int:
@@ -658,6 +667,7 @@ class TimeSeriesDataLoader(DataLoader):
             sensitive_features=self.sensitive_features,
             random_state=self.random_state,
             train_size=self.train_size,
+            seq_offset=self.seq_offset,
         )
 
     def unpack_and_decorate(self, data: pd.DataFrame) -> "DataLoader":
@@ -710,6 +720,8 @@ class TimeSeriesDataLoader(DataLoader):
             static_data=static_data,
             outcome=outcome,
             sensitive_features=info["sensitive_features"],
+            fill=info["fill"],
+            seq_offset=info["seq_offset"],
         )
 
     def unpack(self, as_numpy: bool = False, pad: bool = False) -> Any:
@@ -816,11 +828,11 @@ class TimeSeriesDataLoader(DataLoader):
     def sequential_view(
         self,
     ) -> Tuple[pd.DataFrame, dict]:  # sequential dataframe, loader info
-        id_col = "id"
-        time_col = "time_id"
-        static_features = [f"static_{col}" for col in self.static_features]
-        outcome_features = [f"out_{col}" for col in self.outcome_features]
-        temporal_features = [f"temporal_{col}" for col in self.temporal_features]
+        id_col = "seq_id"
+        time_col = "seq_time_id"
+        static_features = [f"seq_static_{col}" for col in self.static_features]
+        outcome_features = [f"seq_out_{col}" for col in self.outcome_features]
+        temporal_features = [f"seq_temporal_{col}" for col in self.temporal_features]
         cols = (
             [id_col, time_col] + static_features + temporal_features + outcome_features
         )
@@ -830,7 +842,10 @@ class TimeSeriesDataLoader(DataLoader):
             real_tidx = 0
             for tidx, temporal_item in self.data["temporal_data"][sidx].iterrows():
                 local_seq_data = (
-                    [sidx, self.data["temporal_horizons"][sidx][real_tidx]]
+                    [
+                        sidx + self.seq_offset,
+                        self.data["temporal_horizons"][sidx][real_tidx],
+                    ]
                     + static_item[self.static_features].values.tolist()
                     + temporal_item[self.temporal_features].values.tolist()
                     + self.data["outcome"]
@@ -842,11 +857,11 @@ class TimeSeriesDataLoader(DataLoader):
 
         seq_df = pd.DataFrame(seq, columns=cols)
         info = self.info()
-        info["id_feature"] = id_col
-        info["time_feature"] = time_col
-        info["static_features"] = static_features
-        info["temporal_features"] = temporal_features
-        info["outcome_features"] = outcome_features
+        info["seq_id_feature"] = id_col
+        info["seq_time_feature"] = time_col
+        info["seq_static_features"] = static_features
+        info["seq_temporal_features"] = temporal_features
+        info["seq_outcome_features"] = outcome_features
 
         return seq_df, info
 
@@ -855,17 +870,17 @@ class TimeSeriesDataLoader(DataLoader):
         seq_df: pd.DataFrame,
         info: dict,
     ) -> Tuple:
-        id_col = info["id_feature"]
-        time_col = info["time_feature"]
+        id_col = info["seq_id_feature"]
+        time_col = info["seq_time_feature"]
 
-        static_cols = info["static_features"]
-        new_static_cols = [feat.split("static_")[1] for feat in static_cols]
+        static_cols = info["seq_static_features"]
+        new_static_cols = [feat.split("seq_static_")[1] for feat in static_cols]
 
-        temporal_cols = info["temporal_features"]
-        new_temporal_cols = [feat.split("temporal_")[1] for feat in temporal_cols]
+        temporal_cols = info["seq_temporal_features"]
+        new_temporal_cols = [feat.split("seq_temporal_")[1] for feat in temporal_cols]
 
-        outcome_cols = info["outcome_features"]
-        new_outcome_cols = [feat.split("out_")[1] for feat in outcome_cols]
+        outcome_cols = info["seq_outcome_features"]
+        new_outcome_cols = [feat.split("seq_out_")[1] for feat in outcome_cols]
 
         ids = sorted(list(set(seq_df[id_col])))
 
@@ -915,6 +930,7 @@ class TimeSeriesDataLoader(DataLoader):
             random_state=info["random_state"],
             train_size=info["train_size"],
             fill=info["fill"],
+            seq_offset=info["seq_offset"],
         )
 
 
@@ -932,15 +948,16 @@ class TimeSeriesSurvivalDataLoader(TimeSeriesDataLoader):
         random_state: int = 0,
         train_size: float = 0.8,
         fill: Any = 0,
+        seq_offset: int = 0,
         **kwargs: Any,
     ) -> None:
-        outcome = pd.concat([pd.Series(T), pd.Series(E)], axis=1)
         self.time_to_event_col = "time_to_event"
         self.event_col = "event"
 
         if len(time_horizons) == 0:
             time_horizons = np.linspace(T.min(), T.max(), num=5)[1:-1].tolist()
         self.time_horizons = time_horizons
+        outcome = pd.concat([pd.Series(T), pd.Series(E)], axis=1)
 
         super().__init__(
             temporal_data=temporal_data,
@@ -951,6 +968,7 @@ class TimeSeriesSurvivalDataLoader(TimeSeriesDataLoader):
             random_state=random_state,
             train_size=train_size,
             fill=fill,
+            seq_offset=seq_offset,
             **kwargs,
         )
         self.data_type = "time_series_survival"
@@ -986,6 +1004,7 @@ class TimeSeriesSurvivalDataLoader(TimeSeriesDataLoader):
             random_state=self.random_state,
             time_horizons=self.time_horizons,
             train_size=self.train_size,
+            seq_offset=self.seq_offset,
         )
 
     @staticmethod
@@ -1010,6 +1029,7 @@ class TimeSeriesSurvivalDataLoader(TimeSeriesDataLoader):
             E=outcome[info["event_column"]],
             sensitive_features=info["sensitive_features"],
             time_horizons=info["time_horizons"],
+            seq_offset=info["seq_offset"],
         )
 
     def unpack(self, as_numpy: bool = False, pad: bool = False) -> Any:
@@ -1062,6 +1082,7 @@ class TimeSeriesSurvivalDataLoader(TimeSeriesDataLoader):
             random_state=info["random_state"],
             train_size=info["train_size"],
             fill=info["fill"],
+            seq_offset=info["seq_offset"],
         )
 
     def match(self, constraints: Constraints) -> "DataLoader":

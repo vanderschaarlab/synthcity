@@ -1,3 +1,6 @@
+# stdlib
+from typing import Any
+
 # third party
 import numpy as np
 import pytest
@@ -12,14 +15,8 @@ from synthcity.plugins.core.dataloader import (
 from synthcity.plugins.time_series.plugin_autoregressive import plugin
 from synthcity.utils.datasets.time_series.google_stocks import GoogleStocksDataloader
 from synthcity.utils.datasets.time_series.pbc import PBCDataloader
+from synthcity.utils.datasets.time_series.sine import SineDataloader
 
-static_data, temporal_data, temporal_horizons, outcome = GoogleStocksDataloader().load()
-data = TimeSeriesDataLoader(
-    temporal_data=temporal_data,
-    temporal_horizons=temporal_horizons,
-    static_data=static_data,
-    outcome=outcome,
-)
 plugin_name = "autoregressive"
 
 
@@ -44,6 +41,19 @@ def test_plugin_hyperparams(test_plugin: Plugin) -> None:
 
 
 def test_plugin_fit() -> None:
+    (
+        static_data,
+        temporal_data,
+        temporal_horizons,
+        outcome,
+    ) = SineDataloader().load()
+    data = TimeSeriesDataLoader(
+        temporal_data=temporal_data,
+        temporal_horizons=temporal_horizons,
+        static_data=static_data,
+        outcome=outcome,
+    )
+
     test_plugin = plugin(
         n_iter=10,
     )
@@ -51,7 +61,22 @@ def test_plugin_fit() -> None:
     test_plugin.fit(data)
 
 
-def test_plugin_generate() -> None:
+@pytest.mark.parametrize(
+    "source",
+    [
+        SineDataloader(with_missing=True),
+        SineDataloader(),
+        GoogleStocksDataloader(),
+    ],
+)
+def test_plugin_generate(source: Any) -> None:
+    static_data, temporal_data, temporal_horizons, outcome = source.load()
+    data = TimeSeriesDataLoader(
+        temporal_data=temporal_data,
+        temporal_horizons=temporal_horizons,
+        static_data=static_data,
+        outcome=outcome,
+    )
     test_plugin = plugin(
         n_iter=10,
     )
@@ -100,9 +125,9 @@ def test_plugin_generate_survival() -> None:
     )
     test_plugin.fit(survival_data)
 
-    X_gen = test_plugin.generate()
+    X_gen = test_plugin.generate(10)
 
     assert X_gen.type() == "time_series_survival"
-    assert len(X_gen) == len(survival_data)
+    assert len(X_gen) == 10
     assert test_plugin.schema_includes(X_gen)
-    assert list(X_gen.columns) == list(data.columns)
+    assert list(X_gen.columns) == list(survival_data.columns)
