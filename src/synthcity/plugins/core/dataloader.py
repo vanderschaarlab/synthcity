@@ -440,7 +440,7 @@ class TimeSeriesDataLoader(DataLoader):
         sensitive_features: List[str] = [],
         random_state: int = 0,
         train_size: float = 0.8,
-        fill: Any = 0,
+        fill: Any = np.nan,
         seq_offset: int = 0,
         **kwargs: Any,
     ) -> None:
@@ -506,7 +506,7 @@ class TimeSeriesDataLoader(DataLoader):
         temporal_data: List[pd.DataFrame],
         temporal_horizons: List,
         outcome: Optional[pd.DataFrame],
-        fill: Any = 0,
+        fill: Any = np.nan,
     ) -> pd.DataFrame:
         # Temporal data: (subjects, temporal_sequence, temporal_feature)
         ext_temporal_features = []
@@ -864,21 +864,20 @@ class TimeSeriesDataLoader(DataLoader):
         cols = (
             [id_col, time_col] + static_features + temporal_features + outcome_features
         )
+        static_data, temporal_data, temporal_horizons, outcome = self.pad()
 
         seq = []
-        for sidx, static_item in self.data["static_data"].iterrows():
+        for sidx, static_item in static_data.iterrows():
             real_tidx = 0
-            for tidx, temporal_item in self.data["temporal_data"][sidx].iterrows():
+            for tidx, temporal_item in temporal_data[sidx].iterrows():
                 local_seq_data = (
                     [
                         sidx + self.seq_offset,
-                        self.data["temporal_horizons"][sidx][real_tidx],
+                        temporal_horizons[sidx][real_tidx],
                     ]
                     + static_item[self.static_features].values.tolist()
                     + temporal_item[self.temporal_features].values.tolist()
-                    + self.data["outcome"]
-                    .loc[sidx, self.outcome_features]
-                    .values.tolist()
+                    + outcome.loc[sidx, self.outcome_features].values.tolist()
                 )
                 seq.append(local_seq_data)
                 real_tidx += 1
@@ -975,7 +974,7 @@ class TimeSeriesSurvivalDataLoader(TimeSeriesDataLoader):
         time_horizons: list = [],
         random_state: int = 0,
         train_size: float = 0.8,
-        fill: Any = 0,
+        fill: Any = np.nan,
         seq_offset: int = 0,
         **kwargs: Any,
     ) -> None:

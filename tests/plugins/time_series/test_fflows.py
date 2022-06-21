@@ -1,3 +1,6 @@
+# stdlib
+from typing import Any
+
 # third party
 import numpy as np
 import pytest
@@ -12,14 +15,8 @@ from synthcity.plugins.core.dataloader import (
 from synthcity.plugins.time_series.plugin_fflows import plugin
 from synthcity.utils.datasets.time_series.google_stocks import GoogleStocksDataloader
 from synthcity.utils.datasets.time_series.pbc import PBCDataloader
+from synthcity.utils.datasets.time_series.sine import SineDataloader
 
-static_data, temporal_data, temporal_horizons, outcome = GoogleStocksDataloader().load()
-data = TimeSeriesDataLoader(
-    temporal_data=temporal_data,
-    temporal_horizons=temporal_horizons,
-    static_data=static_data,
-    outcome=outcome,
-)
 plugin_name = "fflows"
 
 
@@ -44,6 +41,19 @@ def test_plugin_hyperparams(test_plugin: Plugin) -> None:
 
 
 def test_plugin_fit() -> None:
+    (
+        static_data,
+        temporal_data,
+        temporal_horizons,
+        outcome,
+    ) = GoogleStocksDataloader().load()
+    data = TimeSeriesDataLoader(
+        temporal_data=temporal_data,
+        temporal_horizons=temporal_horizons,
+        static_data=static_data,
+        outcome=outcome,
+    )
+
     test_plugin = plugin(
         n_iter=10,
     )
@@ -51,9 +61,23 @@ def test_plugin_fit() -> None:
     test_plugin.fit(data)
 
 
-def test_plugin_generate() -> None:
+@pytest.mark.parametrize(
+    "source",
+    [
+        SineDataloader(with_missing=True),
+        GoogleStocksDataloader(),
+    ],
+)
+def test_plugin_generate(source: Any) -> None:
+    static_data, temporal_data, temporal_horizons, outcome = source.load()
+    data = TimeSeriesDataLoader(
+        temporal_data=temporal_data,
+        temporal_horizons=temporal_horizons,
+        static_data=static_data,
+        outcome=outcome,
+    )
     test_plugin = plugin(
-        n_iter=100,
+        n_iter=10,
     )
     test_plugin.fit(data)
 

@@ -65,7 +65,6 @@ def test_plugin_fit() -> None:
     "source",
     [
         SineDataloader(with_missing=True),
-        SineDataloader(),
         GoogleStocksDataloader(),
     ],
 )
