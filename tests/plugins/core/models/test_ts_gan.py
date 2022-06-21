@@ -161,7 +161,9 @@ def test_ts_gan_generation_schema(source: Any) -> None:
         static_data=pd.DataFrame(static_gen, columns=static.columns),
     )
 
-    assert reference_schema.as_constraints().filter(gen_data.dataframe()).sum() > 0
+    seq_df, _ = gen_data.sequential_view()
+
+    assert reference_schema.as_constraints().filter(seq_df).sum() > 0
 
 
 @pytest.mark.parametrize("source", [SineDataloader, GoogleStocksDataloader])

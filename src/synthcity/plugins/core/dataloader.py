@@ -428,7 +428,7 @@ class TimeSeriesDataLoader(DataLoader):
         sensitive_features: List[str] = [],
         random_state: int = 0,
         train_size: float = 0.8,
-        fill: Any = 0,
+        fill: Any = np.nan,
         seq_offset: int = 0,
         **kwargs: Any,
     ) -> None:
@@ -445,11 +445,15 @@ class TimeSeriesDataLoader(DataLoader):
             if len(static_data) != len(temporal_data):
                 raise ValueError("Static and temporal data mismatch")
             static_features = list(static_data.columns)
+        else:
+            static_data = pd.DataFrame(np.zeros((len(temporal_data), 0)))
 
         if outcome is not None:
             if len(outcome) != len(temporal_data):
                 raise ValueError("Temporal and outcome data mismatch")
             self.outcome_features = list(outcome.columns)
+        else:
+            outcome = pd.DataFrame(np.zeros((len(temporal_data), 0)))
 
         self.seq_len = max_seq_len
         self.fill = fill
@@ -490,7 +494,7 @@ class TimeSeriesDataLoader(DataLoader):
         temporal_data: List[pd.DataFrame],
         temporal_horizons: List,
         outcome: Optional[pd.DataFrame],
-        fill: Any = 0,
+        fill: Any = np.nan,
     ) -> pd.DataFrame:
         # Temporal data: (subjects, temporal_sequence, temporal_feature)
         ext_temporal_features = []
@@ -947,7 +951,7 @@ class TimeSeriesSurvivalDataLoader(TimeSeriesDataLoader):
         time_horizons: list = [],
         random_state: int = 0,
         train_size: float = 0.8,
-        fill: Any = 0,
+        fill: Any = np.nan,
         seq_offset: int = 0,
         **kwargs: Any,
     ) -> None:

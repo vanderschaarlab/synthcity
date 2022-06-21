@@ -302,7 +302,7 @@ def test_time_series_sequential_view(source: Any) -> None:
     static_data, temporal_data, temporal_horizons, outcome = source().load()
 
     temporal_cols = TimeSeriesDataLoader.unique_temporal_features(temporal_data)
-    temporal_cols = [f"temporal_{col}" for col in temporal_cols]
+    temporal_cols = [f"seq_temporal_{col}" for col in temporal_cols]
 
     total_events = 0
     for item in temporal_data:
@@ -316,10 +316,10 @@ def test_time_series_sequential_view(source: Any) -> None:
     )
 
     seq_df, info = loader.sequential_view()
-    id_col = info["id_feature"]
-    time_col = info["time_feature"]
-    static_cols = info["static_features"]
-    out_cols = info["outcome_features"]
+    id_col = info["seq_id_feature"]
+    time_col = info["seq_time_feature"]
+    static_cols = info["seq_static_features"]
+    out_cols = info["seq_outcome_features"]
 
     assert (
         seq_df.columns.values.tolist()
@@ -528,17 +528,17 @@ def test_time_series_survival_sequential_view() -> None:
     )
 
     temporal_cols = TimeSeriesSurvivalDataLoader.unique_temporal_features(temporal_data)
-    temporal_cols = [f"temporal_{col}" for col in temporal_cols]
+    temporal_cols = [f"seq_temporal_{col}" for col in temporal_cols]
 
     total_events = 0
     for item in temporal_data:
         total_events += len(item)
 
     seq_df, info = loader.sequential_view()
-    id_col = info["id_feature"]
-    time_col = info["time_feature"]
-    static_cols = info["static_features"]
-    out_cols = info["outcome_features"]
+    id_col = info["seq_id_feature"]
+    time_col = info["seq_time_feature"]
+    static_cols = info["seq_static_features"]
+    out_cols = info["seq_outcome_features"]
 
     assert (
         seq_df.columns.values.tolist()
