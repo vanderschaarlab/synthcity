@@ -440,7 +440,6 @@ class TimeSeriesDataLoader(DataLoader):
         sensitive_features: List[str] = [],
         random_state: int = 0,
         train_size: float = 0.8,
-        fill: Any = np.nan,
         seq_offset: int = 0,
         **kwargs: Any,
     ) -> None:
@@ -468,13 +467,18 @@ class TimeSeriesDataLoader(DataLoader):
             outcome = pd.DataFrame(np.zeros((len(temporal_data), 0)))
 
         self.seq_len = max_seq_len
-        self.fill = fill
+        self.fill = np.nan
         self.seq_offset = seq_offset
 
-        grouped = TimeSeriesDataLoader.pack_raw_data(
-            static_data, temporal_data, temporal_horizons, outcome, fill=fill
+        (
+            static_data,
+            temporal_data,
+            temporal_horizons,
+            outcome,
+            grouped,
+        ) = TimeSeriesDataLoader.pack_raw_data(
+            static_data, temporal_data, temporal_horizons, outcome, fill=self.fill
         )
-
         super().__init__(
             data={
                 "static_data": static_data,
@@ -500,23 +504,33 @@ class TimeSeriesDataLoader(DataLoader):
         return sorted(np.unique(temporal_features).tolist())
 
     @staticmethod
+    def extract_masked_features(full_temporal_features: list) -> tuple:
+        temporal_features = []
+        mask_features = []
+        mask_prefix = "masked_"
+        for feat in full_temporal_features:
+            if not feat.startswith(mask_prefix):
+                temporal_features.append(feat)
+                continue
+
+            other_feat = feat[len(mask_prefix) :]
+            if other_feat in full_temporal_features:
+                mask_features.append(feat)
+            else:
+                temporal_features.append(feat)
+
+        return temporal_features, mask_features
+
+    @staticmethod
     @validate_arguments(config=dict(arbitrary_types_allowed=True))
-    def pack_raw_data(
+    def pad_raw_features(
         static_data: Optional[pd.DataFrame],
         temporal_data: List[pd.DataFrame],
         temporal_horizons: List,
         outcome: Optional[pd.DataFrame],
         fill: Any = np.nan,
-    ) -> pd.DataFrame:
-        # Temporal data: (subjects, temporal_sequence, temporal_feature)
-        ext_temporal_features = []
-        max_seq_len = max([len(t) for t in temporal_horizons])
+    ) -> Any:
         temporal_features = TimeSeriesDataLoader.unique_temporal_features(temporal_data)
-
-        for feat in temporal_features:
-            ext_temporal_features.extend(
-                [f"temporal_{feat}_t{idx}" for idx in range(max_seq_len)]
-            )
 
         for idx, item in enumerate(temporal_data):
             # handling missing features
@@ -524,6 +538,33 @@ class TimeSeriesDataLoader(DataLoader):
                 if col not in item.columns:
                     item[col] = fill
             item = item[temporal_features]
+
+            assert list(item.columns) == list(temporal_features)
+            temporal_data[idx] = item.fillna(fill)
+
+        return static_data, temporal_data, temporal_horizons, outcome
+
+    @staticmethod
+    @validate_arguments(config=dict(arbitrary_types_allowed=True))
+    def pad_raw_data(
+        static_data: Optional[pd.DataFrame],
+        temporal_data: List[pd.DataFrame],
+        temporal_horizons: List,
+        outcome: Optional[pd.DataFrame],
+        fill: Any = np.nan,
+    ) -> Any:
+        (
+            static_data,
+            temporal_data,
+            temporal_horizons,
+            outcome,
+        ) = TimeSeriesDataLoader.pad_raw_features(
+            static_data, temporal_data, temporal_horizons, outcome, fill=fill
+        )
+        max_seq_len = max([len(t) for t in temporal_data])
+        temporal_features = TimeSeriesDataLoader.unique_temporal_features(temporal_data)
+
+        for idx, item in enumerate(temporal_data):
             if len(item) != max_seq_len:
                 pads = fill * np.ones((max_seq_len - len(item), len(temporal_features)))
                 start = max(item.index) + 1
@@ -540,42 +581,146 @@ class TimeSeriesDataLoader(DataLoader):
 
             temporal_data[idx] = item.fillna(fill)
 
-        temporal_arr = np.asarray(temporal_data)
-        temporal_arr = np.swapaxes(temporal_arr, 1, 2)
-
-        out_df = pd.DataFrame(
-            temporal_arr.reshape(len(temporal_arr), -1), columns=ext_temporal_features
-        )
-
         temporal_horizons_padded = []
-        temporal_horizon_cols = [f"temporal_t{idx}_value" for idx in range(max_seq_len)]
         for idx, item in enumerate(temporal_horizons):
             item = list(item)
             if len(item) != max_seq_len:
                 pads = fill * np.ones(max_seq_len - len(item))
                 item.extend(pads.tolist())
             temporal_horizons_padded.append(item)
-        out_df[temporal_horizon_cols] = temporal_horizons_padded
+
+        return static_data, temporal_data, temporal_horizons_padded, outcome
+
+    @staticmethod
+    @validate_arguments(config=dict(arbitrary_types_allowed=True))
+    def mask_temporal_data(
+        temporal_data: List[pd.DataFrame],
+        temporal_horizons: List,
+        fill: Any = np.nan,
+    ) -> Any:
+        nan_cnt = 0
+        for item in temporal_data:
+            nan_cnt += np.asarray(np.isnan(item)).sum()
+
+        if nan_cnt == 0:
+            return temporal_data, temporal_horizons
+
+        temporal_features = TimeSeriesDataLoader.unique_temporal_features(temporal_data)
+        masked_features = [f"masked_{feat}" for feat in temporal_features]
+
+        for idx, item in enumerate(temporal_data):
+            item[masked_features] = (~np.isnan(item)).astype(int)
+            item = item.fillna(fill)
+            temporal_data[idx] = item
+
+        for idx, item in enumerate(temporal_horizons):
+            item = np.nan_to_num(item, nan=fill).tolist()
+
+            temporal_horizons[idx] = item
+
+        return temporal_data, temporal_horizons
+
+    @staticmethod
+    @validate_arguments(config=dict(arbitrary_types_allowed=True))
+    def unmask_temporal_data(
+        temporal_data: List[pd.DataFrame],
+        temporal_horizons: List,
+        fill: Any = np.nan,
+    ) -> Any:
+        temporal_features = TimeSeriesDataLoader.unique_temporal_features(temporal_data)
+        temporal_features, mask_features = TimeSeriesDataLoader.extract_masked_features(
+            temporal_features
+        )
+        if len(mask_features) == 0:
+            return temporal_data, temporal_horizons
+
+        missing_horizons = []
+        for idx, item in enumerate(temporal_data):
+            # handle existing mask
+            mask = temporal_data[idx][mask_features].astype(bool)
+            item[~mask] = np.nan
+
+            item_missing_rows = item.isna().sum(axis=1).values
+            missing_horizons.append(item_missing_rows == len(temporal_features))
+
+            temporal_data[idx] = item.fillna(fill)
+
+        temporal_horizons_unmasked = []
+        for idx, item in enumerate(temporal_horizons):
+            item = list(item)
+
+            for midx, mval in enumerate(missing_horizons[idx]):
+                if mval:
+                    item[midx] = np.nan
+
+            temporal_horizons_unmasked.append(item)
+
+        return temporal_data, temporal_horizons_unmasked
+
+    @staticmethod
+    @validate_arguments(config=dict(arbitrary_types_allowed=True))
+    def pack_raw_data(
+        static_data: Optional[pd.DataFrame],
+        temporal_data: List[pd.DataFrame],
+        temporal_horizons: List,
+        outcome: Optional[pd.DataFrame],
+        fill: Any = np.nan,
+    ) -> pd.DataFrame:
+
+        # Temporal data: (subjects, temporal_sequence, temporal_feature)
+        ext_temporal_features = []
+        max_seq_len = max([len(t) for t in temporal_horizons])
+        temporal_features = TimeSeriesDataLoader.unique_temporal_features(temporal_data)
+        temporal_features, mask_features = TimeSeriesDataLoader.extract_masked_features(
+            temporal_features
+        )
+        for feat in temporal_features:
+            ext_temporal_features.extend(
+                [f"temporal_{feat}_t{idx}" for idx in range(max_seq_len)]
+            )
+
+        temporal_data, temporal_horizons = TimeSeriesDataLoader.unmask_temporal_data(
+            temporal_data, temporal_horizons
+        )
+        (
+            padded_static,
+            padded_temporal,
+            padded_horizons,
+            padded_outcome,
+        ) = TimeSeriesDataLoader.pad_raw_data(
+            static_data, temporal_data, temporal_horizons, outcome, fill=fill
+        )
+
+        padded_temporal_arr = np.asarray(padded_temporal)
+        padded_temporal_arr = np.swapaxes(padded_temporal_arr, 1, 2)
+
+        out_df = pd.DataFrame(
+            padded_temporal_arr.reshape(len(padded_temporal_arr), -1),
+            columns=ext_temporal_features,
+        )
+
+        temporal_horizon_cols = [f"temporal_t{idx}_value" for idx in range(max_seq_len)]
+        out_df[temporal_horizon_cols] = padded_horizons
         ext_temporal_features.extend(temporal_horizon_cols)
 
-        if static_data is not None:
+        if padded_static is not None:
             out_df = pd.concat(
                 [
                     pd.DataFrame(
-                        static_data.values,
-                        columns=[f"static_{feat}" for feat in static_data.columns],
+                        padded_static.values,
+                        columns=[f"static_{feat}" for feat in padded_static.columns],
                     ),
                     out_df,
                 ],
                 axis=1,
             )
-        if outcome is not None:
+        if padded_outcome is not None:
             out_df = pd.concat(
                 [
                     out_df,
                     pd.DataFrame(
-                        outcome.values,
-                        columns=[f"out_{feat}" for feat in outcome.columns],
+                        padded_outcome.values,
+                        columns=[f"out_{feat}" for feat in padded_outcome.columns],
                     ),
                 ],
                 axis=1,
@@ -586,7 +731,7 @@ class TimeSeriesDataLoader(DataLoader):
             if "float" in str(out_df[col].dtype):
                 out_df[col] = out_df[col].astype(float)
 
-        return out_df
+        return static_data, temporal_data, temporal_horizons, outcome, out_df
 
     @staticmethod
     @validate_arguments(config=dict(arbitrary_types_allowed=True))
@@ -754,7 +899,7 @@ class TimeSeriesDataLoader(DataLoader):
 
     def unpack(self, as_numpy: bool = False, pad: bool = False) -> Any:
         if pad:
-            static_data, temporal_data, temporal_horizons, outcome = self.pad()
+            static_data, temporal_data, temporal_horizons, outcome = self.pad_and_mask()
         else:
             static_data, temporal_data, temporal_horizons, outcome = (
                 self.data["static_data"],
@@ -776,48 +921,35 @@ class TimeSeriesDataLoader(DataLoader):
             outcome,
         )
 
+    def pad_features(self) -> Any:
+        return TimeSeriesDataLoader.pad_raw_features(
+            self.data["static_data"],
+            self.data["temporal_data"],
+            self.data["temporal_horizons"],
+            self.data["outcome"],
+            fill=self.fill,
+        )
+
     def pad(self) -> Any:
-        static_data = self.data["static_data"]
-        temporal_data = self.data["temporal_data"].copy()
-        temporal_horizons = self.data["temporal_horizons"].copy()
-        outcome = self.data["outcome"]
+        return TimeSeriesDataLoader.pad_raw_data(
+            self.data["static_data"],
+            self.data["temporal_data"],
+            self.data["temporal_horizons"],
+            self.data["outcome"],
+            fill=self.fill,
+        )
 
-        max_seq_len = max([len(t) for t in temporal_data])
-        temporal_features = TimeSeriesDataLoader.unique_temporal_features(temporal_data)
+    def pad_and_mask(self, fill: Any = 0, only_features: Any = False) -> Any:
+        if only_features:
+            static_data, temporal_data, temporal_horizons, outcome = self.pad_features()
+        else:
+            static_data, temporal_data, temporal_horizons, outcome = self.pad()
 
-        for idx, item in enumerate(temporal_data):
-            # handling missing features
-            for col in temporal_features:
-                if col not in item.columns:
-                    item[col] = self.fill
-            item = item[temporal_features]
-            if len(item) != max_seq_len:
-                pads = self.fill * np.ones(
-                    (max_seq_len - len(item), len(temporal_features))
-                )
-                start = max(item.index) + 1
-                pads_df = pd.DataFrame(
-                    pads,
-                    index=[start + i for i in range(len(pads))],
-                    columns=item.columns,
-                )
-                item = pd.concat([item, pads_df])
+        temporal_data, temporal_horizons = TimeSeriesDataLoader.mask_temporal_data(
+            temporal_data, temporal_horizons
+        )
 
-            # handle missing time points
-            assert list(item.columns) == list(temporal_features)
-            assert len(item) == max_seq_len
-
-            temporal_data[idx] = item.fillna(self.fill)
-
-        temporal_horizons_padded = []
-        for idx, item in enumerate(temporal_horizons):
-            item = list(item)
-            if len(item) != max_seq_len:
-                pads = self.fill * np.ones(max_seq_len - len(item))
-                item.extend(pads.tolist())
-            temporal_horizons_padded.append(item)
-
-        return static_data, temporal_data, temporal_horizons_padded, outcome
+        return static_data, temporal_data, temporal_horizons, outcome
 
     def __getitem__(self, feature: Union[str, list]) -> Any:
         return self.data["grouped_data"][feature]
@@ -856,15 +988,25 @@ class TimeSeriesDataLoader(DataLoader):
     def sequential_view(
         self,
     ) -> Tuple[pd.DataFrame, dict]:  # sequential dataframe, loader info
+        static_data, temporal_data, temporal_horizons, outcome = self.pad_and_mask(
+            only_features=True
+        )
         id_col = "seq_id"
         time_col = "seq_time_id"
-        static_features = [f"seq_static_{col}" for col in self.static_features]
-        outcome_features = [f"seq_out_{col}" for col in self.outcome_features]
-        temporal_features = [f"seq_temporal_{col}" for col in self.temporal_features]
+
+        raw_static_features = list(static_data.columns)
+        static_features = [f"seq_static_{col}" for col in raw_static_features]
+
+        raw_outcome_features = list(outcome.columns)
+        outcome_features = [f"seq_out_{col}" for col in raw_outcome_features]
+
+        raw_temporal_features = TimeSeriesDataLoader.unique_temporal_features(
+            temporal_data
+        )
+        temporal_features = [f"seq_temporal_{col}" for col in raw_temporal_features]
         cols = (
             [id_col, time_col] + static_features + temporal_features + outcome_features
         )
-        static_data, temporal_data, temporal_horizons, outcome = self.pad()
 
         seq = []
         for sidx, static_item in static_data.iterrows():
@@ -875,9 +1017,9 @@ class TimeSeriesDataLoader(DataLoader):
                         sidx + self.seq_offset,
                         temporal_horizons[sidx][real_tidx],
                     ]
-                    + static_item[self.static_features].values.tolist()
-                    + temporal_item[self.temporal_features].values.tolist()
-                    + outcome.loc[sidx, self.outcome_features].values.tolist()
+                    + static_item[raw_static_features].values.tolist()
+                    + temporal_item[raw_temporal_features].values.tolist()
+                    + outcome.loc[sidx, raw_outcome_features].values.tolist()
                 )
                 seq.append(local_seq_data)
                 real_tidx += 1
@@ -974,7 +1116,6 @@ class TimeSeriesSurvivalDataLoader(TimeSeriesDataLoader):
         time_horizons: list = [],
         random_state: int = 0,
         train_size: float = 0.8,
-        fill: Any = np.nan,
         seq_offset: int = 0,
         **kwargs: Any,
     ) -> None:
@@ -985,6 +1126,7 @@ class TimeSeriesSurvivalDataLoader(TimeSeriesDataLoader):
             time_horizons = np.linspace(T.min(), T.max(), num=5)[1:-1].tolist()
         self.time_horizons = time_horizons
         outcome = pd.concat([pd.Series(T), pd.Series(E)], axis=1)
+        self.fill = np.nan
 
         super().__init__(
             temporal_data=temporal_data,
@@ -994,12 +1136,10 @@ class TimeSeriesSurvivalDataLoader(TimeSeriesDataLoader):
             sensitive_features=sensitive_features,
             random_state=random_state,
             train_size=train_size,
-            fill=fill,
             seq_offset=seq_offset,
             **kwargs,
         )
         self.data_type = "time_series_survival"
-        self.fill = fill
 
     def info(self) -> dict:
         parent_info = super().info()
@@ -1061,7 +1201,7 @@ class TimeSeriesSurvivalDataLoader(TimeSeriesDataLoader):
 
     def unpack(self, as_numpy: bool = False, pad: bool = False) -> Any:
         if pad:
-            static_data, temporal_data, temporal_horizons, outcome = self.pad()
+            static_data, temporal_data, temporal_horizons, outcome = self.pad_and_mask()
         else:
             static_data, temporal_data, temporal_horizons, outcome = (
                 self.data["static_data"],

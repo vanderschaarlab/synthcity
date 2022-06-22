@@ -210,8 +210,7 @@ class ARModel:
 
         temporal = []
         for idx, item in enumerate(temporal_raw):
-            # TODO: debug fillna
-            item = pd.DataFrame(item, columns=self.temporal_columns).fillna(0)
+            item = pd.DataFrame(item, columns=self.temporal_columns)
             for col in item.columns:
                 assert (
                     np.isnan(item[col]).sum() == 0
@@ -371,10 +370,11 @@ class AutoregressivePlugin(Plugin):
     def _fit(self, X: DataLoader, *args: Any, **kwargs: Any) -> "AutoregressivePlugin":
         assert X.type() in ["time_series", "time_series_survival"]
 
+        unpacked = X.unpack(pad=True)
         if X.type() == "time_series":
-            static, temporal, temporal_horizons, outcome = X.unpack(pad=True)
+            static, temporal, temporal_horizons, outcome = unpacked
         elif X.type() == "time_series_survival":
-            static, temporal, temporal_horizons, T, E = X.unpack(pad=True)
+            static, temporal, temporal_horizons, T, E = unpacked
             outcome = pd.concat([pd.Series(T), pd.Series(E)], axis=1)
             outcome.columns = ["time_to_event", "event"]
 

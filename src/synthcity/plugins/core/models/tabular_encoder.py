@@ -430,10 +430,12 @@ class TimeSeriesTabularEncoder(TransformerMixin, BaseEstimator):
         max_clusters: int = 10,
         weight_threshold: float = 0.005,
         categorical_limit: int = 15,
+        whitelist: list = [],
     ) -> None:
         self.max_clusters = max_clusters
         self.weight_threshold = weight_threshold
         self.categorical_limit = categorical_limit
+        self.whitelist = whitelist
 
     def fit_temporal(
         self,
@@ -446,6 +448,7 @@ class TimeSeriesTabularEncoder(TransformerMixin, BaseEstimator):
             max_clusters=self.max_clusters,
             weight_threshold=self.weight_threshold,
             categorical_limit=self.categorical_limit,
+            whitelist=self.whitelist,
         )
         temporal_features = temporal_data[0].columns
 
@@ -476,6 +479,7 @@ class TimeSeriesTabularEncoder(TransformerMixin, BaseEstimator):
             max_clusters=self.max_clusters,
             weight_threshold=self.weight_threshold,
             categorical_limit=self.categorical_limit,
+            whitelist=self.whitelist,
         )
         self.static_encoder.fit(static_data, discrete_columns=discrete_columns)
 

@@ -1,4 +1,5 @@
 # third party
+import numpy as np
 import pandas as pd
 import pytest
 
@@ -127,7 +128,7 @@ def test_constraint_op_eq() -> None:
 def test_constraint_op_in() -> None:
     cons = Constraints(rules=[("feat1", "in", [1])])
 
-    data = pd.DataFrame([[-3, 1], [-2, 2]], columns=["feat1", "feat2"])
+    data = pd.DataFrame([[-3, 1], [-2, 2], [-2, np.nan]], columns=["feat1", "feat2"])
     assert len(cons.match(data)) == 0
     assert cons.filter(data).sum() == 0
 

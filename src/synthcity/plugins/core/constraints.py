@@ -60,17 +60,17 @@ class Constraints(BaseModel):
             The pandas.Index which matches the constraint.
         """
         if op == "lt" or op == "<":
-            return X[feature] < operand
+            return (X[feature] < operand) | X[feature].isna()
         elif op == "le" or op == "<=":
-            return X[feature] <= operand
+            return (X[feature] <= operand) | X[feature].isna()
         elif op == "gt" or op == ">":
-            return X[feature] > operand
+            return (X[feature] > operand) | X[feature].isna()
         elif op == "ge" or op == ">=":
-            return X[feature] >= operand
+            return (X[feature] >= operand) | X[feature].isna()
         elif op == "eq" or op == "==":
-            return X[feature] == operand
+            return (X[feature] == operand) | X[feature].isna()
         elif op == "in":
-            return X[feature].isin(operand)
+            return (X[feature].isin(operand)) | X[feature].isna()
         elif op == "dtype":
             return X[feature].dtype == operand
         else:
@@ -90,7 +90,8 @@ class Constraints(BaseModel):
         res = pd.Series([True] * len(X), index=X.index)
         for feature, op, thresh in self.rules:
             if feature not in X:
-                raise RuntimeError(f"Unseen feature = {feature}")
+                # TODO: better check
+                continue
 
             prev = res.sum()
             res &= self._eval(

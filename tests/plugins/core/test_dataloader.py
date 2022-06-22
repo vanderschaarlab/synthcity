@@ -506,7 +506,7 @@ def test_time_series_survival_pack_unpack_padding(as_numpy: bool) -> None:
         as_numpy=as_numpy,
     )
     assert len(unp_temporal) == len(temporal_data)
-    assert unp_temporal[0].shape == (max_seq_len, len(temporal_features))
+    assert unp_temporal[0].shape == (max_seq_len, 2 * len(temporal_features))
     assert len(unp_temporal_horizons) == len(temporal_data)
     assert len(unp_temporal_horizons[0]) == max_seq_len
 

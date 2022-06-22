@@ -88,7 +88,7 @@ def test_plugin_generate(source: Any) -> None:
     X_gen = test_plugin.generate(50)
     assert len(X_gen) == 50
     assert test_plugin.schema_includes(X_gen)
-    assert list(X_gen.columns) == list(data.columns)
+    assert list(X_gen.sequential_columns) == list(data.sequential_columns)
 
 
 def test_sample_hyperparams() -> None:

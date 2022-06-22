@@ -94,12 +94,15 @@ class TabularVAE(nn.Module):
         encoder_nonlin: str = "leaky_relu",
         encoder_batch_norm: bool = False,
         encoder_dropout: float = 0.1,
+        encoder_whitelist: list = [],
         device: Any = DEVICE,
         dataloader_sampler: Optional[sampler.Sampler] = None,
     ) -> None:
         super(TabularVAE, self).__init__()
         self.columns = X.columns
-        self.encoder = TabularEncoder(max_clusters=encoder_max_clusters).fit(X)
+        self.encoder = TabularEncoder(
+            max_clusters=encoder_max_clusters, whitelist=encoder_whitelist
+        ).fit(X)
 
         self.model = VAE(
             self.encoder.n_features(),

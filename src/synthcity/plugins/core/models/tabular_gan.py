@@ -70,6 +70,8 @@ class TabularGAN(torch.nn.Module):
             The max number of clusters to create for continuous columns when encoding
         encoder:
             Pre-trained tabular encoder. If None, a new encoder is trained.
+        encoder_whitelist:
+            Ignore columns from encoding
     """
 
     @validate_arguments(config=dict(arbitrary_types_allowed=True))
@@ -114,6 +116,7 @@ class TabularGAN(torch.nn.Module):
         lambda_identifiability_penalty: float = 0.1,
         encoder_max_clusters: int = 20,
         encoder: Any = None,
+        encoder_whitelist: list = [],
         dataloader_sampler: Optional[torch.utils.data.sampler.Sampler] = None,
         device: Any = DEVICE,
     ) -> None:
@@ -122,7 +125,9 @@ class TabularGAN(torch.nn.Module):
         if encoder is not None:
             self.encoder = encoder
         else:
-            self.encoder = TabularEncoder(max_clusters=encoder_max_clusters).fit(X)
+            self.encoder = TabularEncoder(
+                max_clusters=encoder_max_clusters, whitelist=encoder_whitelist
+            ).fit(X)
 
         self.model = GAN(
             self.encoder.n_features(),
