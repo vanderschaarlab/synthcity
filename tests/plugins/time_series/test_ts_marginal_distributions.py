@@ -1,3 +1,6 @@
+# stdlib
+from typing import Any
+
 # third party
 import numpy as np
 import pytest
@@ -12,27 +15,49 @@ from synthcity.plugins.core.dataloader import (
 from synthcity.plugins.generic.plugin_marginal_distributions import plugin
 from synthcity.utils.datasets.time_series.google_stocks import GoogleStocksDataloader
 from synthcity.utils.datasets.time_series.pbc import PBCDataloader
-
-static_data, temporal_data, temporal_horizons, outcome = GoogleStocksDataloader().load()
-data = TimeSeriesDataLoader(
-    temporal_data=temporal_data,
-    temporal_horizons=temporal_horizons,
-    static_data=static_data,
-    outcome=outcome,
-)
+from synthcity.utils.datasets.time_series.sine import SineDataloader
 
 
 @pytest.mark.parametrize(
     "test_plugin", generate_fixtures("marginal_distributions", plugin)
 )
 def test_plugin_fit(test_plugin: Plugin) -> None:
+    (
+        static_data,
+        temporal_data,
+        temporal_horizons,
+        outcome,
+    ) = GoogleStocksDataloader().load()
+    data = TimeSeriesDataLoader(
+        temporal_data=temporal_data,
+        temporal_horizons=temporal_horizons,
+        static_data=static_data,
+        outcome=outcome,
+    )
+
     test_plugin.fit(data)
 
 
 @pytest.mark.parametrize(
-    "test_plugin", generate_fixtures("marginal_distributions", plugin)
+    "test_plugin", [generate_fixtures("marginal_distributions", plugin)[0]]
 )
-def test_plugin_generate(test_plugin: Plugin) -> None:
+@pytest.mark.parametrize(
+    "source",
+    [
+        SineDataloader(with_missing=False),
+        SineDataloader(with_missing=True),
+        GoogleStocksDataloader(),
+    ],
+)
+def test_plugin_generate(test_plugin: Plugin, source: Any) -> None:
+    static_data, temporal_data, temporal_horizons, outcome = source.load()
+    data = TimeSeriesDataLoader(
+        temporal_data=temporal_data,
+        temporal_horizons=temporal_horizons,
+        static_data=static_data,
+        outcome=outcome,
+    )
+
     test_plugin.fit(data)
 
     X_gen = test_plugin.generate().dataframe()
@@ -76,4 +101,4 @@ def test_plugin_generate_survival() -> None:
     assert X_gen.type() == "time_series_survival"
     assert len(X_gen) == 10
     assert test_plugin.schema_includes(X_gen)
-    assert list(X_gen.sequential_columns) == list(survival_data.sequential_columns)
+    assert list(X_gen.columns) == list(survival_data.columns)

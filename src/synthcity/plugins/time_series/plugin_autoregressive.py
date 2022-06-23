@@ -301,7 +301,7 @@ class AutoregressivePlugin(Plugin):
         static_model: str = "ctgan",
         **kwargs: Any,
     ) -> None:
-        super().__init__(sequential_schema_view=True)
+        super().__init__()
         self.n_iter = n_iter
         self.n_layers_hidden = n_layers_hidden
         self.n_units_hidden = n_units_hidden

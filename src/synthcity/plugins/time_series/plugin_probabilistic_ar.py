@@ -52,7 +52,7 @@ class ProbabilisticAutoregressivePlugin(Plugin):
         encoder_max_clusters: int = 10,
         **kwargs: Any
     ) -> None:
-        super().__init__(sequential_schema_view=True)
+        super().__init__()
 
         self.model = PARModel(epochs=n_iter, sample_size=sample_size, verbose=False)
         self.encoder = TabularEncoder(
@@ -86,11 +86,11 @@ class ProbabilisticAutoregressivePlugin(Plugin):
             outcome = pd.concat([pd.Series(T), pd.Series(E)], axis=1)
             outcome.columns = ["time_to_event", "event"]
 
-        seq_df, info = X.sequential_view()
-        self.info = info
+        seq_df = X.dataframe()
+        self.info = X.info()
 
-        id_col = info["seq_id_feature"]
-        time_col = info["seq_time_feature"]
+        id_col = self.info["seq_id_feature"]
+        time_col = self.info["seq_time_feature"]
 
         seq_df["par_bkp_time"] = seq_df[time_col]
 

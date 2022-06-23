@@ -13,6 +13,7 @@ from synthcity.plugins.core.dataloader import (
     SurvivalAnalysisDataLoader,
     TimeSeriesDataLoader,
     TimeSeriesSurvivalDataLoader,
+    create_from_info,
 )
 from synthcity.utils.datasets.time_series.google_stocks import GoogleStocksDataloader
 from synthcity.utils.datasets.time_series.pbc import PBCDataloader
@@ -194,23 +195,29 @@ def test_time_series_dataloader_sanity(source: Any) -> None:
     )
 
     assert len(loader.raw()) == 5
-    feat_cnt = (
-        temporal_data[0].shape[0] * temporal_data[0].shape[1]
-        + temporal_data[0].shape[0]
-    )
+    feat_cnt = temporal_data[0].shape[1] + 2  # id, time_id
     if static_data is not None:
         feat_cnt += static_data.shape[1]
     if outcome is not None:
         feat_cnt += outcome.shape[1]
 
-    assert loader.dataframe().shape == (len(temporal_data), feat_cnt)
-    assert loader.numpy().shape == (len(temporal_data), feat_cnt)
-    assert len(loader) == len(temporal_data)
+    window_len = temporal_data[0].shape[0]
+    data_len = len(temporal_data) * window_len
+
+    assert loader.dataframe().shape == (data_len, feat_cnt)
+    assert loader.numpy().shape == (data_len, feat_cnt)
+    assert len(loader) == data_len
 
     train_len = int(0.8 * (len(temporal_data)))
-    assert loader.train().shape == (train_len, feat_cnt)
-    assert loader.test().shape == (len(temporal_data) - train_len, feat_cnt)
-    assert loader.sample(10).shape == (10, feat_cnt)
+
+    train_sample = loader.train().ids()
+    assert len(train_sample) == train_len
+
+    test_sample = loader.test().ids()
+    assert len(test_sample) == len(temporal_data) - train_len
+
+    rnd_sample = loader.sample(10).ids()
+    assert len(rnd_sample) == 10
 
     assert loader.hash() != ""
 
@@ -228,9 +235,12 @@ def test_time_series_dataloader_info(source: Any) -> None:
         sensitive_features=["test"],
     )
 
+    window_len = temporal_data[0].shape[0]
+
     info = loader.info()
     assert info["data_type"] == "time_series"
-    assert info["len"] == len(temporal_data)
+    assert info["len"] == len(temporal_data) * window_len
+    assert info["window_len"] == window_len
     assert info["static_features"] == (
         list(static_data.columns) if static_data is not None else []
     )
@@ -238,7 +248,7 @@ def test_time_series_dataloader_info(source: Any) -> None:
     assert info["outcome_features"] == (
         list(outcome.columns) if outcome is not None else []
     )
-    assert info["seq_len"] == len(temporal_data[0])
+    assert info["window_len"] == len(temporal_data[0])
     assert info["sensitive_features"] == ["test"]
 
     new_loader = TimeSeriesDataLoader.from_info(loader.dataframe(), loader.info())
@@ -246,10 +256,17 @@ def test_time_series_dataloader_info(source: Any) -> None:
     assert new_loader.info() == loader.info()
 
 
-@pytest.mark.parametrize("source", [SineDataloader, GoogleStocksDataloader])
+@pytest.mark.parametrize(
+    "source",
+    [
+        SineDataloader(with_missing=True),
+        SineDataloader(with_missing=False),
+        GoogleStocksDataloader(),
+    ],
+)
 @pytest.mark.parametrize("repack", [True, False])
 def test_time_series_pack_unpack(source: Any, repack: bool) -> None:
-    static_data, temporal_data, temporal_horizons, outcome = source().load()
+    static_data, temporal_data, temporal_horizons, outcome = source.load()
 
     loader = TimeSeriesDataLoader(
         temporal_data=temporal_data,
@@ -266,10 +283,7 @@ def test_time_series_pack_unpack(source: Any, repack: bool) -> None:
             unp_out,
         ) = TimeSeriesDataLoader.unpack_raw_data(
             loader.dataframe(),
-            loader.static_features,
-            loader.temporal_features,
-            loader.outcome_features,
-            loader.seq_len,
+            loader.info(),
         )
     else:
         unp_static_data, unp_temporal, unp_temporal_horizons, unp_out = loader.unpack()
@@ -297,41 +311,6 @@ def test_time_series_pack_unpack(source: Any, repack: bool) -> None:
         assert (unp_temporal[idx].values == item[cols].values).all()
 
 
-@pytest.mark.parametrize("source", [SineDataloader, GoogleStocksDataloader])
-def test_time_series_sequential_view(source: Any) -> None:
-    static_data, temporal_data, temporal_horizons, outcome = source().load()
-
-    temporal_cols = TimeSeriesDataLoader.unique_temporal_features(temporal_data)
-    temporal_cols = [f"seq_temporal_{col}" for col in temporal_cols]
-
-    total_events = 0
-    for item in temporal_data:
-        total_events += len(item)
-
-    loader = TimeSeriesDataLoader(
-        temporal_data=temporal_data,
-        temporal_horizons=temporal_horizons,
-        static_data=static_data,
-        outcome=outcome,
-    )
-
-    seq_df, info = loader.sequential_view()
-    id_col = info["seq_id_feature"]
-    time_col = info["seq_time_feature"]
-    static_cols = info["seq_static_features"]
-    out_cols = info["seq_outcome_features"]
-
-    assert (
-        seq_df.columns.values.tolist()
-        == [id_col, time_col] + static_cols + temporal_cols + out_cols
-    )
-    assert len(seq_df) == total_events
-
-    reloader = TimeSeriesDataLoader.from_sequential_view(seq_df, info)
-
-    assert (loader.dataframe().values == reloader.dataframe().values).all()
-
-
 def test_time_series_survival_dataloader_sanity() -> None:
     static_data, temporal_data, temporal_horizons, outcome = PBCDataloader().load()
     T, E = outcome
@@ -346,23 +325,26 @@ def test_time_series_survival_dataloader_sanity() -> None:
     )
 
     assert len(loader.raw()) == 5
-    max_seq_len = max([len(t) for t in temporal_data])
     max_feats = max([len(t.columns) for t in temporal_data])
 
-    feat_cnt = max_seq_len * max_feats + max_seq_len
+    feat_cnt = max_feats + 2  # id, time id
     if static_data is not None:
         feat_cnt += static_data.shape[1]
     # outcome
     feat_cnt += 2
 
-    assert loader.dataframe().shape == (len(temporal_data), feat_cnt)
-    assert loader.numpy().shape == (len(temporal_data), feat_cnt)
-    assert len(loader) == len(temporal_data)
+    total_len = 0
+    for item in temporal_data:
+        total_len += len(item)
+
+    assert loader.dataframe().shape == (total_len, feat_cnt)
+    assert loader.numpy().shape == (total_len, feat_cnt)
+    assert len(loader) == total_len
 
     train_len = int(0.8 * (len(temporal_data)))
-    assert loader.train().shape == (train_len, feat_cnt)
-    assert loader.test().shape[0] == len(temporal_data) - train_len
-    assert loader.sample(100).shape[0] == 100
+    assert len(loader.train().ids()) == train_len
+    assert len(loader.test().ids()) == len(temporal_data) - train_len
+    assert len(loader.sample(100).ids()) == 100
 
     assert loader.hash() != ""
 
@@ -381,22 +363,26 @@ def test_time_series_survival_dataloader_info() -> None:
         sensitive_features=["test"],
     )
 
-    max_seq_len = max([len(t) for t in temporal_data])
+    max_window_len = max([len(t) for t in temporal_data])
 
     temporal_features = []
     for item in temporal_data:
         temporal_features.extend(item.columns)
     temporal_features = sorted(np.unique(temporal_features).tolist())
 
+    total_len = 0
+    for item in temporal_data:
+        total_len += len(item)
+
     info = loader.info()
     assert info["data_type"] == "time_series_survival"
-    assert info["len"] == len(temporal_data)
+    assert info["len"] == total_len
     assert info["static_features"] == (
         list(static_data.columns) if static_data is not None else []
     )
     assert info["temporal_features"] == temporal_features
     assert info["outcome_features"] == ["time_to_event", "event"]
-    assert info["seq_len"] == max_seq_len
+    assert info["window_len"] == max_window_len
     assert info["sensitive_features"] == ["test"]
 
     new_loader = TimeSeriesSurvivalDataLoader.from_info(
@@ -404,6 +390,25 @@ def test_time_series_survival_dataloader_info() -> None:
     )
     assert new_loader.shape == loader.shape
     assert new_loader.info() == loader.info()
+
+
+def test_time_series_survival_create_from_info() -> None:
+    static_data, temporal_data, temporal_horizons, outcome = PBCDataloader().load()
+    T, E = outcome
+
+    loader = TimeSeriesSurvivalDataLoader(
+        temporal_data=temporal_data,
+        temporal_horizons=temporal_horizons,
+        static_data=static_data,
+        T=T,
+        E=E,
+    )
+
+    df = loader.dataframe()
+    reloaded = create_from_info(df, loader.info())
+
+    for col in df.columns:
+        assert np.allclose(df[col], reloaded.dataframe()[col], equal_nan=True)
 
 
 def test_time_series_survival_pack_unpack() -> None:
@@ -430,10 +435,7 @@ def test_time_series_survival_pack_unpack() -> None:
         unp_out,
     ) = TimeSeriesSurvivalDataLoader.unpack_raw_data(
         loader.dataframe(),
-        loader.static_features,
-        loader.temporal_features,
-        loader.outcome_features,
-        loader.seq_len,
+        loader.info(),
     )
 
     temporal_features = []
@@ -498,57 +500,23 @@ def test_time_series_survival_pack_unpack_padding(as_numpy: bool) -> None:
         E=E,
     )
 
-    max_seq_len = max([len(t) for t in temporal_data])
+    max_window_len = max([len(t) for t in temporal_data])
     temporal_features = TimeSeriesDataLoader.unique_temporal_features(temporal_data)
 
     unp_static, unp_temporal, unp_temporal_horizons, unp_T, unp_E = loader.unpack(
         pad=True,
         as_numpy=as_numpy,
     )
+    assert np.asarray(unp_temporal).shape == (
+        len(temporal_data),
+        max_window_len,
+        2 * len(temporal_features),
+    )
     assert len(unp_temporal) == len(temporal_data)
-    assert unp_temporal[0].shape == (max_seq_len, 2 * len(temporal_features))
+    assert unp_temporal[0].shape == (max_window_len, 2 * len(temporal_features))
     assert len(unp_temporal_horizons) == len(temporal_data)
-    assert len(unp_temporal_horizons[0]) == max_seq_len
+    assert len(unp_temporal_horizons[0]) == max_window_len
 
     for idx, item in enumerate(unp_temporal):
-        assert len(unp_temporal[idx]) == max_seq_len
-        assert len(unp_temporal_horizons[idx]) == max_seq_len
-
-
-def test_time_series_survival_sequential_view() -> None:
-    static_data, temporal_data, temporal_horizons, outcome = PBCDataloader().load()
-    T, E = outcome
-
-    loader = TimeSeriesSurvivalDataLoader(
-        temporal_data=temporal_data,
-        temporal_horizons=temporal_horizons,
-        static_data=static_data,
-        T=T,
-        E=E,
-    )
-
-    temporal_cols = TimeSeriesSurvivalDataLoader.unique_temporal_features(temporal_data)
-    temporal_cols = [f"seq_temporal_{col}" for col in temporal_cols]
-
-    total_events = 0
-    for item in temporal_data:
-        total_events += len(item)
-
-    seq_df, info = loader.sequential_view()
-    id_col = info["seq_id_feature"]
-    time_col = info["seq_time_feature"]
-    static_cols = info["seq_static_features"]
-    out_cols = info["seq_outcome_features"]
-
-    assert (
-        seq_df.columns.values.tolist()
-        == [id_col, time_col] + static_cols + temporal_cols + out_cols
-    )
-    assert len(seq_df) == total_events
-
-    reloader = TimeSeriesSurvivalDataLoader.from_sequential_view(seq_df, info)
-
-    assert (loader.dataframe().columns == reloader.dataframe().columns).all()
-    assert np.allclose(
-        loader.dataframe().values, reloader.dataframe().values, equal_nan=True
-    )
+        assert len(unp_temporal[idx]) == max_window_len
+        assert len(unp_temporal_horizons[idx]) == max_window_len

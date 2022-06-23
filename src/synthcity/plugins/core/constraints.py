@@ -90,8 +90,8 @@ class Constraints(BaseModel):
         res = pd.Series([True] * len(X), index=X.index)
         for feature, op, thresh in self.rules:
             if feature not in X:
-                # TODO: better check
-                continue
+                res &= False
+                break
 
             prev = res.sum()
             res &= self._eval(

@@ -22,7 +22,7 @@ class Schema(BaseModel):
     """Utility class for defining the schema of a Dataset."""
 
     sampling_strategy: str = "marginal"  # uniform or marginal
-    sequential_view: bool = False
+    protected_cols = ["seq_id", "seq_time_id"]
     data: Any = None
     domain: Dict = {}
 
@@ -33,14 +33,9 @@ class Schema(BaseModel):
 
         feature_domain = {}
         raw = values["data"]
-        protected_cols = ["seq_id", "seq_time_id"]
-        sequential_view = values["sequential_view"]
 
         if isinstance(raw, DataLoader):
-            if sequential_view:
-                X, _ = raw.sequential_view()
-            else:
-                X = raw.dataframe()
+            X = raw.dataframe()
         elif isinstance(raw, pd.DataFrame):
             X = raw
         else:
@@ -53,9 +48,6 @@ class Schema(BaseModel):
 
         if sampling_strategy == "marginal":
             for col in X.columns:
-                if col in protected_cols:
-                    continue
-
                 if X[col].dtype == "object" or len(X[col].unique()) < 10:
                     feature_domain[col] = CategoricalDistribution(name=col, data=X[col])
                 elif X[col].dtype in ["int", "int32", "int64", "uint32", "uint64"]:
@@ -66,9 +58,6 @@ class Schema(BaseModel):
                     raise ValueError("unsupported format ", col)
         elif sampling_strategy == "uniform":
             for col in X.columns:
-                if col in protected_cols:
-                    continue
-
                 if X[col].dtype == "object" or len(X[col].unique()) < 10:
                     feature_domain[col] = CategoricalDistribution(
                         name=col, choices=list(X[col].unique())
@@ -129,6 +118,8 @@ class Schema(BaseModel):
     def includes(self, other: "Schema") -> bool:
         """Test if another schema is included in the local one."""
         for feature in other:
+            if feature in self.protected_cols:
+                continue
             if feature not in self.domain:
                 return False
 
@@ -164,14 +155,14 @@ class Schema(BaseModel):
         """Convert the schema to a list of Constraints."""
         constraints = Constraints(rules=[])
         for feature in self:
+            if feature in self.protected_cols:
+                continue
             constraints.extend(self[feature].as_constraint())
 
         return constraints
 
     @classmethod
-    def from_constraints(
-        cls, constraints: Constraints, sequential_view: bool = False
-    ) -> "Schema":
+    def from_constraints(cls, constraints: Constraints) -> "Schema":
         """Create a schema from a list of Constraints."""
 
         features = constraints.features()
@@ -181,4 +172,4 @@ class Schema(BaseModel):
             dist = constraint_to_distribution(constraints, feature)
             feature_domain[feature] = dist
 
-        return cls(sequential_view=sequential_view, domain=feature_domain)
+        return cls(domain=feature_domain)

@@ -24,7 +24,6 @@ from synthcity.plugins.core.dataloader import (
     TimeSeriesDataLoader,
     TimeSeriesSurvivalDataLoader,
     create_from_info,
-    create_from_sequential_view,
 )
 from synthcity.plugins.core.distribution import Distribution
 from synthcity.plugins.core.schema import Schema
@@ -57,7 +56,6 @@ class Plugin(Serializable, metaclass=ABCMeta):
         sampling_strategy: str = "marginal",  # uniform, marginal
         sampling_patience: int = 500,
         strict: bool = True,
-        sequential_schema_view: bool = False,
         device: Any = DEVICE,
     ) -> None:
         """
@@ -75,7 +73,6 @@ class Plugin(Serializable, metaclass=ABCMeta):
         self.sampling_patience = sampling_patience
         self.strict = strict
         self.device = device
-        self.sequential_schema_view = sequential_schema_view
 
     @staticmethod
     @abstractmethod
@@ -130,7 +127,6 @@ class Plugin(Serializable, metaclass=ABCMeta):
         self._schema = Schema(
             data=X,
             sampling_strategy=self.sampling_strategy,
-            sequential_view=self.sequential_schema_view,
         )
 
         return self._fit(X, *args, **kwargs)
@@ -176,26 +172,17 @@ class Plugin(Serializable, metaclass=ABCMeta):
         if constraints is not None:
             gen_constraints = gen_constraints.extend(constraints)
 
-        syn_schema = Schema.from_constraints(
-            gen_constraints, sequential_view=self.sequential_schema_view
-        )
+        syn_schema = Schema.from_constraints(gen_constraints)
 
         X_syn = self._generate(count=count, syn_schema=syn_schema, **kwargs)
 
-        if (
-            not X_syn.satisfies(
-                gen_constraints, sequential_view=self.sequential_schema_view
-            )
-            and self.strict
-        ):
+        if not X_syn.satisfies(gen_constraints) and self.strict:
             raise RuntimeError(
                 f"Plugin {self.name()} failed to meet the synthetic constraints."
             )
 
         if self.strict:
-            return X_syn.match(
-                gen_constraints, sequential_view=self.sequential_schema_view
-            )
+            return X_syn.match(gen_constraints)
 
         return X_syn
 
@@ -257,7 +244,6 @@ class Plugin(Serializable, metaclass=ABCMeta):
 
         data_synth = pd.DataFrame([], columns=self.schema().features())
         data_info = self.data_info
-        seq_data_info = {}
         offset = 0
         seq_offset = 0
         for it in range(self.sampling_patience):
@@ -287,8 +273,8 @@ class Plugin(Serializable, metaclass=ABCMeta):
                 )
 
             # validate schema
-            iter_samples_df, seq_data_info = loader.sequential_view()
-            id_col = seq_data_info["seq_id_feature"]
+            iter_samples_df = loader.dataframe()
+            id_col = loader.info()["seq_id_feature"]
 
             iter_samples_df = self.schema().adapt_dtypes(iter_samples_df)
 
@@ -306,10 +292,7 @@ class Plugin(Serializable, metaclass=ABCMeta):
                 break
 
         data_synth = self.schema().adapt_dtypes(data_synth)
-        for key in seq_data_info:
-            data_info[key] = seq_data_info[key]
-
-        return create_from_sequential_view(data_synth, data_info)
+        return create_from_info(data_synth, data_info)
 
     @validate_arguments(config=dict(arbitrary_types_allowed=True))
     def schema_includes(self, other: Union[DataLoader, pd.DataFrame]) -> bool:
@@ -323,7 +306,7 @@ class Plugin(Serializable, metaclass=ABCMeta):
             bool, if the schema includes the dataset or not.
 
         """
-        other_schema = Schema(data=other, sequential_view=self.sequential_schema_view)
+        other_schema = Schema(data=other)
         return self.schema().includes(other_schema)
 
     def schema(self) -> Schema:
