@@ -9,11 +9,7 @@ import pandas as pd
 from deepecho import PARModel
 
 # synthcity absolute
-from synthcity.plugins.core.dataloader import (
-    DataLoader,
-    TimeSeriesDataLoader,
-    TimeSeriesSurvivalDataLoader,
-)
+from synthcity.plugins.core.dataloader import DataLoader, create_from_info
 from synthcity.plugins.core.distribution import Distribution, IntegerDistribution
 from synthcity.plugins.core.models.tabular_encoder import TabularEncoder
 from synthcity.plugins.core.plugin import Plugin
@@ -86,11 +82,11 @@ class ProbabilisticAutoregressivePlugin(Plugin):
             outcome = pd.concat([pd.Series(T), pd.Series(E)], axis=1)
             outcome.columns = ["time_to_event", "event"]
 
-        seq_df = X.dataframe()
+        seq_df = X.dataframe().copy()
         self.info = X.info()
 
         id_col = self.info["seq_id_feature"]
-        time_col = self.info["seq_time_feature"]
+        time_col = self.info["seq_time_id_feature"]
 
         seq_df["par_bkp_time"] = seq_df[time_col]
 
@@ -112,19 +108,14 @@ class ProbabilisticAutoregressivePlugin(Plugin):
             # Static and Temporal generation
             data = self.model.sample(num_entities=count)
             data = self.encoder.inverse_transform(data)
-            time_col = self.info["seq_time_feature"]
+            time_col = self.info["seq_time_id_feature"]
             bkp_time_col = "par_bkp_time"
 
             # Decoding
             data[time_col] = data[bkp_time_col]
             data = data.drop(columns=[bkp_time_col])
 
-            if self.data_info["data_type"] == "time_series":
-                loader = TimeSeriesDataLoader.from_sequential_view(data, self.info)
-            elif self.data_info["data_type"] == "time_series_survival":
-                loader = TimeSeriesSurvivalDataLoader.from_sequential_view(
-                    data, self.info
-                )
+            loader = create_from_info(data, self.info)
 
             return loader.unpack()
 
