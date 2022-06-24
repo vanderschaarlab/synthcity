@@ -161,7 +161,7 @@ def test_ts_gan_generation_schema(source: Any) -> None:
         static_data=pd.DataFrame(static_gen, columns=static.columns),
     )
 
-    seq_df, _ = gen_data.sequential_view()
+    seq_df = gen_data.dataframe()
 
     assert reference_schema.as_constraints().filter(seq_df).sum() > 0
 
