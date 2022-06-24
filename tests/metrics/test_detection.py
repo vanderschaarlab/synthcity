@@ -86,7 +86,7 @@ def test_detect_synth_generic(test_plugin: Plugin, evaluator_t: Type) -> None:
     assert evaluator.direction() == "minimize"
 
 
-@pytest.mark.parametrize("test_plugin", [Plugins().get("marginal_distributions")])
+@pytest.mark.parametrize("test_plugin", [Plugins().get("dummy_sampler")])
 @pytest.mark.parametrize(
     "evaluator_t",
     [
@@ -125,6 +125,7 @@ def test_detect_synth_timeseries(test_plugin: Plugin, evaluator_t: Type) -> None
         pd.DataFrame(np.random.randn(sz, len(data.columns)), columns=data.columns),
         data.info(),
     )
+    print("rnd generated ", data_rnd.dataframe())
 
     score = evaluator.evaluate(
         data,
