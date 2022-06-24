@@ -22,7 +22,7 @@ class Schema(BaseModel):
     """Utility class for defining the schema of a Dataset."""
 
     sampling_strategy: str = "marginal"  # uniform or marginal
-    protected_cols = ["seq_id", "seq_time_id"]
+    protected_cols = ["seq_id"]
     data: Any = None
     domain: Dict = {}
 

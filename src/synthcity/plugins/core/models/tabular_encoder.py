@@ -639,13 +639,11 @@ class TimeSeriesBinEncoder(TransformerMixin, BaseEstimator):
     ) -> pd.DataFrame:
         temporal_init = np.asarray(temporal_data)[:, 0, :].squeeze()
         temporal_init_df = pd.DataFrame(temporal_init, columns=temporal_data[0].columns)
-        temporal_horizons_df = pd.DataFrame(temporal_horizons)
 
         out = pd.concat(
             [
                 static_data.reset_index(drop=True),
                 temporal_init_df.reset_index(drop=True),
-                temporal_horizons_df.reset_index(drop=True),
             ],
             axis=1,
         )
