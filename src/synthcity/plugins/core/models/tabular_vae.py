@@ -57,8 +57,8 @@ class TabularVAE(nn.Module):
             Batch size
         n_iter_print: int
             Number of iterations after which to print updates and check the validation loss.
-        seed: int
-            Seed used
+        random_state: int
+            random_state used
         n_iter_min: int
             Minimum number of iterations to go through before starting early stopping
         clipping_value: int, default 1
@@ -77,7 +77,7 @@ class TabularVAE(nn.Module):
         weight_decay: float = 1e-3,
         batch_size: int = 64,
         n_iter_print: int = 10,
-        seed: int = 0,
+        random_state: int = 0,
         clipping_value: int = 1,
         loss_strategy: str = "standard",
         encoder_max_clusters: int = 20,
@@ -94,12 +94,15 @@ class TabularVAE(nn.Module):
         encoder_nonlin: str = "leaky_relu",
         encoder_batch_norm: bool = False,
         encoder_dropout: float = 0.1,
+        encoder_whitelist: list = [],
         device: Any = DEVICE,
         dataloader_sampler: Optional[sampler.Sampler] = None,
     ) -> None:
         super(TabularVAE, self).__init__()
         self.columns = X.columns
-        self.encoder = TabularEncoder(max_clusters=encoder_max_clusters).fit(X)
+        self.encoder = TabularEncoder(
+            max_clusters=encoder_max_clusters, whitelist=encoder_whitelist
+        ).fit(X)
 
         self.model = VAE(
             self.encoder.n_features(),
@@ -109,7 +112,7 @@ class TabularVAE(nn.Module):
             lr=lr,
             weight_decay=weight_decay,
             clipping_value=clipping_value,
-            seed=seed,
+            random_state=random_state,
             n_iter_print=n_iter_print,
             loss_strategy=loss_strategy,
             decoder_n_layers_hidden=decoder_n_layers_hidden,

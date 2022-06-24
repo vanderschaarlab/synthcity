@@ -22,6 +22,7 @@ from synthcity.plugins.core.dataloader import (
     DataLoader,
     GenericDataLoader,
     TimeSeriesDataLoader,
+    TimeSeriesSurvivalDataLoader,
     create_from_info,
 )
 from synthcity.plugins.core.distribution import Distribution
@@ -237,33 +238,61 @@ class Plugin(Serializable, metaclass=ABCMeta):
     def _safe_generate_time_series(
         self, gen_cbk: Callable, count: int, syn_schema: Schema, **kwargs: Any
     ) -> DataLoader:
-        assert self.data_info["data_type"] == "time_series"
+        assert self.data_info["data_type"] in ["time_series", "time_series_survival"]
 
         constraints = syn_schema.as_constraints()
 
         data_synth = pd.DataFrame([], columns=self.schema().features())
+        data_info = self.data_info
+        offset = 0
+        seq_offset = 0
         for it in range(self.sampling_patience):
             # sample
-            static, temporal, outcome = gen_cbk(count, **kwargs)
-            loader = TimeSeriesDataLoader(
-                temporal_data=temporal, static_data=static, outcome=outcome
-            )
-            iter_samples_df = loader.dataframe()
+            if self.data_info["data_type"] == "time_series":
+                static, temporal, temporal_horizons, outcome = gen_cbk(
+                    count - offset, **kwargs
+                )
+                loader = TimeSeriesDataLoader(
+                    temporal_data=temporal,
+                    temporal_horizons=temporal_horizons,
+                    static_data=static,
+                    outcome=outcome,
+                    seq_offset=seq_offset,
+                )
+            elif self.data_info["data_type"] == "time_series_survival":
+                static, temporal, temporal_horizons, T, E = gen_cbk(
+                    count - offset, **kwargs
+                )
+                loader = TimeSeriesSurvivalDataLoader(
+                    temporal_data=temporal,
+                    temporal_horizons=temporal_horizons,
+                    static_data=static,
+                    T=T,
+                    E=E,
+                    seq_offset=seq_offset,
+                )
 
             # validate schema
+            iter_samples_df = loader.dataframe()
+            id_col = loader.info()["seq_id_feature"]
+
             iter_samples_df = self.schema().adapt_dtypes(iter_samples_df)
 
             if self.strict:
                 iter_samples_df = constraints.match(iter_samples_df)
 
-            data_synth = pd.concat([data_synth, iter_samples_df], ignore_index=True)
+            if len(iter_samples_df) == 0:
+                continue
 
-            if len(data_synth) >= count:
+            data_synth = pd.concat([data_synth, iter_samples_df], ignore_index=True)
+            offset = len(data_synth[id_col].unique())
+            seq_offset = max(data_synth[id_col].unique()) + 1
+
+            if offset >= count:
                 break
 
-        data_synth = self.schema().adapt_dtypes(data_synth).head(count)
-
-        return create_from_info(data_synth, self.data_info)
+        data_synth = self.schema().adapt_dtypes(data_synth)
+        return create_from_info(data_synth, data_info)
 
     @validate_arguments(config=dict(arbitrary_types_allowed=True))
     def schema_includes(self, other: Union[DataLoader, pd.DataFrame]) -> bool:

@@ -29,7 +29,7 @@ def evaluate_survival_model(
     time_horizons: List,
     n_folds: int = 3,
     metrics: List[str] = ["c_index", "brier_score", "aucroc"],
-    seed: int = 0,
+    random_state: int = 0,
     pretrained: bool = False,
 ) -> Dict:
     """Helper for evaluating survival analysis tasks.
@@ -51,7 +51,7 @@ def evaluate_survival_model(
             Number of folds for cross validation
         metrics: list
             Available metrics: "c_index", "brier_score", "aucroc"
-        seed: int
+        random_state: int
             Random seed
         pretrained: bool
             If the estimator was trained or not
@@ -154,7 +154,7 @@ def evaluate_survival_model(
     if n_folds == 1:
         cv_idx = 0
         X_train, X_test, T_train, T_test, Y_train, Y_test = train_test_split(
-            X, T, Y, random_state=seed
+            X, T, Y, random_state=random_state
         )
         local_time_horizons = [t for t in time_horizons if t > np.min(T_test)]
 
@@ -182,7 +182,7 @@ def evaluate_survival_model(
                     X, T, Y, time_horizons[k]
                 )
                 X_train, X_test, T_train, T_test, Y_train, Y_test = train_test_split(
-                    X_horizon, T_horizon, Y_horizon, random_state=seed
+                    X_horizon, T_horizon, Y_horizon, random_state=random_state
                 )
 
                 metric = "aucroc"
@@ -199,7 +199,7 @@ def evaluate_survival_model(
                 )
 
     else:
-        skf = StratifiedKFold(n_splits=n_folds, shuffle=True, random_state=seed)
+        skf = StratifiedKFold(n_splits=n_folds, shuffle=True, random_state=random_state)
 
         cv_idx = 0
         for train_index, test_index in skf.split(X, Y):

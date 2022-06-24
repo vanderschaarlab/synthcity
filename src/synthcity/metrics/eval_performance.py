@@ -24,8 +24,20 @@ from synthcity.plugins.core.models.survival_analysis import (
     XGBSurvivalAnalysis,
     evaluate_survival_model,
 )
+from synthcity.plugins.core.models.time_series_survival.benchmarks import (
+    evaluate_ts_survival_model,
+    search_hyperparams,
+)
+from synthcity.plugins.core.models.time_series_survival.ts_surv_coxph import (
+    CoxTimeSeriesSurvival,
+)
+from synthcity.plugins.core.models.time_series_survival.ts_surv_dynamic_deephit import (
+    DynamicDeephitTimeSeriesSurvival,
+)
+from synthcity.plugins.core.models.time_series_survival.ts_surv_xgb import (
+    XGBTimeSeriesSurvival,
+)
 from synthcity.plugins.core.models.ts_rnn import TimeSeriesRNN
-from synthcity.utils.serialization import dataframe_hash
 
 
 class PerformanceEvaluator(MetricEvaluator):
@@ -143,7 +155,7 @@ class PerformanceEvaluator(MetricEvaluator):
         if len(id_y_gt.unique()) < 5:
             eval_cbk = self._evaluate_performance_classification
             skf = StratifiedKFold(
-                n_splits=self._n_folds, shuffle=True, random_state=self._random_seed
+                n_splits=self._n_folds, shuffle=True, random_state=self._random_state
             )
             model = clf_model
             model_args = clf_args
@@ -152,7 +164,7 @@ class PerformanceEvaluator(MetricEvaluator):
             model = regression_model
             model_args = regression_args
             skf = KFold(
-                n_splits=self._n_folds, shuffle=True, random_state=self._random_seed
+                n_splits=self._n_folds, shuffle=True, random_state=self._random_state
             )
 
         real_scores = []
@@ -210,7 +222,7 @@ class PerformanceEvaluator(MetricEvaluator):
 
         predictor_gt = model(**args)
         log.info(
-            f" Performance eval for df hash = {dataframe_hash(id_X_gt)} ood hash = {dataframe_hash(ood_X_gt)}"
+            f" Performance eval for df hash = {X_gt.train().hash()} ood hash = {X_gt.test().hash()}"
         )
         score_gt = evaluate_survival_model(
             predictor_gt,
@@ -295,14 +307,24 @@ class PerformanceEvaluator(MetricEvaluator):
         assert X_gt.type() == "time_series"
         assert X_syn.type() == "time_series"
 
-        id_static_gt, id_temporal_gt, id_outcome_gt = X_gt.train().unpack(as_numpy=True)
-        ood_static_gt, ood_temporal_gt, ood_outcome_gt = X_gt.test().unpack(
+        (
+            id_static_gt,
+            id_temporal_gt,
+            id_temporal_horizons_gt,
+            id_outcome_gt,
+        ) = X_gt.train().unpack(as_numpy=True)
+        (
+            ood_static_gt,
+            ood_temporal_gt,
+            ood_temporal_horizons_gt,
+            ood_outcome_gt,
+        ) = X_gt.test().unpack(as_numpy=True)
+        static_syn, temporal_syn, temporal_horizons_syn, outcome_syn = X_syn.unpack(
             as_numpy=True
         )
-        static_syn, temporal_syn, outcome_syn = X_syn.unpack(as_numpy=True)
 
         skf = KFold(
-            n_splits=self._n_folds, shuffle=True, random_state=self._random_seed
+            n_splits=self._n_folds, shuffle=True, random_state=self._random_state
         )
 
         real_scores = []
@@ -312,16 +334,20 @@ class PerformanceEvaluator(MetricEvaluator):
         def ts_eval_cbk(
             static_train: np.ndarray,
             temporal_train: np.ndarray,
+            temporal_horizons_train: np.ndarray,
             outcome_train: np.ndarray,
             static_test: np.ndarray,
             temporal_test: np.ndarray,
+            temporal_horizons_test: np.ndarray,
             outcome_test: np.ndarray,
         ) -> float:
             try:
                 estimator = model(**model_args).fit(
-                    static_train, temporal_train, outcome_train
+                    static_train, temporal_train, temporal_horizons_train, outcome_train
                 )
-                preds = estimator.predict(static_test, temporal_test)
+                preds = estimator.predict(
+                    static_test, temporal_test, temporal_horizons_test
+                )
 
                 score = mean_squared_error(outcome_test, preds)
             except BaseException as e:
@@ -334,34 +360,42 @@ class PerformanceEvaluator(MetricEvaluator):
         for train_idx, test_idx in skf.split(id_static_gt):
             static_train_data = id_static_gt[train_idx]
             temporal_train_data = id_temporal_gt[train_idx]
+            temporal_horizons_train_data = id_temporal_horizons_gt[train_idx]
             outcome_train_data = id_outcome_gt[train_idx]
 
             static_test_data = id_static_gt[test_idx]
             temporal_test_data = id_temporal_gt[test_idx]
+            temporal_horizons_test_data = id_temporal_horizons_gt[test_idx]
             outcome_test_data = id_outcome_gt[test_idx]
 
             real_score = ts_eval_cbk(
                 static_train_data,
                 temporal_train_data,
+                temporal_horizons_train_data,
                 outcome_train_data,
                 static_test_data,
                 temporal_test_data,
+                temporal_horizons_test_data,
                 outcome_test_data,
             )
             synth_score_id = ts_eval_cbk(
                 static_syn,
                 temporal_syn,
+                temporal_horizons_syn,
                 outcome_syn,
                 static_test_data,
                 temporal_test_data,
+                temporal_horizons_test_data,
                 outcome_test_data,
             )
             synth_score_ood = ts_eval_cbk(
                 static_syn,
                 temporal_syn,
+                temporal_horizons_syn,
                 outcome_syn,
                 ood_static_gt,
                 ood_temporal_gt,
+                ood_temporal_horizons_gt,
                 ood_outcome_gt,
             )
 
@@ -373,6 +407,136 @@ class PerformanceEvaluator(MetricEvaluator):
             "gt": float(self.reduction()(real_scores)),
             "syn_id": float(self.reduction()(syn_scores_id)),
             "syn_ood": float(self.reduction()(syn_scores_ood)),
+        }
+
+    @validate_arguments(config=dict(arbitrary_types_allowed=True))
+    def _evaluate_time_series_survival_performance(
+        self,
+        model: Any,
+        args: Dict,
+        X_gt: DataLoader,
+        X_syn: DataLoader,
+    ) -> Dict:
+        """Train a time series survival model on the synthetic data and evaluate the performance on real test data. Returns the average performance discrepancy between training on real data vs on synthetic data.
+
+        Returns:
+            gt and syn performance scores
+        """
+        assert X_gt.type() == "time_series_survival"
+        assert X_syn.type() == "time_series_survival"
+
+        info = X_gt.info()
+        time_horizons = info["time_horizons"]
+
+        (
+            id_X_static_gt,
+            id_X_temporal_gt,
+            id_X_temporal_horizons_gt,
+            id_T_gt,
+            id_E_gt,
+        ) = X_gt.train().unpack(as_numpy=True)
+        (
+            ood_X_static_gt,
+            ood_X_temporal_gt,
+            ood_X_temporal_horizons_gt,
+            ood_T_gt,
+            ood_E_gt,
+        ) = X_gt.test().unpack(as_numpy=True)
+        (
+            iter_X_static_syn,
+            iter_X_temporal_syn,
+            iter_X_temporal_horizons_syn,
+            iter_T_syn,
+            iter_E_syn,
+        ) = X_syn.unpack(as_numpy=True)
+
+        predictor_gt = model(**args)
+        log.info(
+            f" Performance eval for df hash = {X_gt.train().hash()} ood hash = {X_gt.test().hash()}"
+        )
+        score_gt = evaluate_ts_survival_model(
+            predictor_gt,
+            id_X_static_gt,
+            id_X_temporal_gt,
+            id_X_temporal_horizons_gt,
+            id_T_gt,
+            id_E_gt,
+            metrics=["c_index", "brier_score"],
+            n_folds=self._n_folds,
+            time_horizons=time_horizons,
+        )["clf"]
+
+        log.info(f"Baseline performance score: {score_gt}")
+
+        predictor_syn = model(**args)
+
+        fail_score = {
+            "c_index": (0, 0),
+            "brier_score": (1, 0),
+        }
+        try:
+            predictor_syn.fit(
+                iter_X_static_syn,
+                iter_X_temporal_syn,
+                iter_X_temporal_horizons_syn,
+                iter_T_syn,
+                iter_E_syn,
+            )
+            score_syn_id = evaluate_ts_survival_model(
+                [predictor_syn] * self._n_folds,
+                id_X_static_gt,
+                id_X_temporal_gt,
+                id_X_temporal_horizons_gt,
+                id_T_gt,
+                id_E_gt,
+                metrics=["c_index", "brier_score"],
+                n_folds=self._n_folds,
+                time_horizons=time_horizons,
+                pretrained=True,
+            )["clf"]
+        except BaseException as e:
+            log.error(
+                f"Failed to evaluate synthetic ID performance. {model.name()}: {e}"
+            )
+            score_syn_id = fail_score
+
+        log.info(f"Synthetic ID performance score: {score_syn_id}")
+
+        try:
+            predictor_syn.fit(
+                iter_X_static_syn,
+                iter_X_temporal_syn,
+                iter_X_temporal_horizons_syn,
+                iter_T_syn,
+                iter_E_syn,
+            )
+            score_syn_ood = evaluate_ts_survival_model(
+                [predictor_syn] * self._n_folds,
+                ood_X_static_gt,
+                ood_X_temporal_gt,
+                ood_X_temporal_horizons_gt,
+                ood_T_gt,
+                ood_E_gt,
+                metrics=["c_index", "brier_score"],
+                n_folds=self._n_folds,
+                time_horizons=time_horizons,
+                pretrained=True,
+            )["clf"]
+        except BaseException as e:
+            log.error(
+                f"Failed to evaluate synthetic OOD performance. {model.name()}: {e}"
+            )
+            score_syn_ood = fail_score
+
+        log.info(f"Synthetic OOD performance score: {score_syn_ood}")
+
+        return {
+            "gt.c_index": float(score_gt["c_index"][0]),
+            "gt.brier_score": float(score_gt["brier_score"][0]),
+            "syn_id.c_index": float(score_syn_id["c_index"][0]),
+            "syn_id.brier_score": float(score_syn_id["brier_score"][0]),
+            "syn_ood.c_index": float(score_syn_ood["c_index"][0]),
+            "syn_ood.brier_score": float(score_syn_ood["brier_score"][0]),
         }
 
 
@@ -402,7 +566,7 @@ class PerformanceEvaluatorXGB(PerformanceEvaluator):
                     "verbosity": 0,
                     "depth": 3,
                     "strategy": "debiased_bce",  # "weibull", "debiased_bce"
-                    "random_state": self._random_seed,
+                    "random_state": self._random_state,
                 },
                 X_gt,
                 X_syn,
@@ -412,7 +576,7 @@ class PerformanceEvaluatorXGB(PerformanceEvaluator):
                 "n_jobs": -1,
                 "verbosity": 0,
                 "depth": 3,
-                "random_state": self._random_seed,
+                "random_state": self._random_state,
             }
 
             xgb_reg_args = copy.deepcopy(xgb_clf_args)
@@ -422,6 +586,19 @@ class PerformanceEvaluatorXGB(PerformanceEvaluator):
                 xgb_clf_args,
                 XGBRegressor,
                 xgb_reg_args,
+                X_gt,
+                X_syn,
+            )
+        elif self._task_type == "time_series_survival":
+            return self._evaluate_time_series_survival_performance(
+                XGBTimeSeriesSurvival,
+                {
+                    "n_jobs": -1,
+                    "verbosity": 0,
+                    "depth": 3,
+                    "strategy": "debiased_bce",  # "weibull", "debiased_bce"
+                    "random_state": self._random_state,
+                },
                 X_gt,
                 X_syn,
             )
@@ -452,11 +629,30 @@ class PerformanceEvaluatorLinear(PerformanceEvaluator):
         elif self._task_type == "classification" or self._task_type == "regression":
             return self._evaluate_standard_performance(
                 LogisticRegression,
-                {"random_state": self._random_seed},
+                {"random_state": self._random_state},
                 LinearRegression,
                 {},
                 X_gt,
                 X_syn,
+            )
+        elif self._task_type == "time_series_survival":
+            static, temporal, temporal_horizons, T, E = X_gt.unpack()
+
+            info = X_gt.info()
+            time_horizons = info["time_horizons"]
+
+            args = search_hyperparams(
+                CoxTimeSeriesSurvival,
+                static,
+                temporal,
+                temporal_horizons,
+                T,
+                E,
+                time_horizons=time_horizons,
+            )
+            log.info(f"Performance evaluation using CoxTimeSeriesSurvival and {args}")
+            return self._evaluate_time_series_survival_performance(
+                CoxTimeSeriesSurvival, args, X_gt, X_syn
             )
         else:
             raise RuntimeError(f"Unuspported task type {self._task_type}")
@@ -489,7 +685,7 @@ class PerformanceEvaluatorMLP(PerformanceEvaluator):
             mlp_args = {
                 "n_units_in": X_gt.shape[1] - 1,
                 "n_units_out": 1,
-                "seed": self._random_seed,
+                "random_state": self._random_state,
             }
             clf_args = copy.deepcopy(mlp_args)
             clf_args["task_type"] = "classification"
@@ -514,6 +710,27 @@ class PerformanceEvaluatorMLP(PerformanceEvaluator):
             }
             return self._evaluate_time_series_performance(
                 TimeSeriesRNN, args, X_gt, X_syn
+            )
+        elif self._task_type == "time_series_survival":
+            static, temporal, temporal_horizons, T, E = X_gt.unpack()
+
+            info = X_gt.info()
+            time_horizons = info["time_horizons"]
+
+            args = search_hyperparams(
+                DynamicDeephitTimeSeriesSurvival,
+                static,
+                temporal,
+                temporal_horizons,
+                T,
+                E,
+                time_horizons=time_horizons,
+            )
+            log.info(
+                f"Performance evaluation using DynamicDeephitTimeSeriesSurvival and {args}"
+            )
+            return self._evaluate_time_series_survival_performance(
+                DynamicDeephitTimeSeriesSurvival, args, X_gt, X_syn
             )
 
         else:

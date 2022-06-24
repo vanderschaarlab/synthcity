@@ -1,12 +1,15 @@
 # stdlib
+import io
 from pathlib import Path
 from typing import List, Tuple
 
 # third party
 import numpy as np
 import pandas as pd
+import requests
 from sklearn.preprocessing import MinMaxScaler
 
+URL = "https://raw.githubusercontent.com/PacktPublishing/Learning-Pandas-Second-Edition/master/data/goog.csv"
 df_path = Path(__file__).parent / "data/goog.csv"
 
 
@@ -17,43 +20,59 @@ class GoogleStocksDataloader:
 
     def load(
         self,
-    ) -> Tuple[pd.DataFrame, List[pd.DataFrame], pd.DataFrame]:
+    ) -> Tuple[pd.DataFrame, List[pd.DataFrame], List, pd.DataFrame]:
         # Load Google Data
-        df = pd.read_csv(df_path)
+        if not df_path.exists():
+            s = requests.get(URL).content
+            df = pd.read_csv(io.StringIO(s.decode("utf-8")))
+
+            df.to_csv(df_path, index=None)
+        else:
+            df = pd.read_csv(df_path)
 
         # Flip the data to make chronological data
         df = pd.DataFrame(df.values[::-1], columns=df.columns)
-        df = df.drop(columns=["date"])
+        T = pd.to_datetime(df["Date"], infer_datetime_format=True).astype(int) / 10**9
+        T = pd.Series(MinMaxScaler().fit_transform(T.values.reshape(-1, 1)).squeeze())
+
+        df = df.drop(columns=["Date"])
 
         df = pd.DataFrame(MinMaxScaler().fit_transform(df), columns=df.columns)
         # Build dataset
         dataX = []
+        dataT = []
         outcome = []
 
         # Cut data by sequence length
         for i in range(0, len(df) - self.seq_len - 1):
             df_seq = df.loc[i : i + self.seq_len - 1]
-            out = df["open"].loc[i + self.seq_len]
+            horizons = T.loc[i : i + self.seq_len - 1]
+            out = df["Open"].loc[i + self.seq_len]
 
             dataX.append(df_seq)
+            dataT.append(horizons.values.tolist())
             outcome.append(out)
 
         # Mix Data (to make it similar to i.i.d)
         idx = np.random.permutation(len(dataX))
 
         temporal_data = []
+        temporal_horizons = []
         for i in range(len(dataX)):
             temporal_data.append(dataX[idx[i]])
+            temporal_horizons.append(dataT[idx[i]])
 
         if self.as_numpy:
             return (
                 np.zeros((len(temporal_data), 0)),
                 np.asarray(temporal_data, dtype=np.float32),
+                np.asarray(temporal_horizons),
                 np.asarray(outcome, dtype=np.float32),
             )
 
         return (
             pd.DataFrame(np.zeros((len(temporal_data), 0))),
             temporal_data,
-            pd.DataFrame(outcome, columns=["open_next"]),
+            temporal_horizons,
+            pd.DataFrame(outcome, columns=["Open_next"]),
         )

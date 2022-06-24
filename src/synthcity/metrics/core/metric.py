@@ -20,14 +20,14 @@ class MetricEvaluator(metaclass=ABCMeta):
         n_histogram_bins: int = 10,
         n_folds: int = 3,
         task_type: str = "classification",
-        random_seed: int = 0,
+        random_state: int = 0,
     ) -> None:
         self._reduction = reduction
         self._n_histogram_bins = n_histogram_bins
         self._n_folds = n_folds
 
         self._task_type = task_type
-        self._random_seed = random_seed
+        self._random_state = random_state
 
     @validate_arguments(config=dict(arbitrary_types_allowed=True))
     @abstractmethod

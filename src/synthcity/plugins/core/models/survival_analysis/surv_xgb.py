@@ -12,6 +12,7 @@ from xgbse.converters import convert_to_structured
 from synthcity.plugins.core.distribution import (
     CategoricalDistribution,
     Distribution,
+    FloatDistribution,
     IntegerDistribution,
 )
 from synthcity.utils.constants import DEVICE
@@ -33,17 +34,17 @@ class XGBSurvivalAnalysis(SurvivalAnalysisPlugin):
         learning_rate: float = 5e-2,
         min_child_weight: int = 50,
         tree_method: str = "hist",
-        booster: int = 2,
+        booster: int = 0,
         random_state: int = 0,
         objective: str = "aft",  # "aft", "cox"
         strategy: str = "debiased_bce",  # "weibull", "debiased_bce", "km"
+        bce_n_iter: int = 1000,
         time_points: int = 100,
-        seed: int = 0,
         device: Any = DEVICE,
         **kwargs: Any,
     ) -> None:
         super().__init__()
-        enable_reproducible_results(seed)
+        enable_reproducible_results(random_state)
 
         surv_params = {}
         if objective == "aft":
@@ -77,7 +78,7 @@ class XGBSurvivalAnalysis(SurvivalAnalysisPlugin):
         }
         lr_params = {
             "C": 1e-3,
-            "max_iter": 10000,
+            "max_iter": bce_n_iter,
         }
 
         if strategy == "debiased_bce":
@@ -145,9 +146,17 @@ class XGBSurvivalAnalysis(SurvivalAnalysisPlugin):
             IntegerDistribution(name="min_child_weight", low=0, high=50),
             CategoricalDistribution(name="objective", choices=["aft", "cox"]),
             CategoricalDistribution(
-                name="strategy", choices=["weibull", "debiased_bce"]
-            ),
-            CategoricalDistribution(
                 name="strategy", choices=["weibull", "debiased_bce", "km"]
+            ),
+            FloatDistribution(name="reg_lambda", low=1e-3, high=10.0),
+            FloatDistribution(name="reg_alpha", low=1e-3, high=10.0),
+            FloatDistribution(name="colsample_bytree", low=0.1, high=0.9),
+            FloatDistribution(name="colsample_bynode", low=0.1, high=0.9),
+            FloatDistribution(name="colsample_bylevel", low=0.1, high=0.9),
+            FloatDistribution(name="subsample", low=0.1, high=0.9),
+            FloatDistribution(name="learning_rate", low=1e-4, high=1e-2),
+            IntegerDistribution(name="max_bin", low=256, high=512),
+            IntegerDistribution(
+                name="booster", low=0, high=len(XGBSurvivalAnalysis.booster) - 1
             ),
         ]

@@ -42,9 +42,9 @@ def evaluate_model(
     T: pd.DataFrame,
     E: pd.DataFrame,
     n_folds: int = 3,
-    seed: int = 0,
+    random_state: int = 0,
 ) -> tuple:
-    skf = StratifiedKFold(n_splits=n_folds, shuffle=True, random_state=seed)
+    skf = StratifiedKFold(n_splits=n_folds, shuffle=True, random_state=random_state)
 
     local_results: dict = {
         "te_err_l1_ood": [],
@@ -135,7 +135,7 @@ def objective_meta(
         try:
             full_score, _ = evaluate_model(model_name, args, X, T, E, n_folds=n_folds)
         except BaseException as e:
-            log.error("model search failed", template, e)
+            log.error(f"model search failed {e}")
             return 0
 
         score = full_score[metric][0]
@@ -150,7 +150,7 @@ def select_uncensoring_model(
     X: pd.DataFrame,
     T: pd.DataFrame,
     E: pd.DataFrame,
-    seeds: List[str] = [
+    random_states: List[str] = [
         "weibull_aft",
         "cox_ph",
         "random_survival_forest",
@@ -162,7 +162,7 @@ def select_uncensoring_model(
     n_folds: int = 2,
     n_trials: int = 10,
     timeout: int = 120,
-    seed: int = 0,
+    random_state: int = 0,
 ) -> Any:
     metric = "c_index_ood"
 
@@ -175,7 +175,7 @@ def select_uncensoring_model(
         "args": {},
         "score": 0,
     }
-    for model in seeds:
+    for model in random_states:
         start = time()
         study, pruner = create_study(
             study_name=f"uncensoring_{df_hash}_{model}_{metric}",

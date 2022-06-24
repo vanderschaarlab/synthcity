@@ -66,8 +66,8 @@ class TimeGANPlugin(Plugin):
             Batch size
         n_iter_print: int
             Number of iterations after which to print updates and check the validation loss.
-        seed: int
-            Seed used
+        random_state: int
+            random_state used
         clipping_value: int, default 0
             Gradients clipping value
         encoder_max_clusters: int
@@ -125,7 +125,7 @@ class TimeGANPlugin(Plugin):
         discriminator_weight_decay: float = 1e-3,
         batch_size: int = 64,
         n_iter_print: int = 10,
-        seed: int = 0,
+        random_state: int = 0,
         clipping_value: int = 0,
         encoder_max_clusters: int = 20,
         encoder: Any = None,
@@ -137,6 +137,7 @@ class TimeGANPlugin(Plugin):
         **kwargs: Any
     ) -> None:
         super().__init__()
+
         self.n_iter = n_iter
         self.n_units_conditional = n_units_conditional
         self.generator_n_layers_hidden = generator_n_layers_hidden
@@ -161,7 +162,7 @@ class TimeGANPlugin(Plugin):
         self.discriminator_weight_decay = discriminator_weight_decay
         self.batch_size = batch_size
         self.n_iter_print = n_iter_print
-        self.seed = seed
+        self.random_state = random_state
         self.clipping_value = clipping_value
         self.mode = mode
         self.encoder_max_clusters = encoder_max_clusters
@@ -214,7 +215,7 @@ class TimeGANPlugin(Plugin):
         ]
 
     def _fit(self, X: DataLoader, *args: Any, **kwargs: Any) -> "TimeGANPlugin":
-        assert X.type() == "time_series"
+        assert X.type() in ["time_series", "time_series_survival"]
 
         cond: Optional[Union[pd.DataFrame, pd.Series]] = None
         if self.n_units_conditional > 0:
@@ -223,11 +224,17 @@ class TimeGANPlugin(Plugin):
             cond = kwargs["cond"]
 
         # Static and temporal generation
-        static, temporal, outcome = X.unpack()
+        if X.type() == "time_series":
+            static, temporal, temporal_horizons, outcome = X.unpack(pad=True)
+        elif X.type() == "time_series_survival":
+            static, temporal, temporal_horizons, T, E = X.unpack(pad=True)
+            outcome = pd.concat([pd.Series(T), pd.Series(E)], axis=1)
+            outcome.columns = ["time_to_event", "event"]
 
         self.cov_model = TimeSeriesTabularGAN(
             static_data=static,
             temporal_data=temporal,
+            temporal_horizons=temporal_horizons,
             generator_n_iter=self.n_iter,
             n_units_conditional=self.n_units_conditional,
             generator_n_layers_hidden=self.generator_n_layers_hidden,
@@ -252,7 +259,7 @@ class TimeGANPlugin(Plugin):
             discriminator_weight_decay=self.discriminator_weight_decay,
             batch_size=self.batch_size,
             n_iter_print=self.n_iter_print,
-            seed=self.seed,
+            random_state=self.random_state,
             clipping_value=self.clipping_value,
             mode=self.mode,
             encoder_max_clusters=self.encoder_max_clusters,
@@ -262,7 +269,7 @@ class TimeGANPlugin(Plugin):
             moments_penalty=self.moments_penalty,
             embedding_penalty=self.embedding_penalty,
         )
-        self.cov_model.fit(static, temporal, cond=cond)
+        self.cov_model.fit(static, temporal, temporal_horizons, cond=cond)
 
         # Outcome generation
         self.outcome_encoder.fit(outcome)
@@ -294,7 +301,10 @@ class TimeGANPlugin(Plugin):
             ),
         )
         self.outcome_model.fit(
-            np.asarray(static), np.asarray(temporal), np.asarray(outcome_enc)
+            np.asarray(static),
+            np.asarray(temporal),
+            np.asarray(temporal_horizons),
+            np.asarray(outcome_enc),
         )
 
         return self
@@ -305,10 +315,19 @@ class TimeGANPlugin(Plugin):
             cond = kwargs["cond"]
 
         def _sample(count: int) -> Tuple:
-            static, temporal = self.cov_model.generate(count, cond=cond)
+            local_cond: Optional[Union[pd.DataFrame, pd.Series]] = None
+            if cond is not None:
+                local_cond = cond.sample(count)
+            static, temporal, temporal_horizons = self.cov_model.generate(
+                count, cond=local_cond
+            )
 
             outcome_enc = pd.DataFrame(
-                self.outcome_model.predict(np.asarray(static), np.asarray(temporal)),
+                self.outcome_model.predict(
+                    np.asarray(static),
+                    np.asarray(temporal),
+                    np.asarray(temporal_horizons),
+                ),
                 columns=self.outcome_encoded_columns,
             )
             outcome_raw = self.outcome_encoder.inverse_transform(outcome_enc)
@@ -316,7 +335,18 @@ class TimeGANPlugin(Plugin):
                 outcome_raw, columns=self.data_info["outcome_features"]
             )
 
-            return static, temporal, outcome
+            if self.data_info["data_type"] == "time_series":
+                return static, temporal, temporal_horizons, outcome
+            elif self.data_info["data_type"] == "time_series_survival":
+                return (
+                    static,
+                    temporal,
+                    temporal_horizons,
+                    outcome[self.data_info["time_to_event_column"]],
+                    outcome[self.data_info["event_column"]],
+                )
+            else:
+                raise RuntimeError("unknow data type")
 
         return self._safe_generate_time_series(_sample, count, syn_schema)
 

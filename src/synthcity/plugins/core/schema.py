@@ -22,6 +22,7 @@ class Schema(BaseModel):
     """Utility class for defining the schema of a Dataset."""
 
     sampling_strategy: str = "marginal"  # uniform or marginal
+    protected_cols = ["seq_id"]
     data: Any = None
     domain: Dict = {}
 
@@ -32,6 +33,7 @@ class Schema(BaseModel):
 
         feature_domain = {}
         raw = values["data"]
+
         if isinstance(raw, DataLoader):
             X = raw.dataframe()
         elif isinstance(raw, pd.DataFrame):
@@ -116,6 +118,8 @@ class Schema(BaseModel):
     def includes(self, other: "Schema") -> bool:
         """Test if another schema is included in the local one."""
         for feature in other:
+            if feature in self.protected_cols:
+                continue
             if feature not in self.domain:
                 return False
 
@@ -151,6 +155,8 @@ class Schema(BaseModel):
         """Convert the schema to a list of Constraints."""
         constraints = Constraints(rules=[])
         for feature in self:
+            if feature in self.protected_cols:
+                continue
             constraints.extend(self[feature].as_constraint())
 
         return constraints

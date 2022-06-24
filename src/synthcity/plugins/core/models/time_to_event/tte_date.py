@@ -67,7 +67,7 @@ class TimeEventGAN(nn.Module):
         patience: int = 10,
         batch_size: int = 100,
         n_iter_print: int = 50,
-        seed: int = 0,
+        random_state: int = 0,
         n_iter_min: int = 100,
         clipping_value: int = 0,
         device: Any = DEVICE,
@@ -93,7 +93,7 @@ class TimeEventGAN(nn.Module):
             batch_norm=generator_batch_norm,
             dropout=generator_dropout,
             loss=generator_loss,
-            seed=seed,
+            random_state=random_state,
             lr=generator_lr,
             residual=generator_residual,
             opt_betas=generator_opt_betas,
@@ -111,7 +111,7 @@ class TimeEventGAN(nn.Module):
             batch_norm=discriminator_batch_norm,
             dropout=discriminator_dropout,
             loss=discriminator_loss,
-            seed=seed,
+            random_state=random_state,
             lr=discriminator_lr,
             opt_betas=discriminator_opt_betas,
         ).to(self.device)
@@ -125,8 +125,8 @@ class TimeEventGAN(nn.Module):
         self.clipping_value = clipping_value
         self.patience = patience
 
-        self.seed = seed
-        enable_reproducible_results(seed)
+        self.random_state = random_state
+        enable_reproducible_results(random_state)
 
     def fit(
         self,
@@ -167,7 +167,7 @@ class TimeEventGAN(nn.Module):
             T.cpu(),
             E.cpu(),
             stratify=E.cpu(),
-            random_state=self.seed,
+            random_state=self.random_state,
         )
         train_dataset = TensorDataset(
             self._check_tensor(X_train),

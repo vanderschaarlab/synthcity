@@ -96,12 +96,14 @@ class Metrics:
         n_histogram_bins: int = 10,
         metrics: Optional[Dict] = None,
         task_type: str = "classification",
+        random_state: int = 0,
     ) -> pd.DataFrame:
         supported_tasks = [
             "classification",
             "regression",
             "survival_analysis",
             "time_series",
+            "time_series_survival",
         ]
         if task_type not in supported_tasks:
             raise ValueError(
@@ -119,6 +121,12 @@ class Metrics:
         if task_type == "survival_analysis":
             if X_gt.type() != "survival_analysis":
                 raise ValueError("Invalid dataloader for survival analysis")
+        elif task_type == "time_series":
+            if X_gt.type() != "time_series":
+                raise ValueError("Invalid dataloader for time series")
+        elif task_type == "time_series_survival":
+            if X_gt.type() != "time_series_survival":
+                raise ValueError("Invalid dataloader for time series survival analysis")
 
         if metrics is None:
             metrics = Metrics.list()
@@ -137,6 +145,7 @@ class Metrics:
                     reduction=reduction,
                     n_histogram_bins=n_histogram_bins,
                     task_type=task_type,
+                    random_state=random_state,
                 ),
                 X_gt.sample(eval_cnt),
                 X_syn.sample(eval_cnt),

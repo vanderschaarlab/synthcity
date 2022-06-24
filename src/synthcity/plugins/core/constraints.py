@@ -60,17 +60,17 @@ class Constraints(BaseModel):
             The pandas.Index which matches the constraint.
         """
         if op == "lt" or op == "<":
-            return X[feature] < operand
+            return (X[feature] < operand) | X[feature].isna()
         elif op == "le" or op == "<=":
-            return X[feature] <= operand
+            return (X[feature] <= operand) | X[feature].isna()
         elif op == "gt" or op == ">":
-            return X[feature] > operand
+            return (X[feature] > operand) | X[feature].isna()
         elif op == "ge" or op == ">=":
-            return X[feature] >= operand
+            return (X[feature] >= operand) | X[feature].isna()
         elif op == "eq" or op == "==":
-            return X[feature] == operand
+            return (X[feature] == operand) | X[feature].isna()
         elif op == "in":
-            return X[feature].isin(operand)
+            return (X[feature].isin(operand)) | X[feature].isna()
         elif op == "dtype":
             return X[feature].dtype == operand
         else:
@@ -91,7 +91,7 @@ class Constraints(BaseModel):
         for feature, op, thresh in self.rules:
             if feature not in X:
                 res &= False
-                continue
+                break
 
             prev = res.sum()
             res &= self._eval(
@@ -102,7 +102,7 @@ class Constraints(BaseModel):
             )
             if res.sum() < prev:
                 log.error(
-                    f"[{feature}] quality loss for constraints {op} = {thresh}. Original dtype {X[feature].dtype} ",
+                    f"[{feature}] quality loss for constraints {op} = {thresh}. Remaining {res.sum()}. prev length {prev}. Original dtype {X[feature].dtype} ",
                 )
         return res
 

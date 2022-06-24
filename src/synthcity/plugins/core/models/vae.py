@@ -26,7 +26,7 @@ class Encoder(nn.Module):
         n_layers_hidden: int = 1,
         n_units_hidden: int = 100,
         nonlin: str = "relu",
-        seed: int = 0,
+        random_state: int = 0,
         dropout: float = 0.1,
         batch_norm: bool = True,
         residual: bool = False,
@@ -41,7 +41,7 @@ class Encoder(nn.Module):
             n_units_hidden=n_units_hidden,
             n_layers_hidden=n_layers_hidden - 1,
             nonlin=nonlin,
-            seed=seed,
+            random_state=random_state,
             dropout=dropout,
             batch_norm=batch_norm,
             residual=residual,
@@ -69,7 +69,7 @@ class Decoder(nn.Module):
         n_units_hidden: int = 100,
         nonlin: str = "relu",
         nonlin_out: Optional[List[Tuple[str, int]]] = None,
-        seed: int = 0,
+        random_state: int = 0,
         dropout: float = 0.1,
         batch_norm: bool = True,
         residual: bool = False,
@@ -85,7 +85,7 @@ class Decoder(nn.Module):
             n_units_hidden=n_units_hidden,
             nonlin=nonlin,
             nonlin_out=nonlin_out,
-            seed=seed,
+            random_state=random_state,
             dropout=dropout,
             batch_norm=batch_norm,
             residual=residual,
@@ -111,8 +111,8 @@ class VAE(nn.Module):
             Number of training iterations
         n_iter_print: int
             When to log the training error
-        seed: int
-            Random seed
+        random_state: int
+            Random random_state
         clipping_value: float
             Gradients clipping value
         lr: float
@@ -158,7 +158,7 @@ class VAE(nn.Module):
         batch_size: int = 100,
         n_iter: int = 500,
         n_iter_print: int = 10,
-        seed: int = 0,
+        random_state: int = 0,
         clipping_value: int = 1,
         lr: float = 2e-4,
         weight_decay: float = 1e-3,
@@ -201,8 +201,8 @@ class VAE(nn.Module):
         self.robust_divergence_beta = robust_divergence_beta
         self.dataloader_sampler = dataloader_sampler
 
-        self.seed = seed
-        torch.manual_seed(self.seed)
+        self.random_state = random_state
+        torch.manual_seed(self.random_state)
 
         self.encoder = Encoder(
             n_features,

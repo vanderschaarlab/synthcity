@@ -43,9 +43,6 @@ def sanity_check(original: Any, reloaded: Any, generate: bool = False) -> None:
     for key in original.__dict__:
         assert key in reloaded.__dict__
 
-    if generate:
-        reloaded.generate(1000)
-
 
 def verify_serialization(model: Any, generate: bool = False) -> None:
     # pickle test
@@ -81,9 +78,15 @@ def test_serialization_generic_plugins(plugin: str) -> None:
 @pytest.mark.parametrize("plugin", Plugins(categories=["time_series"]).list())
 @pytest.mark.slow
 def test_serialization_ts_plugins(plugin: str) -> None:
-    static_data, temporal_data, outcome = GoogleStocksDataloader().load()
+    (
+        static_data,
+        temporal_data,
+        temporal_horizons,
+        outcome,
+    ) = GoogleStocksDataloader().load()
     ts_data = TimeSeriesDataLoader(
         temporal_data=temporal_data,
+        temporal_horizons=temporal_horizons,
         static_data=static_data,
         outcome=outcome,
     )

@@ -14,10 +14,11 @@ from synthcity.utils.datasets.time_series.sine import SineDataloader
 
 
 def test_network_config() -> None:
-    static, temporal, _ = SineDataloader().load()
+    static, temporal, temporal_horizons, _ = SineDataloader().load()
     net = TimeSeriesTabularGAN(
         static,
         temporal,
+        temporal_horizons,
         # Generator
         generator_n_layers_hidden=2,
         generator_n_units_hidden=100,
@@ -41,7 +42,7 @@ def test_network_config() -> None:
         # Training
         batch_size=64,
         n_iter_print=100,
-        seed=77,
+        random_state=77,
         clipping_value=1,
         encoder_max_clusters=11,
         gamma_penalty=2,
@@ -55,7 +56,7 @@ def test_network_config() -> None:
     assert net.model.batch_size == 64
     assert net.model.generator_n_iter == 1001
     assert net.model.discriminator_n_iter == 1002
-    assert net.model.seed == 77
+    assert net.model.random_state == 77
     assert net.model.gamma_penalty == 2
     assert net.model.moments_penalty == 2
     assert net.model.embedding_penalty == 2
@@ -63,18 +64,20 @@ def test_network_config() -> None:
 
 @pytest.mark.parametrize("source", [SineDataloader, GoogleStocksDataloader])
 def test_ts_gan_generation(source: Any) -> None:
-    static, temporal, _ = source().load()
+    static, temporal, temporal_horizons, _ = source().load()
 
     model = TimeSeriesTabularGAN(
         static,
         temporal,
+        temporal_horizons,
         generator_n_iter=10,
     )
-    model.fit(static, temporal)
+    model.fit(static, temporal, temporal_horizons)
 
-    static_gen, temporal_gen = model.generate(10)
+    static_gen, temporal_gen, temporal_horizons_gen = model.generate(10)
 
     assert static_gen.shape == (10, static.shape[1])
+    assert len(temporal_horizons_gen) == len(temporal_gen)
     assert np.asarray(temporal_gen).shape == (
         10,
         temporal[0].shape[0],
@@ -85,53 +88,62 @@ def test_ts_gan_generation(source: Any) -> None:
 @pytest.mark.slow
 @pytest.mark.parametrize("source", [GoogleStocksDataloader])
 def test_ts_gan_generation_schema(source: Any) -> None:
-    static, temporal, _ = source().load()
+    static, temporal, temporal_horizons, _ = source().load()
 
     model = TimeSeriesTabularGAN(
         static,
         temporal,
+        temporal_horizons,
         generator_n_iter=10,
     )
-    model.fit(static, temporal)
+    model.fit(static, temporal, temporal_horizons)
 
-    static_gen, temporal_gen = model.generate(1000)
+    static_gen, temporal_gen, temporal_horizons_gen = model.generate(1000)
 
     reference_data = TimeSeriesDataLoader(
         temporal_data=temporal,
+        temporal_horizons=temporal_horizons,
         static_data=static,
     )
     reference_schema = Schema(data=reference_data)
 
     gen_data = TimeSeriesDataLoader(
         temporal_data=temporal_gen,
+        temporal_horizons=temporal_horizons_gen,
         static_data=static_gen,
     )
 
-    assert reference_schema.as_constraints().filter(gen_data.dataframe()).sum() > 0
+    seq_df = gen_data.dataframe()
+    assert reference_schema.as_constraints().filter(seq_df).sum() > 0
 
 
 @pytest.mark.parametrize("source", [SineDataloader, GoogleStocksDataloader])
 def test_ts_gan_conditional(source: Any) -> None:
-    static, temporal, outcome = source().load()
+    static, temporal, temporal_horizons, outcome = source().load()
 
     model = TimeSeriesTabularGAN(
         static,
         temporal,
+        temporal_horizons,
         n_units_conditional=1,
         generator_n_iter=10,
     )
-    model.fit(static, temporal, cond=outcome)
+    model.fit(static, temporal, temporal_horizons, cond=outcome)
 
-    static_gen, temporal_gen = model.generate(10)
+    static_gen, temporal_gen, temporal_horizons_gen = model.generate(10)
     assert static_gen.shape == (10, static.shape[1])
+    assert len(temporal_horizons_gen) == len(temporal_gen)
     assert np.asarray(temporal_gen).shape == (
         10,
         temporal[0].shape[0],
         temporal[0].shape[1],
     )
 
-    static_gen, temporal_gen = model.generate(5, np.ones([5, *outcome.shape[1:]]))
+    static_gen, temporal_gen, temporal_horizons_gen = model.generate(
+        5, np.ones([5, *outcome.shape[1:]])
+    )
     assert static_gen.shape == (5, static.shape[1])
+    assert len(temporal_horizons_gen) == len(temporal_gen)
     assert np.asarray(temporal_gen).shape == (
         5,
         temporal[0].shape[0],

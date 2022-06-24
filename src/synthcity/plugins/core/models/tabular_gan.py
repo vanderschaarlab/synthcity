@@ -56,8 +56,8 @@ class TabularGAN(torch.nn.Module):
             Batch size
         n_iter_print: int
             Number of iterations after which to print updates and check the validation loss.
-        seed: int
-            Seed used
+        random_state: int
+            random_state used
         n_iter_min: int
             Minimum number of iterations to go through before starting early stopping
         clipping_value: int, default 0
@@ -70,6 +70,8 @@ class TabularGAN(torch.nn.Module):
             The max number of clusters to create for continuous columns when encoding
         encoder:
             Pre-trained tabular encoder. If None, a new encoder is trained.
+        encoder_whitelist:
+            Ignore columns from encoding
     """
 
     @validate_arguments(config=dict(arbitrary_types_allowed=True))
@@ -107,13 +109,14 @@ class TabularGAN(torch.nn.Module):
         ],  # "identifiability_penalty", "gradient_penalty"
         batch_size: int = 64,
         n_iter_print: int = 50,
-        seed: int = 0,
+        random_state: int = 0,
         n_iter_min: int = 100,
         clipping_value: int = 0,
         lambda_gradient_penalty: float = 10,
         lambda_identifiability_penalty: float = 0.1,
         encoder_max_clusters: int = 20,
         encoder: Any = None,
+        encoder_whitelist: list = [],
         dataloader_sampler: Optional[torch.utils.data.sampler.Sampler] = None,
         device: Any = DEVICE,
     ) -> None:
@@ -122,7 +125,9 @@ class TabularGAN(torch.nn.Module):
         if encoder is not None:
             self.encoder = encoder
         else:
-            self.encoder = TabularEncoder(max_clusters=encoder_max_clusters).fit(X)
+            self.encoder = TabularEncoder(
+                max_clusters=encoder_max_clusters, whitelist=encoder_whitelist
+            ).fit(X)
 
         self.model = GAN(
             self.encoder.n_features(),
@@ -160,7 +165,7 @@ class TabularGAN(torch.nn.Module):
             lambda_identifiability_penalty=lambda_identifiability_penalty,
             clipping_value=clipping_value,
             n_iter_print=n_iter_print,
-            seed=seed,
+            random_state=random_state,
             n_iter_min=n_iter_min,
             dataloader_sampler=dataloader_sampler,
             device=device,

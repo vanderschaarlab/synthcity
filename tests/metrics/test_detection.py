@@ -86,7 +86,7 @@ def test_detect_synth_generic(test_plugin: Plugin, evaluator_t: Type) -> None:
     assert evaluator.direction() == "minimize"
 
 
-@pytest.mark.parametrize("test_plugin", [Plugins().get("marginal_distributions")])
+@pytest.mark.parametrize("test_plugin", [Plugins().get("dummy_sampler")])
 @pytest.mark.parametrize(
     "evaluator_t",
     [
@@ -94,9 +94,15 @@ def test_detect_synth_generic(test_plugin: Plugin, evaluator_t: Type) -> None:
     ],
 )
 def test_detect_synth_timeseries(test_plugin: Plugin, evaluator_t: Type) -> None:
-    static_data, temporal_data, outcome = GoogleStocksDataloader().load()
+    (
+        static_data,
+        temporal_data,
+        temporal_horizons,
+        outcome,
+    ) = GoogleStocksDataloader().load()
     data = TimeSeriesDataLoader(
         temporal_data=temporal_data,
+        temporal_horizons=temporal_horizons,
         static_data=static_data,
         outcome=outcome,
     )

@@ -48,7 +48,7 @@ def test_rnn_sanity(mode: str, task_type: str) -> None:
 @pytest.mark.parametrize("mode", ["LSTM", "RNN", "GRU"])
 @pytest.mark.parametrize("source", [SineDataloader, GoogleStocksDataloader])
 def test_rnn_regression_fit_predict(mode: str, source: Any) -> None:
-    static, temporal, outcome = source(as_numpy=True).load()
+    static, temporal, temporal_horizons, outcome = source(as_numpy=True).load()
     outcome = outcome.reshape(-1, 1)
 
     outlen = len(outcome.reshape(-1)) / len(outcome)
@@ -64,19 +64,19 @@ def test_rnn_regression_fit_predict(mode: str, source: Any) -> None:
         mode=mode,
     )
 
-    model.fit(static, temporal, outcome)
+    model.fit(static, temporal, temporal_horizons, outcome)
 
-    y_pred = model.predict(static, temporal)
+    y_pred = model.predict(static, temporal, temporal_horizons)
 
     assert y_pred.shape == outcome.shape
 
-    assert model.score(static, temporal, outcome) < 2
+    assert model.score(static, temporal, temporal_horizons, outcome) < 2
 
 
 @pytest.mark.parametrize("mode", ["LSTM", "RNN", "GRU"])
 @pytest.mark.parametrize("source", [SineDataloader, GoogleStocksDataloader])
 def test_rnn_classification_fit_predict(mode: str, source: Any) -> None:
-    static, temporal, outcome = source(as_numpy=True).load()
+    static, temporal, temporal_horizons, outcome = source(as_numpy=True).load()
     static_fake, temporal_fake = np.random.randn(*static.shape), np.random.randn(
         *temporal.shape
     )
@@ -95,11 +95,12 @@ def test_rnn_classification_fit_predict(mode: str, source: Any) -> None:
 
     static_data = np.concatenate([static, static_fake])
     temporal_data = np.concatenate([temporal, temporal_fake])
+    temporal_horizons = np.concatenate([temporal_horizons, temporal_horizons])
 
-    model.fit(static_data, temporal_data, y)
+    model.fit(static_data, temporal_data, temporal_horizons, y)
 
-    y_pred = model.predict(static_data, temporal_data)
+    y_pred = model.predict(static_data, temporal_data, temporal_horizons)
 
     assert y_pred.shape == y.shape
 
-    assert model.score(static_data, temporal_data, y) <= 1
+    assert model.score(static_data, temporal_data, temporal_horizons, y) <= 1
