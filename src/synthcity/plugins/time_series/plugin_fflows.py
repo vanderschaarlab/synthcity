@@ -127,15 +127,14 @@ class FourierFlowsPlugin(Plugin):
             outcome.columns = ["time_to_event", "event"]
 
         # Train static generator
-        self.temporal_encoder.fit(static, temporal, temporal_horizons)
+        self.temporal_encoder.fit_temporal(temporal, temporal_horizons)
         (
-            static_enc,
             temporal_enc,
             temporal_horizons_enc,
-        ) = self.temporal_encoder.transform(static, temporal, temporal_horizons)
+        ) = self.temporal_encoder.transform_temporal(temporal, temporal_horizons)
 
         static_data_with_horizons = np.concatenate(
-            [np.asarray(static_enc), np.asarray(temporal_horizons_enc)], axis=1
+            [np.asarray(static), np.asarray(temporal_horizons)], axis=1
         )
         self.static_model.fit(pd.DataFrame(static_data_with_horizons))
 
@@ -148,8 +147,8 @@ class FourierFlowsPlugin(Plugin):
 
         self.outcome_model = TimeSeriesRNN(
             task_type="regression",
-            n_static_units_in=static_enc.shape[-1],
-            n_temporal_units_in=temporal_enc[0].shape[-1],
+            n_static_units_in=static.shape[-1],
+            n_temporal_units_in=temporal[0].shape[-1],
             output_shape=outcome_enc.shape[1:],
             n_iter=self.train_args["epochs"],
             batch_size=self.train_args["batch_size"],
@@ -161,15 +160,15 @@ class FourierFlowsPlugin(Plugin):
             ),
         )
         self.outcome_model.fit(
-            np.asarray(static_enc),
-            np.asarray(temporal_enc),
-            np.asarray(temporal_horizons_enc),
+            np.asarray(static),
+            np.asarray(temporal),
+            np.asarray(temporal_horizons),
             np.asarray(outcome_enc),
         )
 
         self.temporal_encoded_columns = temporal_enc[0].columns
-        self.static_encoded_columns = static_enc.columns
         self.outcome_encoded_columns = outcome_enc.columns
+        self.static_columns = static.columns
 
         return self
 
@@ -177,12 +176,12 @@ class FourierFlowsPlugin(Plugin):
         def _sample(count: int) -> Tuple:
             # Static generation
             static_data_with_horizons = self.static_model.generate(count).numpy()
-            static_enc = pd.DataFrame(
-                static_data_with_horizons[:, : len(self.static_encoded_columns)],
-                columns=self.static_encoded_columns,
+            static = pd.DataFrame(
+                static_data_with_horizons[:, : len(self.static_columns)],
+                columns=self.static_columns,
             )
             temporal_horizons_enc = static_data_with_horizons[
-                :, len(self.static_encoded_columns) :
+                :, len(self.static_columns) :
             ]
 
             # Temporal generation
@@ -193,34 +192,34 @@ class FourierFlowsPlugin(Plugin):
                     pd.DataFrame(item, columns=self.temporal_encoded_columns)
                 )
 
-            # Outcome generation
-            outcome_enc = pd.DataFrame(
-                self.outcome_model.predict(
-                    np.asarray(static_enc),
-                    np.asarray(temporal_enc),
-                    np.asarray(temporal_horizons_enc),
-                ),
-                columns=self.outcome_encoded_columns,
-            )
-
+            # Decoding
             (
-                static_raw,
                 temporal_raw,
                 temporal_horizons,
-            ) = self.temporal_encoder.inverse_transform(
-                static_enc, temporal_enc, temporal_horizons_enc.tolist()
+            ) = self.temporal_encoder.inverse_transform_temporal(
+                temporal_enc, temporal_horizons_enc.tolist()
             )
-            outcome_raw = self.outcome_encoder.inverse_transform(outcome_enc)
 
             temporal = []
             for item in temporal_raw:
                 temporal.append(
                     pd.DataFrame(item, columns=self.data_info["temporal_features"])
                 )
+
+            # Outcome generation
+            outcome_enc = pd.DataFrame(
+                self.outcome_model.predict(
+                    np.asarray(static),
+                    np.asarray(temporal_raw),
+                    np.asarray(temporal_horizons),
+                ),
+                columns=self.outcome_encoded_columns,
+            )
+            outcome_raw = self.outcome_encoder.inverse_transform(outcome_enc)
             outcome = pd.DataFrame(
                 outcome_raw, columns=self.data_info["outcome_features"]
             )
-            static = pd.DataFrame(static_raw, columns=self.data_info["static_features"])
+            static = pd.DataFrame(static, columns=self.data_info["static_features"])
 
             if self.data_info["data_type"] == "time_series":
                 return static, temporal, temporal_horizons, outcome

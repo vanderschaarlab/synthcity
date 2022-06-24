@@ -55,7 +55,7 @@ def test_plugin_fit() -> None:
     )
 
     test_plugin = plugin(
-        n_iter=10,
+        n_iter=100,
     )
 
     test_plugin.fit(data)
@@ -77,16 +77,12 @@ def test_plugin_generate(source: Any) -> None:
         outcome=outcome,
     )
     test_plugin = plugin(
-        n_iter=10,
+        n_iter=100,
     )
     test_plugin.fit(data)
 
-    X_gen = test_plugin.generate()
-    assert len(X_gen) == len(data)
-    assert test_plugin.schema_includes(X_gen)
-
     X_gen = test_plugin.generate(50)
-    assert len(X_gen) == 50
+    assert len(X_gen.ids()) == 50
     assert test_plugin.schema_includes(X_gen)
     assert list(X_gen.columns) == list(data.columns)
 
@@ -127,6 +123,6 @@ def test_plugin_generate_survival() -> None:
     X_gen = test_plugin.generate(10)
 
     assert X_gen.type() == "time_series_survival"
-    assert len(X_gen) == 10
+    assert len(X_gen.ids()) == 10
     assert test_plugin.schema_includes(X_gen)
     assert list(X_gen.columns) == list(survival_data.columns)
