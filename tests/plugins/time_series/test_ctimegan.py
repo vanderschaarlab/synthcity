@@ -55,7 +55,7 @@ def test_plugin_fit() -> None:
     )
 
     test_plugin = plugin(
-        n_iter=100,
+        n_iter=10,
     )
 
     test_plugin.fit(data)
@@ -77,7 +77,7 @@ def test_plugin_generate(source: Any) -> None:
         outcome=outcome,
     )
     test_plugin = plugin(
-        n_iter=100,
+        n_iter=10,
     )
     test_plugin.fit(data)
 

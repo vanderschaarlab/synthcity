@@ -120,6 +120,7 @@ def test_plugin_generate_survival() -> None:
     test_plugin.fit(survival_data)
 
     X_gen = test_plugin.generate(10)
+    st, tmp, tmp_horiz, genT, genE = X_gen.unpack()
 
     assert X_gen.type() == "time_series_survival"
     assert len(X_gen.ids()) == 10

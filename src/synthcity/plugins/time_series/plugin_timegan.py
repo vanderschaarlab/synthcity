@@ -317,8 +317,7 @@ class TimeGANPlugin(Plugin):
         def _sample(count: int) -> Tuple:
             local_cond: Optional[Union[pd.DataFrame, pd.Series]] = None
             if cond is not None:
-                print("resampling condition", count)
-                local_cond = cond.sample(count, replace=True)
+                local_cond = cond.sample(count)
             static, temporal, temporal_horizons = self.cov_model.generate(
                 count, cond=local_cond
             )
