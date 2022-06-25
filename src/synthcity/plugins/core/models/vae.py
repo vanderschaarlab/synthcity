@@ -55,7 +55,7 @@ class Encoder(nn.Module):
     def forward(self, X: Tensor) -> Tuple[Tensor, Tensor]:
         shared = self.model(X)
         mu = self.mu_fc(shared)
-        logvar = self.mu_fc(shared)
+        logvar = self.logvar_fc(shared)
         return mu, logvar
 
 
