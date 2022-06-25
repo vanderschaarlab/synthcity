@@ -6,31 +6,9 @@ import numpy as np
 import pytest
 
 # synthcity absolute
-from synthcity.plugins.core.models.ts_model import TimeSeriesModel
+from synthcity.plugins.core.models.ts_model import TimeSeriesModel, modes
 from synthcity.utils.datasets.time_series.google_stocks import GoogleStocksDataloader
 from synthcity.utils.datasets.time_series.sine import SineDataloader
-
-modes = [
-    "LSTM",
-    "GRU",
-    "RNN",
-    "MLSTM_FCN",
-    "TCN",
-    "InceptionTime",
-    "InceptionTimePlus",
-    "XceptionTime",
-    "ResCNN",
-    "OmniScaleCNN",
-    "TST",
-    "XCM",
-    "gMLP",
-    "MiniRocket",
-    "MiniRocketPlus",
-    "TransformerModel",
-    "TSiTPlus",
-    "TSTPlus",
-    "TSPerceiver",
-]
 
 
 @pytest.mark.parametrize("mode", modes)

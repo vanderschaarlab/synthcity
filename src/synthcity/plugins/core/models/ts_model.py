@@ -18,7 +18,6 @@ from tsai.models.RNN_FCN import MLSTM_FCN
 from tsai.models.TCN import TCN
 from tsai.models.TransformerModel import TransformerModel
 from tsai.models.TSiTPlus import TSiTPlus
-from tsai.models.TSPerceiver import TSPerceiver
 from tsai.models.TST import TST
 from tsai.models.TSTPlus import TSTPlus
 from tsai.models.XceptionTime import XceptionTime
@@ -29,6 +28,27 @@ import synthcity.logger as log
 from synthcity.plugins.core.models.mlp import MLP, MultiActivationHead, get_nonlin
 from synthcity.utils.constants import DEVICE
 from synthcity.utils.reproducibility import enable_reproducible_results
+
+modes = [
+    "LSTM",
+    "GRU",
+    "RNN",
+    "MLSTM_FCN",
+    "TCN",
+    "InceptionTime",
+    "InceptionTimePlus",
+    "XceptionTime",
+    "ResCNN",
+    "OmniScaleCNN",
+    "TST",
+    "TSTPlus",
+    "XCM",
+    "gMLP",
+    "MiniRocket",
+    "MiniRocketPlus",
+    "TransformerModel",
+    "TSiTPlus",
+]
 
 
 class TimeSeriesModel(nn.Module):
@@ -64,6 +84,7 @@ class TimeSeriesModel(nn.Module):
         enable_reproducible_results(random_state)
 
         assert task_type in ["classification", "regression"]
+        assert mode in modes, f"Unsupported mode {mode}. Available: {modes}"
         assert len(output_shape) > 0
 
         self.task_type = task_type
@@ -411,13 +432,6 @@ class TimeSeriesLayer(nn.Module):
                 seq_len=seq_len,
                 n_layers=n_temporal_layers_hidden,
                 dropout=dropout,
-            )
-        elif mode == "TSPerceiver":
-            self.temporal_layer = TSPerceiver(
-                c_in=n_temporal_units_in,
-                c_out=n_temporal_units_hidden,
-                seq_len=seq_len,
-                n_layers=n_temporal_layers_hidden,
             )
         else:
             raise RuntimeError(f"Unknown TS mode {mode}")
