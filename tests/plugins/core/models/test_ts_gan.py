@@ -215,8 +215,8 @@ def test_ts_gan_conditional_static_data(source: Any) -> None:
         cnt, static_data=static[static_ids]
     )
     assert np.isclose(np.asarray(static_gen), np.asarray(static[static_ids])).all()
-    assert temporal_gen.shape == (10, temporal.shape[1], temporal.shape[2])
-    assert temporal_horizons_gen.shape == (10, temporal.shape[1])
+    assert temporal_gen.shape == (cnt, temporal.shape[1], temporal.shape[2])
+    assert temporal_horizons_gen.shape == (cnt, temporal.shape[1])
 
     cnt = 5
     static_ids = np.random.choice(len(static), cnt, replace=False)
@@ -224,8 +224,8 @@ def test_ts_gan_conditional_static_data(source: Any) -> None:
         cnt, cond=np.ones([cnt, *outcome.shape[1:]]), static_data=static[static_ids]
     )
     assert np.isclose(np.asarray(static_gen), np.asarray(static[static_ids])).all()
-    assert temporal_gen.shape == (5, temporal.shape[1], temporal.shape[2])
-    assert temporal_horizons_gen.shape == (5, temporal.shape[1])
+    assert temporal_gen.shape == (cnt, temporal.shape[1], temporal.shape[2])
+    assert temporal_horizons_gen.shape == (cnt, temporal.shape[1])
 
 
 @pytest.mark.parametrize("source", [SineDataloader, GoogleStocksDataloader])
@@ -252,8 +252,8 @@ def test_ts_gan_conditional_temporal_horizons(source: Any) -> None:
     assert np.isclose(
         np.asarray(temporal_horizons_gen), np.asarray(temporal_horizons[horizon_ids])
     ).all()
-    assert temporal_gen.shape == (10, temporal.shape[1], temporal.shape[2])
-    assert temporal_horizons_gen.shape == (10, temporal.shape[1])
+    assert temporal_gen.shape == (cnt, temporal.shape[1], temporal.shape[2])
+    assert temporal_horizons_gen.shape == (cnt, temporal.shape[1])
 
     cnt = 5
     horizon_ids = np.random.choice(len(temporal_horizons), cnt, replace=False)
@@ -265,5 +265,5 @@ def test_ts_gan_conditional_temporal_horizons(source: Any) -> None:
     assert np.isclose(
         np.asarray(temporal_horizons_gen), np.asarray(temporal_horizons[horizon_ids])
     ).all()
-    assert temporal_gen.shape == (5, temporal.shape[1], temporal.shape[2])
-    assert temporal_horizons_gen.shape == (5, temporal.shape[1])
+    assert temporal_gen.shape == (cnt, temporal.shape[1], temporal.shape[2])
+    assert temporal_horizons_gen.shape == (cnt, temporal.shape[1])

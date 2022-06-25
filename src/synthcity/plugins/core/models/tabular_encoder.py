@@ -491,6 +491,20 @@ class TimeSeriesTabularEncoder(TransformerMixin, BaseEstimator):
         return self
 
     @validate_arguments(config=dict(arbitrary_types_allowed=True))
+    def transform_temporal_horizons(
+        self,
+        temporal_horizons: List,
+    ) -> List:
+        horizons_encoded = (
+            self.temporal_horizons_encoder.transform(
+                np.asarray(temporal_horizons).reshape(-1, 1)
+            )
+            .reshape(len(temporal_horizons), -1)
+            .tolist()
+        )
+        return horizons_encoded
+
+    @validate_arguments(config=dict(arbitrary_types_allowed=True))
     def transform_temporal(
         self,
         temporal_data: List[pd.DataFrame],
@@ -500,14 +514,18 @@ class TimeSeriesTabularEncoder(TransformerMixin, BaseEstimator):
         for item in temporal_data:
             temporal_encoded.append(self.temporal_encoder.transform(item))
 
-        horizons_encoded = (
-            self.temporal_horizons_encoder.transform(
-                np.asarray(temporal_horizons).reshape(-1, 1)
-            )
-            .reshape(len(temporal_horizons), -1)
-            .tolist()
-        )
+        horizons_encoded = self.transform_temporal_horizons(temporal_horizons)
+
         return temporal_encoded, horizons_encoded
+
+    @validate_arguments(config=dict(arbitrary_types_allowed=True))
+    def transform_static(
+        self,
+        static_data: pd.DataFrame,
+    ) -> pd.DataFrame:
+        static_encoded = self.static_encoder.transform(static_data)
+
+        return static_encoded
 
     @validate_arguments(config=dict(arbitrary_types_allowed=True))
     def transform(
@@ -516,7 +534,7 @@ class TimeSeriesTabularEncoder(TransformerMixin, BaseEstimator):
         temporal_data: List[pd.DataFrame],
         temporal_horizons: List,
     ) -> Tuple[pd.DataFrame, pd.DataFrame, List]:
-        static_encoded = self.static_encoder.transform(static_data)
+        static_encoded = self.transform_static(static_data)
 
         temporal_encoded, horizons_encoded = self.transform_temporal(
             temporal_data, temporal_horizons
@@ -546,6 +564,20 @@ class TimeSeriesTabularEncoder(TransformerMixin, BaseEstimator):
         )
 
     @validate_arguments(config=dict(arbitrary_types_allowed=True))
+    def inverse_transform_temporal_horizons(
+        self,
+        temporal_horizons: List,
+    ) -> pd.DataFrame:
+        horizons_decoded = (
+            self.temporal_horizons_encoder.inverse_transform(
+                np.asarray(temporal_horizons).reshape(-1, 1)
+            )
+            .reshape(len(temporal_horizons), -1)
+            .tolist()
+        )
+        return horizons_decoded
+
+    @validate_arguments(config=dict(arbitrary_types_allowed=True))
     def inverse_transform_temporal(
         self,
         temporal_encoded: List[pd.DataFrame],
@@ -555,14 +587,17 @@ class TimeSeriesTabularEncoder(TransformerMixin, BaseEstimator):
         for item in temporal_encoded:
             temporal_decoded.append(self.temporal_encoder.inverse_transform(item))
 
-        horizons_decoded = (
-            self.temporal_horizons_encoder.inverse_transform(
-                np.asarray(temporal_horizons).reshape(-1, 1)
-            )
-            .reshape(len(temporal_horizons), -1)
-            .tolist()
-        )
+        horizons_decoded = self.inverse_transform_temporal_horizons(temporal_horizons)
+
         return temporal_decoded, horizons_decoded
+
+    @validate_arguments(config=dict(arbitrary_types_allowed=True))
+    def inverse_transform_static(
+        self,
+        static_encoded: pd.DataFrame,
+    ) -> pd.DataFrame:
+        static_decoded = self.static_encoder.inverse_transform(static_encoded)
+        return static_decoded
 
     @validate_arguments(config=dict(arbitrary_types_allowed=True))
     def inverse_transform(
@@ -571,7 +606,7 @@ class TimeSeriesTabularEncoder(TransformerMixin, BaseEstimator):
         temporal_encoded: List[pd.DataFrame],
         temporal_horizons: List,
     ) -> pd.DataFrame:
-        static_decoded = self.static_encoder.inverse_transform(static_encoded)
+        static_decoded = self.inverse_transform_static(static_encoded)
 
         temporal_decoded, horizons_decoded = self.inverse_transform_temporal(
             temporal_encoded, temporal_horizons
