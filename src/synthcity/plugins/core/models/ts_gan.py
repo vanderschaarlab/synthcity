@@ -286,9 +286,9 @@ class TimeSeriesGAN(nn.Module):
         temporal_horizons: np.ndarray,
         cond: Optional[np.ndarray] = None,
     ) -> "TimeSeriesGAN":
-        static_data_t = self._check_tensor(static_data)
-        temporal_data_t = self._check_tensor(temporal_data)
-        temporal_horizons_t = self._check_tensor(temporal_horizons)
+        static_data_t = self._check_tensor(static_data).float()
+        temporal_data_t = self._check_tensor(temporal_data).float()
+        temporal_horizons_t = self._check_tensor(temporal_horizons).float()
 
         condt: Optional[torch.Tensor] = None
 
@@ -306,7 +306,7 @@ class TimeSeriesGAN(nn.Module):
                     "Expecting conditional with the same length as the dataset"
                 )
 
-            condt = self._check_tensor(cond)
+            condt = self._check_tensor(cond).float()
 
         self._train(
             static_data_t,
@@ -318,9 +318,16 @@ class TimeSeriesGAN(nn.Module):
         return self
 
     def generate(
-        self, count: int, cond: Optional[np.ndarray] = None
+        self,
+        count: int,
+        cond: Optional[np.ndarray] = None,
+        static_data: Optional[np.ndarray] = None,
+        temporal_horizons: Optional[np.ndarray] = None,
     ) -> Tuple[np.ndarray, np.ndarray, np.ndarray]:
         condt: Optional[torch.Tensor] = None
+        static_t: Optional[torch.Tensor] = None
+        horizons_t: Optional[torch.Tensor] = None
+
         self.static_generator.eval()
         self.temporal_horizons_generator.eval()
         self.temporal_generator.eval()
@@ -329,9 +336,15 @@ class TimeSeriesGAN(nn.Module):
         self.temporal_recovery.eval()
 
         if cond is not None:
-            condt = self._check_tensor(cond)
+            condt = self._check_tensor(cond).float()
+        if static_data is not None:
+            static_t = self._check_tensor(static_data).float()
+        if temporal_horizons is not None:
+            horizons_t = self._check_tensor(temporal_horizons).float()
 
-        static, temporal, temporal_horizons = self(count, condt)
+        static, temporal, temporal_horizons = self(
+            count, condt, static_data=static_t, temporal_horizons=horizons_t
+        )
         return (
             static.detach().cpu().numpy(),
             temporal.detach().cpu().numpy(),
@@ -343,6 +356,8 @@ class TimeSeriesGAN(nn.Module):
         self,
         count: int,
         cond: Optional[torch.Tensor] = None,
+        static_data: Optional[torch.Tensor] = None,
+        temporal_horizons: Optional[torch.Tensor] = None,
     ) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
         if cond is None and self.n_units_conditional > 0:
             # sample from the original conditional
@@ -360,11 +375,12 @@ class TimeSeriesGAN(nn.Module):
             )
 
         # Static data
-        static_noise = torch.randn(
-            count, self.n_static_units_latent, device=self.device
-        )
-        static_noise = self._append_optional_cond(static_noise, cond)
-        static_data = self.static_generator(static_noise)
+        if static_data is None:
+            static_noise = torch.randn(
+                count, self.n_static_units_latent, device=self.device
+            )
+            static_noise = self._append_optional_cond(static_noise, cond)
+            static_data = self.static_generator(static_noise)
         static_data_with_cond = self._append_optional_cond(static_data, cond)
 
         # Temporal data
@@ -374,13 +390,15 @@ class TimeSeriesGAN(nn.Module):
             self.n_temporal_units_latent,
             device=self.device,
         )
-        static_data_with_cond_and_temporal_noise = self._append_optional_cond(
-            static_data_with_cond, temporal_noise.view(len(static_data_with_cond), -1)
-        )
+        if temporal_horizons is None:
+            static_data_with_cond_and_temporal_noise = self._append_optional_cond(
+                static_data_with_cond,
+                temporal_noise.view(len(static_data_with_cond), -1),
+            )
 
-        temporal_horizons = self.temporal_horizons_generator(
-            static_data_with_cond_and_temporal_noise
-        )
+            temporal_horizons = self.temporal_horizons_generator(
+                static_data_with_cond_and_temporal_noise
+            )
 
         temporal_latent_data = self.temporal_generator(
             static_data_with_cond, temporal_noise, temporal_horizons
