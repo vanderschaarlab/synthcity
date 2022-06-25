@@ -15,50 +15,7 @@ from synthcity.utils.constants import DEVICE
 from synthcity.utils.reproducibility import enable_reproducible_results
 
 
-class WindowLinearLayer(nn.Module):
-    @validate_arguments(config=dict(arbitrary_types_allowed=True))
-    def __init__(
-        self,
-        n_static_units_in: int,
-        n_temporal_units_in: int,
-        window_size: int,
-        n_units_out: int,
-        n_units_hidden: int = 100,
-        n_layers: int = 1,
-        dropout: float = 0,
-        nonlin: Optional[str] = "relu",
-        device: Any = DEVICE,
-    ) -> None:
-        super(WindowLinearLayer, self).__init__()
-
-        self.device = device
-        self.window_size = window_size
-        self.model = MLP(
-            task_type="regression",
-            n_units_in=n_static_units_in + n_temporal_units_in * window_size,
-            n_units_out=n_units_out,
-            n_layers_hidden=n_layers,
-            n_units_hidden=n_units_hidden,
-            dropout=dropout,
-            nonlin=nonlin,
-            device=device,
-        )
-
-    @validate_arguments(config=dict(arbitrary_types_allowed=True))
-    def forward(
-        self, static_data: torch.Tensor, temporal_data: torch.Tensor
-    ) -> torch.Tensor:
-        assert len(static_data) == len(temporal_data)
-        batch_size, seq_len, n_feats = temporal_data.shape
-        temporal_batch = temporal_data[:, seq_len - self.window_size :, :].reshape(
-            batch_size, n_feats * self.window_size
-        )
-        batch = torch.cat([static_data, temporal_batch], axis=1)
-
-        return self.model(batch).to(self.device)
-
-
-class TimeSeriesRNN(nn.Module):
+class TimeSeriesModel(nn.Module):
     @validate_arguments(config=dict(arbitrary_types_allowed=True))
     def __init__(
         self,
@@ -86,7 +43,7 @@ class TimeSeriesRNN(nn.Module):
         random_state: int = 0,
         clipping_value: int = 1,
     ) -> None:
-        super(TimeSeriesRNN, self).__init__()
+        super(TimeSeriesModel, self).__init__()
 
         enable_reproducible_results(random_state)
 
@@ -119,32 +76,23 @@ class TimeSeriesRNN(nn.Module):
         self.n_units_out = np.prod(self.output_shape)
         self.clipping_value = clipping_value
 
-        temporal_params = {
-            "input_size": self.n_temporal_units_in + 1,
-            "hidden_size": self.n_temporal_units_hidden,
-            "num_layers": self.n_temporal_layers_hidden,
-            "dropout": 0 if self.n_temporal_layers_hidden == 1 else dropout,
-            "batch_first": True,
-        }
-        temporal_models = {
-            "RNN": nn.RNN,
-            "LSTM": nn.LSTM,
-            "GRU": nn.GRU,
-        }
-
-        self.temporal_layer = temporal_models[mode](**temporal_params).to(self.device)
-        self.mode = mode
-
-        self.out = WindowLinearLayer(
+        self.temporal_layer = TimeSeriesLayer(
             n_static_units_in=n_static_units_in,
-            n_temporal_units_in=self.n_temporal_units_hidden,
-            window_size=self.window_size,
+            n_temporal_units_in=n_temporal_units_in,
             n_units_out=self.n_units_out,
-            n_layers=n_static_layers_hidden,
+            n_static_units_hidden=n_static_units_hidden,
+            n_static_layers_hidden=n_static_layers_hidden,
+            n_temporal_units_hidden=n_temporal_units_hidden,
+            n_temporal_layers_hidden=n_temporal_layers_hidden,
+            mode=mode,
+            window_size=window_size,
+            device=device,
             dropout=dropout,
             nonlin=nonlin,
-            device=device,
+            random_state=random_state,
         )
+
+        self.mode = mode
 
         self.out_activation: Optional[nn.Module] = None
         self.n_act_out: Optional[int] = None
@@ -192,11 +140,7 @@ class TimeSeriesRNN(nn.Module):
         )
         assert torch.isnan(temporal_data_merged).sum() == 0
 
-        X_interm, _ = self.temporal_layer(temporal_data_merged)
-        assert torch.isnan(X_interm).sum() == 0
-
-        # choose r_out at the last <window size> steps
-        pred = self.out(static_data, X_interm)
+        pred = self.temporal_layer(static_data, temporal_data_merged)
 
         if self.out_activation is not None:
             pred = pred.reshape(-1, self.n_act_out)
@@ -313,3 +257,102 @@ class TimeSeriesRNN(nn.Module):
             return X.to(self.device)
         else:
             return torch.from_numpy(np.asarray(X)).to(self.device)
+
+
+class TimeSeriesLayer(nn.Module):
+    def __init__(
+        self,
+        n_static_units_in: int,
+        n_temporal_units_in: int,
+        n_units_out: int,
+        n_static_units_hidden: int = 100,
+        n_static_layers_hidden: int = 2,
+        n_temporal_units_hidden: int = 100,
+        n_temporal_layers_hidden: int = 2,
+        mode: str = "RNN",  # RNN, LSTM, GRU
+        window_size: int = 1,
+        device: Any = DEVICE,
+        dropout: float = 0,
+        nonlin: Optional[str] = "relu",
+        random_state: int = 0,
+    ) -> None:
+        super(TimeSeriesLayer, self).__init__()
+        temporal_params = {
+            "input_size": n_temporal_units_in + 1,
+            "hidden_size": n_temporal_units_hidden,
+            "num_layers": n_temporal_layers_hidden,
+            "dropout": 0 if n_temporal_layers_hidden == 1 else dropout,
+            "batch_first": True,
+        }
+        temporal_models = {
+            "RNN": nn.RNN,
+            "LSTM": nn.LSTM,
+            "GRU": nn.GRU,
+        }
+
+        self.temporal_layer = temporal_models[mode](**temporal_params).to(device)
+        self.device = device
+        self.mode = mode
+
+        self.out = WindowLinearLayer(
+            n_static_units_in=n_static_units_in,
+            n_temporal_units_in=n_temporal_units_hidden,
+            window_size=window_size,
+            n_units_out=n_units_out,
+            n_layers=n_static_layers_hidden,
+            dropout=dropout,
+            nonlin=nonlin,
+            device=device,
+        )
+
+    def forward(
+        self, static_data: torch.Tensor, temporal_data: torch.Tensor
+    ) -> torch.Tensor:
+        X_interm, _ = self.temporal_layer(temporal_data)
+        assert torch.isnan(X_interm).sum() == 0
+
+        # choose r_out at the last <window size> steps
+        return self.out(static_data, X_interm)
+
+
+class WindowLinearLayer(nn.Module):
+    @validate_arguments(config=dict(arbitrary_types_allowed=True))
+    def __init__(
+        self,
+        n_static_units_in: int,
+        n_temporal_units_in: int,
+        window_size: int,
+        n_units_out: int,
+        n_units_hidden: int = 100,
+        n_layers: int = 1,
+        dropout: float = 0,
+        nonlin: Optional[str] = "relu",
+        device: Any = DEVICE,
+    ) -> None:
+        super(WindowLinearLayer, self).__init__()
+
+        self.device = device
+        self.window_size = window_size
+        self.model = MLP(
+            task_type="regression",
+            n_units_in=n_static_units_in + n_temporal_units_in * window_size,
+            n_units_out=n_units_out,
+            n_layers_hidden=n_layers,
+            n_units_hidden=n_units_hidden,
+            dropout=dropout,
+            nonlin=nonlin,
+            device=device,
+        )
+
+    @validate_arguments(config=dict(arbitrary_types_allowed=True))
+    def forward(
+        self, static_data: torch.Tensor, temporal_data: torch.Tensor
+    ) -> torch.Tensor:
+        assert len(static_data) == len(temporal_data)
+        batch_size, seq_len, n_feats = temporal_data.shape
+        temporal_batch = temporal_data[:, seq_len - self.window_size :, :].reshape(
+            batch_size, n_feats * self.window_size
+        )
+        batch = torch.cat([static_data, temporal_batch], axis=1)
+
+        return self.model(batch).to(self.device)

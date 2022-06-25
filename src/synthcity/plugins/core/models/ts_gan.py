@@ -15,7 +15,7 @@ from synthcity.utils.reproducibility import enable_reproducible_results
 
 # synthcity relative
 from .mlp import MLP
-from .ts_rnn import TimeSeriesRNN
+from .ts_model import TimeSeriesModel
 
 
 class TimeSeriesGAN(nn.Module):
@@ -189,7 +189,7 @@ class TimeSeriesGAN(nn.Module):
             "device": device,
         }
         # Embedding network between original feature space to latent space: (X_static, recovered_temporal_data) -> temporal_embeddings
-        self.temporal_embedder = TimeSeriesRNN(
+        self.temporal_embedder = TimeSeriesModel(
             task_type="regression",
             n_static_units_in=n_static_units + n_units_conditional,
             n_temporal_units_in=n_temporal_units,
@@ -198,7 +198,7 @@ class TimeSeriesGAN(nn.Module):
         ).to(self.device)
 
         # Recovery network from latent space to original space: (X_static, temporal_embeddings) -> recovered_temporal_data
-        self.temporal_recovery = TimeSeriesRNN(
+        self.temporal_recovery = TimeSeriesModel(
             task_type="regression",
             n_static_units_in=n_static_units + n_units_conditional,
             n_temporal_units_in=n_temporal_units_latent,
@@ -208,7 +208,7 @@ class TimeSeriesGAN(nn.Module):
         )
 
         # Temporal generator from the latent space: Z_temporal -> E_temporal
-        self.temporal_generator = TimeSeriesRNN(
+        self.temporal_generator = TimeSeriesModel(
             task_type="regression",
             n_static_units_in=n_static_units + n_units_conditional,
             n_temporal_units_in=n_temporal_units_latent,
@@ -217,7 +217,7 @@ class TimeSeriesGAN(nn.Module):
         )
 
         # Temporal supervisor: Generate the next sequence: E_temporal -> fake_next_temporal_embeddings_temporal
-        self.temporal_supervisor = TimeSeriesRNN(
+        self.temporal_supervisor = TimeSeriesModel(
             task_type="regression",
             n_static_units_in=n_static_units + n_units_conditional,
             n_temporal_units_in=n_temporal_units_latent,
@@ -226,7 +226,7 @@ class TimeSeriesGAN(nn.Module):
         )
 
         # Discriminate the original and synthetic time-series data.
-        self.discriminator = TimeSeriesRNN(
+        self.discriminator = TimeSeriesModel(
             task_type="regression",
             n_static_units_in=n_static_units + n_units_conditional,
             n_temporal_units_in=n_temporal_units,

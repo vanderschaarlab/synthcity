@@ -37,7 +37,7 @@ from synthcity.plugins.core.models.time_series_survival.ts_surv_dynamic_deephit 
 from synthcity.plugins.core.models.time_series_survival.ts_surv_xgb import (
     XGBTimeSeriesSurvival,
 )
-from synthcity.plugins.core.models.ts_rnn import TimeSeriesRNN
+from synthcity.plugins.core.models.ts_model import TimeSeriesModel
 
 
 class PerformanceEvaluator(MetricEvaluator):
@@ -709,7 +709,7 @@ class PerformanceEvaluatorMLP(PerformanceEvaluator):
                 "output_shape": [info["outcome_len"]],
             }
             return self._evaluate_time_series_performance(
-                TimeSeriesRNN, args, X_gt, X_syn
+                TimeSeriesModel, args, X_gt, X_syn
             )
         elif self._task_type == "time_series_survival":
             static, temporal, temporal_horizons, T, E = X_gt.unpack()

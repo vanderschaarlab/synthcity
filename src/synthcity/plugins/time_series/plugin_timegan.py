@@ -17,7 +17,7 @@ from synthcity.plugins.core.distribution import (
     IntegerDistribution,
 )
 from synthcity.plugins.core.models.tabular_encoder import TabularEncoder
-from synthcity.plugins.core.models.ts_rnn import TimeSeriesRNN
+from synthcity.plugins.core.models.ts_model import TimeSeriesModel
 from synthcity.plugins.core.models.ts_tabular_gan import TimeSeriesTabularGAN
 from synthcity.plugins.core.plugin import Plugin
 from synthcity.plugins.core.schema import Schema
@@ -276,7 +276,7 @@ class TimeGANPlugin(Plugin):
         outcome_enc = self.outcome_encoder.transform(outcome)
         self.outcome_encoded_columns = outcome_enc.columns
 
-        self.outcome_model = TimeSeriesRNN(
+        self.outcome_model = TimeSeriesModel(
             task_type="regression",
             n_static_units_in=static.shape[-1],
             n_temporal_units_in=temporal[0].shape[-1],

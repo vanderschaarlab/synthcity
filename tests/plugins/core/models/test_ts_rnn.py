@@ -6,7 +6,7 @@ import numpy as np
 import pytest
 
 # synthcity absolute
-from synthcity.plugins.core.models.ts_rnn import TimeSeriesRNN
+from synthcity.plugins.core.models.ts_model import TimeSeriesModel
 from synthcity.utils.datasets.time_series.google_stocks import GoogleStocksDataloader
 from synthcity.utils.datasets.time_series.sine import SineDataloader
 
@@ -14,7 +14,7 @@ from synthcity.utils.datasets.time_series.sine import SineDataloader
 @pytest.mark.parametrize("mode", ["LSTM", "RNN", "GRU"])
 @pytest.mark.parametrize("task_type", ["classification", "regression"])
 def test_rnn_sanity(mode: str, task_type: str) -> None:
-    model = TimeSeriesRNN(
+    model = TimeSeriesModel(
         task_type=task_type,
         n_static_units_in=3,
         n_temporal_units_in=4,
@@ -53,7 +53,7 @@ def test_rnn_regression_fit_predict(mode: str, source: Any) -> None:
 
     outlen = len(outcome.reshape(-1)) / len(outcome)
 
-    model = TimeSeriesRNN(
+    model = TimeSeriesModel(
         task_type="regression",
         n_static_units_in=static.shape[-1],
         n_temporal_units_in=temporal.shape[-1],
@@ -83,7 +83,7 @@ def test_rnn_classification_fit_predict(mode: str, source: Any) -> None:
 
     y = np.asarray([1] * len(static) + [0] * len(static_fake))
 
-    model = TimeSeriesRNN(
+    model = TimeSeriesModel(
         task_type="classification",
         n_static_units_in=static.shape[-1],
         n_temporal_units_in=temporal.shape[-1],
