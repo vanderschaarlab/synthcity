@@ -47,7 +47,10 @@ def test_rnn_sanity(mode: str, task_type: str) -> None:
 
 @pytest.mark.parametrize("mode", modes)
 @pytest.mark.parametrize("source", [SineDataloader, GoogleStocksDataloader])
-def test_rnn_regression_fit_predict(mode: str, source: Any) -> None:
+@pytest.mark.parametrize("use_horizon_condition", [True, False])
+def test_rnn_regression_fit_predict(
+    mode: str, source: Any, use_horizon_condition: bool
+) -> None:
     static, temporal, temporal_horizons, outcome = source(as_numpy=True).load()
     outcome = outcome.reshape(-1, 1)
 
@@ -62,6 +65,7 @@ def test_rnn_regression_fit_predict(mode: str, source: Any) -> None:
         n_iter=10,
         nonlin_out=[("tanh", outlen)],
         mode=mode,
+        use_horizon_condition=use_horizon_condition,
     )
 
     model.fit(static, temporal, temporal_horizons, outcome)

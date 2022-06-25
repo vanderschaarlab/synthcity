@@ -80,6 +80,7 @@ class TimeSeriesModel(nn.Module):
         nonlin: Optional[str] = "relu",
         random_state: int = 0,
         clipping_value: int = 1,
+        use_horizon_condition: bool = True,
     ) -> None:
         super(TimeSeriesModel, self).__init__()
 
@@ -114,10 +115,12 @@ class TimeSeriesModel(nn.Module):
         self.output_shape = output_shape
         self.n_units_out = np.prod(self.output_shape)
         self.clipping_value = clipping_value
+        self.use_horizon_condition = use_horizon_condition
 
         self.temporal_layer = TimeSeriesLayer(
             n_static_units_in=n_static_units_in,
-            n_temporal_units_in=n_temporal_units_in + 1,  # measurements + horizon
+            n_temporal_units_in=n_temporal_units_in
+            + int(use_horizon_condition),  # measurements + horizon
             n_units_out=self.n_units_out,
             n_static_units_hidden=n_static_units_hidden,
             n_static_layers_hidden=n_static_layers_hidden,
@@ -174,9 +177,13 @@ class TimeSeriesModel(nn.Module):
         assert torch.isnan(temporal_data).sum() == 0
         assert torch.isnan(temporal_horizons).sum() == 0
 
-        temporal_data_merged = torch.cat(
-            [temporal_data, temporal_horizons.unsqueeze(2)], dim=2
-        )
+        if self.use_horizon_condition:
+            temporal_data_merged = torch.cat(
+                [temporal_data, temporal_horizons.unsqueeze(2)], dim=2
+            )
+        else:
+            temporal_data_merged = temporal_data
+
         assert torch.isnan(temporal_data_merged).sum() == 0
 
         pred = self.temporal_layer(static_data, temporal_data_merged)

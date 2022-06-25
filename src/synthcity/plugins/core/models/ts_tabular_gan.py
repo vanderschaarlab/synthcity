@@ -122,6 +122,7 @@ class TimeSeriesTabularGAN(torch.nn.Module):
         gamma_penalty: float = 1,
         moments_penalty: float = 100,
         embedding_penalty: float = 10,
+        use_horizon_condition: bool = True,
     ) -> None:
         super(TimeSeriesTabularGAN, self).__init__()
         if encoder is not None:
@@ -177,6 +178,7 @@ class TimeSeriesTabularGAN(torch.nn.Module):
             gamma_penalty=gamma_penalty,
             moments_penalty=moments_penalty,
             embedding_penalty=embedding_penalty,
+            use_horizon_condition=use_horizon_condition,
         )
 
     @validate_arguments(config=dict(arbitrary_types_allowed=True))

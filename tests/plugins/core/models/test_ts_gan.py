@@ -9,6 +9,7 @@ import pytest
 # synthcity absolute
 from synthcity.plugins.core.dataloader import TimeSeriesDataLoader
 from synthcity.plugins.core.models.ts_gan import TimeSeriesGAN
+from synthcity.plugins.core.models.ts_model import modes
 from synthcity.plugins.core.schema import Schema
 from synthcity.utils.datasets.time_series.google_stocks import GoogleStocksDataloader
 from synthcity.utils.datasets.time_series.sine import SineDataloader
@@ -68,7 +69,7 @@ def test_network_config() -> None:
 @pytest.mark.parametrize("dropout", [0, 0.5, 0.2])
 @pytest.mark.parametrize("batch_norm", [True, False])
 @pytest.mark.parametrize("lr", [1e-3, 3e-4])
-@pytest.mark.parametrize("mode", ["LSTM", "RNN", "GRU"])
+@pytest.mark.parametrize("mode", modes)
 def test_basic_network(
     nonlin: str,
     n_iter: int,

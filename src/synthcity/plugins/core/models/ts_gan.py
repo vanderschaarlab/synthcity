@@ -118,6 +118,7 @@ class TimeSeriesGAN(nn.Module):
         mode: str = "RNN",
         device: Any = DEVICE,
         window_size: int = 1,
+        use_horizon_condition: bool = True,
     ) -> None:
         super(TimeSeriesGAN, self).__init__()
 
@@ -187,6 +188,7 @@ class TimeSeriesGAN(nn.Module):
             "random_state": random_state,
             "lr": generator_lr,
             "device": device,
+            "use_horizon_condition": use_horizon_condition,
         }
         # Embedding network between original feature space to latent space: (X_static, recovered_temporal_data) -> temporal_embeddings
         self.temporal_embedder = TimeSeriesModel(
@@ -245,6 +247,7 @@ class TimeSeriesGAN(nn.Module):
             random_state=random_state,
             lr=discriminator_lr,
             device=device,
+            use_horizon_condition=use_horizon_condition,
         ).to(self.device)
 
         self.discriminator_horizons = MLP(

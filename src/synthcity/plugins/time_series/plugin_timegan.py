@@ -134,6 +134,7 @@ class TimeGANPlugin(Plugin):
         gamma_penalty: float = 1,
         moments_penalty: float = 100,
         embedding_penalty: float = 10,
+        use_horizon_condition: bool = False,
         **kwargs: Any
     ) -> None:
         super().__init__()
@@ -171,6 +172,7 @@ class TimeGANPlugin(Plugin):
         self.gamma_penalty = gamma_penalty
         self.moments_penalty = moments_penalty
         self.embedding_penalty = embedding_penalty
+        self.use_horizon_condition = use_horizon_condition
 
         self.outcome_encoder = TabularEncoder(max_clusters=encoder_max_clusters)
 
@@ -268,6 +270,7 @@ class TimeGANPlugin(Plugin):
             gamma_penalty=self.gamma_penalty,
             moments_penalty=self.moments_penalty,
             embedding_penalty=self.embedding_penalty,
+            use_horizon_condition=self.use_horizon_condition,
         )
         self.cov_model.fit(static, temporal, temporal_horizons, cond=cond)
 
