@@ -10,8 +10,30 @@ from synthcity.plugins.core.models.ts_model import TimeSeriesModel
 from synthcity.utils.datasets.time_series.google_stocks import GoogleStocksDataloader
 from synthcity.utils.datasets.time_series.sine import SineDataloader
 
+modes = [
+    "LSTM",
+    "GRU",
+    "RNN",
+    "MLSTM_FCN",
+    "TCN",
+    "InceptionTime",
+    "InceptionTimePlus",
+    "XceptionTime",
+    "ResCNN",
+    "OmniScaleCNN",
+    "TST",
+    "XCM",
+    "gMLP",
+    "MiniRocket",
+    "MiniRocketPlus",
+    "TransformerModel",
+    "TSiTPlus",
+    "TSTPlus",
+    "TSPerceiver",
+]
 
-@pytest.mark.parametrize("mode", ["LSTM", "RNN", "GRU"])
+
+@pytest.mark.parametrize("mode", modes)
 @pytest.mark.parametrize("task_type", ["classification", "regression"])
 def test_rnn_sanity(mode: str, task_type: str) -> None:
     model = TimeSeriesModel(
@@ -45,7 +67,7 @@ def test_rnn_sanity(mode: str, task_type: str) -> None:
     assert model.batch_size == 123
 
 
-@pytest.mark.parametrize("mode", ["LSTM", "RNN", "GRU"])
+@pytest.mark.parametrize("mode", modes)
 @pytest.mark.parametrize("source", [SineDataloader, GoogleStocksDataloader])
 def test_rnn_regression_fit_predict(mode: str, source: Any) -> None:
     static, temporal, temporal_horizons, outcome = source(as_numpy=True).load()
@@ -73,7 +95,7 @@ def test_rnn_regression_fit_predict(mode: str, source: Any) -> None:
     assert model.score(static, temporal, temporal_horizons, outcome) < 2
 
 
-@pytest.mark.parametrize("mode", ["LSTM", "RNN", "GRU"])
+@pytest.mark.parametrize("mode", modes)
 @pytest.mark.parametrize("source", [SineDataloader, GoogleStocksDataloader])
 def test_rnn_classification_fit_predict(mode: str, source: Any) -> None:
     static, temporal, temporal_horizons, outcome = source(as_numpy=True).load()
@@ -103,4 +125,5 @@ def test_rnn_classification_fit_predict(mode: str, source: Any) -> None:
 
     assert y_pred.shape == y.shape
 
+    print(mode, model.score(static_data, temporal_data, temporal_horizons, y))
     assert model.score(static_data, temporal_data, temporal_horizons, y) <= 1

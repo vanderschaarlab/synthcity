@@ -7,6 +7,22 @@ import torch
 from pydantic import validate_arguments
 from torch import nn
 from torch.utils.data import DataLoader, TensorDataset, sampler
+from tsai.models.gMLP import gMLP
+from tsai.models.InceptionTime import InceptionTime
+from tsai.models.InceptionTimePlus import InceptionTimePlus
+from tsai.models.MINIROCKET_Pytorch import MiniRocket
+from tsai.models.MINIROCKETPlus_Pytorch import MiniRocketPlus
+from tsai.models.OmniScaleCNN import OmniScaleCNN
+from tsai.models.ResCNN import ResCNN
+from tsai.models.RNN_FCN import MLSTM_FCN
+from tsai.models.TCN import TCN
+from tsai.models.TransformerModel import TransformerModel
+from tsai.models.TSiTPlus import TSiTPlus
+from tsai.models.TSPerceiver import TSPerceiver
+from tsai.models.TST import TST
+from tsai.models.TSTPlus import TSTPlus
+from tsai.models.XceptionTime import XceptionTime
+from tsai.models.XCM import XCM
 
 # synthcity absolute
 import synthcity.logger as log
@@ -23,12 +39,12 @@ class TimeSeriesModel(nn.Module):
         n_static_units_in: int,
         n_temporal_units_in: int,
         output_shape: List[int],
-        n_static_units_hidden: int = 100,
+        n_static_units_hidden: int = 102,
         n_static_layers_hidden: int = 2,
-        n_temporal_units_hidden: int = 100,
+        n_temporal_units_hidden: int = 102,
         n_temporal_layers_hidden: int = 2,
         n_iter: int = 500,
-        mode: str = "RNN",  # RNN, LSTM, GRU
+        mode: str = "RNN",
         n_iter_print: int = 10,
         batch_size: int = 150,
         lr: float = 1e-3,
@@ -78,7 +94,7 @@ class TimeSeriesModel(nn.Module):
 
         self.temporal_layer = TimeSeriesLayer(
             n_static_units_in=n_static_units_in,
-            n_temporal_units_in=n_temporal_units_in,
+            n_temporal_units_in=n_temporal_units_in + 1,  # measurements + horizon
             n_units_out=self.n_units_out,
             n_static_units_hidden=n_static_units_hidden,
             n_static_layers_hidden=n_static_layers_hidden,
@@ -269,7 +285,8 @@ class TimeSeriesLayer(nn.Module):
         n_static_layers_hidden: int = 2,
         n_temporal_units_hidden: int = 100,
         n_temporal_layers_hidden: int = 2,
-        mode: str = "RNN",  # RNN, LSTM, GRU
+        seq_len: int = 10,
+        mode: str = "RNN",
         window_size: int = 1,
         device: Any = DEVICE,
         dropout: float = 0,
@@ -278,7 +295,7 @@ class TimeSeriesLayer(nn.Module):
     ) -> None:
         super(TimeSeriesLayer, self).__init__()
         temporal_params = {
-            "input_size": n_temporal_units_in + 1,
+            "input_size": n_temporal_units_in,
             "hidden_size": n_temporal_units_hidden,
             "num_layers": n_temporal_layers_hidden,
             "dropout": 0 if n_temporal_layers_hidden == 1 else dropout,
@@ -290,29 +307,162 @@ class TimeSeriesLayer(nn.Module):
             "GRU": nn.GRU,
         }
 
-        self.temporal_layer = temporal_models[mode](**temporal_params).to(device)
+        if mode in ["RNN", "LSTM", "GRU"]:
+            self.temporal_layer = temporal_models[mode](**temporal_params).to(device)
+        elif mode == "MLSTM_FCN":
+            self.temporal_layer = MLSTM_FCN(
+                c_in=n_temporal_units_in,
+                c_out=n_temporal_units_hidden,
+                hidden_size=n_temporal_units_hidden,
+                rnn_layers=n_temporal_layers_hidden,
+                fc_dropout=dropout,
+                shuffle=False,
+            )
+        elif mode == "TCN":
+            self.temporal_layer = TCN(
+                c_in=n_temporal_units_in,
+                c_out=n_temporal_units_hidden,
+                fc_dropout=dropout,
+            )
+        elif mode == "InceptionTime":
+            self.temporal_layer = InceptionTime(
+                c_in=n_temporal_units_in,
+                c_out=n_temporal_units_hidden,
+                depth=n_temporal_layers_hidden,
+            )
+        elif mode == "InceptionTimePlus":
+            self.temporal_layer = InceptionTimePlus(
+                c_in=n_temporal_units_in,
+                c_out=n_temporal_units_hidden,
+                depth=n_temporal_layers_hidden,
+            )
+        elif mode == "XceptionTime":
+            self.temporal_layer = XceptionTime(
+                c_in=n_temporal_units_in,
+                c_out=n_temporal_units_hidden,
+            )
+        elif mode == "ResCNN":
+            self.temporal_layer = ResCNN(
+                c_in=n_temporal_units_in,
+                c_out=n_temporal_units_hidden,
+            )
+        elif mode == "OmniScaleCNN":
+            self.temporal_layer = OmniScaleCNN(
+                c_in=n_temporal_units_in,
+                c_out=n_temporal_units_hidden,
+                seq_len=seq_len,
+            )
+        elif mode == "TST":
+            self.temporal_layer = TST(
+                c_in=n_temporal_units_in,
+                c_out=n_temporal_units_hidden,
+                seq_len=seq_len,
+                n_layers=n_temporal_layers_hidden,
+                dropout=dropout,
+            )
+        elif mode == "XCM":
+            self.temporal_layer = XCM(
+                c_in=n_temporal_units_in,
+                c_out=n_temporal_units_hidden,
+                seq_len=seq_len,
+                fc_dropout=dropout,
+            )
+        elif mode == "gMLP":
+            self.temporal_layer = gMLP(
+                c_in=n_temporal_units_in,
+                c_out=n_temporal_units_hidden,
+                seq_len=seq_len,
+                depth=n_temporal_layers_hidden,
+            )
+        elif mode == "MiniRocket":
+            self.temporal_layer = MiniRocket(
+                c_in=n_temporal_units_in,
+                c_out=n_temporal_units_hidden,
+                seq_len=seq_len,
+                random_state=random_state,
+                fc_dropout=dropout,
+            )
+        elif mode == "MiniRocketPlus":
+            self.temporal_layer = MiniRocketPlus(
+                c_in=n_temporal_units_in,
+                c_out=n_temporal_units_hidden,
+                seq_len=seq_len,
+                fc_dropout=dropout,
+            )
+        elif mode == "TransformerModel":
+            self.temporal_layer = TransformerModel(
+                c_in=n_temporal_units_in,
+                c_out=n_temporal_units_hidden,
+                dropout=dropout,
+                n_layers=n_temporal_layers_hidden,
+            )
+        elif mode == "TSiTPlus":
+            self.temporal_layer = TSiTPlus(
+                c_in=n_temporal_units_in,
+                c_out=n_temporal_units_hidden,
+                seq_len=seq_len,
+                depth=n_temporal_layers_hidden,
+                dropout=dropout,
+            )
+        elif mode == "TSTPlus":
+            self.temporal_layer = TSTPlus(
+                c_in=n_temporal_units_in,
+                c_out=n_temporal_units_hidden,
+                seq_len=seq_len,
+                n_layers=n_temporal_layers_hidden,
+                dropout=dropout,
+            )
+        elif mode == "TSPerceiver":
+            self.temporal_layer = TSPerceiver(
+                c_in=n_temporal_units_in,
+                c_out=n_temporal_units_hidden,
+                seq_len=seq_len,
+                n_layers=n_temporal_layers_hidden,
+            )
+        else:
+            raise RuntimeError(f"Unknown TS mode {mode}")
+
         self.device = device
         self.mode = mode
 
-        self.out = WindowLinearLayer(
-            n_static_units_in=n_static_units_in,
-            n_temporal_units_in=n_temporal_units_hidden,
-            window_size=window_size,
-            n_units_out=n_units_out,
-            n_layers=n_static_layers_hidden,
-            dropout=dropout,
-            nonlin=nonlin,
-            device=device,
-        )
+        if mode in ["RNN", "LSTM", "GRU"]:
+            self.out = WindowLinearLayer(
+                n_static_units_in=n_static_units_in,
+                n_temporal_units_in=n_temporal_units_hidden,
+                window_size=window_size,
+                n_units_out=n_units_out,
+                n_layers=n_static_layers_hidden,
+                dropout=dropout,
+                nonlin=nonlin,
+                device=device,
+            )
+        else:
+            self.out = MLP(
+                task_type="regression",
+                n_units_in=n_static_units_in + n_temporal_units_hidden,
+                n_units_out=n_units_out,
+                n_layers_hidden=n_static_layers_hidden,
+                n_units_hidden=n_static_units_hidden,
+                dropout=dropout,
+                nonlin=nonlin,
+                device=device,
+            )
 
     def forward(
         self, static_data: torch.Tensor, temporal_data: torch.Tensor
     ) -> torch.Tensor:
-        X_interm, _ = self.temporal_layer(temporal_data)
-        assert torch.isnan(X_interm).sum() == 0
+        if self.mode in ["RNN", "LSTM", "GRU"]:
+            X_interm, _ = self.temporal_layer(temporal_data)
 
-        # choose r_out at the last <window size> steps
-        return self.out(static_data, X_interm)
+            assert torch.isnan(X_interm).sum() == 0
+
+            return self.out(static_data, X_interm)
+        else:
+            X_interm = self.temporal_layer(torch.swapaxes(temporal_data, 1, 2))
+
+            assert torch.isnan(X_interm).sum() == 0
+
+            return self.out(torch.cat([static_data, X_interm], dim=1))
 
 
 class WindowLinearLayer(nn.Module):
