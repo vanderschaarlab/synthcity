@@ -125,7 +125,6 @@ def test_detect_synth_timeseries(test_plugin: Plugin, evaluator_t: Type) -> None
         pd.DataFrame(np.random.randn(sz, len(data.columns)), columns=data.columns),
         data.info(),
     )
-    print("rnd generated ", data_rnd.dataframe())
 
     score = evaluator.evaluate(
         data,

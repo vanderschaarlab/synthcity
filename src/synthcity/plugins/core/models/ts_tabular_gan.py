@@ -200,6 +200,34 @@ class TimeSeriesTabularGAN(torch.nn.Module):
         )
 
     @validate_arguments(config=dict(arbitrary_types_allowed=True))
+    def encode_static(
+        self,
+        static_data: pd.DataFrame,
+    ) -> Tuple:
+        return self.encoder.transform_static(static_data)
+
+    @validate_arguments(config=dict(arbitrary_types_allowed=True))
+    def decode_static(
+        self,
+        static_data: pd.DataFrame,
+    ) -> Tuple:
+        return self.encoder.inverse_transform_static(static_data)
+
+    @validate_arguments(config=dict(arbitrary_types_allowed=True))
+    def encode_horizons(
+        self,
+        temporal_horizons: List,
+    ) -> Tuple:
+        return self.encoder.transform_temporal_horizons(temporal_horizons)
+
+    @validate_arguments(config=dict(arbitrary_types_allowed=True))
+    def decode_horizons(
+        self,
+        temporal_horizons: List,
+    ) -> Tuple:
+        return self.encoder.inverse_transform_temporal_horizons(temporal_horizons)
+
+    @validate_arguments(config=dict(arbitrary_types_allowed=True))
     def fit(
         self,
         static_data: pd.DataFrame,
@@ -228,8 +256,24 @@ class TimeSeriesTabularGAN(torch.nn.Module):
         )
         return self
 
-    def generate(self, count: int, cond: Optional[pd.DataFrame] = None) -> pd.DataFrame:
-        static_raw, temporal_raw, temporal_horizons = self.model.generate(count, cond)
+    def generate(
+        self,
+        count: int,
+        cond: Optional[pd.DataFrame] = None,
+        static_data: Optional[np.ndarray] = None,
+        temporal_horizons: Optional[np.ndarray] = None,
+    ) -> pd.DataFrame:
+        if static_data is not None:
+            static_data = self.encode_static(static_data)
+        if temporal_horizons is not None:
+            temporal_horizons = self.encode_horizons(temporal_horizons)
+
+        static_raw, temporal_raw, temporal_horizons = self.model.generate(
+            count,
+            cond=cond,
+            static_data=static_data,
+            temporal_horizons=temporal_horizons,
+        )
 
         static_data = pd.DataFrame(static_raw, columns=self.static_encoded_columns)
         temporal_data = []
