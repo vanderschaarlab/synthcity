@@ -6,6 +6,9 @@ import torch
 from torch import nn
 from torch.nn.modules.transformer import TransformerEncoder, TransformerEncoderLayer
 
+# synthcity absolute
+from synthcity.utils.constants import DEVICE
+
 
 class Permute(nn.Module):
     def __init__(self, *dims: Any) -> None:
@@ -47,6 +50,7 @@ class TransformerModel(nn.Module):
         dropout: float = 0.1,
         activation: str = "relu",
         n_hidden_layers: int = 1,
+        device: Any = DEVICE,
     ) -> None:
         """
         Args:
@@ -78,6 +82,7 @@ class TransformerModel(nn.Module):
             encoder_layer, n_hidden_layers, norm=encoder_norm
         )
         self.transpose = Transpose(1, 0)
+        self.to(device)
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         x = self.permute(x)  # bs x seq_len x nvars -> seq_len x bs x nvars
