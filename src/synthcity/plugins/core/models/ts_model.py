@@ -331,7 +331,7 @@ class TimeSeriesLayer(nn.Module):
         }
 
         if mode in ["RNN", "LSTM", "GRU"]:
-            self.temporal_layer = temporal_models[mode](**temporal_params).to(device)
+            self.temporal_layer = temporal_models[mode](**temporal_params)
         elif mode == "MLSTM_FCN":
             self.temporal_layer = MLSTM_FCN(
                 c_in=n_temporal_units_in,
@@ -469,6 +469,9 @@ class TimeSeriesLayer(nn.Module):
                 nonlin=nonlin,
                 device=device,
             )
+
+        self.temporal_layer.to(device)
+        self.out.to(device)
 
     def forward(
         self, static_data: torch.Tensor, temporal_data: torch.Tensor
