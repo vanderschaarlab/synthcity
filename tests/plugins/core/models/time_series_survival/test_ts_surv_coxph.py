@@ -27,14 +27,15 @@ def test_hyperparams() -> None:
     assert len(params.keys()) == 11
 
 
-def test_train_prediction() -> None:
+@pytest.mark.parametrize("rnn_type", ["GRU", "LSTM", "Transformer"])
+def test_train_prediction(rnn_type: str) -> None:
     static, temporal, temporal_horizons, outcome = PBCDataloader(as_numpy=True).load()
     T, E = outcome
 
     horizons = [0.25, 0.5, 0.75]
     time_horizons = np.quantile(T, horizons).tolist()
 
-    model = CoxTimeSeriesSurvival()
+    model = CoxTimeSeriesSurvival(emb_rnn_type=rnn_type)
     score = evaluate_ts_survival_model(
         model, static, temporal, temporal_horizons, T, E, time_horizons
     )

@@ -9,6 +9,7 @@ from synthcity.plugins.core.models.time_series_survival.benchmarks import (
 )
 from synthcity.plugins.core.models.time_series_survival.ts_surv_dynamic_deephit import (
     DynamicDeephitTimeSeriesSurvival,
+    rnn_modes,
 )
 from synthcity.utils.datasets.time_series.pbc import PBCDataloader
 
@@ -27,14 +28,15 @@ def test_hyperparams() -> None:
     assert len(params.keys()) == 9
 
 
-def test_train_prediction() -> None:
+@pytest.mark.parametrize("rnn_type", rnn_modes)
+def test_train_prediction(rnn_type: str) -> None:
     static, temporal, temporal_horizons, outcome = PBCDataloader(as_numpy=True).load()
     T, E = outcome
 
     horizons = [0.25, 0.5, 0.75]
     time_horizons = np.quantile(T, horizons).tolist()
 
-    model = DynamicDeephitTimeSeriesSurvival()
+    model = DynamicDeephitTimeSeriesSurvival(rnn_type=rnn_type)
     score = evaluate_ts_survival_model(
         model, static, temporal, temporal_horizons, T, E, time_horizons
     )

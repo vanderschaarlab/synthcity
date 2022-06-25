@@ -17,7 +17,7 @@ from synthcity.plugins.core.distribution import (
     IntegerDistribution,
 )
 from synthcity.plugins.core.models.tabular_encoder import TabularEncoder
-from synthcity.plugins.core.models.ts_model import TimeSeriesModel
+from synthcity.plugins.core.models.ts_model import TimeSeriesModel, modes
 from synthcity.plugins.core.models.ts_tabular_gan import TimeSeriesTabularGAN
 from synthcity.plugins.core.plugin import Plugin
 from synthcity.plugins.core.schema import Schema
@@ -208,7 +208,7 @@ class TimeGANPlugin(Plugin):
             CategoricalDistribution(name="weight_decay", choices=[1e-3, 1e-4]),
             CategoricalDistribution(name="batch_size", choices=[100, 200, 500]),
             IntegerDistribution(name="encoder_max_clusters", low=2, high=20),
-            CategoricalDistribution(name="mode", choices=["LSTM", "GRU", "RNN"]),
+            CategoricalDistribution(name="mode", choices=modes),
             FloatDistribution(name="gamma_penalty", low=0, high=1000),
             FloatDistribution(name="moments_penalty", low=0, high=1000),
             FloatDistribution(name="embedding_penalty", low=0, high=1000),

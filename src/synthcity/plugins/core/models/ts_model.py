@@ -12,6 +12,7 @@ from tsai.models.InceptionTime import InceptionTime
 from tsai.models.InceptionTimePlus import InceptionTimePlus
 from tsai.models.MINIROCKET_Pytorch import MiniRocket
 from tsai.models.MINIROCKETPlus_Pytorch import MiniRocketPlus
+from tsai.models.mWDN import mWDNPlus
 from tsai.models.OmniScaleCNN import OmniScaleCNN
 from tsai.models.ResCNN import ResCNN
 from tsai.models.RNN_FCN import MLSTM_FCN
@@ -48,6 +49,7 @@ modes = [
     "MiniRocketPlus",
     "TransformerModel",
     "TSiTPlus",
+    "mWDNPlus",
 ]
 
 
@@ -432,6 +434,12 @@ class TimeSeriesLayer(nn.Module):
                 seq_len=seq_len,
                 n_layers=n_temporal_layers_hidden,
                 dropout=dropout,
+            )
+        elif mode == "mWDNPlus":
+            self.temporal_layer = mWDNPlus(
+                c_in=n_temporal_units_in,
+                c_out=n_temporal_units_hidden,
+                seq_len=seq_len,
             )
         else:
             raise RuntimeError(f"Unknown TS mode {mode}")

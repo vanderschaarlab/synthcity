@@ -18,11 +18,14 @@ from synthcity.plugins.core.distribution import (
 )
 from synthcity.plugins.core.models.mlp import MLP
 from synthcity.plugins.core.models.time_series_survival.utils import get_padded_features
+from synthcity.plugins.core.models.transformer import TransformerModel
 from synthcity.utils.constants import DEVICE
 from synthcity.utils.reproducibility import enable_reproducible_results
 
 # synthcity relative
 from ._base import TimeSeriesSurvivalPlugin
+
+rnn_modes = ["GRU", "LSTM", "RNN", "Transformer"]
 
 
 class DynamicDeephitTimeSeriesSurvival(TimeSeriesSurvivalPlugin):
@@ -46,6 +49,7 @@ class DynamicDeephitTimeSeriesSurvival(TimeSeriesSurvivalPlugin):
     ) -> None:
         super().__init__()
         enable_reproducible_results(random_state)
+        assert rnn_type in rnn_modes, f"Supported modes: {rnn_modes}"
 
         self.model = DynamicDeepHitModel(
             split=split,
@@ -150,9 +154,7 @@ class DynamicDeephitTimeSeriesSurvival(TimeSeriesSurvivalPlugin):
                 name=f"{prefix}_batch_size", choices=[100, 200, 500]
             ),
             CategoricalDistribution(name=f"{prefix}_lr", choices=[1e-2, 1e-3, 1e-4]),
-            CategoricalDistribution(
-                name=f"{prefix}_rnn_type", choices=["LSTM", "GRU", "RNN"]
-            ),
+            CategoricalDistribution(name=f"{prefix}_rnn_type", choices=rnn_modes),
             FloatDistribution(name=f"{prefix}_alpha", low=0.0, high=0.5),
             FloatDistribution(name=f"{prefix}_sigma", low=0.0, high=0.5),
             FloatDistribution(name=f"{prefix}_beta", low=0.0, high=0.5),
@@ -549,7 +551,7 @@ class DynamicDeepHitLayers(nn.Module):
             self.embedding = nn.LSTM(
                 input_dim, hidden_rnn, layers_rnn, bias=False, batch_first=True
             )
-        if self.rnn_type == "RNN":
+        elif self.rnn_type == "RNN":
             self.embedding = nn.RNN(
                 input_dim,
                 hidden_rnn,
@@ -558,11 +560,16 @@ class DynamicDeepHitLayers(nn.Module):
                 batch_first=True,
                 nonlinearity="relu",
             )
-        if self.rnn_type == "GRU":
+        elif self.rnn_type == "GRU":
             self.embedding = nn.GRU(
                 input_dim, hidden_rnn, layers_rnn, bias=False, batch_first=True
             )
-
+        elif self.rnn_type == "Transformer":
+            self.embedding = TransformerModel(
+                input_dim, hidden_rnn, n_hidden_layers=layers_rnn, dropout=dropout
+            )
+        else:
+            raise RuntimeError(f"Unknown rnn_type {rnn_type}")
         # Longitudinal network
         self.longitudinal = MLP(
             task_type="regression",
@@ -613,7 +620,11 @@ class DynamicDeepHitLayers(nn.Module):
 
         assert torch.isnan(x).sum() == 0
 
-        hidden, _ = self.embedding(x)
+        if self.rnn_type in ["GRU", "LSTM", "RNN"]:
+            hidden, _ = self.embedding(x)
+        else:
+            hidden = self.embedding(x)
+
         assert torch.isnan(hidden).sum() == 0
 
         # Longitudinal modelling
