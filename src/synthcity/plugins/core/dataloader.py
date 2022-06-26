@@ -491,7 +491,7 @@ class TimeSeriesDataLoader(DataLoader):
         return self.static_features + self.temporal_features + self.outcome_features
 
     def dataframe(self) -> pd.DataFrame:
-        return self.data["seq_data"]
+        return self.data["seq_data"].copy()
 
     def numpy(self) -> np.ndarray:
         return self.dataframe().values
@@ -649,6 +649,7 @@ class TimeSeriesDataLoader(DataLoader):
 
     def sample(self, count: int) -> "DataLoader":
         ids = self.ids()
+        count = min(count, len(ids))
         sampled_ids = random.sample(ids, count)
 
         return self.unpack_and_decorate(self.filter_ids(sampled_ids))

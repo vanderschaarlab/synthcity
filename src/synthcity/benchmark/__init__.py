@@ -69,7 +69,7 @@ class Benchmarks:
         plugin_cats = ["generic"]
         if task_type == "survival_analysis":
             plugin_cats.append("survival_analysis")
-        elif task_type == "time_series":
+        elif task_type == "time_series" or task_type == "time_series_survival":
             plugin_cats.append("time_series")
 
         for plugin in plugins:
