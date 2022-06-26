@@ -3,6 +3,7 @@ from typing import Any
 
 # third party
 import numpy as np
+import pandas as pd
 import pytest
 from ts_helpers import generate_fixtures
 
@@ -82,6 +83,70 @@ def test_plugin_generate(source: Any) -> None:
 
     X_gen = test_plugin.generate(50)
     assert len(X_gen.ids()) == 50
+    assert test_plugin.schema_includes(X_gen)
+    assert list(X_gen.columns) == list(data.columns)
+
+
+@pytest.mark.parametrize(
+    "source",
+    [
+        SineDataloader(with_missing=True),
+        GoogleStocksDataloader(),
+    ],
+)
+def test_plugin_generate_static_cond(source: Any) -> None:
+    static_data, temporal_data, temporal_horizons, outcome = source.load()
+    data = TimeSeriesDataLoader(
+        temporal_data=temporal_data,
+        temporal_horizons=temporal_horizons,
+        static_data=static_data,
+        outcome=outcome,
+    )
+    test_plugin = plugin(
+        n_iter=10,
+    )
+    test_plugin.fit(data)
+
+    cnt = 50
+    static_seed = static_data.head(1).values.tolist() * cnt
+    X_gen = test_plugin.generate(
+        cnt, static_data=pd.DataFrame(static_seed, columns=static_data.columns)
+    )
+    static_gen, _, _, _ = X_gen.unpack(as_numpy=True)
+    assert len(X_gen.ids()) == cnt
+    assert test_plugin.schema_includes(X_gen)
+    assert list(X_gen.columns) == list(data.columns)
+    assert np.isclose(np.asarray(static_gen), np.asarray(static_seed)).all()
+
+
+@pytest.mark.parametrize(
+    "source",
+    [
+        SineDataloader(with_missing=True),
+        GoogleStocksDataloader(),
+    ],
+)
+def test_plugin_generate_horizons_cond(source: Any) -> None:
+    static_data, temporal_data, temporal_horizons, outcome = source.load()
+    data = TimeSeriesDataLoader(
+        temporal_data=temporal_data,
+        temporal_horizons=temporal_horizons,
+        static_data=static_data,
+        outcome=outcome,
+    )
+    _, _, temporal_horizons, _ = data.unpack(pad=True)
+    test_plugin = plugin(
+        n_iter=10,
+    )
+    test_plugin.fit(data)
+
+    cnt = 50
+    horizon_seed = []
+    for r in range(cnt):
+        horizon_seed.append(temporal_horizons[0])
+
+    X_gen = test_plugin.generate(cnt, temporal_horizons=horizon_seed)
+    assert len(X_gen.ids()) == cnt
     assert test_plugin.schema_includes(X_gen)
     assert list(X_gen.columns) == list(data.columns)
 

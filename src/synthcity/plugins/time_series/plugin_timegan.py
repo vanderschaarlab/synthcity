@@ -314,15 +314,36 @@ class TimeGANPlugin(Plugin):
 
     def _generate(self, count: int, syn_schema: Schema, **kwargs: Any) -> pd.DataFrame:
         cond: Optional[Union[pd.DataFrame, pd.Series]] = None
+        static_data_cond: Optional[pd.DataFrame] = None
+        temporal_horizons_cond: Optional[list] = None
+
         if "cond" in kwargs:
             cond = kwargs["cond"]
+        if "static_data" in kwargs:
+            static_data_cond = kwargs["static_data"]
+        if "temporal_horizons" in kwargs:
+            temporal_horizons_cond = kwargs["temporal_horizons"]
 
         def _sample(count: int) -> Tuple:
             local_cond: Optional[Union[pd.DataFrame, pd.Series]] = None
+            local_static_data: Optional[pd.DataFrame] = None
+            local_temporal_horizons: Optional[list] = None
             if cond is not None:
                 local_cond = cond.sample(count)
+            if static_data_cond is not None:
+                local_static_data = static_data_cond.sample(count)
+            if temporal_horizons_cond is not None:
+                ids = list(range(len(temporal_horizons_cond)))
+                local_ids = np.random.choice(ids, count)
+                local_temporal_horizons = np.asarray(temporal_horizons_cond)[
+                    local_ids
+                ].tolist()
+
             static, temporal, temporal_horizons = self.cov_model.generate(
-                count, cond=local_cond
+                count,
+                cond=local_cond,
+                static_data=local_static_data,
+                temporal_horizons=local_temporal_horizons,
             )
 
             outcome_enc = pd.DataFrame(
