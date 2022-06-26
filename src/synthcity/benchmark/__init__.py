@@ -1,7 +1,7 @@
 # stdlib
 import json
 from pathlib import Path
-from typing import Dict, List, Optional
+from typing import Dict, List, Optional, Tuple
 
 # third party
 import pandas as pd
@@ -23,7 +23,7 @@ class Benchmarks:
     @staticmethod
     @validate_arguments(config=dict(arbitrary_types_allowed=True))
     def evaluate(
-        plugins: List,
+        tests: List[Tuple[str, str, dict]],  # test name, plugin name, plugin args
         X: DataLoader,
         metrics: Optional[Dict] = None,
         repeats: int = 3,
@@ -33,12 +33,11 @@ class Benchmarks:
         synthetic_reuse_is_exists: bool = True,
         task_type: str = "classification",  # classification, regression, survival_analysis, time_series
         workspace: Path = Path("workspace"),
-        plugin_kwargs: Dict = {},
     ) -> pd.DataFrame:
         """Benchmark the performance of several algorithms.
 
         Args:
-            plugins:
+            tests:
                 The list of algorithms to evaluate
             X:
                 The baseline dataset to learn
@@ -72,25 +71,24 @@ class Benchmarks:
         elif task_type == "time_series" or task_type == "time_series_survival":
             plugin_cats.append("time_series")
 
-        for plugin in plugins:
+        for testcase, plugin, kwargs in tests:
             log.info(f"Benchmarking plugin : {plugin}")
             scores = ScoreEvaluator()
 
             kwargs = {}
             kwargs_hash = ""
-            if plugin in plugin_kwargs:
-                kwargs = plugin_kwargs[plugin]
             if len(kwargs) > 0:
                 kwargs_hash = json.dumps(kwargs, sort_keys=True)
 
             for repeat in range(repeats):
                 enable_reproducible_results(repeat)
                 cache_file = (
-                    workspace / f"{experiment_name}_{plugin}{kwargs_hash}_{repeat}.bkp"
+                    workspace
+                    / f"{experiment_name}_{testcase}_{plugin}{kwargs_hash}_{repeat}.bkp"
                 )
 
                 log.info(
-                    f" Experiment repeat: {repeat} task type: {task_type} Train df hash = {X.train().hash()}"
+                    f"[testcase] Experiment repeat: {repeat} task type: {task_type} Train df hash = {X.train().hash()}"
                 )
 
                 if cache_file.exists() and synthetic_reuse_is_exists:
@@ -135,7 +133,7 @@ class Benchmarks:
                         duration[key],
                         direction[key],
                     )
-            out[plugin] = scores.to_dataframe()
+            out[testcase] = scores.to_dataframe()
 
         return out
 

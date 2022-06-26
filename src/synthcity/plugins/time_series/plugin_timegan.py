@@ -134,7 +134,7 @@ class TimeGANPlugin(Plugin):
         gamma_penalty: float = 1,
         moments_penalty: float = 100,
         embedding_penalty: float = 10,
-        use_horizon_condition: bool = False,
+        use_horizon_condition: bool = True,
         **kwargs: Any
     ) -> None:
         super().__init__()
