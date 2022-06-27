@@ -283,6 +283,7 @@ class TimeGANPlugin(Plugin):
             task_type="regression",
             n_static_units_in=static.shape[-1],
             n_temporal_units_in=temporal[0].shape[-1],
+            n_temporal_window=temporal[0].shape[0],
             output_shape=outcome_enc.shape[1:],
             n_static_units_hidden=self.generator_n_units_hidden,
             n_static_layers_hidden=self.generator_n_layers_hidden,
@@ -329,12 +330,12 @@ class TimeGANPlugin(Plugin):
             local_static_data: Optional[pd.DataFrame] = None
             local_temporal_horizons: Optional[list] = None
             if cond is not None:
-                local_cond = cond.sample(count)
+                local_cond = cond.sample(count, replace=True)
             if static_data_cond is not None:
-                local_static_data = static_data_cond.sample(count)
+                local_static_data = static_data_cond.sample(count, replace=True)
             if temporal_horizons_cond is not None:
                 ids = list(range(len(temporal_horizons_cond)))
-                local_ids = np.random.choice(ids, count)
+                local_ids = np.random.choice(ids, count, replace=True)
                 local_temporal_horizons = np.asarray(temporal_horizons_cond)[
                     local_ids
                 ].tolist()

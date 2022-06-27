@@ -195,6 +195,7 @@ class TimeSeriesGAN(nn.Module):
             task_type="regression",
             n_static_units_in=n_static_units + n_units_conditional,
             n_temporal_units_in=n_temporal_units,
+            n_temporal_window=n_temporal_window,
             output_shape=[n_temporal_window, n_temporal_units_latent],
             **rnn_generator_extra_args,
         ).to(self.device)
@@ -204,6 +205,7 @@ class TimeSeriesGAN(nn.Module):
             task_type="regression",
             n_static_units_in=n_static_units + n_units_conditional,
             n_temporal_units_in=n_temporal_units_latent,
+            n_temporal_window=n_temporal_window,
             output_shape=[n_temporal_window, n_temporal_units],
             nonlin_out=generator_temporal_nonlin_out,
             **rnn_generator_extra_args,
@@ -214,6 +216,7 @@ class TimeSeriesGAN(nn.Module):
             task_type="regression",
             n_static_units_in=n_static_units + n_units_conditional,
             n_temporal_units_in=n_temporal_units_latent,
+            n_temporal_window=n_temporal_window,
             output_shape=[n_temporal_window, n_temporal_units_latent],
             **rnn_generator_extra_args,
         )
@@ -223,6 +226,7 @@ class TimeSeriesGAN(nn.Module):
             task_type="regression",
             n_static_units_in=n_static_units + n_units_conditional,
             n_temporal_units_in=n_temporal_units_latent,
+            n_temporal_window=n_temporal_window,
             output_shape=[n_temporal_window, n_temporal_units_latent],
             **rnn_generator_extra_args,
         )
@@ -232,6 +236,7 @@ class TimeSeriesGAN(nn.Module):
             task_type="regression",
             n_static_units_in=n_static_units + n_units_conditional,
             n_temporal_units_in=n_temporal_units,
+            n_temporal_window=n_temporal_window,
             output_shape=[1],
             n_static_layers_hidden=discriminator_n_layers_hidden,
             n_static_units_hidden=discriminator_n_units_hidden,

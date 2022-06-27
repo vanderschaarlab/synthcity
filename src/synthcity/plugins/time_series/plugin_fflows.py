@@ -149,6 +149,7 @@ class FourierFlowsPlugin(Plugin):
             task_type="regression",
             n_static_units_in=static.shape[-1],
             n_temporal_units_in=temporal[0].shape[-1],
+            n_temporal_window=temporal[0].shape[0],
             output_shape=outcome_enc.shape[1:],
             n_iter=self.train_args["epochs"],
             batch_size=self.train_args["batch_size"],

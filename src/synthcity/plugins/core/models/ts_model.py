@@ -60,6 +60,7 @@ class TimeSeriesModel(nn.Module):
         task_type: str,  # regression, classification
         n_static_units_in: int,
         n_temporal_units_in: int,
+        n_temporal_window: int,
         output_shape: List[int],
         n_static_units_hidden: int = 102,
         n_static_layers_hidden: int = 2,
@@ -104,6 +105,7 @@ class TimeSeriesModel(nn.Module):
         self.batch_size = batch_size
         self.n_static_units_in = n_static_units_in
         self.n_temporal_units_in = n_temporal_units_in
+        self.n_temporal_window = n_temporal_window
         self.n_static_units_hidden = n_static_units_hidden
         self.n_temporal_units_hidden = n_temporal_units_hidden
         self.n_static_layers_hidden = n_static_layers_hidden
@@ -121,6 +123,7 @@ class TimeSeriesModel(nn.Module):
             n_static_units_in=n_static_units_in,
             n_temporal_units_in=n_temporal_units_in
             + int(use_horizon_condition),  # measurements + horizon
+            n_temporal_window=n_temporal_window,
             n_units_out=self.n_units_out,
             n_static_units_hidden=n_static_units_hidden,
             n_static_layers_hidden=n_static_layers_hidden,
@@ -310,12 +313,12 @@ class TimeSeriesLayer(nn.Module):
         self,
         n_static_units_in: int,
         n_temporal_units_in: int,
+        n_temporal_window: int,
         n_units_out: int,
         n_static_units_hidden: int = 100,
         n_static_layers_hidden: int = 2,
         n_temporal_units_hidden: int = 100,
         n_temporal_layers_hidden: int = 2,
-        seq_len: int = 10,
         mode: str = "RNN",
         window_size: int = 1,
         device: Any = DEVICE,
@@ -346,6 +349,7 @@ class TimeSeriesLayer(nn.Module):
                 hidden_size=n_temporal_units_hidden,
                 rnn_layers=n_temporal_layers_hidden,
                 fc_dropout=dropout,
+                seq_len=n_temporal_window,
                 shuffle=False,
             )
         elif mode == "TCN":
@@ -359,12 +363,14 @@ class TimeSeriesLayer(nn.Module):
                 c_in=n_temporal_units_in,
                 c_out=n_temporal_units_hidden,
                 depth=n_temporal_layers_hidden,
+                seq_len=n_temporal_window,
             )
         elif mode == "InceptionTimePlus":
             self.temporal_layer = InceptionTimePlus(
                 c_in=n_temporal_units_in,
                 c_out=n_temporal_units_hidden,
                 depth=n_temporal_layers_hidden,
+                seq_len=n_temporal_window,
             )
         elif mode == "XceptionTime":
             self.temporal_layer = XceptionTime(
@@ -380,35 +386,36 @@ class TimeSeriesLayer(nn.Module):
             self.temporal_layer = OmniScaleCNN(
                 c_in=n_temporal_units_in,
                 c_out=n_temporal_units_hidden,
-                seq_len=seq_len,
+                seq_len=max(n_temporal_window, 10),
             )
         elif mode == "TST":
+            print("temporal window", n_temporal_window)
             self.temporal_layer = TST(
                 c_in=n_temporal_units_in,
                 c_out=n_temporal_units_hidden,
-                seq_len=seq_len,
+                seq_len=n_temporal_window,
+                max_seq_len=n_temporal_window,
                 n_layers=n_temporal_layers_hidden,
-                dropout=dropout,
             )
         elif mode == "XCM":
             self.temporal_layer = XCM(
                 c_in=n_temporal_units_in,
                 c_out=n_temporal_units_hidden,
-                seq_len=seq_len,
+                seq_len=n_temporal_window,
                 fc_dropout=dropout,
             )
         elif mode == "gMLP":
             self.temporal_layer = gMLP(
                 c_in=n_temporal_units_in,
                 c_out=n_temporal_units_hidden,
-                seq_len=seq_len,
+                seq_len=n_temporal_window,
                 depth=n_temporal_layers_hidden,
             )
         elif mode == "MiniRocket":
             self.temporal_layer = MiniRocket(
                 c_in=n_temporal_units_in,
                 c_out=n_temporal_units_hidden,
-                seq_len=seq_len,
+                seq_len=n_temporal_window,
                 random_state=random_state,
                 fc_dropout=dropout,
             )
@@ -416,7 +423,7 @@ class TimeSeriesLayer(nn.Module):
             self.temporal_layer = MiniRocketPlus(
                 c_in=n_temporal_units_in,
                 c_out=n_temporal_units_hidden,
-                seq_len=seq_len,
+                seq_len=n_temporal_window,
                 fc_dropout=dropout,
             )
         elif mode == "TransformerModel":
@@ -430,7 +437,7 @@ class TimeSeriesLayer(nn.Module):
             self.temporal_layer = TSiTPlus(
                 c_in=n_temporal_units_in,
                 c_out=n_temporal_units_hidden,
-                seq_len=seq_len,
+                seq_len=n_temporal_window,
                 depth=n_temporal_layers_hidden,
                 dropout=dropout,
             )
@@ -438,7 +445,7 @@ class TimeSeriesLayer(nn.Module):
             self.temporal_layer = TSTPlus(
                 c_in=n_temporal_units_in,
                 c_out=n_temporal_units_hidden,
-                seq_len=seq_len,
+                seq_len=n_temporal_window,
                 n_layers=n_temporal_layers_hidden,
                 dropout=dropout,
             )
@@ -446,7 +453,7 @@ class TimeSeriesLayer(nn.Module):
             self.temporal_layer = mWDNPlus(
                 c_in=n_temporal_units_in,
                 c_out=n_temporal_units_hidden,
-                seq_len=seq_len,
+                seq_len=n_temporal_window,
             )
         else:
             raise RuntimeError(f"Unknown TS mode {mode}")

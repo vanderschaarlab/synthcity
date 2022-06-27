@@ -706,6 +706,7 @@ class PerformanceEvaluatorMLP(PerformanceEvaluator):
                 "task_type": "regression",
                 "n_static_units_in": len(info["static_features"]),
                 "n_temporal_units_in": len(info["temporal_features"]),
+                "n_temporal_window": len(info["window_len"]),
                 "output_shape": [info["outcome_len"]],
             }
             return self._evaluate_time_series_performance(
