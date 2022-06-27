@@ -389,7 +389,6 @@ class TimeSeriesLayer(nn.Module):
                 seq_len=max(n_temporal_window, 10),
             )
         elif mode == "TST":
-            print("temporal window", n_temporal_window)
             self.temporal_layer = TST(
                 c_in=n_temporal_units_in,
                 c_out=n_temporal_units_hidden,
