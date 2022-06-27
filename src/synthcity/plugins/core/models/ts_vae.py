@@ -266,8 +266,8 @@ class TimeSeriesAutoEncoder(nn.Module):
         self.loss_factor = loss_factor
         self.lr = lr
         self.weight_decay = weight_decay
-        self.n_static_units_embedding = n_static_units_embedding
-        self.n_temporal_units_embedding = n_temporal_units_embedding
+        self.n_static_units_embedding = int(n_static_units_embedding)
+        self.n_temporal_units_embedding = int(n_temporal_units_embedding)
         self.static_nonlin_out = decoder_static_nonlin_out
         self.temporal_nonlin_out = decoder_temporal_nonlin_out
         self.n_temporal_window = n_temporal_window
@@ -478,19 +478,24 @@ class TimeSeriesAutoEncoder(nn.Module):
             for activation, length in nonlin_out:
                 step_end = step + length
                 if activation == "softmax":
+                    recon_slice = reconstructed[..., step:step_end]
+                    if len(recon_slice.shape) == 3:
+                        recon_slice = recon_slice.permute(
+                            0, 2, 1
+                        )  # batches, classes, len
                     discr_loss = nn.functional.cross_entropy(
-                        reconstructed[:, step:step_end],
-                        torch.argmax(real[:, step:step_end], dim=-1),
+                        recon_slice,
+                        torch.argmax(real[..., step:step_end], dim=-1),
                     )
                     loss.append(discr_loss)
                 else:
                     cont_loss = nn.functional.mse_loss(
-                        reconstructed[:, step:step_end], real[:, step:step_end]
+                        reconstructed[..., step:step_end], real[..., step:step_end]
                     )
                     loss.append(cont_loss)
                 step = step_end
 
-            if step != reconstructed.size()[1]:
+            if step != reconstructed.size()[-1]:
                 raise RuntimeError(
                     f"Invalid reconstructed features. Expected {step}, got {reconstructed.shape}"
                 )
