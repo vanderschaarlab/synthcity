@@ -566,7 +566,7 @@ class DynamicDeepHitLayers(nn.Module):
             )
         elif self.rnn_type == "Transformer":
             self.embedding = TransformerModel(
-                input_dim, hidden_rnn, n_hidden_layers=layers_rnn, dropout=dropout
+                input_dim, hidden_rnn, n_layers_hidden=layers_rnn, dropout=dropout
             )
         else:
             raise RuntimeError(f"Unknown rnn_type {rnn_type}")

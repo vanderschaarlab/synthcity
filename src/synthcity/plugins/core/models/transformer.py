@@ -49,7 +49,7 @@ class TransformerModel(nn.Module):
         d_ffn: int = 128,
         dropout: float = 0.1,
         activation: str = "relu",
-        n_hidden_layers: int = 1,
+        n_layers_hidden: int = 1,
         device: Any = DEVICE,
     ) -> None:
         """
@@ -67,9 +67,6 @@ class TransformerModel(nn.Module):
             bs (batch size) x seq_len (aka time steps) x nvars (aka variables, dimensions, channels)
         """
         super(TransformerModel, self).__init__()
-        self.permute = Permute(1, 0, 2)
-        self.inlinear = nn.Linear(n_units_in, n_units_hidden)
-        self.relu = nn.ReLU()
         encoder_layer = TransformerEncoderLayer(
             n_units_hidden,
             n_head,
@@ -79,18 +76,26 @@ class TransformerModel(nn.Module):
         )
         encoder_norm = nn.LayerNorm(n_units_hidden)
         self.transformer_encoder = TransformerEncoder(
-            encoder_layer, n_hidden_layers, norm=encoder_norm
+            encoder_layer, n_layers_hidden, norm=encoder_norm
         )
-        self.transpose = Transpose(1, 0)
-        self.to(device)
+        self.model = nn.Sequential(
+            Permute(1, 0, 2),  # bs x seq_len x nvars -> seq_len x bs x nvars
+            nn.Linear(
+                n_units_in, n_units_hidden
+            ),  # seq_len x bs x nvars -> seq_len x bs x n_units_hidden
+            nn.ReLU(),
+            TransformerEncoderLayer(
+                n_units_hidden,
+                n_head,
+                dim_feedforward=d_ffn,
+                dropout=dropout,
+                activation=activation,
+            ),
+            Transpose(
+                1, 0
+            ),  # seq_len x bs x n_units_hidden -> bs x seq_len x n_units_hidden
+            nn.ReLU(),
+        ).to(device)
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
-        x = self.permute(x)  # bs x seq_len x nvars -> seq_len x bs x nvars
-        x = self.inlinear(x)  # seq_len x bs x nvars -> seq_len x bs x n_units_hidden
-        x = self.relu(x)
-        x = self.transformer_encoder(x)
-        x = self.transpose(
-            x
-        )  # seq_len x bs x n_units_hidden -> bs x seq_len x n_units_hidden
-        x = self.relu(x)
-        return x
+        return self.model(x)

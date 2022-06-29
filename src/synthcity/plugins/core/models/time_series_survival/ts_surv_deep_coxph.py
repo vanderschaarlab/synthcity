@@ -212,7 +212,7 @@ class DeepRecurrentCoxPH(nn.Module):
             self.embedding = TransformerModel(
                 n_units_in,
                 n_units_hidden,
-                n_hidden_layers=n_layers_hidden,
+                n_layers_hidden=n_layers_hidden,
                 dropout=dropout,
             )
         else:
