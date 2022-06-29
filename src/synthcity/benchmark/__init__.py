@@ -30,7 +30,7 @@ class Benchmarks:
         synthetic_size: Optional[int] = None,
         synthetic_constraints: Optional[Constraints] = None,
         synthetic_cache: bool = True,
-        synthetic_reuse_is_exists: bool = True,
+        synthetic_reuse_if_exists: bool = True,
         task_type: str = "classification",  # classification, regression, survival_analysis, time_series
         workspace: Path = Path("workspace"),
     ) -> pd.DataFrame:
@@ -51,7 +51,7 @@ class Benchmarks:
                 Optional constraints on the synthetic data. By default, it inherits the constraints from X.
             synthetic_cache: bool
                 Enable experiment caching
-            synthetic_reuse_is_exists: bool
+            synthetic_reuse_if_exists: bool
                 If the current synthetic dataset is cached, it will be reused for the experiments.
             task_type: str
                 The task type to benchmark for performance. Options: classification, regression, survival_analysis.
@@ -91,7 +91,7 @@ class Benchmarks:
                     f"[testcase] Experiment repeat: {repeat} task type: {task_type} Train df hash = {X.train().hash()}"
                 )
 
-                if cache_file.exists() and synthetic_reuse_is_exists:
+                if cache_file.exists() and synthetic_reuse_if_exists:
                     X_syn = load_from_file(cache_file)
                 else:
                     generator = Plugins(categories=plugin_cats).get(
