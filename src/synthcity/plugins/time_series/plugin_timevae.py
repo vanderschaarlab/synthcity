@@ -238,6 +238,7 @@ class TimeVAEPlugin(Plugin):
             task_type="regression",
             n_static_units_in=static.shape[-1],
             n_temporal_units_in=temporal[0].shape[-1],
+            n_temporal_window=temporal[0].shape[0],
             output_shape=outcome_enc.shape[1:],
             n_static_units_hidden=self.decoder_n_units_hidden,
             n_static_layers_hidden=self.decoder_n_layers_hidden,
