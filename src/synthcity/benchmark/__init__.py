@@ -1,7 +1,7 @@
 # stdlib
 import json
 from pathlib import Path
-from typing import Dict, List, Optional, Tuple
+from typing import Any, Dict, List, Optional, Tuple
 
 # third party
 import pandas as pd
@@ -33,6 +33,7 @@ class Benchmarks:
         synthetic_reuse_if_exists: bool = True,
         task_type: str = "classification",  # classification, regression, survival_analysis, time_series
         workspace: Path = Path("workspace"),
+        **generate_kwargs: Any,
     ) -> pd.DataFrame:
         """Benchmark the performance of several algorithms.
 
@@ -102,7 +103,9 @@ class Benchmarks:
                     try:
                         generator.fit(X.train())
                         X_syn = generator.generate(
-                            count=synthetic_size, constraints=synthetic_constraints
+                            count=synthetic_size,
+                            constraints=synthetic_constraints,
+                            **generate_kwargs,
                         )
                         if len(X_syn) == 0:
                             raise RuntimeError("Plugin failed to generate data")
