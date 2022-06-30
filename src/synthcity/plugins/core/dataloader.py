@@ -724,7 +724,9 @@ class TimeSeriesDataLoader(DataLoader):
                 pads = fill * np.ones(
                     (max_window_len - len(item), len(temporal_features))
                 )
-                start = max(item.index) + 1
+                start = 0
+                if len(item.index) > 0:
+                    start = max(item.index) + 1
                 pads_df = pd.DataFrame(
                     pads,
                     index=[start + i for i in range(len(pads))],
@@ -755,6 +757,7 @@ class TimeSeriesDataLoader(DataLoader):
         mask_features = []
         mask_prefix = "masked_"
         for feat in full_temporal_features:
+            feat = str(feat)
             if not feat.startswith(mask_prefix):
                 temporal_features.append(feat)
                 continue
@@ -1037,6 +1040,8 @@ class TimeSeriesSurvivalDataLoader(TimeSeriesDataLoader):
             time_horizons = np.linspace(T.min(), T.max(), num=5)[1:-1].tolist()
         self.time_horizons = time_horizons
         outcome = pd.concat([pd.Series(T), pd.Series(E)], axis=1)
+        outcome.columns = [self.time_to_event_col, self.event_col]
+
         self.fill = np.nan
 
         super().__init__(

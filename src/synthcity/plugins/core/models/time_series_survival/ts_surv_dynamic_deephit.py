@@ -281,7 +281,9 @@ class DynamicDeepHitModel:
 
                 valid_loss += self.total_loss(xb, tb, eb)
 
+            assert not torch.isnan(valid_loss)
             valid_loss = valid_loss.item()
+
             if valid_loss < old_loss:
                 patience = 0
                 old_loss = valid_loss
@@ -443,7 +445,7 @@ class DynamicDeepHitModel:
             loss += torch.sum(torch.log(ok[selection][:, t[selection]] + 1e-10))
 
         # Censored loss
-        loss += torch.sum(torch.log(1 - censored_cif + 1e-10))
+        loss += torch.sum(torch.log(nn.ReLU()(1 - censored_cif) + 1e-10))
         return -loss / len(outcomes)
 
     def ranking_loss(
@@ -509,6 +511,7 @@ class DynamicDeepHitModel:
         if self.model is None:
             raise RuntimeError("Invalid model for loss")
 
+        assert torch.isnan(x).sum() == 0
         longitudinal_prediction, outcomes = self.model(x.float())
         assert torch.isnan(longitudinal_prediction).sum() == 0
 
