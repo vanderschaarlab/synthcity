@@ -191,3 +191,40 @@ def test_plugin_generate_survival() -> None:
     assert len(X_gen.ids()) == 10
     assert test_plugin.schema_includes(X_gen)
     assert list(X_gen.columns) == list(survival_data.columns)
+
+
+@pytest.mark.parametrize(
+    "sampling_strategy", ["none", "imbalanced_censoring", "imbalanced_time_censoring"]
+)
+def test_plugin_generate_survival_sampler(sampling_strategy: str) -> None:
+    (
+        static_surv,
+        temporal_surv,
+        temporal_surv_horizons,
+        outcome_surv,
+    ) = PBCDataloader().load()
+    T, E = outcome_surv
+
+    horizons = [0.25, 0.5, 0.75]
+    time_horizons = np.quantile(T, horizons).tolist()
+
+    survival_data = TimeSeriesSurvivalDataLoader(
+        temporal_data=temporal_surv,
+        temporal_horizons=temporal_surv_horizons,
+        static_data=static_surv,
+        T=T,
+        E=E,
+        time_horizons=time_horizons,
+    )
+
+    test_plugin = plugin(n_iter=10, dataloader_sampling_strategy=sampling_strategy)
+    assert test_plugin.dataloader_sampling_strategy == sampling_strategy
+    test_plugin.fit(survival_data)
+
+    X_gen = test_plugin.generate(10)
+    st, tmp, tmp_horiz, genT, genE = X_gen.unpack()
+
+    assert X_gen.type() == "time_series_survival"
+    assert len(X_gen.ids()) == 10
+    assert test_plugin.schema_includes(X_gen)
+    assert list(X_gen.columns) == list(survival_data.columns)

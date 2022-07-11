@@ -16,12 +16,14 @@ from synthcity.plugins.core.distribution import (
     FloatDistribution,
     IntegerDistribution,
 )
+from synthcity.plugins.core.models import BinEncoder
 from synthcity.plugins.core.models.tabular_encoder import TabularEncoder
 from synthcity.plugins.core.models.ts_model import TimeSeriesModel, modes
 from synthcity.plugins.core.models.ts_tabular_gan import TimeSeriesTabularGAN
 from synthcity.plugins.core.plugin import Plugin
 from synthcity.plugins.core.schema import Schema
 from synthcity.utils.constants import DEVICE
+from synthcity.utils.samplers import ImbalancedDatasetSampler
 
 
 class TimeGANPlugin(Plugin):
@@ -135,6 +137,7 @@ class TimeGANPlugin(Plugin):
         moments_penalty: float = 100,
         embedding_penalty: float = 10,
         use_horizon_condition: bool = True,
+        dataloader_sampling_strategy: str = "imbalanced_time_censoring",  # none, imbalanced_censoring, imbalanced_time_censoring
         **kwargs: Any
     ) -> None:
         super().__init__()
@@ -173,6 +176,7 @@ class TimeGANPlugin(Plugin):
         self.moments_penalty = moments_penalty
         self.embedding_penalty = embedding_penalty
         self.use_horizon_condition = use_horizon_condition
+        self.dataloader_sampling_strategy = dataloader_sampling_strategy
 
         self.outcome_encoder = TabularEncoder(max_clusters=encoder_max_clusters)
 
@@ -220,6 +224,8 @@ class TimeGANPlugin(Plugin):
         assert X.type() in ["time_series", "time_series_survival"]
 
         cond: Optional[Union[pd.DataFrame, pd.Series]] = None
+        sampler: Optional[ImbalancedDatasetSampler] = None
+
         if self.n_units_conditional > 0:
             if "cond" not in kwargs:
                 raise ValueError("expecting 'cond' for training")
@@ -232,6 +238,19 @@ class TimeGANPlugin(Plugin):
             static, temporal, temporal_horizons, T, E = X.unpack(pad=True)
             outcome = pd.concat([pd.Series(T), pd.Series(E)], axis=1)
             outcome.columns = ["time_to_event", "event"]
+
+            sampling_labels: Optional[list] = None
+
+            if self.dataloader_sampling_strategy == "imbalanced_censoring":
+                sampling_labels = list(E.values)
+            elif self.dataloader_sampling_strategy == "imbalanced_time_censoring":
+                Tbins = (
+                    BinEncoder().fit_transform(T.to_frame()).values.squeeze().tolist()
+                )
+                sampling_labels = list(zip(E, Tbins))
+
+            if sampling_labels is not None:
+                sampler = ImbalancedDatasetSampler(sampling_labels)
 
         self.cov_model = TimeSeriesTabularGAN(
             static_data=static,
@@ -271,6 +290,7 @@ class TimeGANPlugin(Plugin):
             moments_penalty=self.moments_penalty,
             embedding_penalty=self.embedding_penalty,
             use_horizon_condition=self.use_horizon_condition,
+            dataloader_sampler=sampler,
         )
         self.cov_model.fit(static, temporal, temporal_horizons, cond=cond)
 
