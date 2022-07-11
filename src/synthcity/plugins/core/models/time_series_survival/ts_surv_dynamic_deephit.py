@@ -511,7 +511,6 @@ class DynamicDeepHitModel:
         if self.model is None:
             raise RuntimeError("Invalid model for loss")
 
-        assert torch.isnan(x).sum() == 0
         longitudinal_prediction, outcomes = self.model(x.float())
         assert torch.isnan(longitudinal_prediction).sum() == 0
 
