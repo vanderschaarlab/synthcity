@@ -140,6 +140,8 @@ class TimeGANPlugin(Plugin):
         encoder: Any = None,
         device: Any = DEVICE,
         mode: str = "RNN",
+        survival_mode: str = "RNN",
+        tte_mode: str = "RNN",
         gamma_penalty: float = 1,
         moments_penalty: float = 100,
         embedding_penalty: float = 10,
@@ -175,7 +177,6 @@ class TimeGANPlugin(Plugin):
         self.n_iter_print = n_iter_print
         self.random_state = random_state
         self.clipping_value = clipping_value
-        self.mode = mode
         self.encoder_max_clusters = encoder_max_clusters
         self.encoder = encoder
         self.device = device
@@ -184,6 +185,9 @@ class TimeGANPlugin(Plugin):
         self.embedding_penalty = embedding_penalty
         self.use_horizon_condition = use_horizon_condition
         self.dataloader_sampling_strategy = dataloader_sampling_strategy
+        self.mode = mode
+        self.survival_mode = survival_mode
+        self.tte_mode = tte_mode
 
         self.time_to_event_col = "out_time_to_event"
         self.event_col = "out_event"
@@ -357,7 +361,8 @@ class TimeGANPlugin(Plugin):
             static, temporal, temporal_horizons, T, E = X.unpack()
 
             self.outcome_model = TSSurvivalFunctionTimeToEvent(
-                regression_learner=self.mode,
+                regression_base_learner=self.tte_mode,
+                survival_base_learner=self.survival_mode,
                 lr=self.generator_lr,
                 device=self.device,
                 dropout=self.generator_dropout,
