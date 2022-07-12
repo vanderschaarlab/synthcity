@@ -47,7 +47,7 @@ class TSSurvivalFunctionTimeToEvent(TimeToEventPlugin):
             dropout=dropout,
             patience=patience,
         )
-        self.time_points = 5  # time_points
+        self.time_points = 10  # time_points
 
         self.target_column = "target_column"
         self.tte_column = "tte_column"

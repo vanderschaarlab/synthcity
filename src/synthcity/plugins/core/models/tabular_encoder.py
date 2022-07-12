@@ -267,7 +267,7 @@ class TabularEncoder(TransformerMixin, BaseEstimator):
     ) -> pd.DataFrame:
         ohe = column_transform_info.transform
         return pd.DataFrame(
-            ohe.transform(data.to_frame()),
+            ohe.transform(data.to_frame().values),
             columns=ohe.get_feature_names_out([data.name]),
         )
 

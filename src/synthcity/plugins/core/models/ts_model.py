@@ -319,7 +319,7 @@ class TimeSeriesModel(nn.Module):
                 self.optimizer.zero_grad()  # clear gradients for this training step
 
                 pred = self(static_mb, temporal_mb, horizons_mb)  # rnn output
-                loss = self.loss(pred, y_mb)
+                loss = self.loss(pred.squeeze(), y_mb.squeeze())
 
                 loss.backward()  # backpropagation, compute gradients
                 if self.clipping_value > 0:
@@ -339,7 +339,7 @@ class TimeSeriesModel(nn.Module):
         for loader in loaders:
             for step, (static_mb, temporal_mb, horizons_mb, y_mb) in enumerate(loader):
                 pred = self(static_mb, temporal_mb, horizons_mb)  # rnn output
-                loss = self.loss(pred, y_mb)
+                loss = self.loss(pred.squeeze(), y_mb.squeeze())
 
                 losses.append(loss.detach().cpu())
 
@@ -410,12 +410,12 @@ class TimeSeriesModel(nn.Module):
             static_data_t = self._check_tensor(static_data[indices]).float()
 
             local_temporal_data = np.array(temporal_data[indices].tolist()).astype(
-                np.float
+                float
             )
             temporal_data_t = self._check_tensor(local_temporal_data).float()
             local_temporal_horizons = np.array(
                 temporal_horizons[indices].tolist()
-            ).astype(np.float)
+            ).astype(float)
             temporal_horizons_t = self._check_tensor(local_temporal_horizons).float()
 
             static_data_mb.append(static_data_t)

@@ -158,7 +158,7 @@ def test_sample_hyperparams() -> None:
         assert plugin(**args) is not None
 
 
-def test_plugin_generate_survival() -> None:
+def test_timegan_plugin_generate_survival() -> None:
     (
         static_surv,
         temporal_surv,

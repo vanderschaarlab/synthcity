@@ -32,7 +32,7 @@ def test_train_prediction(survival_base_learner: str) -> None:
     temporal_horizons = np.asarray(temporal_horizons)
 
     model = TSSurvivalFunctionTimeToEvent(
-        survival_base_learner=survival_base_learner, n_iter=500
+        survival_base_learner=survival_base_learner, n_iter=10
     )
 
     model.fit(static, temporal, temporal_horizons, T, E)

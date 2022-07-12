@@ -418,7 +418,7 @@ class DynamicDeepHitModel:
             xb = x[j * self.batch_size : (j + 1) * self.batch_size]
             _, f = self.model(xb)
             for t_ in t:
-                scores[t_].extend(
+                pred = (
                     torch.cumsum(f[int(risk) - 1], dim=1)[:, t_]
                     .squeeze()
                     .detach()
@@ -426,6 +426,11 @@ class DynamicDeepHitModel:
                     .numpy()
                     .tolist()
                 )
+
+                if isinstance(pred, list):
+                    scores[t_].extend(pred)
+                else:
+                    scores[t_].append(pred)
 
         output = []
         for t_ in t:

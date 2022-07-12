@@ -9,7 +9,11 @@ import numpy as np
 import pandas as pd
 
 # synthcity absolute
-from synthcity.plugins.core.dataloader import DataLoader
+from synthcity.plugins.core.dataloader import (
+    DataLoader,
+    TimeSeriesSurvivalDataLoader,
+    create_from_info,
+)
 from synthcity.plugins.core.distribution import (
     CategoricalDistribution,
     Distribution,
@@ -18,6 +22,9 @@ from synthcity.plugins.core.distribution import (
 )
 from synthcity.plugins.core.models import BinEncoder
 from synthcity.plugins.core.models.tabular_encoder import TabularEncoder
+from synthcity.plugins.core.models.time_to_event.tte_survival_time_series import (
+    TSSurvivalFunctionTimeToEvent,
+)
 from synthcity.plugins.core.models.ts_model import TimeSeriesModel, modes
 from synthcity.plugins.core.models.ts_tabular_gan import TimeSeriesTabularGAN
 from synthcity.plugins.core.plugin import Plugin
@@ -178,7 +185,8 @@ class TimeGANPlugin(Plugin):
         self.use_horizon_condition = use_horizon_condition
         self.dataloader_sampling_strategy = dataloader_sampling_strategy
 
-        self.outcome_encoder = TabularEncoder(max_clusters=encoder_max_clusters)
+        self.time_to_event_col = "out_time_to_event"
+        self.event_col = "out_event"
 
     @staticmethod
     def name() -> str:
@@ -224,20 +232,101 @@ class TimeGANPlugin(Plugin):
         assert X.type() in ["time_series", "time_series_survival"]
 
         cond: Optional[Union[pd.DataFrame, pd.Series]] = None
-        sampler: Optional[ImbalancedDatasetSampler] = None
 
         if self.n_units_conditional > 0:
             if "cond" not in kwargs:
                 raise ValueError("expecting 'cond' for training")
             cond = kwargs["cond"]
 
+        gan_args = {
+            "generator_n_iter": self.n_iter,
+            "n_units_conditional": self.n_units_conditional,
+            "generator_n_layers_hidden": self.generator_n_layers_hidden,
+            "generator_n_units_hidden": self.generator_n_units_hidden,
+            "generator_nonlin": self.generator_nonlin,
+            "generator_nonlin_out_discrete": self.generator_nonlin_out_discrete,
+            "generator_nonlin_out_continuous": self.generator_nonlin_out_continuous,
+            "generator_batch_norm": self.generator_batch_norm,
+            "generator_dropout": self.generator_dropout,
+            "generator_loss": self.generator_loss,
+            "generator_lr": self.generator_lr,
+            "generator_weight_decay": self.generator_weight_decay,
+            "generator_residual": self.generator_residual,
+            "discriminator_n_layers_hidden": self.discriminator_n_layers_hidden,
+            "discriminator_n_units_hidden": self.discriminator_n_units_hidden,
+            "discriminator_nonlin": self.discriminator_nonlin,
+            "discriminator_n_iter": self.discriminator_n_iter,
+            "discriminator_batch_norm": self.discriminator_batch_norm,
+            "discriminator_dropout": self.discriminator_dropout,
+            "discriminator_loss": self.discriminator_loss,
+            "discriminator_lr": self.discriminator_lr,
+            "discriminator_weight_decay": self.discriminator_weight_decay,
+            "batch_size": self.batch_size,
+            "n_iter_print": self.n_iter_print,
+            "random_state": self.random_state,
+            "clipping_value": self.clipping_value,
+            "mode": self.mode,
+            "encoder_max_clusters": self.encoder_max_clusters,
+            "encoder": self.encoder,
+            "device": self.device,
+            "gamma_penalty": self.gamma_penalty,
+            "moments_penalty": self.moments_penalty,
+            "embedding_penalty": self.embedding_penalty,
+            "use_horizon_condition": self.use_horizon_condition,
+        }
         # Static and temporal generation
         if X.type() == "time_series":
             static, temporal, temporal_horizons, outcome = X.unpack(pad=True)
+
+            self.cov_model = TimeSeriesTabularGAN(
+                static_data=static,
+                temporal_data=temporal,
+                temporal_horizons=temporal_horizons,
+                **gan_args,
+            ).fit(static, temporal, temporal_horizons, cond=cond)
+
+            # Outcome generation
+            self.outcome_encoder = TabularEncoder(
+                max_clusters=self.encoder_max_clusters
+            )
+
+            self.outcome_encoder.fit(outcome)
+            outcome_enc = self.outcome_encoder.transform(outcome)
+            self.outcome_encoded_columns = outcome_enc.columns
+
+            self.outcome_model = TimeSeriesModel(
+                task_type="regression",
+                n_static_units_in=static.shape[-1],
+                n_temporal_units_in=temporal[0].shape[-1],
+                n_temporal_window=temporal[0].shape[0],
+                output_shape=outcome_enc.shape[1:],
+                n_static_units_hidden=self.generator_n_units_hidden,
+                n_static_layers_hidden=self.generator_n_layers_hidden,
+                n_temporal_units_hidden=self.generator_n_units_hidden,
+                n_temporal_layers_hidden=self.generator_n_layers_hidden,
+                n_iter=self.n_iter,
+                mode=self.mode,
+                n_iter_print=self.n_iter_print,
+                batch_size=self.batch_size,
+                lr=self.generator_lr,
+                weight_decay=self.generator_weight_decay,
+                device=self.device,
+                dropout=self.generator_dropout,
+                nonlin=self.generator_nonlin,
+                nonlin_out=self.outcome_encoder.activation_layout(
+                    discrete_activation="softmax",
+                    continuous_activation="tanh",
+                ),
+            )
+            self.outcome_model.fit(
+                np.asarray(static),
+                np.asarray(temporal),
+                np.asarray(temporal_horizons),
+                np.asarray(outcome_enc),
+            )
         elif X.type() == "time_series_survival":
+            sampler: Optional[ImbalancedDatasetSampler] = None
             static, temporal, temporal_horizons, T, E = X.unpack(pad=True)
-            outcome = pd.concat([pd.Series(T), pd.Series(E)], axis=1)
-            outcome.columns = ["time_to_event", "event"]
 
             sampling_labels: Optional[list] = None
 
@@ -252,84 +341,38 @@ class TimeGANPlugin(Plugin):
             if sampling_labels is not None:
                 sampler = ImbalancedDatasetSampler(sampling_labels)
 
-        self.cov_model = TimeSeriesTabularGAN(
-            static_data=static,
-            temporal_data=temporal,
-            temporal_horizons=temporal_horizons,
-            generator_n_iter=self.n_iter,
-            n_units_conditional=self.n_units_conditional,
-            generator_n_layers_hidden=self.generator_n_layers_hidden,
-            generator_n_units_hidden=self.generator_n_units_hidden,
-            generator_nonlin=self.generator_nonlin,
-            generator_nonlin_out_discrete=self.generator_nonlin_out_discrete,
-            generator_nonlin_out_continuous=self.generator_nonlin_out_continuous,
-            generator_batch_norm=self.generator_batch_norm,
-            generator_dropout=self.generator_dropout,
-            generator_loss=self.generator_loss,
-            generator_lr=self.generator_lr,
-            generator_weight_decay=self.generator_weight_decay,
-            generator_residual=self.generator_residual,
-            discriminator_n_layers_hidden=self.discriminator_n_layers_hidden,
-            discriminator_n_units_hidden=self.discriminator_n_units_hidden,
-            discriminator_nonlin=self.discriminator_nonlin,
-            discriminator_n_iter=self.discriminator_n_iter,
-            discriminator_batch_norm=self.discriminator_batch_norm,
-            discriminator_dropout=self.discriminator_dropout,
-            discriminator_loss=self.discriminator_loss,
-            discriminator_lr=self.discriminator_lr,
-            discriminator_weight_decay=self.discriminator_weight_decay,
-            batch_size=self.batch_size,
-            n_iter_print=self.n_iter_print,
-            random_state=self.random_state,
-            clipping_value=self.clipping_value,
-            mode=self.mode,
-            encoder_max_clusters=self.encoder_max_clusters,
-            encoder=self.encoder,
-            device=self.device,
-            gamma_penalty=self.gamma_penalty,
-            moments_penalty=self.moments_penalty,
-            embedding_penalty=self.embedding_penalty,
-            use_horizon_condition=self.use_horizon_condition,
-            dataloader_sampler=sampler,
-        )
-        self.cov_model.fit(static, temporal, temporal_horizons, cond=cond)
+            merged_static = static.copy()
+            merged_static[self.time_to_event_col] = T
+            merged_static[self.event_col] = E
 
-        # Outcome generation
-        self.outcome_encoder.fit(outcome)
-        outcome_enc = self.outcome_encoder.transform(outcome)
-        self.outcome_encoded_columns = outcome_enc.columns
+            self.cov_model = TimeSeriesTabularGAN(
+                static_data=merged_static,  # static + T + E
+                temporal_data=temporal,
+                temporal_horizons=temporal_horizons,
+                dataloader_sampler=sampler,
+                **gan_args,
+            ).fit(merged_static, temporal, temporal_horizons, cond=cond)
 
-        self.outcome_model = TimeSeriesModel(
-            task_type="regression",
-            n_static_units_in=static.shape[-1],
-            n_temporal_units_in=temporal[0].shape[-1],
-            n_temporal_window=temporal[0].shape[0],
-            output_shape=outcome_enc.shape[1:],
-            n_static_units_hidden=self.generator_n_units_hidden,
-            n_static_layers_hidden=self.generator_n_layers_hidden,
-            n_temporal_units_hidden=self.generator_n_units_hidden,
-            n_temporal_layers_hidden=self.generator_n_layers_hidden,
-            n_iter=self.n_iter,
-            mode=self.mode,
-            n_iter_print=self.n_iter_print,
-            batch_size=self.batch_size,
-            lr=self.generator_lr,
-            weight_decay=self.generator_weight_decay,
-            window_size=1,
-            device=self.device,
-            dropout=self.generator_dropout,
-            nonlin=self.generator_nonlin,
-            nonlin_out=self.outcome_encoder.activation_layout(
-                discrete_activation="softmax",
-                continuous_activation="tanh",
-            ),
-        )
-        self.outcome_model.fit(
-            np.asarray(static),
-            np.asarray(temporal),
-            np.asarray(temporal_horizons),
-            np.asarray(outcome_enc),
-        )
+            # Outcome generation
+            static, temporal, temporal_horizons, T, E = X.unpack()
+
+            self.outcome_model = TSSurvivalFunctionTimeToEvent(
+                regression_learner=self.mode,
+                lr=self.generator_lr,
+                device=self.device,
+                dropout=self.generator_dropout,
+                nonlin=self.generator_nonlin,
+                batch_size=self.batch_size,
+                n_units_hidden=self.generator_n_units_hidden,
+                n_layers_hidden=self.generator_n_layers_hidden,
+                n_iter=self.n_iter,
+            ).fit(
+                np.asarray(static),
+                np.asarray(temporal, dtype=object),
+                np.asarray(temporal_horizons, dtype=object),
+                np.asarray(T),
+                np.asarray(E),
+            )
 
         return self
 
@@ -367,28 +410,55 @@ class TimeGANPlugin(Plugin):
                 temporal_horizons=local_temporal_horizons,
             )
 
-            outcome_enc = pd.DataFrame(
-                self.outcome_model.predict(
-                    np.asarray(static),
-                    np.asarray(temporal),
-                    np.asarray(temporal_horizons),
-                ),
-                columns=self.outcome_encoded_columns,
-            )
-            outcome_raw = self.outcome_encoder.inverse_transform(outcome_enc)
-            outcome = pd.DataFrame(
-                outcome_raw, columns=self.data_info["outcome_features"]
-            )
-
             if self.data_info["data_type"] == "time_series":
+                outcome_enc = pd.DataFrame(
+                    self.outcome_model.predict(
+                        np.asarray(static),
+                        np.asarray(temporal),
+                        np.asarray(temporal_horizons),
+                    ),
+                    columns=self.outcome_encoded_columns,
+                )
+                outcome_raw = self.outcome_encoder.inverse_transform(outcome_enc)
+                outcome = pd.DataFrame(
+                    outcome_raw, columns=self.data_info["outcome_features"]
+                )
                 return static, temporal, temporal_horizons, outcome
             elif self.data_info["data_type"] == "time_series_survival":
+                Egen = static[self.event_col].astype(int)
+                static = static.drop(columns=[self.time_to_event_col, self.event_col])
+
+                interm_loader = TimeSeriesSurvivalDataLoader(
+                    temporal_data=temporal,
+                    temporal_horizons=temporal_horizons,
+                    static_data=static,
+                    T=np.zeros(len(Egen)),
+                    E=Egen,
+                )
+                norm_loader = create_from_info(
+                    interm_loader.dataframe(), self.data_info
+                )
+                (
+                    static_norm,
+                    temporal_norm,
+                    temporal_horizons_norm,
+                    _,
+                    _,
+                ) = norm_loader.unpack()
+
+                Tgen = self.outcome_model.predict_any(
+                    np.asarray(static_norm),
+                    temporal_norm,
+                    temporal_horizons_norm,
+                    np.asarray(Egen),
+                )
+
                 return (
                     static,
                     temporal,
                     temporal_horizons,
-                    outcome[self.data_info["time_to_event_column"]],
-                    outcome[self.data_info["event_column"]],
+                    Tgen,
+                    Egen,
                 )
             else:
                 raise RuntimeError("unknow data type")
