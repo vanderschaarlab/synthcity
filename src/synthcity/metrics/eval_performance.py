@@ -434,21 +434,21 @@ class PerformanceEvaluator(MetricEvaluator):
             id_X_temporal_horizons_gt,
             id_T_gt,
             id_E_gt,
-        ) = X_gt.train().unpack(as_numpy=True)
+        ) = X_gt.train().unpack(as_numpy=True, pad = True)
         (
             ood_X_static_gt,
             ood_X_temporal_gt,
             ood_X_temporal_horizons_gt,
             ood_T_gt,
             ood_E_gt,
-        ) = X_gt.test().unpack(as_numpy=True)
+        ) = X_gt.test().unpack(as_numpy=True, pad = True)
         (
             iter_X_static_syn,
             iter_X_temporal_syn,
             iter_X_temporal_horizons_syn,
             iter_T_syn,
             iter_E_syn,
-        ) = X_syn.unpack(as_numpy=True)
+        ) = X_syn.unpack(as_numpy=True, pad = True)
 
         predictor_gt = model(**args)
         log.info(
@@ -641,15 +641,7 @@ class PerformanceEvaluatorLinear(PerformanceEvaluator):
             info = X_gt.info()
             time_horizons = info["time_horizons"]
 
-            args = search_hyperparams(
-                CoxTimeSeriesSurvival,
-                static,
-                temporal,
-                temporal_horizons,
-                T,
-                E,
-                time_horizons=time_horizons,
-            )
+            args = {}
             log.info(f"Performance evaluation using CoxTimeSeriesSurvival and {args}")
             return self._evaluate_time_series_survival_performance(
                 CoxTimeSeriesSurvival, args, X_gt, X_syn
@@ -718,15 +710,7 @@ class PerformanceEvaluatorMLP(PerformanceEvaluator):
             info = X_gt.info()
             time_horizons = info["time_horizons"]
 
-            args = search_hyperparams(
-                DynamicDeephitTimeSeriesSurvival,
-                static,
-                temporal,
-                temporal_horizons,
-                T,
-                E,
-                time_horizons=time_horizons,
-            )
+            args = {}
             log.info(
                 f"Performance evaluation using DynamicDeephitTimeSeriesSurvival and {args}"
             )

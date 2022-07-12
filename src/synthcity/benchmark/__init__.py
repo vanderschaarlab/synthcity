@@ -73,10 +73,9 @@ class Benchmarks:
             plugin_cats.append("time_series")
 
         for testcase, plugin, kwargs in tests:
-            log.info(f"Benchmarking plugin : {plugin}")
+            log.info(f"Testcase : {testcase}")
             scores = ScoreEvaluator()
 
-            kwargs = {}
             kwargs_hash = ""
             if len(kwargs) > 0:
                 kwargs_hash = json.dumps(kwargs, sort_keys=True)

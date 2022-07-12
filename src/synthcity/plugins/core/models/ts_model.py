@@ -47,9 +47,9 @@ modes = [
     # "gMLP",
     # "MiniRocket",
     # "MiniRocketPlus",
-    # "mWDNPlus",
+    "mWDNPlus",
     "Transformer",
-    # "TSiTPlus",
+    "TSiTPlus",
 ]
 
 
@@ -221,7 +221,7 @@ class TimeSeriesModel(nn.Module):
                 window_batches,
             ) = self._prepare_input(static_data, temporal_data, temporal_horizons)
 
-            yt = torch.zeros(len(temporal_data), *self.output_shape)
+            yt = torch.zeros(len(temporal_data), *self.output_shape).to(self.device)
             for widx in range(len(temporal_data_t)):
                 window_size = len(temporal_horizons_t[widx][0])
                 local_yt = self(
