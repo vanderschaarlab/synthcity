@@ -29,6 +29,23 @@ def test_hyperparams() -> None:
 
 
 @pytest.mark.parametrize("rnn_type", rnn_modes)
+def test_train(rnn_type: str) -> None:
+    static, temporal, temporal_horizons, outcome = PBCDataloader(as_numpy=True).load()
+    T, E = outcome
+
+    horizons = [0.25, 0.5, 0.75]
+    time_horizons = np.quantile(T, horizons).tolist()
+
+    model = DynamicDeephitTimeSeriesSurvival(rnn_type=rnn_type)
+    model.fit(static, temporal, temporal_horizons, T, E)
+    out = model.predict(
+        static, temporal, temporal_horizons, time_horizons=time_horizons
+    )
+
+    assert out.shape == (len(temporal), len(time_horizons))
+
+
+@pytest.mark.parametrize("rnn_type", rnn_modes)
 def test_train_prediction(rnn_type: str) -> None:
     static, temporal, temporal_horizons, outcome = PBCDataloader(as_numpy=True).load()
     T, E = outcome

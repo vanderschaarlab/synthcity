@@ -117,7 +117,6 @@ class TimeSeriesGAN(nn.Module):
         dataloader_sampler: Optional[sampler.Sampler] = None,
         mode: str = "RNN",
         device: Any = DEVICE,
-        window_size: int = 1,
         use_horizon_condition: bool = True,
     ) -> None:
         super(TimeSeriesGAN, self).__init__()
@@ -175,7 +174,6 @@ class TimeSeriesGAN(nn.Module):
         )
 
         rnn_generator_extra_args = {
-            "window_size": window_size,
             "n_static_layers_hidden": generator_n_layers_hidden,
             "n_static_units_hidden": generator_n_units_hidden,
             "n_temporal_layers_hidden": generator_n_layers_hidden,
@@ -242,7 +240,6 @@ class TimeSeriesGAN(nn.Module):
             n_static_units_hidden=discriminator_n_units_hidden,
             n_temporal_layers_hidden=discriminator_n_layers_hidden,
             n_temporal_units_hidden=discriminator_n_units_hidden,
-            window_size=window_size,
             nonlin=discriminator_nonlin,
             mode=mode,
             nonlin_out=[("sigmoid", 1)],

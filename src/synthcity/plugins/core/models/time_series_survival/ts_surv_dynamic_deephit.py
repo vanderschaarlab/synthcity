@@ -1,6 +1,6 @@
 # stdlib
 from copy import deepcopy
-from typing import Any, List, Optional, Tuple
+from typing import Any, List, Optional, Tuple, Union
 
 # third party
 import numpy as np
@@ -96,11 +96,17 @@ class DynamicDeephitTimeSeriesSurvival(TimeSeriesSurvivalPlugin):
     def fit(
         self,
         static: Optional[np.ndarray],
-        temporal: np.ndarray,
-        temporal_horizons: np.ndarray,
-        T: np.ndarray,
-        E: np.ndarray,
+        temporal: Union[np.ndarray, List],
+        temporal_horizons: Union[np.ndarray, List],
+        T: Union[np.ndarray, List],
+        E: Union[np.ndarray, List],
     ) -> TimeSeriesSurvivalPlugin:
+        static = np.asarray(static)
+        temporal = np.asarray(temporal)
+        temporal_horizons = np.asarray(temporal_horizons)
+        T = np.asarray(T)
+        E = np.asarray(E)
+
         data = self._merge_data(static, temporal, temporal_horizons)
 
         self.model.fit(
@@ -114,11 +120,15 @@ class DynamicDeephitTimeSeriesSurvival(TimeSeriesSurvivalPlugin):
     def predict(
         self,
         static: Optional[np.ndarray],
-        temporal: np.ndarray,
-        temporal_horizons: np.ndarray,
+        temporal: Union[np.ndarray, List],
+        temporal_horizons: Union[np.ndarray, List],
         time_horizons: List,
     ) -> np.ndarray:
         "Predict risk"
+        static = np.asarray(static)
+        temporal = np.asarray(temporal)
+        temporal_horizons = np.asarray(temporal_horizons)
+
         data = self._merge_data(static, temporal, temporal_horizons)
 
         return pd.DataFrame(
@@ -129,10 +139,14 @@ class DynamicDeephitTimeSeriesSurvival(TimeSeriesSurvivalPlugin):
     def predict_emb(
         self,
         static: Optional[np.ndarray],
-        temporal: np.ndarray,
-        temporal_horizons: np.ndarray,
+        temporal: Union[np.ndarray, List],
+        temporal_horizons: Union[np.ndarray, List],
     ) -> np.ndarray:
         "Predict embeddings"
+        static = np.asarray(static)
+        temporal = np.asarray(temporal)
+        temporal_horizons = np.asarray(temporal_horizons)
+
         data = self._merge_data(static, temporal, temporal_horizons)
 
         return self.model.predict_emb(data).detach().cpu().numpy()
@@ -396,8 +410,6 @@ class DynamicDeepHitModel:
                 new_x += [x_[: li + 1] for li in range(l_)]
             x = new_x
 
-        if not isinstance(t, list):
-            t = [t]
         t = self.discretize([t], self.split, self.split_time)[0][0]
         x = self._preprocess_test_data(x)
         batches = int(len(x) / bs) + 1
