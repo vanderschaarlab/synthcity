@@ -20,22 +20,51 @@ class TSSurvivalFunctionTimeToEvent(TimeToEventPlugin):
     def __init__(
         self,
         time_points: int = 100,
-        base_learner: str = "Transformer",
+        survival_base_learner: str = "Transformer",
+        regression_learner: str = "Transformer",
         device: Any = DEVICE,
+        random_state: int = 0,
+        n_layers_hidden: int = 1,
+        n_units_hidden: int = 250,
+        nonlin: str = "leaky_relu",
+        n_iter: int = 500,
+        dropout: float = 0,
+        lr: float = 1e-3,
+        patience: int = 20,
         **kwargs: Any
     ) -> None:
         super().__init__()
 
         survival_model = "dynamic_deephit"
         self.model = get_model_template(survival_model)(
-            device=device, rnn_type=base_learner, split=time_points
+            device=device,
+            rnn_type=survival_base_learner,
+            split=time_points,
+            n_iter=n_iter,
+            lr=lr,
+            n_layers_hidden=n_layers_hidden,
+            n_units_hidden=n_units_hidden,
+            dropout=dropout,
+            patience=patience,
         )
         self.time_points = 5  # time_points
 
-        self.base_learner = base_learner
-
         self.target_column = "target_column"
         self.tte_column = "tte_column"
+
+        self.rnn_generator_extra_args = {
+            "n_static_layers_hidden": n_layers_hidden,
+            "n_static_units_hidden": n_units_hidden,
+            "n_temporal_layers_hidden": n_layers_hidden,
+            "n_temporal_units_hidden": n_units_hidden,
+            "mode": regression_learner,
+            "nonlin": nonlin,
+            "n_iter": n_iter,
+            "dropout": dropout,
+            "random_state": random_state,
+            "lr": lr,
+            "device": device,
+        }
 
     @validate_arguments(config=dict(arbitrary_types_allowed=True))
     def fit(
@@ -66,10 +95,11 @@ class TSSurvivalFunctionTimeToEvent(TimeToEventPlugin):
 
         self.tte_regressor = TimeSeriesModel(
             task_type="regression",
-            n_static_units_in=static.shape[-1] if static is not None else 0,
+            n_static_units_in=data.shape[-1],
             n_temporal_units_in=temporal[0].shape[-1],
             n_temporal_window=temporal[0].shape[0],
             output_shape=[1],
+            **self.rnn_generator_extra_args,
         ).fit(data, temporal, temporal_horizons, Tlog)
 
         return self
@@ -101,9 +131,13 @@ class TSSurvivalFunctionTimeToEvent(TimeToEventPlugin):
         )
         surv_fn = surv_fn.loc[:, ~surv_fn.columns.duplicated()]
 
-        data = np.concatenate([static, surv_fn.values, E], axis=1)
+        data = np.concatenate(
+            [static, surv_fn.values, np.expand_dims(E, axis=1)], axis=1
+        )
 
-        return np.exp(self.tte_regressor.predict(data, temporal, temporal_horizons))
+        return np.exp(
+            self.tte_regressor.predict(data, temporal, temporal_horizons)
+        ).squeeze()
 
     @staticmethod
     def name() -> str:

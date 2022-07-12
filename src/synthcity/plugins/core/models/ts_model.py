@@ -81,6 +81,8 @@ class TimeSeriesModel(nn.Module):
         random_state: int = 0,
         clipping_value: int = 1,
         use_horizon_condition: bool = True,
+        patience: int = 20,
+        train_ratio: float = 0.8,
     ) -> None:
         super(TimeSeriesModel, self).__init__()
 
@@ -118,6 +120,9 @@ class TimeSeriesModel(nn.Module):
         self.n_units_out = np.prod(self.output_shape)
         self.clipping_value = clipping_value
         self.use_horizon_condition = use_horizon_condition
+        self.patience = patience
+        self.train_ratio = train_ratio
+        self.random_state = random_state
 
         self.temporal_layer = TimeSeriesLayer(
             n_static_units_in=n_static_units_in,
@@ -272,37 +277,71 @@ class TimeSeriesModel(nn.Module):
         outcome: List[torch.Tensor],
     ) -> Any:
         # training and testing
-        for it in range(self.n_iter):
-            losses = []
-            for widx in range(len(temporal_data)):
-                loader = self.dataloader(
-                    static_data[widx],
-                    temporal_data[widx],
-                    temporal_horizons[widx],
-                    outcome[widx],
-                )
+        patience = 0
+        prev_error = np.inf
 
-                loss = self._train_epoch(loader)
-                losses.append(loss)
+        train_dataloaders = []
+        test_dataloaders = []
+        for widx in range(len(temporal_data)):
+            train_dl, test_dl = self.dataloader(
+                static_data[widx],
+                temporal_data[widx],
+                temporal_horizons[widx],
+                outcome[widx],
+            )
+            train_dataloaders.append(train_dl)
+            test_dataloaders.append(test_dl)
+
+        for it in range(self.n_iter):
+            train_loss = self._train_epoch(train_dataloaders)
+
             if it % self.n_iter_print == 0:
-                log.info(f"Epoch:{it}| train loss: {np.mean(losses)}")
+                val_loss = self._test_epoch(test_dataloaders)
+                log.info(
+                    f"Epoch:{it}| train loss: {train_loss}, validation loss: {val_loss}"
+                )
+                if val_loss < prev_error:
+                    patience = 0
+                    prev_error = val_loss
+                else:
+                    patience += 1
+                if patience > self.patience:
+                    break
 
         return self
 
-    def _train_epoch(self, loader: DataLoader) -> float:
+    def _train_epoch(self, loaders: List[DataLoader]) -> float:
+        self.train()
+
         losses = []
-        for step, (static_mb, temporal_mb, horizons_mb, y_mb) in enumerate(loader):
-            self.optimizer.zero_grad()  # clear gradients for this training step
+        for loader in loaders:
+            for step, (static_mb, temporal_mb, horizons_mb, y_mb) in enumerate(loader):
+                self.optimizer.zero_grad()  # clear gradients for this training step
 
-            pred = self(static_mb, temporal_mb, horizons_mb)  # rnn output
-            loss = self.loss(pred, y_mb)
+                pred = self(static_mb, temporal_mb, horizons_mb)  # rnn output
+                loss = self.loss(pred, y_mb)
 
-            loss.backward()  # backpropagation, compute gradients
-            if self.clipping_value > 0:
-                torch.nn.utils.clip_grad_norm_(self.parameters(), self.clipping_value)
-            self.optimizer.step()  # apply gradients
+                loss.backward()  # backpropagation, compute gradients
+                if self.clipping_value > 0:
+                    torch.nn.utils.clip_grad_norm_(
+                        self.parameters(), self.clipping_value
+                    )
+                self.optimizer.step()  # apply gradients
 
-            losses.append(loss.detach().cpu())
+                losses.append(loss.detach().cpu())
+
+        return np.mean(losses)
+
+    def _test_epoch(self, loaders: List[DataLoader]) -> float:
+        self.eval()
+
+        losses = []
+        for loader in loaders:
+            for step, (static_mb, temporal_mb, horizons_mb, y_mb) in enumerate(loader):
+                pred = self(static_mb, temporal_mb, horizons_mb)  # rnn output
+                loss = self.loss(pred, y_mb)
+
+                losses.append(loss.detach().cpu())
 
         return np.mean(losses)
 
@@ -314,12 +353,24 @@ class TimeSeriesModel(nn.Module):
         outcome: torch.Tensor,
     ) -> DataLoader:
         dataset = TensorDataset(static_data, temporal_data, temporal_horizons, outcome)
-
-        return DataLoader(
-            dataset,
-            batch_size=self.batch_size,
-            sampler=self.dataloader_sampler,
-            pin_memory=False,
+        train_size = int(len(dataset) * self.train_ratio)
+        test_size = len(dataset) - train_size
+        train_dataset, test_dataset = torch.utils.data.random_split(
+            dataset, [train_size, test_size]
+        )
+        return (
+            DataLoader(
+                train_dataset,
+                batch_size=self.batch_size,
+                sampler=self.dataloader_sampler,
+                pin_memory=False,
+            ),
+            DataLoader(
+                test_dataset,
+                batch_size=self.batch_size,
+                sampler=self.dataloader_sampler,
+                pin_memory=False,
+            ),
         )
 
     def _check_tensor(self, X: torch.Tensor) -> torch.Tensor:

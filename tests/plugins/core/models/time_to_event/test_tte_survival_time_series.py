@@ -1,6 +1,7 @@
 # third party
 import numpy as np
 import pytest
+from sklearn.metrics import mean_squared_error
 
 # synthcity absolute
 from synthcity.plugins.core.models.time_to_event.tte_survival_time_series import (
@@ -23,27 +24,24 @@ def test_hyperparams() -> None:
     assert len(params.keys()) == 1
 
 
-@pytest.mark.parametrize("base_learner", ["RNN", "Transformer", "LSTM", "GRU"])
-def test_train_prediction(base_learner: str) -> None:
+@pytest.mark.parametrize("survival_base_learner", ["RNN", "Transformer", "LSTM", "GRU"])
+def test_train_prediction(survival_base_learner: str) -> None:
     static, temporal, temporal_horizons, outcome = PBCDataloader(as_numpy=True).load()
     T, E = outcome
 
     temporal_horizons = np.asarray(temporal_horizons)
 
-    horizons = [0.25, 0.5, 0.75]
-    time_horizons = np.quantile(T, horizons).tolist()
-
-    model = TSSurvivalFunctionTimeToEvent(base_learner=base_learner)
+    model = TSSurvivalFunctionTimeToEvent(
+        survival_base_learner=survival_base_learner, n_iter=500
+    )
 
     model.fit(static, temporal, temporal_horizons, T, E)
 
-    prediction = model.predict(
-        static, temporal, temporal_horizons, time_horizons=time_horizons
-    )
+    prediction = model.predict(static, temporal, temporal_horizons)
 
     assert prediction.shape == T.shape
 
     prediction_any = model.predict_any(static, temporal, temporal_horizons, E)
 
-    print(prediction_any, T)
     assert prediction_any.shape == T.shape
+    print("error", survival_base_learner, mean_squared_error(T, prediction_any))
