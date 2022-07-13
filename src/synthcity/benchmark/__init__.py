@@ -17,7 +17,7 @@ from synthcity.plugins.core.constraints import Constraints
 from synthcity.plugins.core.dataloader import DataLoader
 from synthcity.utils.reproducibility import enable_reproducible_results
 from synthcity.utils.serialization import load_from_file, save_to_file
-
+import hashlib
 
 class Benchmarks:
     @staticmethod
@@ -78,13 +78,16 @@ class Benchmarks:
 
             kwargs_hash = ""
             if len(kwargs) > 0:
-                kwargs_hash = json.dumps(kwargs, sort_keys=True)
+                kwargs_hash_raw = json.dumps(kwargs, sort_keys=True).encode()
+                hash_object = hashlib.md5(kwargs_hash_raw)
+                kwargs_hash = hash_object.hexdigest()
+
 
             for repeat in range(repeats):
                 enable_reproducible_results(repeat)
                 cache_file = (
                     workspace
-                    / f"{experiment_name}_{testcase}_{plugin}{kwargs_hash}_{repeat}.bkp"
+                    / f"{experiment_name}_{testcase}_{plugin}_{kwargs_hash}_{repeat}.bkp"
                 )
 
                 log.info(
