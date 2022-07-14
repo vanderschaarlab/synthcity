@@ -27,28 +27,22 @@ from synthcity.utils.reproducibility import enable_reproducible_results
 # synthcity relative
 from ._base import TimeSeriesSurvivalPlugin
 
-rnn_modes = ["GRU", "LSTM", "RNN", "Transformer"]
+rnn_modes = ["GRU", "LSTM", "RNN", "Transformer", "Wavelet"]
 output_modes = [
     "MLP",
-    "LSTM",
-    "GRU",
-    "RNN",
-    "MLSTM_FCN",
-    "TCN",
-    "InceptionTime",
-    "InceptionTimePlus",
-    "XceptionTime",
-    "ResCNN",
-    "OmniScaleCNN",
-    "TST",
-    "TSTPlus",
-    "XCM",
-    "gMLP",
     "MiniRocket",
-    "MiniRocketPlus",
     "mWDNPlus",
     "Transformer",
     "TSiTPlus",
+    "LSTM",
+    "GRU",
+    "RNN",
+    "TCN",
+    "InceptionTime",
+    "InceptionTimePlus",
+    "ResCNN",
+    "TST",
+    "XCM",
 ]
 
 
@@ -75,6 +69,7 @@ class DynamicDeephitTimeSeriesSurvival(TimeSeriesSurvivalPlugin):
         super().__init__()
         enable_reproducible_results(random_state)
         assert rnn_type in rnn_modes, f"Supported modes: {rnn_modes}"
+        assert output_type in output_modes, f"Supported output modes: {output_modes}"
 
         self.model = DynamicDeepHitModel(
             split=split,
@@ -195,6 +190,7 @@ class DynamicDeephitTimeSeriesSurvival(TimeSeriesSurvivalPlugin):
             ),
             CategoricalDistribution(name=f"{prefix}_lr", choices=[1e-2, 1e-3, 1e-4]),
             CategoricalDistribution(name=f"{prefix}_rnn_type", choices=rnn_modes),
+            CategoricalDistribution(name=f"{prefix}_output_type", choices=output_modes),
             FloatDistribution(name=f"{prefix}_alpha", low=0.0, high=0.5),
             FloatDistribution(name=f"{prefix}_sigma", low=0.0, high=0.5),
             FloatDistribution(name=f"{prefix}_beta", low=0.0, high=0.5),
@@ -708,7 +704,7 @@ class DynamicDeepHitLayers(nn.Module):
             attention = self.attention(concatenation).squeeze(-1)
         else:
             attention = self.attention(
-                torch.zeros(len(concatenation), 0), concatenation
+                torch.zeros(len(concatenation), 0).to(self.device), concatenation
             ).squeeze(-1)
         attention[
             index >= last_observations_idx
