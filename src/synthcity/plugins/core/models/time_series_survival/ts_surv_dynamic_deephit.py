@@ -19,6 +19,8 @@ from synthcity.plugins.core.distribution import (
 from synthcity.plugins.core.models.mlp import MLP
 from synthcity.plugins.core.models.time_series_survival.utils import get_padded_features
 from synthcity.plugins.core.models.transformer import TransformerModel
+from synthcity.plugins.core.models.ts_model import TimeSeriesLayer
+from synthcity.plugins.core.models.wavelet import Wavelet
 from synthcity.utils.constants import DEVICE
 from synthcity.utils.reproducibility import enable_reproducible_results
 
@@ -26,6 +28,28 @@ from synthcity.utils.reproducibility import enable_reproducible_results
 from ._base import TimeSeriesSurvivalPlugin
 
 rnn_modes = ["GRU", "LSTM", "RNN", "Transformer"]
+output_modes = [
+    "MLP",
+    "LSTM",
+    "GRU",
+    "RNN",
+    "MLSTM_FCN",
+    "TCN",
+    "InceptionTime",
+    "InceptionTimePlus",
+    "XceptionTime",
+    "ResCNN",
+    "OmniScaleCNN",
+    "TST",
+    "TSTPlus",
+    "XCM",
+    "gMLP",
+    "MiniRocket",
+    "MiniRocketPlus",
+    "mWDNPlus",
+    "Transformer",
+    "TSiTPlus",
+]
 
 
 class DynamicDeephitTimeSeriesSurvival(TimeSeriesSurvivalPlugin):
@@ -45,6 +69,7 @@ class DynamicDeephitTimeSeriesSurvival(TimeSeriesSurvivalPlugin):
         dropout: float = 0.06,
         device: Any = DEVICE,
         patience: int = 20,
+        output_type: str = "MLP",
         **kwargs: Any,
     ) -> None:
         super().__init__()
@@ -64,6 +89,7 @@ class DynamicDeephitTimeSeriesSurvival(TimeSeriesSurvivalPlugin):
             lr=lr,
             batch_size=batch_size,
             n_iter=n_iter,
+            output_type=output_type,
             device=device,
         )
 
@@ -200,6 +226,7 @@ class DynamicDeepHitModel:
         val_size: float = 0.1,
         random_state: int = 0,
         clipping_value: int = 1,
+        output_type: str = "MLP",
     ) -> None:
 
         self.split = split
@@ -223,13 +250,17 @@ class DynamicDeepHitModel:
 
         self.patience = patience
         self.random_state = random_state
+        self.output_type = output_type
 
         self.model: Optional[DynamicDeepHitLayers] = None
 
-    def _setup_model(self, inputdim: int, risks: int) -> "DynamicDeepHitLayers":
+    def _setup_model(
+        self, inputdim: int, seqlen: int, risks: int
+    ) -> "DynamicDeepHitLayers":
         return (
             DynamicDeepHitLayers(
                 inputdim,
+                seqlen,
                 self.split,
                 self.layers_rnn,
                 self.hidden_rnn,
@@ -237,6 +268,7 @@ class DynamicDeepHitModel:
                 dropout=self.dropout,
                 risks=risks,
                 device=self.device,
+                output_type=self.output_type,
             )
             .float()
             .to(self.device)
@@ -252,10 +284,11 @@ class DynamicDeepHitModel:
         processed_data = self._preprocess_training_data(x, discretized_t, e)
         x_train, t_train, e_train, x_val, t_val, e_val = processed_data
         inputdim = x_train.shape[-1]
+        seqlen = x_train.shape[-2]
 
         maxrisk = int(np.nanmax(e_train.cpu().numpy()))
 
-        self.model = self._setup_model(inputdim, risks=maxrisk)
+        self.model = self._setup_model(inputdim, seqlen, risks=maxrisk)
         optimizer = torch.optim.Adam(self.model.parameters(), lr=self.lr)
 
         patience, old_loss = 0, np.inf
@@ -548,17 +581,20 @@ class DynamicDeepHitLayers(nn.Module):
     def __init__(
         self,
         input_dim: int,
+        seq_len: int,
         output_dim: int,
         layers_rnn: int,
         hidden_rnn: int,
         rnn_type: str = "LSTM",
         dropout: float = 0.1,
         risks: int = 1,
+        output_type: str = "MLP",
         device: Any = DEVICE,
     ) -> None:
         super(DynamicDeepHitLayers, self).__init__()
 
         self.input_dim = input_dim
+        self.seq_len = seq_len
         self.output_dim = output_dim
         self.risks = risks
         self.rnn_type = rnn_type
@@ -587,6 +623,14 @@ class DynamicDeepHitLayers(nn.Module):
             self.embedding = TransformerModel(
                 input_dim, hidden_rnn, n_layers_hidden=layers_rnn, dropout=dropout
             )
+        elif self.rnn_type == "Wavelet":
+            self.embedding = Wavelet(
+                n_units_in=input_dim,
+                n_units_window=seq_len,
+                n_units_hidden=hidden_rnn,
+                n_layers_hidden=layers_rnn,
+                dropout=dropout,
+            )
         else:
             raise RuntimeError(f"Unknown rnn_type {rnn_type}")
         # Longitudinal network
@@ -600,15 +644,29 @@ class DynamicDeepHitLayers(nn.Module):
         )
 
         # Attention mechanism
-        self.attention = MLP(
-            task_type="regression",
-            n_units_in=input_dim + hidden_rnn,
-            n_units_out=1,
-            dropout=self.dropout,
-            n_layers_hidden=layers_rnn,
-            n_units_hidden=hidden_rnn,
-        )
+        if output_type == "MLP":
+            self.attention = MLP(
+                task_type="regression",
+                n_units_in=input_dim + hidden_rnn,
+                n_units_out=1,
+                dropout=self.dropout,
+                n_layers_hidden=layers_rnn,
+                n_units_hidden=hidden_rnn,
+            )
+        else:
+            self.attention = TimeSeriesLayer(
+                n_static_units_in=0,
+                n_temporal_units_in=input_dim + hidden_rnn,
+                n_temporal_window=seq_len,
+                n_units_out=seq_len,
+                n_temporal_units_hidden=hidden_rnn,
+                n_temporal_layers_hidden=layers_rnn,
+                mode=output_type,
+                dropout=self.dropout,
+                device=device,
+            )
         self.attention_soft = nn.Softmax(1)  # On temporal dimension
+        self.output_type = output_type
 
         # Cause specific network
         self.cause_specific = []
@@ -627,6 +685,45 @@ class DynamicDeepHitLayers(nn.Module):
 
         # Probability
         self.soft = nn.Softmax(dim=-1)  # On all observed output
+
+    def forward_attention(
+        self, x: torch.Tensor, inputmask: torch.Tensor, hidden: torch.Tensor
+    ) -> torch.Tensor:
+        # Attention using last observation to predict weight of all previously observed
+        # Extract last observation (the one used for predictions)
+        last_observations = (~inputmask).sum(axis=1) - 1
+        last_observations_idx = last_observations.unsqueeze(1).repeat(1, x.size(1))
+        index = torch.arange(x.size(1)).repeat(x.size(0), 1).to(self.device)
+
+        last = index == last_observations_idx
+        x_last = x[last]
+
+        # Concatenate all previous with new to measure attention
+        concatenation = torch.cat(
+            [hidden, x_last.unsqueeze(1).repeat(1, x.size(1), 1)], -1
+        )
+
+        # Compute attention and normalize
+        if self.output_type == "MLP":
+            attention = self.attention(concatenation).squeeze(-1)
+        else:
+            attention = self.attention(
+                torch.zeros(len(concatenation), 0), concatenation
+            ).squeeze(-1)
+        attention[
+            index >= last_observations_idx
+        ] = -1e10  # Want soft max to be zero as values not observed
+        attention[last_observations > 0] = self.attention_soft(
+            attention[last_observations > 0]
+        )  # Weight previous observation
+        attention[last_observations == 0] = 0  # No context for only one observation
+
+        # Risk networks
+        # The original paper is not clear on how the last observation is
+        # combined with the temporal sum, other code was concatenating them
+        attention = attention.unsqueeze(2).repeat(1, 1, hidden.size(2))
+        hidden_attentive = torch.sum(attention * hidden, axis=1)
+        return torch.cat([hidden_attentive, x_last], 1)
 
     def forward_emb(self, x: torch.Tensor) -> torch.Tensor:
         """
@@ -650,36 +747,7 @@ class DynamicDeepHitLayers(nn.Module):
         longitudinal_prediction = self.longitudinal(hidden)
         assert torch.isnan(longitudinal_prediction).sum() == 0
 
-        # Attention using last observation to predict weight of all previously observed
-        # Extract last observation (the one used for predictions)
-        last_observations = (~inputmask).sum(axis=1) - 1
-        last_observations_idx = last_observations.unsqueeze(1).repeat(1, x.size(1))
-        index = torch.arange(x.size(1)).repeat(x.size(0), 1).to(self.device)
-
-        last = index == last_observations_idx
-        x_last = x[last]
-
-        # Concatenate all previous with new to measure attention
-        concatenation = torch.cat(
-            [hidden, x_last.unsqueeze(1).repeat(1, x.size(1), 1)], -1
-        )
-
-        # Compute attention and normalize
-        attention = self.attention(concatenation).squeeze(-1)
-        attention[
-            index >= last_observations_idx
-        ] = -1e10  # Want soft max to be zero as values not observed
-        attention[last_observations > 0] = self.attention_soft(
-            attention[last_observations > 0]
-        )  # Weight previous observation
-        attention[last_observations == 0] = 0  # No context for only one observation
-
-        # Risk networks
-        # The original paper is not clear on how the last observation is
-        # combined with the temporal sum, other code was concatenating them
-        attention = attention.unsqueeze(2).repeat(1, 1, hidden.size(2))
-        hidden_attentive = torch.sum(attention * hidden, axis=1)
-        hidden_attentive = torch.cat([hidden_attentive, x_last], 1)
+        hidden_attentive = self.forward_attention(x, inputmask, hidden)
 
         return longitudinal_prediction, hidden_attentive
 

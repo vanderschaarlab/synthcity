@@ -26,7 +26,6 @@ from synthcity.plugins.core.models.survival_analysis import (
 )
 from synthcity.plugins.core.models.time_series_survival.benchmarks import (
     evaluate_ts_survival_model,
-    search_hyperparams,
 )
 from synthcity.plugins.core.models.time_series_survival.ts_surv_coxph import (
     CoxTimeSeriesSurvival,
@@ -434,21 +433,21 @@ class PerformanceEvaluator(MetricEvaluator):
             id_X_temporal_horizons_gt,
             id_T_gt,
             id_E_gt,
-        ) = X_gt.train().unpack(as_numpy=True, pad = True)
+        ) = X_gt.train().unpack(as_numpy=True, pad=True)
         (
             ood_X_static_gt,
             ood_X_temporal_gt,
             ood_X_temporal_horizons_gt,
             ood_T_gt,
             ood_E_gt,
-        ) = X_gt.test().unpack(as_numpy=True, pad = True)
+        ) = X_gt.test().unpack(as_numpy=True, pad=True)
         (
             iter_X_static_syn,
             iter_X_temporal_syn,
             iter_X_temporal_horizons_syn,
             iter_T_syn,
             iter_E_syn,
-        ) = X_syn.unpack(as_numpy=True, pad = True)
+        ) = X_syn.unpack(as_numpy=True, pad=True)
 
         predictor_gt = model(**args)
         log.info(
@@ -638,10 +637,7 @@ class PerformanceEvaluatorLinear(PerformanceEvaluator):
         elif self._task_type == "time_series_survival":
             static, temporal, temporal_horizons, T, E = X_gt.unpack()
 
-            info = X_gt.info()
-            time_horizons = info["time_horizons"]
-
-            args = {}
+            args: dict = {}
             log.info(f"Performance evaluation using CoxTimeSeriesSurvival and {args}")
             return self._evaluate_time_series_survival_performance(
                 CoxTimeSeriesSurvival, args, X_gt, X_syn
@@ -708,7 +704,6 @@ class PerformanceEvaluatorMLP(PerformanceEvaluator):
             static, temporal, temporal_horizons, T, E = X_gt.unpack()
 
             info = X_gt.info()
-            time_horizons = info["time_horizons"]
 
             args = {}
             log.info(
