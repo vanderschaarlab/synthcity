@@ -27,6 +27,32 @@ def test_hyperparams() -> None:
     assert len(params.keys()) == 11
 
 
+@pytest.mark.parametrize(
+    "wavelet_type",
+    ["haar", "db4", "sym2", "dmey"],
+)
+@pytest.mark.parametrize("wavelet_mode", ["symmetric"])
+def test_train_prediction_coxph_wavelet(wavelet_type: str, wavelet_mode: str) -> None:
+    static, temporal, temporal_horizons, outcome = PBCDataloader(as_numpy=True).load()
+    T, E = outcome
+
+    horizons = [0.25, 0.5, 0.75]
+    time_horizons = np.quantile(T, horizons).tolist()
+
+    model = CoxTimeSeriesSurvival(
+        emb_rnn_type="Wavelet",
+        emb_output_type="MLP",
+        emb_wavelet_type=wavelet_type,
+        emb_wavelet_mode=wavelet_mode,
+    )
+    score = evaluate_ts_survival_model(
+        model, static, temporal, temporal_horizons, T, E, time_horizons
+    )
+
+    print("Perf", model.name(), score["str"])
+    assert score["clf"]["c_index"][0] > 0.5
+
+
 @pytest.mark.parametrize("rnn_type", ["GRU", "LSTM", "Transformer"])
 @pytest.mark.parametrize(
     "output_type",
