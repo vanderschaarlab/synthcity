@@ -46,6 +46,7 @@ class Wavelet(nn.Module):
             dropout=dropout,
         )
         self.normalizer: Dict[int, nn.Module] = {}
+        self.to(device)
 
     def encode(self, X: Tensor) -> Tuple[Tensor, List]:
         low, high = self.wavelet_encoder(X)
@@ -62,7 +63,7 @@ class Wavelet(nn.Module):
 
         low, high = self.encode(x)
 
-        out = torch.concat([low] + high, axis=-1)
+        out = torch.concat([low] + high, axis=-1).to(self.device)
         if out.shape[-1] not in self.normalizer:
             self.normalizer[out.shape[-1]] = nn.Linear(
                 out.shape[-1], self.n_units_window
