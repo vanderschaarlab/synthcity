@@ -32,6 +32,8 @@ class WaveBlock(nn.Module):
         self.sigmoid = nn.Sigmoid()
         self.pool = nn.AvgPool1d(2)
 
+        self.to(device)
+
     def forward(self, x: torch.Tensor) -> Tuple[torch.Tensor, torch.Tensor]:
         hp_1 = self.sigmoid(self.mWDN_H(x))
         lp_1 = self.sigmoid(self.mWDN_L(x))
@@ -91,9 +93,10 @@ class Wavelet(nn.Module):
             residual=True,
             dropout=dropout,
         )
+        self.to(device)
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
-        out = torch.zeros((x.shape[0], x.shape[2], 0))
+        out = torch.zeros((x.shape[0], x.shape[2], 0)).to(self.device)
         x = x.to(self.device)
         x = Permute(0, 2, 1)(x)  # bs x seq_len x nvars -> bs x nvars x seq_len
         for block in self.blocks:
