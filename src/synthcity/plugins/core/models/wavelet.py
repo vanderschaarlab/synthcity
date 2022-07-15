@@ -1,5 +1,5 @@
 # stdlib
-from typing import Any, List, Optional, Tuple
+from typing import Any, Dict, List, Tuple
 
 # third party
 import torch
@@ -23,7 +23,7 @@ class Wavelet(nn.Module):
         n_layers_hidden: int = 2,
         dropout: float = 0,
         levels: int = 3,
-        wavelet: str = "haar",
+        wavelet: str = "sym2",
         mode: str = "symmetric",
         device: Any = DEVICE,
     ) -> None:
@@ -45,7 +45,7 @@ class Wavelet(nn.Module):
             device=device,
             dropout=dropout,
         )
-        self.normalizer: Optional[nn.Module] = None
+        self.normalizer: Dict[int, nn.Module] = {}
 
     def encode(self, X: Tensor) -> Tuple[Tensor, List]:
         low, high = self.wavelet_encoder(X)
@@ -63,9 +63,11 @@ class Wavelet(nn.Module):
         low, high = self.encode(x)
 
         out = torch.concat([low] + high, axis=-1)
-        if self.normalizer is None:
-            self.normalizer = nn.Linear(out.shape[-1], self.n_units_window)
-        out = self.normalizer(out)
+        if out.shape[-1] not in self.normalizer:
+            self.normalizer[out.shape[-1]] = nn.Linear(
+                out.shape[-1], self.n_units_window
+            )
+        out = self.normalizer[out.shape[-1]](out)
 
         out = Permute(0, 2, 1)(out)  # bs x outlen x seq_len -> bs x seq_len x outlen
         return self.post_processing(out)

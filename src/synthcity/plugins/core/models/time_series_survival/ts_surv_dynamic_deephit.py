@@ -64,7 +64,7 @@ class DynamicDeephitTimeSeriesSurvival(TimeSeriesSurvivalPlugin):
         device: Any = DEVICE,
         patience: int = 20,
         output_type: str = "MLP",
-        wavelet_type: str = "haar",
+        wavelet_type: str = "sym2",
         wavelet_mode: str = "symmetric",
         **kwargs: Any,
     ) -> None:
@@ -227,7 +227,7 @@ class DynamicDeepHitModel:
         random_state: int = 0,
         clipping_value: int = 1,
         output_type: str = "MLP",
-        wavelet_type: str = "haar",
+        wavelet_type: str = "sym2",
         wavelet_mode: str = "symmetric",
     ) -> None:
 
@@ -596,7 +596,7 @@ class DynamicDeepHitLayers(nn.Module):
         dropout: float = 0.1,
         risks: int = 1,
         output_type: str = "MLP",
-        wavelet_type: str = "haar",
+        wavelet_type: str = "sym2",
         wavelet_mode: str = "symmetric",
         device: Any = DEVICE,
     ) -> None:
