@@ -67,7 +67,7 @@ class Wavelet(nn.Module):
         if out.shape[-1] not in self.normalizer:
             self.normalizer[out.shape[-1]] = nn.Linear(
                 out.shape[-1], self.n_units_window
-            )
+            ).to(self.device)
         out = self.normalizer[out.shape[-1]](out)
 
         out = Permute(0, 2, 1)(out)  # bs x outlen x seq_len -> bs x seq_len x outlen
