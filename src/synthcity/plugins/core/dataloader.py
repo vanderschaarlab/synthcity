@@ -1170,6 +1170,31 @@ class TimeSeriesSurvivalDataLoader(TimeSeriesDataLoader):
             constraints.match(self.dataframe()),
         )
 
+    def train(self) -> "DataLoader":
+        stratify = self.data["outcome"][self.event_col]
+
+        ids = self.ids()
+        train_ids, _ = train_test_split(
+            ids,
+            train_size=self.train_size,
+            random_state=self.random_state,
+            stratify = stratify,
+        )
+        return self.unpack_and_decorate(self.filter_ids(train_ids))
+
+    def test(self) -> "DataLoader":
+        stratify = self.data["outcome"][self.event_col]
+        ids = self.ids()
+        _, test_ids = train_test_split(
+            ids,
+            train_size=self.train_size,
+            random_state=self.random_state,
+            stratify = stratify,
+        )
+        return self.unpack_and_decorate(self.filter_ids(test_ids))
+
+
+
 
 @validate_arguments(config=dict(arbitrary_types_allowed=True))
 def create_from_info(data: pd.DataFrame, info: dict) -> "DataLoader":
