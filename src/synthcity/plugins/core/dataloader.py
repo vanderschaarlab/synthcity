@@ -835,6 +835,7 @@ class TimeSeriesDataLoader(DataLoader):
             item_missing_rows = item.isna().sum(axis=1).values
             missing_horizons.append(item_missing_rows == len(temporal_features))
 
+            # TODO: review impact on horizons
             temporal_data[idx] = item.dropna()
 
         temporal_horizons_unmasked = []
@@ -1020,6 +1021,7 @@ class TimeSeriesDataLoader(DataLoader):
             local_temporal_data = item_data[temporal_cols].copy()
             local_temporal_horizons = item_data[time_col].values.tolist()
             local_temporal_data.columns = new_temporal_cols
+            # TODO: review impact on horizons
             local_temporal_data = local_temporal_data.dropna()
 
             temporal_data.append(local_temporal_data)

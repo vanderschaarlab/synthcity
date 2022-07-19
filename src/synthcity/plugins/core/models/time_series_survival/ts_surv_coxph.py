@@ -40,10 +40,11 @@ class CoxTimeSeriesSurvival(TimeSeriesSurvivalPlugin):
         emb_sigma: float = 0.21,
         emb_dropout: float = 0.06,
         emb_patience: int = 20,
+        emb_wavelet_type: str = "haar",
+        emb_wavelet_mode: str = "symmetric",
         # hyperopt helper
         n_iter: Optional[int] = None,
         random_state: int = 0,
-        **kwargs: Any,
     ) -> None:
         super().__init__()
         enable_reproducible_results(random_state)
@@ -66,6 +67,8 @@ class CoxTimeSeriesSurvival(TimeSeriesSurvivalPlugin):
             dropout=emb_dropout,
             patience=emb_patience,
             random_state=random_state,
+            wavelet_type=emb_wavelet_type,
+            wavelet_mode=emb_wavelet_mode,
         )
         self.pred_model = CoxPHSurvivalAnalysis(
             alpha=alpha,

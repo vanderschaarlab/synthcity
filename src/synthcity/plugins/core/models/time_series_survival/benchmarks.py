@@ -184,8 +184,8 @@ def evaluate_ts_survival_model(
     results = {}
 
     static = np.asarray(static)
-    temporal = np.asarray(temporal)
-    temporal_horizons = np.asarray(temporal_horizons)
+    temporal = np.asarray(temporal, dtype=object)
+    temporal_horizons = np.asarray(temporal_horizons, dtype=object)
     T = np.asarray(T)
     Y = np.asarray(Y)
 

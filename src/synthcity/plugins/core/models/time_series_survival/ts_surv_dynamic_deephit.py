@@ -64,6 +64,8 @@ class DynamicDeephitTimeSeriesSurvival(TimeSeriesSurvivalPlugin):
         device: Any = DEVICE,
         patience: int = 20,
         output_type: str = "MLP",
+        wavelet_type: str = "sym2",
+        wavelet_mode: str = "symmetric",
         **kwargs: Any,
     ) -> None:
         super().__init__()
@@ -86,6 +88,8 @@ class DynamicDeephitTimeSeriesSurvival(TimeSeriesSurvivalPlugin):
             n_iter=n_iter,
             output_type=output_type,
             device=device,
+            wavelet_type=wavelet_type,
+            wavelet_mode=wavelet_mode,
         )
 
     def _merge_data(
@@ -223,6 +227,8 @@ class DynamicDeepHitModel:
         random_state: int = 0,
         clipping_value: int = 1,
         output_type: str = "MLP",
+        wavelet_type: str = "sym2",
+        wavelet_mode: str = "symmetric",
     ) -> None:
 
         self.split = split
@@ -248,6 +254,9 @@ class DynamicDeepHitModel:
         self.random_state = random_state
         self.output_type = output_type
 
+        self.wavelet_type = wavelet_type
+        self.wavelet_mode = wavelet_mode
+
         self.model: Optional[DynamicDeepHitLayers] = None
 
     def _setup_model(
@@ -265,6 +274,8 @@ class DynamicDeepHitModel:
                 risks=risks,
                 device=self.device,
                 output_type=self.output_type,
+                wavelet_type=self.wavelet_type,
+                wavelet_mode=self.wavelet_mode,
             )
             .float()
             .to(self.device)
@@ -585,6 +596,8 @@ class DynamicDeepHitLayers(nn.Module):
         dropout: float = 0.1,
         risks: int = 1,
         output_type: str = "MLP",
+        wavelet_type: str = "sym2",
+        wavelet_mode: str = "symmetric",
         device: Any = DEVICE,
     ) -> None:
         super(DynamicDeepHitLayers, self).__init__()
@@ -626,6 +639,8 @@ class DynamicDeepHitLayers(nn.Module):
                 n_units_hidden=hidden_rnn,
                 n_layers_hidden=layers_rnn,
                 dropout=dropout,
+                wavelet=wavelet_type,
+                mode=wavelet_mode,
             )
         else:
             raise RuntimeError(f"Unknown rnn_type {rnn_type}")
