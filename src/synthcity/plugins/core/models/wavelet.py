@@ -91,9 +91,10 @@ class Wavelet(nn.Module):
             residual=True,
             dropout=dropout,
         )
+        self.to(device)
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
-        out = torch.zeros((x.shape[0], x.shape[2], 0))
+        out = torch.zeros((x.shape[0], x.shape[2], 0)).to(self.device)
         x = x.to(self.device)
         x = Permute(0, 2, 1)(x)  # bs x seq_len x nvars -> bs x nvars x seq_len
         for block in self.blocks:

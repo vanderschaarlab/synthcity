@@ -234,16 +234,23 @@ class GenericDataLoader(DataLoader):
     def __setitem__(self, feature: str, val: Any) -> None:
         self.data[feature] = val
 
-    def train(self) -> "DataLoader":
-        train_data, _ = train_test_split(
-            self.data, train_size=self.train_size, random_state=self.random_state
+    def _train_test_split(self) -> Tuple:
+        stratify = None
+        if self.target_column in self.data:
+            stratify = self.data[self.target_column]
+        return train_test_split(
+            self.data,
+            train_size=self.train_size,
+            random_state=self.random_state,
+            stratify=stratify,
         )
+
+    def train(self) -> "DataLoader":
+        train_data, _ = self._train_test_split()
         return self.decorate(train_data.reset_index(drop=True))
 
     def test(self) -> "DataLoader":
-        _, test_data = train_test_split(
-            self.data, train_size=self.train_size, random_state=self.random_state
-        )
+        _, test_data = self._train_test_split()
         return self.decorate(test_data.reset_index(drop=True))
 
     def fillna(self, value: Any) -> "DataLoader":
@@ -383,16 +390,21 @@ class SurvivalAnalysisDataLoader(DataLoader):
         self.data[feature] = val
 
     def train(self) -> "DataLoader":
+        stratify = self.data[self.target_column]
         train_data, _ = train_test_split(
-            self.data, train_size=self.train_size, random_state=0
+            self.data, train_size=self.train_size, random_state=0, stratify=stratify
         )
         return self.decorate(
             train_data.reset_index(drop=True),
         )
 
     def test(self) -> "DataLoader":
+        stratify = self.data[self.target_column]
         _, test_data = train_test_split(
-            self.data, train_size=self.train_size, random_state=0
+            self.data,
+            train_size=self.train_size,
+            random_state=0,
+            stratify=stratify,
         )
         return self.decorate(
             test_data.reset_index(drop=True),
@@ -630,6 +642,7 @@ class TimeSeriesDataLoader(DataLoader):
         return seq_data[seq_data[id_col].isin(ids_list)]
 
     def train(self) -> "DataLoader":
+        # TODO: stratify
         ids = self.ids()
         train_ids, _ = train_test_split(
             ids,
@@ -639,6 +652,7 @@ class TimeSeriesDataLoader(DataLoader):
         return self.unpack_and_decorate(self.filter_ids(train_ids))
 
     def test(self) -> "DataLoader":
+        # TODO: stratify
         ids = self.ids()
         _, test_ids = train_test_split(
             ids,

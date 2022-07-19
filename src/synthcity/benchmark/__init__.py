@@ -89,21 +89,33 @@ class Benchmarks:
                     workspace
                     / f"{experiment_name}_{testcase}_{plugin}_{kwargs_hash}_{repeat}.bkp"
                 )
+                generator_file = (
+                    workspace
+                    / f"{experiment_name}_{testcase}_{plugin}_{kwargs_hash}_generator_{repeat}.bkp"
+                )
+
 
                 log.info(
                     f"[testcase] Experiment repeat: {repeat} task type: {task_type} Train df hash = {X.train().hash()}"
                 )
 
-                if cache_file.exists() and synthetic_reuse_if_exists:
-                    X_syn = load_from_file(cache_file)
+                if generator_file.exists() and synthetic_reuse_if_exists:
+                    generator = load_from_file(generator_file)
                 else:
                     generator = Plugins(categories=plugin_cats).get(
                         plugin,
                         **kwargs,
                     )
 
+                    generator.fit(X.train())
+
+                    if synthetic_cache:
+                        save_to_file(generator_file, generator)
+
+                if cache_file.exists() and synthetic_reuse_if_exists:
+                    X_syn = load_from_file(cache_file)
+                else:
                     try:
-                        generator.fit(X.train())
                         X_syn = generator.generate(
                             count=synthetic_size,
                             constraints=synthetic_constraints,
