@@ -244,7 +244,10 @@ class GenericDataLoader(DataLoader):
     def _train_test_split(self) -> Tuple:
         stratify = None
         if self.target_column in self.data:
-            stratify = self.data[self.target_column]
+            target = self.data[self.target_column]
+            if target.value_counts().min() > 1:
+                stratify = target
+
         return train_test_split(
             self.data,
             train_size=self.train_size,

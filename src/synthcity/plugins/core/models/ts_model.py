@@ -333,6 +333,11 @@ class TimeSeriesModel(nn.Module):
         temporal_horizons: torch.Tensor,
         outcome: torch.Tensor,
     ) -> DataLoader:
+        stratify = None
+        _, out_counts = torch.unique(outcome, return_counts=True)
+        if out_counts.min() > 1:
+            stratify = outcome
+
         (
             static_data_train,
             static_data_test,
@@ -349,7 +354,7 @@ class TimeSeriesModel(nn.Module):
             outcome,
             train_size=self.train_ratio,
             random_state=self.random_state,
-            stratify=outcome,
+            stratify=stratify,
         )
         train_dataset = TensorDataset(
             static_data_train,
