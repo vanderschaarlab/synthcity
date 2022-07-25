@@ -11,7 +11,7 @@ from torch.utils.data import DataLoader, TensorDataset
 # synthcity absolute
 import synthcity.logger as log
 from synthcity.utils.constants import DEVICE
-from synthcity.utils.reproducibility import enable_reproducible_results, clear_cache
+from synthcity.utils.reproducibility import clear_cache, enable_reproducible_results
 
 
 def get_nonlin(name: str) -> nn.Module:

@@ -1,4 +1,5 @@
 # stdlib
+import hashlib
 import json
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
@@ -17,7 +18,7 @@ from synthcity.plugins.core.constraints import Constraints
 from synthcity.plugins.core.dataloader import DataLoader
 from synthcity.utils.reproducibility import enable_reproducible_results
 from synthcity.utils.serialization import load_from_file, save_to_file
-import hashlib
+
 
 class Benchmarks:
     @staticmethod
@@ -82,7 +83,6 @@ class Benchmarks:
                 hash_object = hashlib.md5(kwargs_hash_raw)
                 kwargs_hash = hash_object.hexdigest()
 
-
             for repeat in range(repeats):
                 enable_reproducible_results(repeat)
                 cache_file = (
@@ -93,7 +93,6 @@ class Benchmarks:
                     workspace
                     / f"{experiment_name}_{testcase}_{plugin}_{kwargs_hash}_generator_{repeat}.bkp"
                 )
-
 
                 log.info(
                     f"[testcase] Experiment repeat: {repeat} task type: {task_type} Train df hash = {X.train().hash()}"

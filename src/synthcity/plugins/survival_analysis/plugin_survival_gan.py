@@ -10,7 +10,7 @@ from pydantic import validate_arguments
 # synthcity absolute
 import synthcity.logger as log
 import synthcity.plugins as plugins
-from synthcity.plugins.core.dataloader import DataLoader, create_from_info
+from synthcity.plugins.core.dataloader import DataLoader
 from synthcity.plugins.core.distribution import Distribution
 from synthcity.plugins.core.models import BinEncoder
 from synthcity.plugins.core.plugin import Plugin
@@ -107,7 +107,9 @@ class SurvivalGANPlugin(Plugin):
 
         if self.use_conditional:
             important_feats = X.important_features
-            precond = pd.concat([T.to_frame(), E.to_frame(), X[important_feats]], axis = 1)
+            precond = pd.concat(
+                [T.to_frame(), E.to_frame(), X[important_feats]], axis=1
+            )
             self.conditional = BinEncoder().fit_transform(precond)
             n_units_conditional = self.conditional.shape[1]
         else:
@@ -136,11 +138,11 @@ class SurvivalGANPlugin(Plugin):
             cond = cond.head(count)
 
         return self.model._generate(
-                count,
-                syn_schema=syn_schema,
-                cond=cond,
-                **kwargs,
-            )
+            count,
+            syn_schema=syn_schema,
+            cond=cond,
+            **kwargs,
+        )
 
 
 plugin = SurvivalGANPlugin

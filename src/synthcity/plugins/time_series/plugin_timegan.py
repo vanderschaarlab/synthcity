@@ -9,6 +9,7 @@ import numpy as np
 import pandas as pd
 
 # synthcity absolute
+import synthcity.logger as log
 from synthcity.plugins.core.dataloader import DataLoader
 from synthcity.plugins.core.distribution import (
     CategoricalDistribution,
@@ -24,7 +25,7 @@ from synthcity.plugins.core.plugin import Plugin
 from synthcity.plugins.core.schema import Schema
 from synthcity.utils.constants import DEVICE
 from synthcity.utils.samplers import ImbalancedDatasetSampler
-import synthcity.logger as log
+
 
 class TimeGANPlugin(Plugin):
     """Synthetic time series generation using TimeGAN.
@@ -138,11 +139,13 @@ class TimeGANPlugin(Plugin):
         embedding_penalty: float = 10,
         use_horizon_condition: bool = True,
         dataloader_sampling_strategy: str = "imbalanced_time_censoring",  # none, imbalanced_censoring, imbalanced_time_censoring
-        **kwargs: Any
+        **kwargs: Any,
     ) -> None:
         super().__init__()
 
-        log.info(f"""TimeGAN: mode = {mode} dataloader_sampling_strategy = {dataloader_sampling_strategy}""")
+        log.info(
+            f"""TimeGAN: mode = {mode} dataloader_sampling_strategy = {dataloader_sampling_strategy}"""
+        )
         self.n_iter = n_iter
         self.n_units_conditional = n_units_conditional
         self.generator_n_layers_hidden = generator_n_layers_hidden

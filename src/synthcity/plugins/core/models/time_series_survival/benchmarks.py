@@ -6,6 +6,7 @@ from typing import Any, Callable, Dict, List
 # third party
 import numpy as np
 import optuna
+from sklearn.metrics import roc_auc_score
 from sklearn.model_selection import StratifiedKFold, train_test_split
 
 # synthcity absolute
@@ -324,6 +325,116 @@ def evaluate_ts_survival_model(
                     results[metric][cv_idx] = c_index
                 elif metric == "brier_score":
                     results[metric][cv_idx] = brier_score
+
+            cv_idx += 1
+
+    output: dict = {
+        "clf": {},
+        "str": {},
+    }
+
+    for metric in metrics:
+        output["clf"][metric] = generate_score(results[metric])
+        output["str"][metric] = print_score(output["clf"][metric])
+
+    return output
+
+
+def evaluate_ts_classification(
+    estimator: Any,
+    static: np.ndarray,
+    temporal: np.ndarray,
+    temporal_horizons: np.ndarray,
+    Y: np.ndarray,
+    n_folds: int = 3,
+    metrics: List[str] = ["aucroc"],
+    random_state: int = 0,
+    pretrained: bool = False,
+) -> Dict:
+    results: Dict[str, list] = {
+        "aucroc": [],
+    }
+
+    static = np.asarray(static)
+    temporal = np.asarray(temporal)
+    temporal_horizons = np.asarray(temporal_horizons)
+    Y = np.asarray(Y)
+
+    def _get_metrics(
+        cv_idx: int,
+        static_train: np.ndarray,
+        static_test: np.ndarray,
+        temporal_train: np.ndarray,
+        temporal_test: np.ndarray,
+        temporal_horizons_train: np.ndarray,
+        temporal_horizons_test: np.ndarray,
+        Y_train: np.ndarray,
+        Y_test: np.ndarray,
+    ) -> tuple:
+        if pretrained:
+            model = estimator[cv_idx]
+        else:
+            model = copy.deepcopy(estimator)
+
+            model.fit(static_train, temporal_train, temporal_horizons_train, Y_train)
+        pred = model.predict(static_test, temporal_test, temporal_horizons_test)
+
+        return roc_auc_score(Y_test, pred)
+
+    if n_folds == 1:
+        cv_idx = 0
+        (
+            static_train,
+            static_test,
+            temporal_train,
+            temporal_test,
+            temporal_horizons_train,
+            temporal_horizons_test,
+            Y_train,
+            Y_test,
+        ) = train_test_split(
+            static, temporal, temporal_horizons, Y, random_state=random_state
+        )
+
+        aucroc = _get_metrics(
+            cv_idx,
+            static_train,
+            static_test,
+            temporal_train,
+            temporal_test,
+            temporal_horizons_train,
+            temporal_horizons_test,
+            Y_train,
+            Y_test,
+        )
+        results["aucroc"] = [aucroc]
+    else:
+        skf = StratifiedKFold(n_splits=n_folds, shuffle=True, random_state=random_state)
+
+        cv_idx = 0
+        for train_index, test_index in skf.split(temporal, Y):
+            static_train = static[train_index]
+            temporal_train = temporal[train_index]
+            temporal_horizons_train = temporal_horizons[train_index]
+            Y_train = Y[train_index]
+
+            static_test = static[test_index]
+            temporal_test = temporal[test_index]
+            temporal_horizons_test = temporal_horizons[test_index]
+            Y_test = Y[test_index]
+
+            aucroc = _get_metrics(
+                cv_idx,
+                static_train,
+                static_test,
+                temporal_train,
+                temporal_test,
+                temporal_horizons_train,
+                temporal_horizons_test,
+                Y_train,
+                Y_test,
+            )
+            results["aucroc"].append(aucroc)
 
             cv_idx += 1
 

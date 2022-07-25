@@ -160,7 +160,7 @@ class GenericDataLoader(DataLoader):
             data=data,
             static_features=list(data.columns),
             sensitive_features=sensitive_features,
-            important_features = important_features,
+            important_features=important_features,
             outcome_features=[self.target_column],
             random_state=random_state,
             **kwargs,
@@ -304,7 +304,7 @@ class SurvivalAnalysisDataLoader(DataLoader):
             data=data,
             static_features=list(data.columns.astype(str)),
             sensitive_features=sensitive_features,
-            important_features = important_features,
+            important_features=important_features,
             outcome_features=[self.target_column],
             random_state=random_state,
             **kwargs,
@@ -497,7 +497,7 @@ class TimeSeriesDataLoader(DataLoader):
             temporal_features=temporal_features,
             outcome_features=self.outcome_features,
             sensitive_features=sensitive_features,
-            important_features = important_features,
+            important_features=important_features,
             random_state=random_state,
             **kwargs,
         )
@@ -1082,7 +1082,7 @@ class TimeSeriesSurvivalDataLoader(TimeSeriesDataLoader):
             outcome=outcome,
             static_data=static_data,
             sensitive_features=sensitive_features,
-            important_features = important_features,
+            important_features=important_features,
             random_state=random_state,
             train_size=train_size,
             seq_offset=seq_offset,
@@ -1197,7 +1197,7 @@ class TimeSeriesSurvivalDataLoader(TimeSeriesDataLoader):
             ids,
             train_size=self.train_size,
             random_state=self.random_state,
-            stratify = stratify,
+            stratify=stratify,
         )
         return self.unpack_and_decorate(self.filter_ids(train_ids))
 
@@ -1208,11 +1208,9 @@ class TimeSeriesSurvivalDataLoader(TimeSeriesDataLoader):
             ids,
             train_size=self.train_size,
             random_state=self.random_state,
-            stratify = stratify,
+            stratify=stratify,
         )
         return self.unpack_and_decorate(self.filter_ids(test_ids))
-
-
 
 
 @validate_arguments(config=dict(arbitrary_types_allowed=True))

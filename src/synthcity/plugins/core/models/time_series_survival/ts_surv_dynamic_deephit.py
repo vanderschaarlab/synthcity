@@ -186,19 +186,19 @@ class DynamicDeephitTimeSeriesSurvival(TimeSeriesSurvivalPlugin):
     ) -> List[Distribution]:
         return [
             IntegerDistribution(
-                name=f"{prefix}_n_units_hidden", low=10, high=100, step=10
+                name=f"{prefix}n_units_hidden", low=10, high=100, step=10
             ),
-            IntegerDistribution(name=f"{prefix}_n_layers_hidden", low=1, high=4),
+            IntegerDistribution(name=f"{prefix}n_layers_hidden", low=1, high=4),
             CategoricalDistribution(
-                name=f"{prefix}_batch_size", choices=[100, 200, 500]
+                name=f"{prefix}batch_size", choices=[100, 200, 500]
             ),
-            CategoricalDistribution(name=f"{prefix}_lr", choices=[1e-2, 1e-3, 1e-4]),
-            CategoricalDistribution(name=f"{prefix}_rnn_type", choices=rnn_modes),
-            CategoricalDistribution(name=f"{prefix}_output_type", choices=output_modes),
-            FloatDistribution(name=f"{prefix}_alpha", low=0.0, high=0.5),
-            FloatDistribution(name=f"{prefix}_sigma", low=0.0, high=0.5),
-            FloatDistribution(name=f"{prefix}_beta", low=0.0, high=0.5),
-            FloatDistribution(name=f"{prefix}_dropout", low=0.0, high=0.2),
+            CategoricalDistribution(name=f"{prefix}lr", choices=[1e-2, 1e-3, 1e-4]),
+            CategoricalDistribution(name=f"{prefix}rnn_type", choices=rnn_modes),
+            CategoricalDistribution(name=f"{prefix}output_type", choices=output_modes),
+            FloatDistribution(name=f"{prefix}alpha", low=0.0, high=0.5),
+            FloatDistribution(name=f"{prefix}sigma", low=0.0, high=0.5),
+            FloatDistribution(name=f"{prefix}beta", low=0.0, high=0.5),
+            FloatDistribution(name=f"{prefix}dropout", low=0.0, high=0.2),
         ]
 
 
