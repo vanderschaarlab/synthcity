@@ -20,6 +20,7 @@ from synthcity.plugins.core.distribution import (
 )
 from synthcity.plugins.core.models.mlp import MLP
 from synthcity.plugins.core.models.time_series_survival.utils import get_padded_features
+from synthcity.plugins.core.models.transformer import TransformerModel
 from synthcity.utils.constants import DEVICE
 from synthcity.utils.reproducibility import enable_reproducible_results
 
@@ -38,7 +39,7 @@ class DeepCoxPHTimeSeriesSurvival(TimeSeriesSurvivalPlugin):
         random_state: int = 0,
         dropout: float = 0.17,
         patience: int = 20,
-        rnn_type: str = "LSTM",
+        rnn_type: str = "Transformer",
         device: Any = DEVICE,
     ) -> None:
         super().__init__()
@@ -143,7 +144,9 @@ class DeepCoxPHTimeSeriesSurvival(TimeSeriesSurvivalPlugin):
             IntegerDistribution(name="n_layers_hidden", low=1, high=4),
             CategoricalDistribution(name="batch_size", choices=[100, 200, 500]),
             CategoricalDistribution(name="lr", choices=[1e-2, 1e-3, 1e-4]),
-            CategoricalDistribution(name="rnn_type", choices=["LSTM", "GRU", "RNN"]),
+            CategoricalDistribution(
+                name="rnn_type", choices=["LSTM", "GRU", "RNN", "Transformer"]
+            ),
             FloatDistribution(name="dropout", low=0.0, high=0.2),
         ]
 
@@ -201,10 +204,19 @@ class DeepRecurrentCoxPH(nn.Module):
         }
         if self.rnn_type == "LSTM":
             self.embedding = nn.LSTM(**rnn_params)
-        if self.rnn_type == "RNN":
+        elif self.rnn_type == "RNN":
             self.embedding = nn.RNN(**rnn_params)
-        if self.rnn_type == "GRU":
+        elif self.rnn_type == "GRU":
             self.embedding = nn.GRU(**rnn_params)
+        elif self.rnn_type == "Transformer":
+            self.embedding = TransformerModel(
+                n_units_in,
+                n_units_hidden,
+                n_layers_hidden=n_layers_hidden,
+                dropout=dropout,
+            )
+        else:
+            raise RuntimeError(f"unknown rnn type {self.rnn_type}")
 
         self.embedding.to(device)
         self.device = device
@@ -214,7 +226,11 @@ class DeepRecurrentCoxPH(nn.Module):
         inputmask = ~torch.isnan(x[:, :, 0]).reshape(-1)
         x[torch.isnan(x)] = -1
 
-        xrep, _ = self.embedding(x)
+        if self.rnn_type in ["LSTM", "RNN", "GRU"]:
+            xrep, _ = self.embedding(x)
+        else:
+            xrep = self.embedding(x)
+
         xrep = xrep.contiguous().view(-1, self.n_units_hidden)
         xrep = xrep[inputmask]
         xrep = nn.ReLU6()(xrep)

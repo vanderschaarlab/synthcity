@@ -6,18 +6,20 @@ import numpy as np
 import pytest
 
 # synthcity absolute
-from synthcity.plugins.core.models.ts_rnn import TimeSeriesRNN
+from synthcity.plugins.core.models.ts_model import TimeSeriesModel, modes
 from synthcity.utils.datasets.time_series.google_stocks import GoogleStocksDataloader
+from synthcity.utils.datasets.time_series.pbc import PBCDataloader
 from synthcity.utils.datasets.time_series.sine import SineDataloader
 
 
-@pytest.mark.parametrize("mode", ["LSTM", "RNN", "GRU"])
+@pytest.mark.parametrize("mode", modes)
 @pytest.mark.parametrize("task_type", ["classification", "regression"])
 def test_rnn_sanity(mode: str, task_type: str) -> None:
-    model = TimeSeriesRNN(
+    model = TimeSeriesModel(
         task_type=task_type,
         n_static_units_in=3,
         n_temporal_units_in=4,
+        n_temporal_window=2,
         output_shape=[2],
         n_iter=11,
         n_static_units_hidden=41,
@@ -45,23 +47,27 @@ def test_rnn_sanity(mode: str, task_type: str) -> None:
     assert model.batch_size == 123
 
 
-@pytest.mark.parametrize("mode", ["LSTM", "RNN", "GRU"])
+@pytest.mark.parametrize("mode", modes)
 @pytest.mark.parametrize("source", [SineDataloader, GoogleStocksDataloader])
-def test_rnn_regression_fit_predict(mode: str, source: Any) -> None:
+@pytest.mark.parametrize("use_horizon_condition", [True, False])
+def test_rnn_regression_fit_predict(
+    mode: str, source: Any, use_horizon_condition: bool
+) -> None:
     static, temporal, temporal_horizons, outcome = source(as_numpy=True).load()
     outcome = outcome.reshape(-1, 1)
 
     outlen = len(outcome.reshape(-1)) / len(outcome)
 
-    model = TimeSeriesRNN(
+    model = TimeSeriesModel(
         task_type="regression",
         n_static_units_in=static.shape[-1],
         n_temporal_units_in=temporal.shape[-1],
+        n_temporal_window=temporal.shape[1],
         output_shape=outcome.shape[1:],
-        window_size=2,
         n_iter=10,
         nonlin_out=[("tanh", outlen)],
         mode=mode,
+        use_horizon_condition=use_horizon_condition,
     )
 
     model.fit(static, temporal, temporal_horizons, outcome)
@@ -73,7 +79,7 @@ def test_rnn_regression_fit_predict(mode: str, source: Any) -> None:
     assert model.score(static, temporal, temporal_horizons, outcome) < 2
 
 
-@pytest.mark.parametrize("mode", ["LSTM", "RNN", "GRU"])
+@pytest.mark.parametrize("mode", modes)
 @pytest.mark.parametrize("source", [SineDataloader, GoogleStocksDataloader])
 def test_rnn_classification_fit_predict(mode: str, source: Any) -> None:
     static, temporal, temporal_horizons, outcome = source(as_numpy=True).load()
@@ -83,12 +89,12 @@ def test_rnn_classification_fit_predict(mode: str, source: Any) -> None:
 
     y = np.asarray([1] * len(static) + [0] * len(static_fake))
 
-    model = TimeSeriesRNN(
+    model = TimeSeriesModel(
         task_type="classification",
         n_static_units_in=static.shape[-1],
         n_temporal_units_in=temporal.shape[-1],
+        n_temporal_window=temporal.shape[1],
         output_shape=[2],
-        window_size=2,
         n_iter=10,
         mode=mode,
     )
@@ -103,4 +109,29 @@ def test_rnn_classification_fit_predict(mode: str, source: Any) -> None:
 
     assert y_pred.shape == y.shape
 
+    print(mode, model.score(static_data, temporal_data, temporal_horizons, y))
     assert model.score(static_data, temporal_data, temporal_horizons, y) <= 1
+
+
+@pytest.mark.skip  # TODO
+@pytest.mark.parametrize("mode", modes)
+def test_rnn_irregular_ts(mode: str) -> None:
+    static, temporal, temporal_horizons, outcome = PBCDataloader(as_numpy=True).load()
+    T, E = outcome
+    y = np.concatenate([np.expand_dims(T, axis=1), np.expand_dims(E, axis=1)], axis=1)
+
+    model = TimeSeriesModel(
+        task_type="regression",
+        n_static_units_in=static.shape[-1],
+        n_temporal_units_in=temporal[0].shape[-1],
+        n_temporal_window=max(len(tmp) for tmp in temporal),
+        output_shape=[2],
+        n_iter=10,
+        mode=mode,
+    )
+
+    model.fit(static, temporal, temporal_horizons, y)
+
+    y_pred = model.predict(static, temporal, temporal_horizons)
+
+    assert y_pred.shape == y.shape

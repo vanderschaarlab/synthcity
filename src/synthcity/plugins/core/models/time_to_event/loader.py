@@ -6,7 +6,6 @@ from .tte_aft import WeibullAFTTimeToEvent
 from .tte_coxph import CoxPHTimeToEvent
 from .tte_date import DATETimeToEvent
 from .tte_deephit import DeephitTimeToEvent
-from .tte_rsf import RandomSurvivalForestTimeToEvent
 from .tte_survival_function_regression import SurvivalFunctionTimeToEvent
 from .tte_tenn import TENNTimeToEvent
 from .tte_xgb import XGBTimeToEvent
@@ -18,7 +17,6 @@ def get_model_template(model: str) -> Any:
         "date": DATETimeToEvent,
         "weibull_aft": WeibullAFTTimeToEvent,
         "cox_ph": CoxPHTimeToEvent,
-        "random_survival_forest": RandomSurvivalForestTimeToEvent,
         "survival_xgboost": XGBTimeToEvent,
         "deephit": DeephitTimeToEvent,
         "survival_function_regression": SurvivalFunctionTimeToEvent,

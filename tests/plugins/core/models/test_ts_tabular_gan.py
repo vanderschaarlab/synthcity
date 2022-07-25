@@ -118,7 +118,7 @@ def test_ts_gan_generation_schema(source: Any) -> None:
 
 
 @pytest.mark.parametrize("source", [SineDataloader, GoogleStocksDataloader])
-def test_ts_gan_conditional(source: Any) -> None:
+def test_ts_tabular_gan_conditional(source: Any) -> None:
     static, temporal, temporal_horizons, outcome = source().load()
 
     model = TimeSeriesTabularGAN(
@@ -149,3 +149,59 @@ def test_ts_gan_conditional(source: Any) -> None:
         temporal[0].shape[0],
         temporal[0].shape[1],
     )
+
+
+@pytest.mark.parametrize("source", [SineDataloader, GoogleStocksDataloader])
+def test_ts_tabular_gan_conditional_static_data(source: Any) -> None:
+    static, temporal, temporal_horizons, outcome = source().load()
+
+    model = TimeSeriesTabularGAN(
+        static,
+        temporal,
+        temporal_horizons,
+        generator_n_iter=10,
+    )
+    model.fit(static, temporal, temporal_horizons)
+
+    cnt = 10
+    static_seed = static.sample(cnt)
+    static_gen, temporal_gen, temporal_horizons_gen = model.generate(
+        cnt, static_data=static_seed
+    )
+    assert np.isclose(np.asarray(static_gen), np.asarray(static_seed)).all()
+    assert np.asarray(temporal_gen).shape == (
+        cnt,
+        len(temporal[0]),
+        temporal[0].shape[1],
+    )
+    assert np.asarray(temporal_horizons_gen).shape == (cnt, len(temporal[0]))
+
+
+@pytest.mark.parametrize("source", [SineDataloader, GoogleStocksDataloader])
+def test_ts_tabular_gan_conditional_temporal_horizons(source: Any) -> None:
+    static, temporal, temporal_horizons, outcome = source().load()
+
+    model = TimeSeriesTabularGAN(
+        static,
+        temporal,
+        temporal_horizons,
+        generator_n_iter=10,
+    )
+    model.fit(static, temporal, temporal_horizons)
+
+    cnt = 10
+    temporal_horizons = np.asarray(temporal_horizons)
+    horizon_ids = np.random.choice(len(temporal_horizons), cnt, replace=False)
+
+    static_gen, temporal_gen, temporal_horizons_gen = model.generate(
+        cnt, temporal_horizons=temporal_horizons[horizon_ids].tolist()
+    )
+    assert np.isclose(
+        np.asarray(temporal_horizons_gen), np.asarray(temporal_horizons[horizon_ids])
+    ).all()
+    assert np.asarray(temporal_gen).shape == (
+        cnt,
+        len(temporal[0]),
+        temporal[0].shape[1],
+    )
+    assert np.asarray(temporal_horizons_gen).shape == (cnt, len(temporal[0]))

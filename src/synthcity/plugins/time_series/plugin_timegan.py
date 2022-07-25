@@ -9,6 +9,7 @@ import numpy as np
 import pandas as pd
 
 # synthcity absolute
+import synthcity.logger as log
 from synthcity.plugins.core.dataloader import DataLoader
 from synthcity.plugins.core.distribution import (
     CategoricalDistribution,
@@ -16,12 +17,14 @@ from synthcity.plugins.core.distribution import (
     FloatDistribution,
     IntegerDistribution,
 )
+from synthcity.plugins.core.models import BinEncoder
 from synthcity.plugins.core.models.tabular_encoder import TabularEncoder
-from synthcity.plugins.core.models.ts_rnn import TimeSeriesRNN
+from synthcity.plugins.core.models.ts_model import TimeSeriesModel, modes
 from synthcity.plugins.core.models.ts_tabular_gan import TimeSeriesTabularGAN
 from synthcity.plugins.core.plugin import Plugin
 from synthcity.plugins.core.schema import Schema
 from synthcity.utils.constants import DEVICE
+from synthcity.utils.samplers import ImbalancedDatasetSampler
 
 
 class TimeGANPlugin(Plugin):
@@ -134,10 +137,15 @@ class TimeGANPlugin(Plugin):
         gamma_penalty: float = 1,
         moments_penalty: float = 100,
         embedding_penalty: float = 10,
-        **kwargs: Any
+        use_horizon_condition: bool = True,
+        dataloader_sampling_strategy: str = "imbalanced_time_censoring",  # none, imbalanced_censoring, imbalanced_time_censoring
+        **kwargs: Any,
     ) -> None:
         super().__init__()
 
+        log.info(
+            f"""TimeGAN: mode = {mode} dataloader_sampling_strategy = {dataloader_sampling_strategy}"""
+        )
         self.n_iter = n_iter
         self.n_units_conditional = n_units_conditional
         self.generator_n_layers_hidden = generator_n_layers_hidden
@@ -171,6 +179,8 @@ class TimeGANPlugin(Plugin):
         self.gamma_penalty = gamma_penalty
         self.moments_penalty = moments_penalty
         self.embedding_penalty = embedding_penalty
+        self.use_horizon_condition = use_horizon_condition
+        self.dataloader_sampling_strategy = dataloader_sampling_strategy
 
         self.outcome_encoder = TabularEncoder(max_clusters=encoder_max_clusters)
 
@@ -208,7 +218,7 @@ class TimeGANPlugin(Plugin):
             CategoricalDistribution(name="weight_decay", choices=[1e-3, 1e-4]),
             CategoricalDistribution(name="batch_size", choices=[100, 200, 500]),
             IntegerDistribution(name="encoder_max_clusters", low=2, high=20),
-            CategoricalDistribution(name="mode", choices=["LSTM", "GRU", "RNN"]),
+            CategoricalDistribution(name="mode", choices=modes),
             FloatDistribution(name="gamma_penalty", low=0, high=1000),
             FloatDistribution(name="moments_penalty", low=0, high=1000),
             FloatDistribution(name="embedding_penalty", low=0, high=1000),
@@ -218,6 +228,8 @@ class TimeGANPlugin(Plugin):
         assert X.type() in ["time_series", "time_series_survival"]
 
         cond: Optional[Union[pd.DataFrame, pd.Series]] = None
+        sampler: Optional[ImbalancedDatasetSampler] = None
+
         if self.n_units_conditional > 0:
             if "cond" not in kwargs:
                 raise ValueError("expecting 'cond' for training")
@@ -230,6 +242,19 @@ class TimeGANPlugin(Plugin):
             static, temporal, temporal_horizons, T, E = X.unpack(pad=True)
             outcome = pd.concat([pd.Series(T), pd.Series(E)], axis=1)
             outcome.columns = ["time_to_event", "event"]
+
+            sampling_labels: Optional[list] = None
+
+            if self.dataloader_sampling_strategy == "imbalanced_censoring":
+                sampling_labels = list(E.values)
+            elif self.dataloader_sampling_strategy == "imbalanced_time_censoring":
+                Tbins = (
+                    BinEncoder().fit_transform(T.to_frame()).values.squeeze().tolist()
+                )
+                sampling_labels = list(zip(E, Tbins))
+
+            if sampling_labels is not None:
+                sampler = ImbalancedDatasetSampler(sampling_labels)
 
         self.cov_model = TimeSeriesTabularGAN(
             static_data=static,
@@ -268,6 +293,8 @@ class TimeGANPlugin(Plugin):
             gamma_penalty=self.gamma_penalty,
             moments_penalty=self.moments_penalty,
             embedding_penalty=self.embedding_penalty,
+            use_horizon_condition=self.use_horizon_condition,
+            dataloader_sampler=sampler,
         )
         self.cov_model.fit(static, temporal, temporal_horizons, cond=cond)
 
@@ -276,10 +303,11 @@ class TimeGANPlugin(Plugin):
         outcome_enc = self.outcome_encoder.transform(outcome)
         self.outcome_encoded_columns = outcome_enc.columns
 
-        self.outcome_model = TimeSeriesRNN(
+        self.outcome_model = TimeSeriesModel(
             task_type="regression",
             n_static_units_in=static.shape[-1],
             n_temporal_units_in=temporal[0].shape[-1],
+            n_temporal_window=temporal[0].shape[0],
             output_shape=outcome_enc.shape[1:],
             n_static_units_hidden=self.generator_n_units_hidden,
             n_static_layers_hidden=self.generator_n_layers_hidden,
@@ -311,15 +339,36 @@ class TimeGANPlugin(Plugin):
 
     def _generate(self, count: int, syn_schema: Schema, **kwargs: Any) -> pd.DataFrame:
         cond: Optional[Union[pd.DataFrame, pd.Series]] = None
+        static_data_cond: Optional[pd.DataFrame] = None
+        temporal_horizons_cond: Optional[list] = None
+
         if "cond" in kwargs:
             cond = kwargs["cond"]
+        if "static_data" in kwargs:
+            static_data_cond = kwargs["static_data"]
+        if "temporal_horizons" in kwargs:
+            temporal_horizons_cond = kwargs["temporal_horizons"]
 
         def _sample(count: int) -> Tuple:
             local_cond: Optional[Union[pd.DataFrame, pd.Series]] = None
+            local_static_data: Optional[pd.DataFrame] = None
+            local_temporal_horizons: Optional[list] = None
             if cond is not None:
-                local_cond = cond.sample(count)
+                local_cond = cond.sample(count, replace=True)
+            if static_data_cond is not None:
+                local_static_data = static_data_cond.sample(count, replace=True)
+            if temporal_horizons_cond is not None:
+                ids = list(range(len(temporal_horizons_cond)))
+                local_ids = np.random.choice(ids, count, replace=True)
+                local_temporal_horizons = np.asarray(temporal_horizons_cond)[
+                    local_ids
+                ].tolist()
+
             static, temporal, temporal_horizons = self.cov_model.generate(
-                count, cond=local_cond
+                count,
+                cond=local_cond,
+                static_data=local_static_data,
+                temporal_horizons=local_temporal_horizons,
             )
 
             outcome_enc = pd.DataFrame(

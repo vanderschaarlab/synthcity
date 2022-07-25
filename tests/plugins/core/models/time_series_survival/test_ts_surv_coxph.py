@@ -24,17 +24,51 @@ def test_hyperparams() -> None:
 
     params = model.sample_hyperparameters()
 
-    assert len(params.keys()) == 11
+    assert len(params.keys()) == 12
 
 
-def test_train_prediction() -> None:
+@pytest.mark.parametrize(
+    "wavelet_type",
+    ["haar", "sym2"],
+)
+@pytest.mark.parametrize("wavelet_mode", ["symmetric"])
+def test_train_prediction_coxph_wavelet(wavelet_type: str, wavelet_mode: str) -> None:
     static, temporal, temporal_horizons, outcome = PBCDataloader(as_numpy=True).load()
     T, E = outcome
 
     horizons = [0.25, 0.5, 0.75]
     time_horizons = np.quantile(T, horizons).tolist()
 
-    model = CoxTimeSeriesSurvival()
+    model = CoxTimeSeriesSurvival(
+        emb_rnn_type="Wavelet",
+        emb_output_type="MLP",
+        emb_wavelet_type=wavelet_type,
+        emb_wavelet_mode=wavelet_mode,
+    )
+    score = evaluate_ts_survival_model(
+        model, static, temporal, temporal_horizons, T, E, time_horizons
+    )
+
+    print("Perf", model.name(), score["str"])
+    assert score["clf"]["c_index"][0] > 0.5
+
+
+@pytest.mark.parametrize("rnn_type", ["LSTM", "Transformer"])
+@pytest.mark.parametrize(
+    "output_type",
+    [
+        "Transformer",
+        "MLP",
+    ],
+)
+def test_train_prediction_coxph(rnn_type: str, output_type: str) -> None:
+    static, temporal, temporal_horizons, outcome = PBCDataloader(as_numpy=True).load()
+    T, E = outcome
+
+    horizons = [0.25, 0.5, 0.75]
+    time_horizons = np.quantile(T, horizons).tolist()
+
+    model = CoxTimeSeriesSurvival(emb_rnn_type=rnn_type, emb_output_type=output_type)
     score = evaluate_ts_survival_model(
         model, static, temporal, temporal_horizons, T, E, time_horizons
     )

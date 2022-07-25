@@ -227,6 +227,7 @@ class ConditionalTimeGANPlugin(Plugin):
             gamma_penalty=self.gamma_penalty,
             moments_penalty=self.moments_penalty,
             embedding_penalty=self.embedding_penalty,
+            use_horizon_condition=True,
         )
         self.model.fit(X, cond=self.conditional)
         return self

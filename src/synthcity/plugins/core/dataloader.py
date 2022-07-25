@@ -22,6 +22,7 @@ class DataLoader(metaclass=ABCMeta):
         static_features: List[str],
         temporal_features: List[str] = [],
         sensitive_features: List[str] = [],
+        important_features: List[str] = [],
         outcome_features: List[str] = [],
         train_size: float = 0.8,
         random_state: int = 0,
@@ -30,6 +31,7 @@ class DataLoader(metaclass=ABCMeta):
         self.static_features = static_features
         self.temporal_features = temporal_features
         self.sensitive_features = sensitive_features
+        self.important_features = important_features
         self.outcome_features = outcome_features
         self.random_state = random_state
 
@@ -136,6 +138,7 @@ class GenericDataLoader(DataLoader):
         self,
         data: Union[pd.DataFrame, list, np.ndarray],
         sensitive_features: List[str] = [],
+        important_features: List[str] = [],
         target_column: Optional[str] = None,
         random_state: int = 0,
         train_size: float = 0.8,
@@ -157,6 +160,7 @@ class GenericDataLoader(DataLoader):
             data=data,
             static_features=list(data.columns),
             sensitive_features=sensitive_features,
+            important_features=important_features,
             outcome_features=[self.target_column],
             random_state=random_state,
             **kwargs,
@@ -190,6 +194,7 @@ class GenericDataLoader(DataLoader):
             "len": len(self),
             "static_features": self.static_features,
             "sensitive_features": self.sensitive_features,
+            "important_features": self.important_features,
             "outcome_features": self.outcome_features,
             "target_column": self.target_column,
         }
@@ -201,6 +206,7 @@ class GenericDataLoader(DataLoader):
         return GenericDataLoader(
             data,
             sensitive_features=self.sensitive_features,
+            important_features=self.important_features,
             target_column=self.target_column,
             random_state=self.random_state,
             train_size=self.train_size,
@@ -225,6 +231,7 @@ class GenericDataLoader(DataLoader):
         return GenericDataLoader(
             data,
             sensitive_features=info["sensitive_features"],
+            important_features=info["important_features"],
             target_column=info["target_column"],
         )
 
@@ -234,16 +241,26 @@ class GenericDataLoader(DataLoader):
     def __setitem__(self, feature: str, val: Any) -> None:
         self.data[feature] = val
 
-    def train(self) -> "DataLoader":
-        train_data, _ = train_test_split(
-            self.data, train_size=self.train_size, random_state=self.random_state
+    def _train_test_split(self) -> Tuple:
+        stratify = None
+        if self.target_column in self.data:
+            target = self.data[self.target_column]
+            if target.value_counts().min() > 1:
+                stratify = target
+
+        return train_test_split(
+            self.data,
+            train_size=self.train_size,
+            random_state=self.random_state,
+            stratify=stratify,
         )
+
+    def train(self) -> "DataLoader":
+        train_data, _ = self._train_test_split()
         return self.decorate(train_data.reset_index(drop=True))
 
     def test(self) -> "DataLoader":
-        _, test_data = train_test_split(
-            self.data, train_size=self.train_size, random_state=self.random_state
-        )
+        _, test_data = self._train_test_split()
         return self.decorate(test_data.reset_index(drop=True))
 
     def fillna(self, value: Any) -> "DataLoader":
@@ -260,6 +277,7 @@ class SurvivalAnalysisDataLoader(DataLoader):
         target_column: str,
         time_horizons: list = [],
         sensitive_features: List[str] = [],
+        important_features: List[str] = [],
         random_state: int = 0,
         train_size: float = 0.8,
         **kwargs: Any,
@@ -273,6 +291,8 @@ class SurvivalAnalysisDataLoader(DataLoader):
             )
 
         T = data[time_to_event_column]
+        data = data[T > 0]
+
         if len(time_horizons) == 0:
             time_horizons = np.linspace(T.min(), T.max(), num=5)[1:-1].tolist()
 
@@ -287,6 +307,7 @@ class SurvivalAnalysisDataLoader(DataLoader):
             data=data,
             static_features=list(data.columns.astype(str)),
             sensitive_features=sensitive_features,
+            important_features=important_features,
             outcome_features=[self.target_column],
             random_state=random_state,
             **kwargs,
@@ -305,10 +326,6 @@ class SurvivalAnalysisDataLoader(DataLoader):
         T = self.data[self.time_to_event_column]
         E = self.data[self.target_column]
 
-        X = X[T > 0]
-        E = E[T > 0]
-        T = T[T > 0]
-
         if as_numpy:
             return np.asarray(X), np.asarray(T), np.asarray(E)
 
@@ -326,6 +343,7 @@ class SurvivalAnalysisDataLoader(DataLoader):
             "len": len(self),
             "static_features": list(self.static_features),
             "sensitive_features": self.sensitive_features,
+            "important_features": self.important_features,
             "outcome_features": self.outcome_features,
             "target_column": self.target_column,
             "time_to_event_column": self.time_to_event_column,
@@ -339,6 +357,7 @@ class SurvivalAnalysisDataLoader(DataLoader):
         return SurvivalAnalysisDataLoader(
             data,
             sensitive_features=self.sensitive_features,
+            important_features=self.important_features,
             target_column=self.target_column,
             time_to_event_column=self.time_to_event_column,
             time_horizons=self.time_horizons,
@@ -373,6 +392,7 @@ class SurvivalAnalysisDataLoader(DataLoader):
             target_column=info["target_column"],
             time_to_event_column=info["time_to_event_column"],
             sensitive_features=info["sensitive_features"],
+            important_features=info["important_features"],
             time_horizons=info["time_horizons"],
         )
 
@@ -383,16 +403,21 @@ class SurvivalAnalysisDataLoader(DataLoader):
         self.data[feature] = val
 
     def train(self) -> "DataLoader":
+        stratify = self.data[self.target_column]
         train_data, _ = train_test_split(
-            self.data, train_size=self.train_size, random_state=0
+            self.data, train_size=self.train_size, random_state=0, stratify=stratify
         )
         return self.decorate(
             train_data.reset_index(drop=True),
         )
 
     def test(self) -> "DataLoader":
+        stratify = self.data[self.target_column]
         _, test_data = train_test_split(
-            self.data, train_size=self.train_size, random_state=0
+            self.data,
+            train_size=self.train_size,
+            random_state=0,
+            stratify=stratify,
         )
         return self.decorate(
             test_data.reset_index(drop=True),
@@ -412,6 +437,7 @@ class TimeSeriesDataLoader(DataLoader):
         outcome: Optional[pd.DataFrame] = None,
         static_data: Optional[pd.DataFrame] = None,
         sensitive_features: List[str] = [],
+        important_features: List[str] = [],
         random_state: int = 0,
         train_size: float = 0.8,
         seq_offset: int = 0,
@@ -474,6 +500,7 @@ class TimeSeriesDataLoader(DataLoader):
             temporal_features=temporal_features,
             outcome_features=self.outcome_features,
             sensitive_features=sensitive_features,
+            important_features=important_features,
             random_state=random_state,
             **kwargs,
         )
@@ -491,7 +518,7 @@ class TimeSeriesDataLoader(DataLoader):
         return self.static_features + self.temporal_features + self.outcome_features
 
     def dataframe(self) -> pd.DataFrame:
-        return self.data["seq_data"]
+        return self.data["seq_data"].copy()
 
     def numpy(self) -> np.ndarray:
         return self.dataframe().values
@@ -507,6 +534,7 @@ class TimeSeriesDataLoader(DataLoader):
             / len(self.data["outcome"]),
             "window_len": self.window_len,
             "sensitive_features": self.sensitive_features,
+            "important_features": self.important_features,
             "random_state": self.random_state,
             "train_size": self.train_size,
             "fill": self.fill,
@@ -529,6 +557,7 @@ class TimeSeriesDataLoader(DataLoader):
             static_data=static_data,
             outcome=outcome,
             sensitive_features=self.sensitive_features,
+            important_features=self.important_features,
             random_state=self.random_state,
             train_size=self.train_size,
             seq_offset=self.seq_offset,
@@ -573,6 +602,7 @@ class TimeSeriesDataLoader(DataLoader):
             static_data=static_data,
             outcome=outcome,
             sensitive_features=info["sensitive_features"],
+            important_features=info["important_features"],
             fill=info["fill"],
             seq_offset=info["seq_offset"],
         )
@@ -630,6 +660,7 @@ class TimeSeriesDataLoader(DataLoader):
         return seq_data[seq_data[id_col].isin(ids_list)]
 
     def train(self) -> "DataLoader":
+        # TODO: stratify
         ids = self.ids()
         train_ids, _ = train_test_split(
             ids,
@@ -639,6 +670,7 @@ class TimeSeriesDataLoader(DataLoader):
         return self.unpack_and_decorate(self.filter_ids(train_ids))
 
     def test(self) -> "DataLoader":
+        # TODO: stratify
         ids = self.ids()
         _, test_ids = train_test_split(
             ids,
@@ -649,6 +681,7 @@ class TimeSeriesDataLoader(DataLoader):
 
     def sample(self, count: int) -> "DataLoader":
         ids = self.ids()
+        count = min(count, len(ids))
         sampled_ids = random.sample(ids, count)
 
         return self.unpack_and_decorate(self.filter_ids(sampled_ids))
@@ -723,7 +756,9 @@ class TimeSeriesDataLoader(DataLoader):
                 pads = fill * np.ones(
                     (max_window_len - len(item), len(temporal_features))
                 )
-                start = max(item.index) + 1
+                start = 0
+                if len(item.index) > 0:
+                    start = max(item.index) + 1
                 pads_df = pd.DataFrame(
                     pads,
                     index=[start + i for i in range(len(pads))],
@@ -754,6 +789,7 @@ class TimeSeriesDataLoader(DataLoader):
         mask_features = []
         mask_prefix = "masked_"
         for feat in full_temporal_features:
+            feat = str(feat)
             if not feat.startswith(mask_prefix):
                 temporal_features.append(feat)
                 continue
@@ -817,6 +853,7 @@ class TimeSeriesDataLoader(DataLoader):
             item_missing_rows = item.isna().sum(axis=1).values
             missing_horizons.append(item_missing_rows == len(temporal_features))
 
+            # TODO: review impact on horizons
             temporal_data[idx] = item.dropna()
 
         temporal_horizons_unmasked = []
@@ -1002,6 +1039,7 @@ class TimeSeriesDataLoader(DataLoader):
             local_temporal_data = item_data[temporal_cols].copy()
             local_temporal_horizons = item_data[time_col].values.tolist()
             local_temporal_data.columns = new_temporal_cols
+            # TODO: review impact on horizons
             local_temporal_data = local_temporal_data.dropna()
 
             temporal_data.append(local_temporal_data)
@@ -1023,6 +1061,7 @@ class TimeSeriesSurvivalDataLoader(TimeSeriesDataLoader):
         E: Union[pd.Series, np.ndarray, pd.Series],
         static_data: Optional[pd.DataFrame] = None,
         sensitive_features: List[str] = [],
+        important_features: List[str] = [],
         time_horizons: list = [],
         random_state: int = 0,
         train_size: float = 0.8,
@@ -1036,6 +1075,8 @@ class TimeSeriesSurvivalDataLoader(TimeSeriesDataLoader):
             time_horizons = np.linspace(T.min(), T.max(), num=5)[1:-1].tolist()
         self.time_horizons = time_horizons
         outcome = pd.concat([pd.Series(T), pd.Series(E)], axis=1)
+        outcome.columns = [self.time_to_event_col, self.event_col]
+
         self.fill = np.nan
 
         super().__init__(
@@ -1044,6 +1085,7 @@ class TimeSeriesSurvivalDataLoader(TimeSeriesDataLoader):
             outcome=outcome,
             static_data=static_data,
             sensitive_features=sensitive_features,
+            important_features=important_features,
             random_state=random_state,
             train_size=train_size,
             seq_offset=seq_offset,
@@ -1078,6 +1120,7 @@ class TimeSeriesSurvivalDataLoader(TimeSeriesDataLoader):
             T=outcome[self.time_to_event_col],
             E=outcome[self.event_col],
             sensitive_features=self.sensitive_features,
+            important_features=self.important_features,
             random_state=self.random_state,
             time_horizons=self.time_horizons,
             train_size=self.train_size,
@@ -1102,6 +1145,7 @@ class TimeSeriesSurvivalDataLoader(TimeSeriesDataLoader):
             T=outcome[info["time_to_event_column"]],
             E=outcome[info["event_column"]],
             sensitive_features=info["sensitive_features"],
+            important_features=info["important_features"],
             time_horizons=info["time_horizons"],
             seq_offset=info["seq_offset"],
         )
@@ -1147,6 +1191,29 @@ class TimeSeriesSurvivalDataLoader(TimeSeriesDataLoader):
         return self.unpack_and_decorate(
             constraints.match(self.dataframe()),
         )
+
+    def train(self) -> "DataLoader":
+        stratify = self.data["outcome"][self.event_col]
+
+        ids = self.ids()
+        train_ids, _ = train_test_split(
+            ids,
+            train_size=self.train_size,
+            random_state=self.random_state,
+            stratify=stratify,
+        )
+        return self.unpack_and_decorate(self.filter_ids(train_ids))
+
+    def test(self) -> "DataLoader":
+        stratify = self.data["outcome"][self.event_col]
+        ids = self.ids()
+        _, test_ids = train_test_split(
+            ids,
+            train_size=self.train_size,
+            random_state=self.random_state,
+            stratify=stratify,
+        )
+        return self.unpack_and_decorate(self.filter_ids(test_ids))
 
 
 @validate_arguments(config=dict(arbitrary_types_allowed=True))

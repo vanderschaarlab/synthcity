@@ -10,3 +10,7 @@ def enable_reproducible_results(seed: int = 0) -> None:
     np.random.seed(seed)
     torch.manual_seed(seed)
     random.seed(seed)
+
+
+def clear_cache() -> None:
+    torch.cuda.empty_cache()

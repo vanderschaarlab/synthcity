@@ -43,11 +43,14 @@ class XGBTimeSeriesSurvival(TimeSeriesSurvivalPlugin):
         emb_n_units_hidden: int = 40,
         emb_split: int = 100,
         emb_rnn_type: str = "GRU",
+        emb_output_type: str = "MLP",
         emb_alpha: float = 0.34,
         emb_beta: float = 0.27,
         emb_sigma: float = 0.21,
         emb_dropout: float = 0.06,
         emb_patience: int = 20,
+        emb_wavelet_type: str = "haar",
+        emb_wavelet_mode: str = "symmetric",
         # hyperopt helper
         n_iter: Optional[int] = None,
         **kwargs: Any,
@@ -67,12 +70,15 @@ class XGBTimeSeriesSurvival(TimeSeriesSurvivalPlugin):
             n_units_hidden=emb_n_units_hidden,
             split=emb_split,
             rnn_type=emb_rnn_type,
+            output_type=emb_output_type,
             alpha=emb_alpha,
             beta=emb_beta,
             sigma=emb_sigma,
             dropout=emb_dropout,
             patience=emb_patience,
             random_state=random_state,
+            wavelet_type=emb_wavelet_type,
+            wavelet_mode=emb_wavelet_mode,
         )
         self.pred_model = XGBSurvivalAnalysis(
             n_estimators=n_estimators,
@@ -128,5 +134,5 @@ class XGBTimeSeriesSurvival(TimeSeriesSurvivalPlugin):
     def hyperparameter_space(*args: Any, **kwargs: Any) -> List[Distribution]:
         return (
             XGBSurvivalAnalysis.hyperparameter_space()
-            + DynamicDeephitTimeSeriesSurvival.hyperparameter_space(prefix="emb")
+            + DynamicDeephitTimeSeriesSurvival.hyperparameter_space(prefix="emb_")
         )

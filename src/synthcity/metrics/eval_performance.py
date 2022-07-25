@@ -26,7 +26,6 @@ from synthcity.plugins.core.models.survival_analysis import (
 )
 from synthcity.plugins.core.models.time_series_survival.benchmarks import (
     evaluate_ts_survival_model,
-    search_hyperparams,
 )
 from synthcity.plugins.core.models.time_series_survival.ts_surv_coxph import (
     CoxTimeSeriesSurvival,
@@ -37,7 +36,7 @@ from synthcity.plugins.core.models.time_series_survival.ts_surv_dynamic_deephit 
 from synthcity.plugins.core.models.time_series_survival.ts_surv_xgb import (
     XGBTimeSeriesSurvival,
 )
-from synthcity.plugins.core.models.ts_rnn import TimeSeriesRNN
+from synthcity.plugins.core.models.ts_model import TimeSeriesModel
 
 
 class PerformanceEvaluator(MetricEvaluator):
@@ -638,18 +637,7 @@ class PerformanceEvaluatorLinear(PerformanceEvaluator):
         elif self._task_type == "time_series_survival":
             static, temporal, temporal_horizons, T, E = X_gt.unpack()
 
-            info = X_gt.info()
-            time_horizons = info["time_horizons"]
-
-            args = search_hyperparams(
-                CoxTimeSeriesSurvival,
-                static,
-                temporal,
-                temporal_horizons,
-                T,
-                E,
-                time_horizons=time_horizons,
-            )
+            args: dict = {}
             log.info(f"Performance evaluation using CoxTimeSeriesSurvival and {args}")
             return self._evaluate_time_series_survival_performance(
                 CoxTimeSeriesSurvival, args, X_gt, X_syn
@@ -706,26 +694,18 @@ class PerformanceEvaluatorMLP(PerformanceEvaluator):
                 "task_type": "regression",
                 "n_static_units_in": len(info["static_features"]),
                 "n_temporal_units_in": len(info["temporal_features"]),
+                "n_temporal_window": len(info["window_len"]),
                 "output_shape": [info["outcome_len"]],
             }
             return self._evaluate_time_series_performance(
-                TimeSeriesRNN, args, X_gt, X_syn
+                TimeSeriesModel, args, X_gt, X_syn
             )
         elif self._task_type == "time_series_survival":
             static, temporal, temporal_horizons, T, E = X_gt.unpack()
 
             info = X_gt.info()
-            time_horizons = info["time_horizons"]
 
-            args = search_hyperparams(
-                DynamicDeephitTimeSeriesSurvival,
-                static,
-                temporal,
-                temporal_horizons,
-                T,
-                E,
-                time_horizons=time_horizons,
-            )
+            args = {}
             log.info(
                 f"Performance evaluation using DynamicDeephitTimeSeriesSurvival and {args}"
             )

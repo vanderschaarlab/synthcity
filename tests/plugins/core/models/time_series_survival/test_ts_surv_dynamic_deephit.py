@@ -9,6 +9,7 @@ from synthcity.plugins.core.models.time_series_survival.benchmarks import (
 )
 from synthcity.plugins.core.models.time_series_survival.ts_surv_dynamic_deephit import (
     DynamicDeephitTimeSeriesSurvival,
+    rnn_modes,
 )
 from synthcity.utils.datasets.time_series.pbc import PBCDataloader
 
@@ -24,17 +25,67 @@ def test_hyperparams() -> None:
 
     params = model.sample_hyperparameters()
 
-    assert len(params.keys()) == 9
+    assert len(params.keys()) == 10
 
 
-def test_train_prediction() -> None:
+@pytest.mark.parametrize("rnn_type", rnn_modes)
+def test_train(rnn_type: str) -> None:
     static, temporal, temporal_horizons, outcome = PBCDataloader(as_numpy=True).load()
     T, E = outcome
 
     horizons = [0.25, 0.5, 0.75]
     time_horizons = np.quantile(T, horizons).tolist()
 
-    model = DynamicDeephitTimeSeriesSurvival()
+    model = DynamicDeephitTimeSeriesSurvival(rnn_type=rnn_type)
+    model.fit(static, temporal, temporal_horizons, T, E)
+    out = model.predict(
+        static, temporal, temporal_horizons, time_horizons=time_horizons
+    )
+
+    assert out.shape == (len(temporal), len(time_horizons))
+
+
+@pytest.mark.parametrize(
+    "wavelet_type",
+    [
+        "haar",
+        "sym2",
+    ],
+)
+@pytest.mark.parametrize("wavelet_mode", ["symmetric"])
+def test_train_prediction_dyn_deephit_wavelets(
+    wavelet_type: str, wavelet_mode: str
+) -> None:
+    static, temporal, temporal_horizons, outcome = PBCDataloader(as_numpy=True).load()
+    T, E = outcome
+
+    horizons = [0.25, 0.5, 0.75]
+    time_horizons = np.quantile(T, horizons).tolist()
+
+    model = DynamicDeephitTimeSeriesSurvival(
+        rnn_type="Wavelet",
+        output_type="MLP",
+        wavelet_type=wavelet_type,
+        wavelet_mode=wavelet_mode,
+    )
+    score = evaluate_ts_survival_model(
+        model, static, temporal, temporal_horizons, T, E, time_horizons
+    )
+
+    print("Perf", model.name(), score["str"])
+    assert score["clf"]["c_index"][0] > 0.5
+
+
+@pytest.mark.parametrize("rnn_type", ["LSTM", "Transformer"])
+@pytest.mark.parametrize("output_type", ["MLP"])
+def test_train_prediction_dyn_deephit(rnn_type: str, output_type: str) -> None:
+    static, temporal, temporal_horizons, outcome = PBCDataloader(as_numpy=True).load()
+    T, E = outcome
+
+    horizons = [0.25, 0.5, 0.75]
+    time_horizons = np.quantile(T, horizons).tolist()
+
+    model = DynamicDeephitTimeSeriesSurvival(rnn_type=rnn_type, output_type=output_type)
     score = evaluate_ts_survival_model(
         model, static, temporal, temporal_horizons, T, E, time_horizons
     )

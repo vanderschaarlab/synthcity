@@ -20,8 +20,8 @@ def test_benchmark_sanity() -> None:
 
     scores = Benchmarks.evaluate(
         [
-            "marginal_distributions",
-            "dummy_sampler",
+            ("test1", "marginal_distributions", {}),
+            ("test2", "dummy_sampler", {}),
         ],
         GenericDataLoader(X, sensitive_columns=["sex"]),
         metrics={"sanity": ["common_rows_proportion", "data_mismatch_score"]},
@@ -37,8 +37,8 @@ def test_benchmark_invalid_plugin() -> None:
     with pytest.raises(ValueError):
         Benchmarks.evaluate(
             [
-                "invalid",
-                "uniform_sampler",
+                ("test1", "invalid", {}),
+                ("test2", "dummy_sampler", {}),
             ],
             GenericDataLoader(X, sensitive_columns=["sex"]),
             metrics={"sanity": ["common_rows_proportion", "data_mismatch_score"]},
@@ -51,12 +51,12 @@ def test_benchmark_invalid_metric() -> None:
 
     score = Benchmarks.evaluate(
         [
-            "uniform_sampler",
+            ("test2", "uniform_sampler", {}),
         ],
         GenericDataLoader(X, sensitive_columns=["sex"]),
         metrics={"sanity": ["invalid"]},
     )
-    assert len(score["uniform_sampler"]) == 0
+    assert len(score["test2"]) == 0
 
 
 def test_benchmark_custom_target() -> None:
@@ -65,7 +65,7 @@ def test_benchmark_custom_target() -> None:
 
     Benchmarks.evaluate(
         [
-            "uniform_sampler",
+            ("test2", "uniform_sampler", {}),
         ],
         GenericDataLoader(
             X, sensitive_columns=["sex"], target_column="sepal width (cm)"
@@ -84,7 +84,7 @@ def test_benchmark_survival_analysis() -> None:
     with pytest.raises(ValueError):
         Benchmarks.evaluate(
             [
-                "uniform_sampler",
+                ("test2", "uniform_sampler", {}),
             ],
             SurvivalAnalysisDataLoader(
                 df, target_column=None, time_to_event_column="week", time_horizons=[30]
@@ -95,15 +95,12 @@ def test_benchmark_survival_analysis() -> None:
                     "linear_model",
                 ]
             },
-            plugin_kwargs={
-                "survival_gan": {"n_iter": 100},
-            },
         )
 
     with pytest.raises(ValueError):
         Benchmarks.evaluate(
             [
-                "uniform_sampler",
+                ("test2", "uniform_sampler", {}),
             ],
             SurvivalAnalysisDataLoader(
                 df,
@@ -117,15 +114,12 @@ def test_benchmark_survival_analysis() -> None:
                     "linear_model",
                 ]
             },
-            plugin_kwargs={
-                "survival_gan": {"n_iter": 100},
-            },
         )
 
     with pytest.raises(ValueError):
         Benchmarks.evaluate(
             [
-                "uniform_sampler",
+                ("test1", "uniform_sampler", {}),
             ],
             SurvivalAnalysisDataLoader(
                 df,
@@ -143,7 +137,7 @@ def test_benchmark_survival_analysis() -> None:
 
     score = Benchmarks.evaluate(
         [
-            "uniform_sampler",
+            ("test1", "uniform_sampler", {}),
         ],
         SurvivalAnalysisDataLoader(
             df, target_column="arrest", time_to_event_column="week", time_horizons=[30]
@@ -153,9 +147,6 @@ def test_benchmark_survival_analysis() -> None:
             "performance": [
                 "linear_model",
             ]
-        },
-        plugin_kwargs={
-            "survival_gan": {"n_iter": 100},
         },
     )
     print(score)
@@ -172,7 +163,7 @@ def test_benchmark_workspace_cache() -> None:
 
     Benchmarks.evaluate(
         [
-            "uniform_sampler",
+            ("test1", "uniform_sampler", {}),
         ],
         SurvivalAnalysisDataLoader(
             df, target_column="arrest", time_to_event_column="week", time_horizons=[30]
@@ -184,9 +175,6 @@ def test_benchmark_workspace_cache() -> None:
             ]
         },
         workspace=workspace,
-        plugin_kwargs={
-            "survival_gan": {"n_iter": 100},
-        },
     )
 
     assert workspace.exists()

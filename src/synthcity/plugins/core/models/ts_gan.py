@@ -15,7 +15,7 @@ from synthcity.utils.reproducibility import enable_reproducible_results
 
 # synthcity relative
 from .mlp import MLP
-from .ts_rnn import TimeSeriesRNN
+from .ts_model import TimeSeriesModel
 
 
 class TimeSeriesGAN(nn.Module):
@@ -117,7 +117,7 @@ class TimeSeriesGAN(nn.Module):
         dataloader_sampler: Optional[sampler.Sampler] = None,
         mode: str = "RNN",
         device: Any = DEVICE,
-        window_size: int = 1,
+        use_horizon_condition: bool = True,
     ) -> None:
         super(TimeSeriesGAN, self).__init__()
 
@@ -174,7 +174,6 @@ class TimeSeriesGAN(nn.Module):
         )
 
         rnn_generator_extra_args = {
-            "window_size": window_size,
             "n_static_layers_hidden": generator_n_layers_hidden,
             "n_static_units_hidden": generator_n_units_hidden,
             "n_temporal_layers_hidden": generator_n_layers_hidden,
@@ -187,55 +186,60 @@ class TimeSeriesGAN(nn.Module):
             "random_state": random_state,
             "lr": generator_lr,
             "device": device,
+            "use_horizon_condition": use_horizon_condition,
         }
         # Embedding network between original feature space to latent space: (X_static, recovered_temporal_data) -> temporal_embeddings
-        self.temporal_embedder = TimeSeriesRNN(
+        self.temporal_embedder = TimeSeriesModel(
             task_type="regression",
             n_static_units_in=n_static_units + n_units_conditional,
             n_temporal_units_in=n_temporal_units,
+            n_temporal_window=n_temporal_window,
             output_shape=[n_temporal_window, n_temporal_units_latent],
             **rnn_generator_extra_args,
         ).to(self.device)
 
         # Recovery network from latent space to original space: (X_static, temporal_embeddings) -> recovered_temporal_data
-        self.temporal_recovery = TimeSeriesRNN(
+        self.temporal_recovery = TimeSeriesModel(
             task_type="regression",
             n_static_units_in=n_static_units + n_units_conditional,
             n_temporal_units_in=n_temporal_units_latent,
+            n_temporal_window=n_temporal_window,
             output_shape=[n_temporal_window, n_temporal_units],
             nonlin_out=generator_temporal_nonlin_out,
             **rnn_generator_extra_args,
         )
 
         # Temporal generator from the latent space: Z_temporal -> E_temporal
-        self.temporal_generator = TimeSeriesRNN(
+        self.temporal_generator = TimeSeriesModel(
             task_type="regression",
             n_static_units_in=n_static_units + n_units_conditional,
             n_temporal_units_in=n_temporal_units_latent,
+            n_temporal_window=n_temporal_window,
             output_shape=[n_temporal_window, n_temporal_units_latent],
             **rnn_generator_extra_args,
         )
 
         # Temporal supervisor: Generate the next sequence: E_temporal -> fake_next_temporal_embeddings_temporal
-        self.temporal_supervisor = TimeSeriesRNN(
+        self.temporal_supervisor = TimeSeriesModel(
             task_type="regression",
             n_static_units_in=n_static_units + n_units_conditional,
             n_temporal_units_in=n_temporal_units_latent,
+            n_temporal_window=n_temporal_window,
             output_shape=[n_temporal_window, n_temporal_units_latent],
             **rnn_generator_extra_args,
         )
 
         # Discriminate the original and synthetic time-series data.
-        self.discriminator = TimeSeriesRNN(
+        self.discriminator = TimeSeriesModel(
             task_type="regression",
             n_static_units_in=n_static_units + n_units_conditional,
             n_temporal_units_in=n_temporal_units,
+            n_temporal_window=n_temporal_window,
             output_shape=[1],
             n_static_layers_hidden=discriminator_n_layers_hidden,
             n_static_units_hidden=discriminator_n_units_hidden,
             n_temporal_layers_hidden=discriminator_n_layers_hidden,
             n_temporal_units_hidden=discriminator_n_units_hidden,
-            window_size=window_size,
             nonlin=discriminator_nonlin,
             mode=mode,
             nonlin_out=[("sigmoid", 1)],
@@ -245,6 +249,7 @@ class TimeSeriesGAN(nn.Module):
             random_state=random_state,
             lr=discriminator_lr,
             device=device,
+            use_horizon_condition=use_horizon_condition,
         ).to(self.device)
 
         self.discriminator_horizons = MLP(
@@ -286,9 +291,9 @@ class TimeSeriesGAN(nn.Module):
         temporal_horizons: np.ndarray,
         cond: Optional[np.ndarray] = None,
     ) -> "TimeSeriesGAN":
-        static_data_t = self._check_tensor(static_data)
-        temporal_data_t = self._check_tensor(temporal_data)
-        temporal_horizons_t = self._check_tensor(temporal_horizons)
+        static_data_t = self._check_tensor(static_data).float()
+        temporal_data_t = self._check_tensor(temporal_data).float()
+        temporal_horizons_t = self._check_tensor(temporal_horizons).float()
 
         condt: Optional[torch.Tensor] = None
 
@@ -306,7 +311,7 @@ class TimeSeriesGAN(nn.Module):
                     "Expecting conditional with the same length as the dataset"
                 )
 
-            condt = self._check_tensor(cond)
+            condt = self._check_tensor(cond).float()
 
         self._train(
             static_data_t,
@@ -318,9 +323,16 @@ class TimeSeriesGAN(nn.Module):
         return self
 
     def generate(
-        self, count: int, cond: Optional[np.ndarray] = None
+        self,
+        count: int,
+        cond: Optional[np.ndarray] = None,
+        static_data: Optional[np.ndarray] = None,
+        temporal_horizons: Optional[np.ndarray] = None,
     ) -> Tuple[np.ndarray, np.ndarray, np.ndarray]:
         condt: Optional[torch.Tensor] = None
+        static_t: Optional[torch.Tensor] = None
+        horizons_t: Optional[torch.Tensor] = None
+
         self.static_generator.eval()
         self.temporal_horizons_generator.eval()
         self.temporal_generator.eval()
@@ -329,9 +341,15 @@ class TimeSeriesGAN(nn.Module):
         self.temporal_recovery.eval()
 
         if cond is not None:
-            condt = self._check_tensor(cond)
+            condt = self._check_tensor(cond).float()
+        if static_data is not None:
+            static_t = self._check_tensor(static_data).float()
+        if temporal_horizons is not None:
+            horizons_t = self._check_tensor(temporal_horizons).float()
 
-        static, temporal, temporal_horizons = self(count, condt)
+        static, temporal, temporal_horizons = self(
+            count, condt, static_data=static_t, temporal_horizons=horizons_t
+        )
         return (
             static.detach().cpu().numpy(),
             temporal.detach().cpu().numpy(),
@@ -343,6 +361,8 @@ class TimeSeriesGAN(nn.Module):
         self,
         count: int,
         cond: Optional[torch.Tensor] = None,
+        static_data: Optional[torch.Tensor] = None,
+        temporal_horizons: Optional[torch.Tensor] = None,
     ) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
         if cond is None and self.n_units_conditional > 0:
             # sample from the original conditional
@@ -360,11 +380,12 @@ class TimeSeriesGAN(nn.Module):
             )
 
         # Static data
-        static_noise = torch.randn(
-            count, self.n_static_units_latent, device=self.device
-        )
-        static_noise = self._append_optional_cond(static_noise, cond)
-        static_data = self.static_generator(static_noise)
+        if static_data is None:
+            static_noise = torch.randn(
+                count, self.n_static_units_latent, device=self.device
+            )
+            static_noise = self._append_optional_cond(static_noise, cond)
+            static_data = self.static_generator(static_noise)
         static_data_with_cond = self._append_optional_cond(static_data, cond)
 
         # Temporal data
@@ -374,13 +395,15 @@ class TimeSeriesGAN(nn.Module):
             self.n_temporal_units_latent,
             device=self.device,
         )
-        static_data_with_cond_and_temporal_noise = self._append_optional_cond(
-            static_data_with_cond, temporal_noise.view(len(static_data_with_cond), -1)
-        )
+        if temporal_horizons is None:
+            static_data_with_cond_and_temporal_noise = self._append_optional_cond(
+                static_data_with_cond,
+                temporal_noise.view(len(static_data_with_cond), -1),
+            )
 
-        temporal_horizons = self.temporal_horizons_generator(
-            static_data_with_cond_and_temporal_noise
-        )
+            temporal_horizons = self.temporal_horizons_generator(
+                static_data_with_cond_and_temporal_noise
+            )
 
         temporal_latent_data = self.temporal_generator(
             static_data_with_cond, temporal_noise, temporal_horizons

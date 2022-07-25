@@ -34,15 +34,17 @@ class CoxTimeSeriesSurvival(TimeSeriesSurvivalPlugin):
         emb_n_units_hidden: int = 40,
         emb_split: int = 100,
         emb_rnn_type: str = "GRU",
+        emb_output_type: str = "MLP",
         emb_alpha: float = 0.34,
         emb_beta: float = 0.27,
         emb_sigma: float = 0.21,
         emb_dropout: float = 0.06,
         emb_patience: int = 20,
+        emb_wavelet_type: str = "haar",
+        emb_wavelet_mode: str = "symmetric",
         # hyperopt helper
         n_iter: Optional[int] = None,
         random_state: int = 0,
-        **kwargs: Any,
     ) -> None:
         super().__init__()
         enable_reproducible_results(random_state)
@@ -58,12 +60,15 @@ class CoxTimeSeriesSurvival(TimeSeriesSurvivalPlugin):
             n_units_hidden=emb_n_units_hidden,
             split=emb_split,
             rnn_type=emb_rnn_type,
+            output_type=emb_output_type,
             alpha=emb_alpha,
             beta=emb_beta,
             sigma=emb_sigma,
             dropout=emb_dropout,
             patience=emb_patience,
             random_state=random_state,
+            wavelet_type=emb_wavelet_type,
+            wavelet_mode=emb_wavelet_mode,
         )
         self.pred_model = CoxPHSurvivalAnalysis(
             alpha=alpha,
@@ -111,5 +116,5 @@ class CoxTimeSeriesSurvival(TimeSeriesSurvivalPlugin):
     def hyperparameter_space(*args: Any, **kwargs: Any) -> List[Distribution]:
         return (
             CoxPHSurvivalAnalysis.hyperparameter_space()
-            + DynamicDeephitTimeSeriesSurvival.hyperparameter_space(prefix="emb")
+            + DynamicDeephitTimeSeriesSurvival.hyperparameter_space(prefix="emb_")
         )

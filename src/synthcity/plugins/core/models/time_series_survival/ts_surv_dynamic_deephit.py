@@ -1,6 +1,6 @@
 # stdlib
 from copy import deepcopy
-from typing import Any, List, Optional, Tuple
+from typing import Any, List, Optional, Tuple, Union
 
 # third party
 import numpy as np
@@ -18,11 +18,32 @@ from synthcity.plugins.core.distribution import (
 )
 from synthcity.plugins.core.models.mlp import MLP
 from synthcity.plugins.core.models.time_series_survival.utils import get_padded_features
+from synthcity.plugins.core.models.transformer import TransformerModel
+from synthcity.plugins.core.models.ts_model import TimeSeriesLayer
+from synthcity.plugins.core.models.wavelet import Wavelet
 from synthcity.utils.constants import DEVICE
 from synthcity.utils.reproducibility import enable_reproducible_results
 
 # synthcity relative
 from ._base import TimeSeriesSurvivalPlugin
+
+rnn_modes = ["GRU", "LSTM", "RNN", "Transformer", "Wavelet"]
+output_modes = [
+    "MLP",
+    "MiniRocket",
+    "mWDNPlus",
+    "Transformer",
+    "TSiTPlus",
+    "LSTM",
+    "GRU",
+    "RNN",
+    "TCN",
+    "InceptionTime",
+    "InceptionTimePlus",
+    "ResCNN",
+    "TST",
+    "XCM",
+]
 
 
 class DynamicDeephitTimeSeriesSurvival(TimeSeriesSurvivalPlugin):
@@ -42,10 +63,15 @@ class DynamicDeephitTimeSeriesSurvival(TimeSeriesSurvivalPlugin):
         dropout: float = 0.06,
         device: Any = DEVICE,
         patience: int = 20,
+        output_type: str = "MLP",
+        wavelet_type: str = "sym2",
+        wavelet_mode: str = "symmetric",
         **kwargs: Any,
     ) -> None:
         super().__init__()
         enable_reproducible_results(random_state)
+        assert rnn_type in rnn_modes, f"Supported modes: {rnn_modes}"
+        assert output_type in output_modes, f"Supported output modes: {output_modes}"
 
         self.model = DynamicDeepHitModel(
             split=split,
@@ -60,7 +86,10 @@ class DynamicDeephitTimeSeriesSurvival(TimeSeriesSurvivalPlugin):
             lr=lr,
             batch_size=batch_size,
             n_iter=n_iter,
+            output_type=output_type,
             device=device,
+            wavelet_type=wavelet_type,
+            wavelet_mode=wavelet_mode,
         )
 
     def _merge_data(
@@ -92,11 +121,17 @@ class DynamicDeephitTimeSeriesSurvival(TimeSeriesSurvivalPlugin):
     def fit(
         self,
         static: Optional[np.ndarray],
-        temporal: np.ndarray,
-        temporal_horizons: np.ndarray,
-        T: np.ndarray,
-        E: np.ndarray,
+        temporal: Union[np.ndarray, List],
+        temporal_horizons: Union[np.ndarray, List],
+        T: Union[np.ndarray, List],
+        E: Union[np.ndarray, List],
     ) -> TimeSeriesSurvivalPlugin:
+        static = np.asarray(static)
+        temporal = np.asarray(temporal)
+        temporal_horizons = np.asarray(temporal_horizons)
+        T = np.asarray(T)
+        E = np.asarray(E)
+
         data = self._merge_data(static, temporal, temporal_horizons)
 
         self.model.fit(
@@ -110,11 +145,15 @@ class DynamicDeephitTimeSeriesSurvival(TimeSeriesSurvivalPlugin):
     def predict(
         self,
         static: Optional[np.ndarray],
-        temporal: np.ndarray,
-        temporal_horizons: np.ndarray,
+        temporal: Union[np.ndarray, List],
+        temporal_horizons: Union[np.ndarray, List],
         time_horizons: List,
     ) -> np.ndarray:
         "Predict risk"
+        static = np.asarray(static)
+        temporal = np.asarray(temporal)
+        temporal_horizons = np.asarray(temporal_horizons)
+
         data = self._merge_data(static, temporal, temporal_horizons)
 
         return pd.DataFrame(
@@ -125,10 +164,14 @@ class DynamicDeephitTimeSeriesSurvival(TimeSeriesSurvivalPlugin):
     def predict_emb(
         self,
         static: Optional[np.ndarray],
-        temporal: np.ndarray,
-        temporal_horizons: np.ndarray,
+        temporal: Union[np.ndarray, List],
+        temporal_horizons: Union[np.ndarray, List],
     ) -> np.ndarray:
         "Predict embeddings"
+        static = np.asarray(static)
+        temporal = np.asarray(temporal)
+        temporal_horizons = np.asarray(temporal_horizons)
+
         data = self._merge_data(static, temporal, temporal_horizons)
 
         return self.model.predict_emb(data).detach().cpu().numpy()
@@ -143,20 +186,19 @@ class DynamicDeephitTimeSeriesSurvival(TimeSeriesSurvivalPlugin):
     ) -> List[Distribution]:
         return [
             IntegerDistribution(
-                name=f"{prefix}_n_units_hidden", low=10, high=100, step=10
+                name=f"{prefix}n_units_hidden", low=10, high=100, step=10
             ),
-            IntegerDistribution(name=f"{prefix}_n_layers_hidden", low=1, high=4),
+            IntegerDistribution(name=f"{prefix}n_layers_hidden", low=1, high=4),
             CategoricalDistribution(
-                name=f"{prefix}_batch_size", choices=[100, 200, 500]
+                name=f"{prefix}batch_size", choices=[100, 200, 500]
             ),
-            CategoricalDistribution(name=f"{prefix}_lr", choices=[1e-2, 1e-3, 1e-4]),
-            CategoricalDistribution(
-                name=f"{prefix}_rnn_type", choices=["LSTM", "GRU", "RNN"]
-            ),
-            FloatDistribution(name=f"{prefix}_alpha", low=0.0, high=0.5),
-            FloatDistribution(name=f"{prefix}_sigma", low=0.0, high=0.5),
-            FloatDistribution(name=f"{prefix}_beta", low=0.0, high=0.5),
-            FloatDistribution(name=f"{prefix}_dropout", low=0.0, high=0.2),
+            CategoricalDistribution(name=f"{prefix}lr", choices=[1e-2, 1e-3, 1e-4]),
+            CategoricalDistribution(name=f"{prefix}rnn_type", choices=rnn_modes),
+            CategoricalDistribution(name=f"{prefix}output_type", choices=output_modes),
+            FloatDistribution(name=f"{prefix}alpha", low=0.0, high=0.5),
+            FloatDistribution(name=f"{prefix}sigma", low=0.0, high=0.5),
+            FloatDistribution(name=f"{prefix}beta", low=0.0, high=0.5),
+            FloatDistribution(name=f"{prefix}dropout", low=0.0, high=0.2),
         ]
 
 
@@ -184,6 +226,9 @@ class DynamicDeepHitModel:
         val_size: float = 0.1,
         random_state: int = 0,
         clipping_value: int = 1,
+        output_type: str = "MLP",
+        wavelet_type: str = "sym2",
+        wavelet_mode: str = "symmetric",
     ) -> None:
 
         self.split = split
@@ -207,13 +252,20 @@ class DynamicDeepHitModel:
 
         self.patience = patience
         self.random_state = random_state
+        self.output_type = output_type
+
+        self.wavelet_type = wavelet_type
+        self.wavelet_mode = wavelet_mode
 
         self.model: Optional[DynamicDeepHitLayers] = None
 
-    def _setup_model(self, inputdim: int, risks: int) -> "DynamicDeepHitLayers":
+    def _setup_model(
+        self, inputdim: int, seqlen: int, risks: int
+    ) -> "DynamicDeepHitLayers":
         return (
             DynamicDeepHitLayers(
                 inputdim,
+                seqlen,
                 self.split,
                 self.layers_rnn,
                 self.hidden_rnn,
@@ -221,6 +273,9 @@ class DynamicDeepHitModel:
                 dropout=self.dropout,
                 risks=risks,
                 device=self.device,
+                output_type=self.output_type,
+                wavelet_type=self.wavelet_type,
+                wavelet_mode=self.wavelet_mode,
             )
             .float()
             .to(self.device)
@@ -236,10 +291,11 @@ class DynamicDeepHitModel:
         processed_data = self._preprocess_training_data(x, discretized_t, e)
         x_train, t_train, e_train, x_val, t_val, e_val = processed_data
         inputdim = x_train.shape[-1]
+        seqlen = x_train.shape[-2]
 
         maxrisk = int(np.nanmax(e_train.cpu().numpy()))
 
-        self.model = self._setup_model(inputdim, risks=maxrisk)
+        self.model = self._setup_model(inputdim, seqlen, risks=maxrisk)
         optimizer = torch.optim.Adam(self.model.parameters(), lr=self.lr)
 
         patience, old_loss = 0, np.inf
@@ -279,7 +335,9 @@ class DynamicDeepHitModel:
 
                 valid_loss += self.total_loss(xb, tb, eb)
 
+            assert not torch.isnan(valid_loss)
             valid_loss = valid_loss.item()
+
             if valid_loss < old_loss:
                 patience = 0
                 old_loss = valid_loss
@@ -392,8 +450,6 @@ class DynamicDeepHitModel:
                 new_x += [x_[: li + 1] for li in range(l_)]
             x = new_x
 
-        if not isinstance(t, list):
-            t = [t]
         t = self.discretize([t], self.split, self.split_time)[0][0]
         x = self._preprocess_test_data(x)
         batches = int(len(x) / bs) + 1
@@ -402,7 +458,7 @@ class DynamicDeepHitModel:
             xb = x[j * self.batch_size : (j + 1) * self.batch_size]
             _, f = self.model(xb)
             for t_ in t:
-                scores[t_].extend(
+                pred = (
                     torch.cumsum(f[int(risk) - 1], dim=1)[:, t_]
                     .squeeze()
                     .detach()
@@ -410,6 +466,11 @@ class DynamicDeepHitModel:
                     .numpy()
                     .tolist()
                 )
+
+                if isinstance(pred, list):
+                    scores[t_].extend(pred)
+                else:
+                    scores[t_].append(pred)
 
         output = []
         for t_ in t:
@@ -441,7 +502,7 @@ class DynamicDeepHitModel:
             loss += torch.sum(torch.log(ok[selection][:, t[selection]] + 1e-10))
 
         # Censored loss
-        loss += torch.sum(torch.log(1 - censored_cif + 1e-10))
+        loss += torch.sum(torch.log(nn.ReLU()(1 - censored_cif) + 1e-10))
         return -loss / len(outcomes)
 
     def ranking_loss(
@@ -527,17 +588,22 @@ class DynamicDeepHitLayers(nn.Module):
     def __init__(
         self,
         input_dim: int,
+        seq_len: int,
         output_dim: int,
         layers_rnn: int,
         hidden_rnn: int,
         rnn_type: str = "LSTM",
         dropout: float = 0.1,
         risks: int = 1,
+        output_type: str = "MLP",
+        wavelet_type: str = "sym2",
+        wavelet_mode: str = "symmetric",
         device: Any = DEVICE,
     ) -> None:
         super(DynamicDeepHitLayers, self).__init__()
 
         self.input_dim = input_dim
+        self.seq_len = seq_len
         self.output_dim = output_dim
         self.risks = risks
         self.rnn_type = rnn_type
@@ -549,7 +615,7 @@ class DynamicDeepHitLayers(nn.Module):
             self.embedding = nn.LSTM(
                 input_dim, hidden_rnn, layers_rnn, bias=False, batch_first=True
             )
-        if self.rnn_type == "RNN":
+        elif self.rnn_type == "RNN":
             self.embedding = nn.RNN(
                 input_dim,
                 hidden_rnn,
@@ -558,11 +624,26 @@ class DynamicDeepHitLayers(nn.Module):
                 batch_first=True,
                 nonlinearity="relu",
             )
-        if self.rnn_type == "GRU":
+        elif self.rnn_type == "GRU":
             self.embedding = nn.GRU(
                 input_dim, hidden_rnn, layers_rnn, bias=False, batch_first=True
             )
-
+        elif self.rnn_type == "Transformer":
+            self.embedding = TransformerModel(
+                input_dim, hidden_rnn, n_layers_hidden=layers_rnn, dropout=dropout
+            )
+        elif self.rnn_type == "Wavelet":
+            self.embedding = Wavelet(
+                n_units_in=input_dim,
+                n_units_window=seq_len,
+                n_units_hidden=hidden_rnn,
+                n_layers_hidden=layers_rnn,
+                dropout=dropout,
+                wavelet=wavelet_type,
+                mode=wavelet_mode,
+            )
+        else:
+            raise RuntimeError(f"Unknown rnn_type {rnn_type}")
         # Longitudinal network
         self.longitudinal = MLP(
             task_type="regression",
@@ -574,15 +655,29 @@ class DynamicDeepHitLayers(nn.Module):
         )
 
         # Attention mechanism
-        self.attention = MLP(
-            task_type="regression",
-            n_units_in=input_dim + hidden_rnn,
-            n_units_out=1,
-            dropout=self.dropout,
-            n_layers_hidden=layers_rnn,
-            n_units_hidden=hidden_rnn,
-        )
+        if output_type == "MLP":
+            self.attention = MLP(
+                task_type="regression",
+                n_units_in=input_dim + hidden_rnn,
+                n_units_out=1,
+                dropout=self.dropout,
+                n_layers_hidden=layers_rnn,
+                n_units_hidden=hidden_rnn,
+            )
+        else:
+            self.attention = TimeSeriesLayer(
+                n_static_units_in=0,
+                n_temporal_units_in=input_dim + hidden_rnn,
+                n_temporal_window=seq_len,
+                n_units_out=seq_len,
+                n_temporal_units_hidden=hidden_rnn,
+                n_temporal_layers_hidden=layers_rnn,
+                mode=output_type,
+                dropout=self.dropout,
+                device=device,
+            )
         self.attention_soft = nn.Softmax(1)  # On temporal dimension
+        self.output_type = output_type
 
         # Cause specific network
         self.cause_specific = []
@@ -602,24 +697,9 @@ class DynamicDeepHitLayers(nn.Module):
         # Probability
         self.soft = nn.Softmax(dim=-1)  # On all observed output
 
-    def forward_emb(self, x: torch.Tensor) -> torch.Tensor:
-        """
-        The forward function that is called when data is passed through DynamicDeepHit.
-        """
-        # RNN representation - Nan values for not observed data
-        x = x.clone()
-        inputmask = torch.isnan(x[:, :, 0])
-        x[torch.isnan(x)] = -1
-
-        assert torch.isnan(x).sum() == 0
-
-        hidden, _ = self.embedding(x)
-        assert torch.isnan(hidden).sum() == 0
-
-        # Longitudinal modelling
-        longitudinal_prediction = self.longitudinal(hidden)
-        assert torch.isnan(longitudinal_prediction).sum() == 0
-
+    def forward_attention(
+        self, x: torch.Tensor, inputmask: torch.Tensor, hidden: torch.Tensor
+    ) -> torch.Tensor:
         # Attention using last observation to predict weight of all previously observed
         # Extract last observation (the one used for predictions)
         last_observations = (~inputmask).sum(axis=1) - 1
@@ -635,7 +715,12 @@ class DynamicDeepHitLayers(nn.Module):
         )
 
         # Compute attention and normalize
-        attention = self.attention(concatenation).squeeze(-1)
+        if self.output_type == "MLP":
+            attention = self.attention(concatenation).squeeze(-1)
+        else:
+            attention = self.attention(
+                torch.zeros(len(concatenation), 0).to(self.device), concatenation
+            ).squeeze(-1)
         attention[
             index >= last_observations_idx
         ] = -1e10  # Want soft max to be zero as values not observed
@@ -649,7 +734,31 @@ class DynamicDeepHitLayers(nn.Module):
         # combined with the temporal sum, other code was concatenating them
         attention = attention.unsqueeze(2).repeat(1, 1, hidden.size(2))
         hidden_attentive = torch.sum(attention * hidden, axis=1)
-        hidden_attentive = torch.cat([hidden_attentive, x_last], 1)
+        return torch.cat([hidden_attentive, x_last], 1)
+
+    def forward_emb(self, x: torch.Tensor) -> torch.Tensor:
+        """
+        The forward function that is called when data is passed through DynamicDeepHit.
+        """
+        # RNN representation - Nan values for not observed data
+        x = x.clone()
+        inputmask = torch.isnan(x[:, :, 0])
+        x[torch.isnan(x)] = -1
+
+        assert torch.isnan(x).sum() == 0
+
+        if self.rnn_type in ["GRU", "LSTM", "RNN"]:
+            hidden, _ = self.embedding(x)
+        else:
+            hidden = self.embedding(x)
+
+        assert torch.isnan(hidden).sum() == 0
+
+        # Longitudinal modelling
+        longitudinal_prediction = self.longitudinal(hidden)
+        assert torch.isnan(longitudinal_prediction).sum() == 0
+
+        hidden_attentive = self.forward_attention(x, inputmask, hidden)
 
         return longitudinal_prediction, hidden_attentive
 

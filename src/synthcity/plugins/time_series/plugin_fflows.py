@@ -20,7 +20,7 @@ from synthcity.plugins.core.models.tabular_encoder import (
     TabularEncoder,
     TimeSeriesTabularEncoder,
 )
-from synthcity.plugins.core.models.ts_rnn import TimeSeriesRNN
+from synthcity.plugins.core.models.ts_model import TimeSeriesModel
 from synthcity.plugins.core.plugin import Plugin
 from synthcity.plugins.core.schema import Schema
 from synthcity.plugins.generic import GenericPlugins
@@ -145,10 +145,11 @@ class FourierFlowsPlugin(Plugin):
         self.outcome_encoder.fit(outcome)
         outcome_enc = self.outcome_encoder.transform(outcome)
 
-        self.outcome_model = TimeSeriesRNN(
+        self.outcome_model = TimeSeriesModel(
             task_type="regression",
             n_static_units_in=static.shape[-1],
             n_temporal_units_in=temporal[0].shape[-1],
+            n_temporal_window=temporal[0].shape[0],
             output_shape=outcome_enc.shape[1:],
             n_iter=self.train_args["epochs"],
             batch_size=self.train_args["batch_size"],

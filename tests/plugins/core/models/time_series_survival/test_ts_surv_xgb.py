@@ -24,17 +24,18 @@ def test_hyperparams() -> None:
 
     params = model.sample_hyperparameters()
 
-    assert len(params.keys()) == 22
+    assert len(params.keys()) == 23
 
 
-def test_train_prediction() -> None:
+@pytest.mark.parametrize("emb_rnn_type", ["GRU", "LSTM", "Transformer"])
+def test_train_prediction(emb_rnn_type: str) -> None:
     static, temporal, temporal_horizons, outcome = PBCDataloader(as_numpy=True).load()
     T, E = outcome
 
     horizons = [0.25, 0.5, 0.75]
     time_horizons = np.quantile(T, horizons).tolist()
 
-    model = XGBTimeSeriesSurvival()
+    model = XGBTimeSeriesSurvival(emb_rnn_type=emb_rnn_type)
     score = evaluate_ts_survival_model(
         model, static, temporal, temporal_horizons, T, E, time_horizons
     )

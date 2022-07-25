@@ -42,7 +42,7 @@ class ProbabilisticAutoregressivePlugin(Plugin):
 
     def __init__(
         self,
-        n_iter: int = 1000,
+        n_iter: int = 200,
         sample_size: int = 1,
         device: Any = DEVICE,
         encoder_max_clusters: int = 10,

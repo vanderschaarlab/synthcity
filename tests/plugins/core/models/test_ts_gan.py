@@ -9,6 +9,7 @@ import pytest
 # synthcity absolute
 from synthcity.plugins.core.dataloader import TimeSeriesDataLoader
 from synthcity.plugins.core.models.ts_gan import TimeSeriesGAN
+from synthcity.plugins.core.models.ts_model import modes
 from synthcity.plugins.core.schema import Schema
 from synthcity.utils.datasets.time_series.google_stocks import GoogleStocksDataloader
 from synthcity.utils.datasets.time_series.sine import SineDataloader
@@ -68,7 +69,7 @@ def test_network_config() -> None:
 @pytest.mark.parametrize("dropout", [0, 0.5, 0.2])
 @pytest.mark.parametrize("batch_norm", [True, False])
 @pytest.mark.parametrize("lr", [1e-3, 3e-4])
-@pytest.mark.parametrize("mode", ["LSTM", "RNN", "GRU"])
+@pytest.mark.parametrize("mode", modes)
 def test_basic_network(
     nonlin: str,
     n_iter: int,
@@ -192,3 +193,78 @@ def test_ts_gan_conditional(source: Any) -> None:
     assert static_gen.shape == (5, static.shape[1])
     assert temporal_gen.shape == (5, temporal.shape[1], temporal.shape[2])
     assert temporal_horizons_gen.shape == (5, temporal.shape[1])
+
+
+@pytest.mark.parametrize("source", [SineDataloader, GoogleStocksDataloader])
+def test_ts_gan_conditional_static_data(source: Any) -> None:
+    static, temporal, temporal_horizons, outcome = source(as_numpy=True).load()
+
+    model = TimeSeriesGAN(
+        n_static_units=static.shape[-1],
+        n_static_units_latent=static.shape[-1],
+        n_temporal_units=temporal.shape[-1],
+        n_temporal_window=temporal.shape[-2],
+        n_temporal_units_latent=temporal.shape[-1],
+        n_units_conditional=1,
+        generator_n_iter=10,
+    )
+    model.fit(static, temporal, temporal_horizons, cond=outcome)
+
+    cnt = 10
+    static_ids = np.random.choice(len(static), cnt, replace=False)
+    static_gen, temporal_gen, temporal_horizons_gen = model.generate(
+        cnt, static_data=static[static_ids]
+    )
+    assert np.isclose(np.asarray(static_gen), np.asarray(static[static_ids])).all()
+    assert temporal_gen.shape == (cnt, temporal.shape[1], temporal.shape[2])
+    assert temporal_horizons_gen.shape == (cnt, temporal.shape[1])
+
+    cnt = 5
+    static_ids = np.random.choice(len(static), cnt, replace=False)
+    static_gen, temporal_gen, temporal_horizons_gen = model.generate(
+        cnt, cond=np.ones([cnt, *outcome.shape[1:]]), static_data=static[static_ids]
+    )
+    assert np.isclose(np.asarray(static_gen), np.asarray(static[static_ids])).all()
+    assert temporal_gen.shape == (cnt, temporal.shape[1], temporal.shape[2])
+    assert temporal_horizons_gen.shape == (cnt, temporal.shape[1])
+
+
+@pytest.mark.parametrize("source", [SineDataloader, GoogleStocksDataloader])
+def test_ts_gan_conditional_temporal_horizons(source: Any) -> None:
+    static, temporal, temporal_horizons, outcome = source(as_numpy=True).load()
+
+    model = TimeSeriesGAN(
+        n_static_units=static.shape[-1],
+        n_static_units_latent=static.shape[-1],
+        n_temporal_units=temporal.shape[-1],
+        n_temporal_window=temporal.shape[-2],
+        n_temporal_units_latent=temporal.shape[-1],
+        n_units_conditional=1,
+        generator_n_iter=10,
+    )
+    model.fit(static, temporal, temporal_horizons, cond=outcome)
+
+    cnt = 10
+    temporal_horizons = np.asarray(temporal_horizons)
+    horizon_ids = np.random.choice(len(temporal_horizons), cnt, replace=False)
+    static_gen, temporal_gen, temporal_horizons_gen = model.generate(
+        cnt, temporal_horizons=temporal_horizons[horizon_ids]
+    )
+    assert np.isclose(
+        np.asarray(temporal_horizons_gen), np.asarray(temporal_horizons[horizon_ids])
+    ).all()
+    assert temporal_gen.shape == (cnt, temporal.shape[1], temporal.shape[2])
+    assert temporal_horizons_gen.shape == (cnt, temporal.shape[1])
+
+    cnt = 5
+    horizon_ids = np.random.choice(len(temporal_horizons), cnt, replace=False)
+    static_gen, temporal_gen, temporal_horizons_gen = model.generate(
+        cnt,
+        cond=np.ones([cnt, *outcome.shape[1:]]),
+        temporal_horizons=temporal_horizons[horizon_ids],
+    )
+    assert np.isclose(
+        np.asarray(temporal_horizons_gen), np.asarray(temporal_horizons[horizon_ids])
+    ).all()
+    assert temporal_gen.shape == (cnt, temporal.shape[1], temporal.shape[2])
+    assert temporal_horizons_gen.shape == (cnt, temporal.shape[1])
