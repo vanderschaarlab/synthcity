@@ -22,6 +22,7 @@ class DataLoader(metaclass=ABCMeta):
         static_features: List[str],
         temporal_features: List[str] = [],
         sensitive_features: List[str] = [],
+        important_features: List[str] = [],
         outcome_features: List[str] = [],
         train_size: float = 0.8,
         random_state: int = 0,
@@ -30,6 +31,7 @@ class DataLoader(metaclass=ABCMeta):
         self.static_features = static_features
         self.temporal_features = temporal_features
         self.sensitive_features = sensitive_features
+        self.important_features = important_features
         self.outcome_features = outcome_features
         self.random_state = random_state
 
@@ -136,6 +138,7 @@ class GenericDataLoader(DataLoader):
         self,
         data: Union[pd.DataFrame, list, np.ndarray],
         sensitive_features: List[str] = [],
+        important_features: List[str] = [],
         target_column: Optional[str] = None,
         random_state: int = 0,
         train_size: float = 0.8,
@@ -157,6 +160,7 @@ class GenericDataLoader(DataLoader):
             data=data,
             static_features=list(data.columns),
             sensitive_features=sensitive_features,
+            important_features = important_features,
             outcome_features=[self.target_column],
             random_state=random_state,
             **kwargs,
@@ -190,6 +194,7 @@ class GenericDataLoader(DataLoader):
             "len": len(self),
             "static_features": self.static_features,
             "sensitive_features": self.sensitive_features,
+            "important_features": self.important_features,
             "outcome_features": self.outcome_features,
             "target_column": self.target_column,
         }
@@ -201,6 +206,7 @@ class GenericDataLoader(DataLoader):
         return GenericDataLoader(
             data,
             sensitive_features=self.sensitive_features,
+            important_features=self.important_features,
             target_column=self.target_column,
             random_state=self.random_state,
             train_size=self.train_size,
@@ -225,6 +231,7 @@ class GenericDataLoader(DataLoader):
         return GenericDataLoader(
             data,
             sensitive_features=info["sensitive_features"],
+            important_features=info["important_features"],
             target_column=info["target_column"],
         )
 
@@ -267,6 +274,7 @@ class SurvivalAnalysisDataLoader(DataLoader):
         target_column: str,
         time_horizons: list = [],
         sensitive_features: List[str] = [],
+        important_features: List[str] = [],
         random_state: int = 0,
         train_size: float = 0.8,
         **kwargs: Any,
@@ -280,6 +288,8 @@ class SurvivalAnalysisDataLoader(DataLoader):
             )
 
         T = data[time_to_event_column]
+        data = data[T > 0]
+
         if len(time_horizons) == 0:
             time_horizons = np.linspace(T.min(), T.max(), num=5)[1:-1].tolist()
 
@@ -294,6 +304,7 @@ class SurvivalAnalysisDataLoader(DataLoader):
             data=data,
             static_features=list(data.columns.astype(str)),
             sensitive_features=sensitive_features,
+            important_features = important_features,
             outcome_features=[self.target_column],
             random_state=random_state,
             **kwargs,
@@ -312,10 +323,6 @@ class SurvivalAnalysisDataLoader(DataLoader):
         T = self.data[self.time_to_event_column]
         E = self.data[self.target_column]
 
-        X = X[T > 0]
-        E = E[T > 0]
-        T = T[T > 0]
-
         if as_numpy:
             return np.asarray(X), np.asarray(T), np.asarray(E)
 
@@ -333,6 +340,7 @@ class SurvivalAnalysisDataLoader(DataLoader):
             "len": len(self),
             "static_features": list(self.static_features),
             "sensitive_features": self.sensitive_features,
+            "important_features": self.important_features,
             "outcome_features": self.outcome_features,
             "target_column": self.target_column,
             "time_to_event_column": self.time_to_event_column,
@@ -346,6 +354,7 @@ class SurvivalAnalysisDataLoader(DataLoader):
         return SurvivalAnalysisDataLoader(
             data,
             sensitive_features=self.sensitive_features,
+            important_features=self.important_features,
             target_column=self.target_column,
             time_to_event_column=self.time_to_event_column,
             time_horizons=self.time_horizons,
@@ -380,6 +389,7 @@ class SurvivalAnalysisDataLoader(DataLoader):
             target_column=info["target_column"],
             time_to_event_column=info["time_to_event_column"],
             sensitive_features=info["sensitive_features"],
+            important_features=info["important_features"],
             time_horizons=info["time_horizons"],
         )
 
@@ -424,6 +434,7 @@ class TimeSeriesDataLoader(DataLoader):
         outcome: Optional[pd.DataFrame] = None,
         static_data: Optional[pd.DataFrame] = None,
         sensitive_features: List[str] = [],
+        important_features: List[str] = [],
         random_state: int = 0,
         train_size: float = 0.8,
         seq_offset: int = 0,
@@ -486,6 +497,7 @@ class TimeSeriesDataLoader(DataLoader):
             temporal_features=temporal_features,
             outcome_features=self.outcome_features,
             sensitive_features=sensitive_features,
+            important_features = important_features,
             random_state=random_state,
             **kwargs,
         )
@@ -519,6 +531,7 @@ class TimeSeriesDataLoader(DataLoader):
             / len(self.data["outcome"]),
             "window_len": self.window_len,
             "sensitive_features": self.sensitive_features,
+            "important_features": self.important_features,
             "random_state": self.random_state,
             "train_size": self.train_size,
             "fill": self.fill,
@@ -541,6 +554,7 @@ class TimeSeriesDataLoader(DataLoader):
             static_data=static_data,
             outcome=outcome,
             sensitive_features=self.sensitive_features,
+            important_features=self.important_features,
             random_state=self.random_state,
             train_size=self.train_size,
             seq_offset=self.seq_offset,
@@ -585,6 +599,7 @@ class TimeSeriesDataLoader(DataLoader):
             static_data=static_data,
             outcome=outcome,
             sensitive_features=info["sensitive_features"],
+            important_features=info["important_features"],
             fill=info["fill"],
             seq_offset=info["seq_offset"],
         )
@@ -1043,6 +1058,7 @@ class TimeSeriesSurvivalDataLoader(TimeSeriesDataLoader):
         E: Union[pd.Series, np.ndarray, pd.Series],
         static_data: Optional[pd.DataFrame] = None,
         sensitive_features: List[str] = [],
+        important_features: List[str] = [],
         time_horizons: list = [],
         random_state: int = 0,
         train_size: float = 0.8,
@@ -1066,6 +1082,7 @@ class TimeSeriesSurvivalDataLoader(TimeSeriesDataLoader):
             outcome=outcome,
             static_data=static_data,
             sensitive_features=sensitive_features,
+            important_features = important_features,
             random_state=random_state,
             train_size=train_size,
             seq_offset=seq_offset,
@@ -1100,6 +1117,7 @@ class TimeSeriesSurvivalDataLoader(TimeSeriesDataLoader):
             T=outcome[self.time_to_event_col],
             E=outcome[self.event_col],
             sensitive_features=self.sensitive_features,
+            important_features=self.important_features,
             random_state=self.random_state,
             time_horizons=self.time_horizons,
             train_size=self.train_size,
@@ -1124,6 +1142,7 @@ class TimeSeriesSurvivalDataLoader(TimeSeriesDataLoader):
             T=outcome[info["time_to_event_column"]],
             E=outcome[info["event_column"]],
             sensitive_features=info["sensitive_features"],
+            important_features=info["important_features"],
             time_horizons=info["time_horizons"],
             seq_offset=info["seq_offset"],
         )

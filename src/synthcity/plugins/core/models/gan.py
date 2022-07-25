@@ -11,7 +11,7 @@ from torch.utils.data import DataLoader, TensorDataset, sampler
 # synthcity absolute
 import synthcity.logger as log
 from synthcity.utils.constants import DEVICE
-from synthcity.utils.reproducibility import enable_reproducible_results
+from synthcity.utils.reproducibility import enable_reproducible_results, clear_cache
 
 # synthcity relative
 from .mlp import MLP
@@ -202,6 +202,8 @@ class GAN(nn.Module):
         fake_labels_generator: Optional[Callable] = None,
         true_labels_generator: Optional[Callable] = None,
     ) -> "GAN":
+        clear_cache()
+
         Xt = self._check_tensor(X)
         condt: Optional[torch.Tensor] = None
 
@@ -231,6 +233,7 @@ class GAN(nn.Module):
         return self
 
     def generate(self, count: int, cond: Optional[np.ndarray] = None) -> np.ndarray:
+        clear_cache()
         self.generator.eval()
 
         condt: Optional[torch.Tensor] = None

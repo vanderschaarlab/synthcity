@@ -10,7 +10,7 @@ from pydantic import validate_arguments
 # synthcity absolute
 import synthcity.logger as log
 import synthcity.plugins as plugins
-from synthcity.plugins.core.dataloader import DataLoader
+from synthcity.plugins.core.dataloader import DataLoader, create_from_info
 from synthcity.plugins.core.distribution import Distribution
 from synthcity.plugins.core.models import BinEncoder
 from synthcity.plugins.core.plugin import Plugin
@@ -106,7 +106,9 @@ class SurvivalGANPlugin(Plugin):
             sampler = ImbalancedDatasetSampler(sampling_labels)
 
         if self.use_conditional:
-            self.conditional = BinEncoder().fit_transform(X.dataframe())
+            important_feats = X.important_features
+            precond = pd.concat([T.to_frame(), E.to_frame(), X[important_feats]], axis = 1)
+            self.conditional = BinEncoder().fit_transform(precond)
             n_units_conditional = self.conditional.shape[1]
         else:
             self.conditional = None
@@ -126,18 +128,19 @@ class SurvivalGANPlugin(Plugin):
         return self
 
     def _generate(self, count: int, syn_schema: Schema, **kwargs: Any) -> pd.DataFrame:
-        cond = (
-            self.conditional.sample(count, replace=True)
-            if self.use_conditional
-            else None
-        )
+        cond = None
+        if self.use_conditional:
+            cond = self.conditional
+            while len(cond) < count:
+                cond = pd.concat([cond, self.conditional])
+            cond = cond.head(count)
 
         return self.model._generate(
-            count,
-            syn_schema=syn_schema,
-            cond=cond,
-            **kwargs,
-        )
+                count,
+                syn_schema=syn_schema,
+                cond=cond,
+                **kwargs,
+            )
 
 
 plugin = SurvivalGANPlugin

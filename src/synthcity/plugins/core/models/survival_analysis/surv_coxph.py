@@ -17,9 +17,16 @@ from ._base import SurvivalAnalysisPlugin
 
 
 class CoxPHSurvivalAnalysis(SurvivalAnalysisPlugin):
-    def __init__(self, device: Any = DEVICE, **kwargs: Any) -> None:
+    def __init__(
+        self,
+        device: Any = DEVICE,
+        alpha: float = 0.05,
+        fit_options: dict = {"step_size": 0.1},
+        **kwargs: Any
+    ) -> None:
         super().__init__()
-        self.model = CoxPHFitter(**kwargs)
+        self.fit_options = fit_options
+        self.model = CoxPHFitter(alpha=alpha, **kwargs)
 
     @validate_arguments(config=dict(arbitrary_types_allowed=True))
     def fit(
@@ -34,7 +41,7 @@ class CoxPHSurvivalAnalysis(SurvivalAnalysisPlugin):
         df["event"] = Y
         df["time"] = T
 
-        self.model.fit(df, "time", "event")
+        self.model.fit(df, "time", "event", fit_options=self.fit_options)
 
         return self
 
