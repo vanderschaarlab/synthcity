@@ -336,7 +336,7 @@ class TimeSeriesModel(nn.Module):
         stratify = None
         _, out_counts = torch.unique(outcome, return_counts=True)
         if out_counts.min() > 1:
-            stratify = outcome
+            stratify = outcome.cpu()
 
         (
             static_data_train,
@@ -348,22 +348,25 @@ class TimeSeriesModel(nn.Module):
             outcome_train,
             outcome_test,
         ) = train_test_split(
-            static_data,
-            temporal_data,
-            temporal_horizons,
-            outcome,
+            static_data.cpu(),
+            temporal_data.cpu(),
+            temporal_horizons.cpu(),
+            outcome.cpu(),
             train_size=self.train_ratio,
             random_state=self.random_state,
             stratify=stratify,
         )
         train_dataset = TensorDataset(
-            static_data_train,
-            temporal_data_train,
-            temporal_horizons_train,
-            outcome_train,
+            static_data_train.to(self.device),
+            temporal_data_train.to(self.device),
+            temporal_horizons_train.to(self.device),
+            outcome_train.to(self.device),
         )
         test_dataset = TensorDataset(
-            static_data_test, temporal_data_test, temporal_horizons_test, outcome_test
+            static_data_test.to(self.device),
+            temporal_data_test.to(self.device),
+            temporal_horizons_test.to(self.device),
+            outcome_test.to(self.device),
         )
 
         sampler = self.dataloader_sampler
