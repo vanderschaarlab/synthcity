@@ -7,7 +7,7 @@ from surv_helpers import generate_fixtures
 from synthcity.plugins import Plugin
 from synthcity.plugins.core.constraints import Constraints
 from synthcity.plugins.core.dataloader import SurvivalAnalysisDataLoader
-from synthcity.plugins.survival_analysis.plugin_survival_gan import plugin
+from synthcity.plugins.survival_analysis.plugin_survae import plugin
 
 X = load_rossi()
 data = SurvivalAnalysisDataLoader(
@@ -17,10 +17,10 @@ data = SurvivalAnalysisDataLoader(
 )
 
 
-plugin_name = "survival_gan"
+plugin_name = "survae"
 plugins_args = {
-    "generator_n_layers_hidden": 1,
-    "generator_n_units_hidden": 10,
+    "decoder_n_layers_hidden": 1,
+    "decoder_n_units_hidden": 10,
     "uncensoring_model": "cox_ph",
     "n_iter": 100,
 }
@@ -51,7 +51,7 @@ def test_plugin_type(test_plugin: Plugin) -> None:
     "test_plugin", generate_fixtures(plugin_name, plugin, plugins_args)
 )
 def test_plugin_hyperparams(test_plugin: Plugin) -> None:
-    assert len(test_plugin.hyperparameter_space()) == 14
+    assert len(test_plugin.hyperparameter_space()) == 12
 
 
 @pytest.mark.parametrize(
@@ -131,18 +131,3 @@ def test_sample_hyperparams() -> None:
         args = plugin.sample_hyperparameters()
 
         assert plugin(**args) is not None
-
-
-@pytest.mark.parametrize("strategy", ["random", "covariate_dependent"])
-def test_plugin_generate_with_censoring_strategy(strategy: str) -> None:
-    test_plugin = plugin(censoring_strategy=strategy, **plugins_args)
-
-    test_plugin.fit(data)
-
-    X_gen = test_plugin.generate()
-    assert len(X_gen) == len(X)
-    assert test_plugin.schema_includes(X_gen)
-
-    X_gen = test_plugin.generate(50)
-    assert len(X_gen) == 50
-    assert test_plugin.schema_includes(X_gen)

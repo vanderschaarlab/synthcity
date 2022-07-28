@@ -9,7 +9,6 @@ from synthcity.plugins.core.models.time_series_survival.benchmarks import (
 )
 from synthcity.plugins.core.models.time_series_survival.ts_surv_dynamic_deephit import (
     DynamicDeephitTimeSeriesSurvival,
-    output_modes,
     rnn_modes,
 )
 from synthcity.utils.datasets.time_series.pbc import PBCDataloader
@@ -50,7 +49,6 @@ def test_train(rnn_type: str) -> None:
     "wavelet_type",
     [
         "haar",
-        "db4",
         "sym2",
     ],
 )
@@ -78,8 +76,8 @@ def test_train_prediction_dyn_deephit_wavelets(
     assert score["clf"]["c_index"][0] > 0.5
 
 
-@pytest.mark.parametrize("rnn_type", rnn_modes)
-@pytest.mark.parametrize("output_type", output_modes)
+@pytest.mark.parametrize("rnn_type", ["LSTM", "Transformer"])
+@pytest.mark.parametrize("output_type", ["MLP"])
 def test_train_prediction_dyn_deephit(rnn_type: str, output_type: str) -> None:
     static, temporal, temporal_horizons, outcome = PBCDataloader(as_numpy=True).load()
     T, E = outcome

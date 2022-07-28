@@ -11,7 +11,6 @@ def enable_reproducible_results(seed: int = 0) -> None:
     torch.manual_seed(seed)
     random.seed(seed)
 
+
 def clear_cache() -> None:
     torch.cuda.empty_cache()
-
-

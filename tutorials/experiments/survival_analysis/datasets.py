@@ -17,10 +17,10 @@ def get_dataset(name: str) -> Tuple[pd.DataFrame, str, str, list]:
 
     if name == "metabric":
         raw_df = pd.read_csv("data/metabric.csv")
-        X = raw_df.drop(columns = ["overall_survival_months", "overall_survival"])
+        X = raw_df.drop(columns=["overall_survival_months", "overall_survival"])
         T = raw_df["overall_survival_months"]
         E = raw_df["overall_survival"]
-        
+
         df = X.copy()
         df["event"] = E
         df["duration"] = T

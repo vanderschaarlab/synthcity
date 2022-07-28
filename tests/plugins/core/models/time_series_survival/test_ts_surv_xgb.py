@@ -24,7 +24,7 @@ def test_hyperparams() -> None:
 
     params = model.sample_hyperparameters()
 
-    assert len(params.keys()) == 22
+    assert len(params.keys()) == 23
 
 
 @pytest.mark.parametrize("emb_rnn_type", ["GRU", "LSTM", "Transformer"])

@@ -52,11 +52,22 @@ class Encoder(nn.Module):
         self.logvar_fc = nn.Linear(n_units_hidden, n_units_embedding).to(self.device)
 
     @validate_arguments(config=dict(arbitrary_types_allowed=True))
-    def forward(self, X: Tensor) -> Tuple[Tensor, Tensor]:
-        shared = self.model(X)
+    def forward(
+        self, X: Tensor, cond: Optional[torch.Tensor] = None
+    ) -> Tuple[Tensor, Tensor]:
+        data = self._append_optional_cond(X, cond)
+        shared = self.model(data)
         mu = self.mu_fc(shared)
         logvar = self.logvar_fc(shared)
         return mu, logvar
+
+    def _append_optional_cond(
+        self, X: torch.Tensor, cond: Optional[torch.Tensor]
+    ) -> torch.Tensor:
+        if cond is None:
+            return X
+
+        return torch.cat([X, cond], dim=1)
 
 
 class Decoder(nn.Module):
@@ -93,8 +104,17 @@ class Decoder(nn.Module):
         ).to(self.device)
 
     @validate_arguments(config=dict(arbitrary_types_allowed=True))
-    def forward(self, X: Tensor) -> Tensor:
-        return self.model(X)
+    def forward(self, X: Tensor, cond: Optional[torch.Tensor] = None) -> Tensor:
+        data = self._append_optional_cond(X, cond)
+        return self.model(data)
+
+    def _append_optional_cond(
+        self, X: torch.Tensor, cond: Optional[torch.Tensor]
+    ) -> torch.Tensor:
+        if cond is None:
+            return X
+
+        return torch.cat([X, cond], dim=1)
 
 
 class VAE(nn.Module):
@@ -155,6 +175,7 @@ class VAE(nn.Module):
         self,
         n_features: int,
         n_units_embedding: int,
+        n_units_conditional: int = 0,
         batch_size: int = 100,
         n_iter: int = 500,
         n_iter_print: int = 10,
@@ -203,9 +224,10 @@ class VAE(nn.Module):
 
         self.random_state = random_state
         torch.manual_seed(self.random_state)
+        self.n_units_conditional = n_units_conditional
 
         self.encoder = Encoder(
-            n_features,
+            n_features + n_units_conditional,
             n_units_embedding,
             n_layers_hidden=encoder_n_layers_hidden,
             n_units_hidden=encoder_n_units_hidden,
@@ -215,7 +237,7 @@ class VAE(nn.Module):
             device=device,
         )
         self.decoder = Decoder(
-            n_units_embedding,
+            n_units_embedding + n_units_conditional,
             n_features,
             n_layers_hidden=decoder_n_layers_hidden,
             n_units_hidden=decoder_n_units_hidden,
@@ -231,29 +253,75 @@ class VAE(nn.Module):
             decoder_nonlin_out = [("none", n_features)]
         self.decoder_nonlin_out = decoder_nonlin_out
 
-    def fit(self, X: np.ndarray) -> Any:
+    def fit(
+        self,
+        X: np.ndarray,
+        cond: Optional[np.ndarray] = None,
+    ) -> Any:
         Xt = self._check_tensor(X)
+        condt: Optional[torch.Tensor] = None
 
-        self._train(Xt)
+        if self.n_units_conditional > 0:
+            if cond is None:
+                raise ValueError("Expecting valid conditional for training")
+            if len(cond.shape) == 1:
+                cond = cond.reshape(-1, 1)
+            if cond.shape[1] != self.n_units_conditional:
+                raise ValueError(
+                    "Expecting conditional with n_units = {self.n_units_conditional}"
+                )
+            if cond.shape[0] != X.shape[0]:
+                raise ValueError(
+                    "Expecting conditional with the same length as the dataset"
+                )
+
+            condt = self._check_tensor(cond)
+
+        self._train(Xt, condt)
 
         return self
 
     @validate_arguments(config=dict(arbitrary_types_allowed=True))
-    def generate(self, samples: int) -> np.ndarray:
+    def generate(self, count: int, cond: Optional[np.ndarray] = None) -> np.ndarray:
         self.decoder.eval()
 
-        steps = samples // self.batch_size + 1
+        steps = count // self.batch_size + 1
         data = []
-        for _ in range(steps):
+
+        condt: Optional[torch.Tensor] = None
+        if cond is None and self.n_units_conditional > 0:
+            # sample from the original conditional
+            if self._original_cond is None:
+                raise ValueError("Invalid original conditional. Provide a valid value.")
+            cond_idxs = torch.randint(len(self._original_cond), (count,))
+            cond = self._original_cond[cond_idxs]
+
+        if cond is not None and len(cond.shape) == 1:
+            cond = cond.reshape(-1, 1)
+
+        if cond is not None and len(cond) != count:
+            raise ValueError("cond length must match count")
+
+        if cond is not None:
+            condt = self._check_tensor(cond)
+
+        for idx in range(steps):
             mean = torch.zeros(self.batch_size, self.n_units_embedding)
             std = torch.ones(self.batch_size, self.n_units_embedding)
-
             noise = torch.normal(mean=mean, std=std).to(self.device)
-            fake = self.decoder(noise)
+
+            condt_mb: Optional[torch.Tensor] = None
+            if condt is not None:
+                condt_mb = condt[
+                    idx * self.batch_size : min((idx + 1) * self.batch_size, count)
+                ]
+                noise = noise[: len(condt_mb)]
+
+            fake = self.decoder(noise, condt_mb)
             data.append(fake.detach().cpu().numpy())
 
         data = np.concatenate(data, axis=0)
-        data = data[:samples]
+        data = data[:count]
         return data
 
     def _reparameterize(self, mu: Tensor, logvar: Tensor) -> Tensor:
@@ -267,8 +335,13 @@ class VAE(nn.Module):
         return eps * std + mu
 
     @validate_arguments(config=dict(arbitrary_types_allowed=True))
-    def _train(self, X: Tensor) -> Any:
-        loader = self._dataloader(X)
+    def _train(
+        self,
+        X: Tensor,
+        cond: Optional[torch.Tensor] = None,
+    ) -> Any:
+        self._original_cond = cond
+        loader = self._dataloader(X, cond)
 
         optimizer = Adam(
             self.parameters(),
@@ -279,15 +352,19 @@ class VAE(nn.Module):
         for epoch in range(self.n_iter):
             for id_, data in enumerate(loader):
                 optimizer.zero_grad()
+                cond_mb: Optional[torch.Tensor] = None
 
-                real = data[0].to(self.device)
+                if self.n_units_conditional > 0:
+                    X, cond_mb = data
+                else:
+                    X = data[0]
 
-                mu, logvar = self.encoder(real)
+                mu, logvar = self.encoder(X, cond_mb)
                 embedding = self._reparameterize(mu, logvar)
-                reconstructed = self.decoder(embedding)
+                reconstructed = self.decoder(embedding, cond_mb)
                 loss = self._loss_function(
                     reconstructed,
-                    real,
+                    X,
                     mu,
                     logvar,
                 )
@@ -304,8 +381,12 @@ class VAE(nn.Module):
         else:
             return torch.from_numpy(np.asarray(X)).to(self.device)
 
-    def _dataloader(self, X: Tensor) -> DataLoader:
-        dataset = TensorDataset(X)
+    def _dataloader(self, X: Tensor, cond: Optional[torch.Tensor] = None) -> DataLoader:
+        if cond is None:
+            dataset = TensorDataset(X)
+        else:
+            dataset = TensorDataset(X, cond)
+
         return DataLoader(
             dataset,
             sampler=self.dataloader_sampler,

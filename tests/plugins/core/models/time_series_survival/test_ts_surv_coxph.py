@@ -24,12 +24,12 @@ def test_hyperparams() -> None:
 
     params = model.sample_hyperparameters()
 
-    assert len(params.keys()) == 11
+    assert len(params.keys()) == 12
 
 
 @pytest.mark.parametrize(
     "wavelet_type",
-    ["haar", "db4", "sym2", "dmey"],
+    ["haar", "sym2"],
 )
 @pytest.mark.parametrize("wavelet_mode", ["symmetric"])
 def test_train_prediction_coxph_wavelet(wavelet_type: str, wavelet_mode: str) -> None:
@@ -53,24 +53,12 @@ def test_train_prediction_coxph_wavelet(wavelet_type: str, wavelet_mode: str) ->
     assert score["clf"]["c_index"][0] > 0.5
 
 
-@pytest.mark.parametrize("rnn_type", ["GRU", "LSTM", "Transformer"])
+@pytest.mark.parametrize("rnn_type", ["LSTM", "Transformer"])
 @pytest.mark.parametrize(
     "output_type",
     [
-        "MiniRocket",
-        "mWDNPlus",
         "Transformer",
-        "TSiTPlus",
         "MLP",
-        "LSTM",
-        "GRU",
-        "RNN",
-        "TCN",
-        "InceptionTime",
-        "InceptionTimePlus",
-        "ResCNN",
-        "TST",
-        "XCM",
     ],
 )
 def test_train_prediction_coxph(rnn_type: str, output_type: str) -> None:
