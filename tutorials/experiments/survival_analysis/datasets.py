@@ -16,7 +16,14 @@ def get_dataset(name: str) -> Tuple[pd.DataFrame, str, str, list]:
     data_folder.mkdir(parents=True, exist_ok=True)
 
     if name == "metabric":
-        df = datasets.metabric.read_df()
+        raw_df = pd.read_csv("data/metabric.csv")
+        X = raw_df.drop(columns = ["overall_survival_months", "overall_survival"])
+        T = raw_df["overall_survival_months"]
+        E = raw_df["overall_survival"]
+        
+        df = X.copy()
+        df["event"] = E
+        df["duration"] = T
     elif name == "support":
         df = datasets.support.read_df()
     elif name == "gbsg":
