@@ -1,4 +1,5 @@
 # third party
+import numpy as np
 import pytest
 from sklearn.datasets import load_digits
 from sklearn.preprocessing import MinMaxScaler
@@ -91,3 +92,22 @@ def test_vae_classification(loss_strategy: str) -> None:
     generated = model.generate(10)
 
     assert generated.shape == (10, X.shape[1])
+
+
+def test_vae_conditional() -> None:
+    X, y = load_digits(return_X_y=True)
+    X = MinMaxScaler().fit_transform(X)
+
+    model = VAE(
+        n_features=X.shape[1],
+        n_units_embedding=50,
+        n_units_conditional=1,
+        n_iter=10,
+    )
+    model.fit(X, cond=y)
+
+    generated = model.generate(10)
+    assert generated.shape == (10, X.shape[1])
+
+    generated = model.generate(5, np.ones(5))
+    assert generated.shape == (5, X.shape[1])

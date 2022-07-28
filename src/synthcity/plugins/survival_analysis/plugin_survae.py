@@ -20,8 +20,8 @@ from synthcity.utils.constants import DEVICE
 from synthcity.utils.samplers import ImbalancedDatasetSampler
 
 
-class SurvivalGANPlugin(Plugin):
-    """Survival GAN plugin.
+class SurVAEPlugin(Plugin):
+    """Survival VAE plugin.
 
     Example:
         >>> from synthcity.plugins import Plugins
@@ -32,7 +32,7 @@ class SurvivalGANPlugin(Plugin):
         >>>        target_column="arrest",
         >>>        time_to_event_column="week",
         >>> )
-        >>> plugin = Plugins().get("survival_gan")
+        >>> plugin = Plugins().get("survae")
         >>> plugin.fit(data)
         >>> plugin.generate()
     """
@@ -69,7 +69,7 @@ class SurvivalGANPlugin(Plugin):
 
         log.info(
             f"""
-            Training SurvivalGAN using
+            Training SurVAE using
                 dataloader_sampling_strategy = {self.dataloader_sampling_strategy};
                 tte_strategy = {self.tte_strategy};
                 uncensoring_model={self.uncensoring_model}
@@ -79,7 +79,7 @@ class SurvivalGANPlugin(Plugin):
 
     @staticmethod
     def name() -> str:
-        return "survival_gan"
+        return "survae"
 
     @staticmethod
     def type() -> str:
@@ -87,9 +87,9 @@ class SurvivalGANPlugin(Plugin):
 
     @staticmethod
     def hyperparameter_space(**kwargs: Any) -> List[Distribution]:
-        return plugins.Plugins().get_type("adsgan").hyperparameter_space()
+        return plugins.Plugins().get_type("rtvae").hyperparameter_space()
 
-    def _fit(self, X: DataLoader, *args: Any, **kwargs: Any) -> "SurvivalGANPlugin":
+    def _fit(self, X: DataLoader, *args: Any, **kwargs: Any) -> "SurVAEPlugin":
         assert X.type() == "survival_analysis"
 
         sampler: Optional[ImbalancedDatasetSampler] = None
@@ -119,7 +119,7 @@ class SurvivalGANPlugin(Plugin):
             n_units_conditional = 0
 
         self.model = SurvivalPipeline(
-            "adsgan",
+            "rtvae",
             strategy=self.tte_strategy,
             uncensoring_model=self.uncensoring_model,
             censoring_strategy=self.censoring_strategy,
@@ -148,4 +148,4 @@ class SurvivalGANPlugin(Plugin):
         )
 
 
-plugin = SurvivalGANPlugin
+plugin = SurVAEPlugin

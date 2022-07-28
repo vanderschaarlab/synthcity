@@ -6,6 +6,7 @@ import pandas as pd
 
 # Necessary packages
 from pydantic import validate_arguments
+from xgboost import XGBClassifier
 
 # synthcity absolute
 import synthcity.logger as log
@@ -30,6 +31,7 @@ class SurvivalPipeline(Plugin):
         method: str = "adsgan",
         strategy: str = "survival_function",  # uncensoring, survival_function
         uncensoring_model: str = "survival_function_regression",
+        censoring_strategy: str = "random",  # "covariate_dependent"
         device: Any = DEVICE,
         **kwargs: Any,
     ) -> None:
@@ -37,6 +39,7 @@ class SurvivalPipeline(Plugin):
 
         self.device = device
         self.strategy = strategy
+        self.censoring_strategy = censoring_strategy
 
         self.uncensoring_model: Optional[TimeToEventPlugin] = None
         if uncensoring_model != "none":
@@ -95,12 +98,29 @@ class SurvivalPipeline(Plugin):
         else:
             raise ValueError(f"unsupported strategy {self.strategy}")
 
+        xgb_params = {
+            "n_jobs": -1,
+            "n_estimators": 200,
+            "verbosity": 0,
+            "depth": 5,
+            "random_state": 0,
+            "booster": "dart",
+            "tree_method": "hist",
+        }
+        self.censoring_predictor = XGBClassifier(**xgb_params).fit(Xcov, E)
+
         return self
 
     def _generate(self, count: int, syn_schema: Schema, **kwargs: Any) -> DataLoader:
         def _generate(count: int) -> pd.DataFrame:
 
             generated = self.generator.generate(count, **kwargs).dataframe()
+            if self.censoring_strategy == "covariate_dependent":
+                generated[self.target_column] = self.censoring_predictor.predict(
+                    generated.drop(
+                        columns=[self.target_column, self.time_to_event_column]
+                    )
+                )
             if self.strategy == "uncensoring":
                 generated[self.target_column] = 1
             elif self.strategy == "survival_function":
