@@ -112,6 +112,7 @@ class MultiActivationHead(nn.Module):
         super(MultiActivationHead, self).__init__()
         self.activations = []
         self.activation_lengths = []
+        self.device = device
 
         for activation, length in activations:
             self.activations.append(activation)
@@ -125,12 +126,13 @@ class MultiActivationHead(nn.Module):
             )
 
         split = 0
+        out = torch.zeros(X.shape).to(self.device)
         for activation, step in zip(self.activations, self.activation_lengths):
-            X[:, split : split + step] = activation(X[:, split : split + step])
+            out[:, split : split + step] = activation(X[:, split : split + step])
 
             split += step
 
-        return X
+        return out
 
 
 class MLP(nn.Module):
