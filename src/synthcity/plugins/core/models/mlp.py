@@ -92,8 +92,6 @@ class ResidualLayer(LinearLayer):
 
     @validate_arguments(config=dict(arbitrary_types_allowed=True))
     def forward(self, X: torch.Tensor) -> torch.Tensor:
-        clear_cache()
-
         if X.shape[-1] == 0:
             return torch.zeros((len(X), self.n_units_out)).to(self.device)
 
@@ -306,7 +304,6 @@ class MLP(nn.Module):
                 self.loss = nn.MSELoss()
 
     def fit(self, X: np.ndarray, y: np.ndarray) -> "MLP":
-        clear_cache()
         Xt = self._check_tensor(X)
         yt = self._check_tensor(y)
 

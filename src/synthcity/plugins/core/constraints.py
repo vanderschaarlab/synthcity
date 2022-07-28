@@ -77,6 +77,27 @@ class Constraints(BaseModel):
             raise RuntimeError("unsupported operation", op)
 
     @validate_arguments(config=dict(arbitrary_types_allowed=True))
+    def _correct(self, X: pd.DataFrame, feature: str, op: str, operand: Any) -> pd.DataFrame:
+        """Correct limits.
+
+        Args:
+            X: DataFrame. The dataset to apply the constraint on.
+            feature: str. The column in the dataset to apply the constraint on.
+            op: str. The operation to execute for the constraint.
+            operand: Any. The operand for the binary operation.
+
+        """
+        _filter = self._eval(X, feature, op, operand)
+        if op in [
+                "lt", "le", "gt", "ge", "eq",
+                "<", "<=", ">", ">=", "==",
+                ]:
+            X.loc[~_filter, feature] = operand
+
+        return X
+
+
+    @validate_arguments(config=dict(arbitrary_types_allowed=True))
     def filter(self, X: pd.DataFrame) -> pd.DataFrame:
         """Apply the constraints to a DataFrame X.
 
@@ -94,6 +115,8 @@ class Constraints(BaseModel):
                 break
 
             prev = res.sum()
+            X = self._correct(X, feature, op, thresh)
+
             res &= self._eval(
                 X,
                 feature,
