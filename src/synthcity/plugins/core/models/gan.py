@@ -303,8 +303,9 @@ class GAN(nn.Module):
 
         output = self.discriminator(fake).squeeze().float()
         # Calculate G's loss based on this output
-        errCond = self._loss_cond(real_X_raw, fake_raw, self.generator_nonlin_out)
-        errG = -torch.mean(output) + errCond
+        errG = -torch.mean(output)
+        if self.generator_nonlin_out is not None:
+            errG += self._loss_cond(real_X_raw, fake_raw, self.generator_nonlin_out)
 
         errG -= self._extra_penalties(
             self.generator_extra_penalties,
@@ -544,9 +545,9 @@ class GAN(nn.Module):
         for activation, length in activations:
             if activation == "softmax":
                 loss += nn.functional.cross_entropy(
-                        fake_samples[:, st:st + length],
-                        torch.argmax(real_samples[:, st:st + length], dim=1),
-                    )
+                    fake_samples[:, st : st + length],
+                    torch.argmax(real_samples[:, st : st + length], dim=1),
+                )
 
             st += length
         return loss

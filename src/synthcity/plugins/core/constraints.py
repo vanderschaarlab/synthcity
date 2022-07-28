@@ -77,7 +77,9 @@ class Constraints(BaseModel):
             raise RuntimeError("unsupported operation", op)
 
     @validate_arguments(config=dict(arbitrary_types_allowed=True))
-    def _correct(self, X: pd.DataFrame, feature: str, op: str, operand: Any) -> pd.DataFrame:
+    def _correct(
+        self, X: pd.DataFrame, feature: str, op: str, operand: Any
+    ) -> pd.DataFrame:
         """Correct limits.
 
         Args:
@@ -89,13 +91,20 @@ class Constraints(BaseModel):
         """
         _filter = self._eval(X, feature, op, operand)
         if op in [
-                "lt", "le", "gt", "ge", "eq",
-                "<", "<=", ">", ">=", "==",
-                ]:
+            "lt",
+            "le",
+            "gt",
+            "ge",
+            "eq",
+            "<",
+            "<=",
+            ">",
+            ">=",
+            "==",
+        ]:
             X.loc[~_filter, feature] = operand
 
         return X
-
 
     @validate_arguments(config=dict(arbitrary_types_allowed=True))
     def filter(self, X: pd.DataFrame) -> pd.DataFrame:
