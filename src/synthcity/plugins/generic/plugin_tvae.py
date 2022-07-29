@@ -57,12 +57,11 @@ class TVAEPlugin(Plugin):
         decompress_n_layers: int = 2,
         l2scale: float = 1e-5,
         batch_size: int = 500,
-        n_iter: int = 300,
+        n_iter: int = 1000,
         loss_factor: int = 2,
         **kwargs: Any
     ) -> None:
         super().__init__(**kwargs)
-
         self.model = TVAE(
             embedding_dim=embedding_n_units,
             compress_dims=list(compress_n_units for i in range(compress_n_layers)),

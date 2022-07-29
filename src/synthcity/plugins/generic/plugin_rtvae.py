@@ -2,6 +2,7 @@
 from typing import Any, List, Optional
 
 # third party
+import numpy as np
 import pandas as pd
 
 # Necessary packages
@@ -176,7 +177,10 @@ class RTVAEPlugin(Plugin):
         return self
 
     def _generate(self, count: int, syn_schema: Schema, **kwargs: Any) -> pd.DataFrame:
-        return self._safe_generate(self.model.generate, count, syn_schema)
+        if "cond" in kwargs:
+            cond = np.asarray(kwargs["cond"])
+
+        return self._safe_generate(self.model.generate, count, syn_schema, cond=cond)
 
 
 plugin = RTVAEPlugin
