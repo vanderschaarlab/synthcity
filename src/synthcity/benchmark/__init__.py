@@ -95,7 +95,7 @@ class Benchmarks:
                 )
 
                 log.info(
-                    f"[testcase] Experiment repeat: {repeat} task type: {task_type} Train df hash = {X.train().hash()}"
+                    f"[testcase] Experiment repeat: {repeat} task type: {task_type} Train df hash = {experiment_name}"
                 )
 
                 if generator_file.exists() and synthetic_reuse_if_exists:

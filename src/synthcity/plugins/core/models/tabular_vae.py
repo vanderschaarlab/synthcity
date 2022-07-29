@@ -72,6 +72,7 @@ class TabularVAE(nn.Module):
         self,
         X: pd.DataFrame,
         n_units_embedding: int,
+        n_units_conditional: int = 0,
         lr: float = 2e-4,
         n_iter: int = 500,
         weight_decay: float = 1e-3,
@@ -107,6 +108,7 @@ class TabularVAE(nn.Module):
         self.model = VAE(
             self.encoder.n_features(),
             n_units_embedding=n_units_embedding,
+            n_units_conditional=n_units_conditional,
             batch_size=batch_size,
             n_iter=n_iter,
             lr=lr,
@@ -146,15 +148,14 @@ class TabularVAE(nn.Module):
     def fit(
         self,
         X: pd.DataFrame,
+        **kwargs: Any,
     ) -> Any:
         X_enc = self.encode(X)
-        self.model.fit(
-            X_enc,
-        )
+        self.model.fit(X_enc, **kwargs)
         return self
 
-    def generate(self, count: int) -> pd.DataFrame:
-        samples = self.model.generate(count)
+    def generate(self, count: int, **kwargs: Any) -> pd.DataFrame:
+        samples = self.model.generate(count, **kwargs)
         return self.decode(pd.DataFrame(samples))
 
     @validate_arguments(config=dict(arbitrary_types_allowed=True))

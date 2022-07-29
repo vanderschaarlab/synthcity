@@ -61,17 +61,17 @@ class CTGANPlugin(Plugin):
     def __init__(
         self,
         embedding_n_units: int = 128,
-        generator_n_units: int = 256,
-        generator_n_layers: int = 2,
+        generator_n_units: int = 500,
+        generator_n_layers: int = 3,
         generator_lr: float = 2e-4,
         generator_decay: float = 1e-6,
-        discriminator_n_units: int = 256,
-        discriminator_n_layers: int = 2,
+        discriminator_n_units: int = 500,
+        discriminator_n_layers: int = 3,
         discriminator_lr: float = 2e-4,
         discriminator_decay: float = 1e-6,
         batch_size: int = 500,
         discriminator_steps: int = 1,
-        n_iter: int = 300,
+        n_iter: int = 2000,
         pac: int = 10,
         **kwargs: Any
     ) -> None:

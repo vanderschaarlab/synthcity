@@ -11,7 +11,7 @@ from torch.utils.data import DataLoader, TensorDataset
 # synthcity absolute
 import synthcity.logger as log
 from synthcity.utils.constants import DEVICE
-from synthcity.utils.reproducibility import clear_cache, enable_reproducible_results
+from synthcity.utils.reproducibility import enable_reproducible_results
 
 
 def get_nonlin(name: str) -> nn.Module:
@@ -92,8 +92,6 @@ class ResidualLayer(LinearLayer):
 
     @validate_arguments(config=dict(arbitrary_types_allowed=True))
     def forward(self, X: torch.Tensor) -> torch.Tensor:
-        clear_cache()
-
         if X.shape[-1] == 0:
             return torch.zeros((len(X), self.n_units_out)).to(self.device)
 
@@ -112,6 +110,7 @@ class MultiActivationHead(nn.Module):
         super(MultiActivationHead, self).__init__()
         self.activations = []
         self.activation_lengths = []
+        self.device = device
 
         for activation, length in activations:
             self.activations.append(activation)
@@ -125,12 +124,13 @@ class MultiActivationHead(nn.Module):
             )
 
         split = 0
+        out = torch.zeros(X.shape).to(self.device)
         for activation, step in zip(self.activations, self.activation_lengths):
-            X[:, split : split + step] = activation(X[:, split : split + step])
+            out[:, split : split + step] = activation(X[:, split : split + step])
 
             split += step
 
-        return X
+        return out
 
 
 class MLP(nn.Module):
@@ -304,7 +304,6 @@ class MLP(nn.Module):
                 self.loss = nn.MSELoss()
 
     def fit(self, X: np.ndarray, y: np.ndarray) -> "MLP":
-        clear_cache()
         Xt = self._check_tensor(X)
         yt = self._check_tensor(y)
 
