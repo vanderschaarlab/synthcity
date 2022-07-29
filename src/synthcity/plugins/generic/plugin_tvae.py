@@ -50,14 +50,14 @@ class TVAEPlugin(Plugin):
 
     def __init__(
         self,
-        embedding_n_units: int = 128,
-        compress_n_units: int = 128,
-        compress_n_layers: int = 2,
-        decompress_n_units: int = 128,
-        decompress_n_layers: int = 2,
+        embedding_n_units: int = 500,
+        compress_n_units: int = 500,
+        compress_n_layers: int = 3,
+        decompress_n_units: int = 500,
+        decompress_n_layers: int = 3,
         l2scale: float = 1e-5,
         batch_size: int = 500,
-        n_iter: int = 300,
+        n_iter: int = 2000,
         loss_factor: int = 2,
         **kwargs: Any
     ) -> None:
