@@ -1,5 +1,5 @@
 # stdlib
-from typing import Any, List, Optional
+from typing import Any, List, Optional, Union
 
 # third party
 import numpy as np
@@ -177,6 +177,7 @@ class RTVAEPlugin(Plugin):
         return self
 
     def _generate(self, count: int, syn_schema: Schema, **kwargs: Any) -> pd.DataFrame:
+        cond: Optional[Union[pd.DataFrame, pd.Series]] = None
         if "cond" in kwargs:
             cond = np.asarray(kwargs["cond"])
 
