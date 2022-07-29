@@ -72,10 +72,10 @@ class NormalizingFlowsPlugin(Plugin):
     @validate_arguments(config=dict(arbitrary_types_allowed=True))
     def __init__(
         self,
-        n_iter: int = 500,
+        n_iter: int = 1000,
         n_layers_hidden: int = 1,
         n_units_hidden: int = 100,
-        batch_size: int = 100,
+        batch_size: int = 500,
         num_transform_blocks: int = 1,
         dropout: float = 0.1,
         batch_norm: bool = False,

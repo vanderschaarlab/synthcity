@@ -154,8 +154,8 @@ class TabularVAE(nn.Module):
         self.model.fit(X_enc, **kwargs)
         return self
 
-    def generate(self, count: int) -> pd.DataFrame:
-        samples = self.model.generate(count)
+    def generate(self, count: int, **kwargs: Any) -> pd.DataFrame:
+        samples = self.model.generate(count, **kwargs)
         return self.decode(pd.DataFrame(samples))
 
     @validate_arguments(config=dict(arbitrary_types_allowed=True))

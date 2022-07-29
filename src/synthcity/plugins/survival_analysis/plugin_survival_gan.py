@@ -50,6 +50,10 @@ class SurvivalGANPlugin(Plugin):
     ) -> None:
         super().__init__()
 
+        assert censoring_strategy in [
+            "random",
+            "covariate_dependent",
+        ], f"Invalid censoring strategy {censoring_strategy}"
         valid_sampling_strategies = [
             "none",
             "imbalanced_censoring",
@@ -73,6 +77,7 @@ class SurvivalGANPlugin(Plugin):
                 dataloader_sampling_strategy = {self.dataloader_sampling_strategy};
                 tte_strategy = {self.tte_strategy};
                 uncensoring_model={self.uncensoring_model}
+                censoring_strategy = {censoring_strategy}
                 device={self.device}
             """
         )
