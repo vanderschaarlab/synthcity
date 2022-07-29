@@ -124,8 +124,6 @@ class Constraints(BaseModel):
                 break
 
             prev = res.sum()
-            X = self._correct(X, feature, op, thresh)
-
             res &= self._eval(
                 X,
                 feature,
