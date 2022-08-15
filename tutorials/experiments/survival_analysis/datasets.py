@@ -6,12 +6,15 @@ from typing import Tuple
 import numpy as np
 import pandas as pd
 from lifelines.datasets import load_rossi
-from medicaldata.SEER_prostate_cancer import download as seer_download
-from medicaldata.SEER_prostate_cancer import load as seer_load
 from pycox import datasets
 from sklearn.preprocessing import LabelEncoder
 from sksurv.datasets import load_aids, load_flchain, load_gbsg2, load_whas500
 
+try:
+    from medicaldata.SEER_prostate_cancer import download as seer_download
+    from medicaldata.SEER_prostate_cancer import load as seer_load
+except BaseException:
+    pass
 
 def get_dataset(name: str) -> Tuple[pd.DataFrame, str, str, list]:
     data_folder = Path("data")
