@@ -18,7 +18,7 @@ from synthcity.plugins.core.constraints import Constraints
 from synthcity.plugins.core.dataloader import DataLoader
 from synthcity.utils.reproducibility import enable_reproducible_results
 from synthcity.utils.serialization import load_from_file, save_to_file
-
+import torch
 
 class Benchmarks:
     @staticmethod
@@ -26,6 +26,7 @@ class Benchmarks:
     def evaluate(
         tests: List[Tuple[str, str, dict]],  # test name, plugin name, plugin args
         X: DataLoader,
+        X_test: Optional[DataLoader] = None,
         metrics: Optional[Dict] = None,
         repeats: int = 3,
         synthetic_size: Optional[int] = None,
@@ -85,6 +86,8 @@ class Benchmarks:
 
             for repeat in range(repeats):
                 enable_reproducible_results(repeat)
+                torch.cuda.empty_cache()
+
                 cache_file = (
                     workspace
                     / f"{experiment_name}_{testcase}_{plugin}_{kwargs_hash}_{repeat}.bkp"
@@ -129,8 +132,10 @@ class Benchmarks:
                     if synthetic_cache:
                         save_to_file(cache_file, X_syn)
 
+                X_gt = X_test if X_test is not None else X
+
                 evaluation = Metrics.evaluate(
-                    X,
+                    X_test if X_test is not None else X,
                     X_syn,
                     metrics=metrics,
                     task_type=task_type,
