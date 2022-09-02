@@ -1,0 +1,73 @@
+name: Package release
+
+on:
+  release:
+    types: [created]
+
+
+jobs:
+  deploy_osx:
+    runs-on: ${{ matrix.os }}
+    strategy:
+      matrix:
+        python-version: ["3.7", "3.8", "3.9", "3.10"]
+        os: [macos-latest]
+
+    steps:
+      - uses: actions/checkout@v2
+        with:
+          submodules: true
+      - name: Set up Python
+        uses: actions/setup-python@v1
+        with:
+          python-version: ${{ matrix.python-version }}
+      - name: Build and publish
+        env:
+          TWINE_USERNAME: ${{ secrets.PYPI_USERNAME }}
+          TWINE_PASSWORD: ${{ secrets.PYPI_PASSWORD }}
+        run: ${GITHUB_WORKSPACE}/.github/workflows/scripts/release_osx.sh
+
+  deploy_linux:
+    strategy:
+      matrix:
+        python-version:
+          - cp37-cp37m
+          - cp38-cp38
+          - cp39-cp39
+          - cp10-cp10
+
+    runs-on: ubuntu-latest
+    container: quay.io/pypa/manylinux2014_x86_64
+    steps:
+      - uses: actions/checkout@v1
+        with:
+          submodules: true
+      - name: Set target Python version PATH
+        run: |
+            echo "/opt/python/${{ matrix.python-version }}/bin" >> $GITHUB_PATH
+      - name: Build and publish
+        env:
+          TWINE_USERNAME: ${{ secrets.PYPI_USERNAME }}
+          TWINE_PASSWORD: ${{ secrets.PYPI_PASSWORD }}
+        run: ${GITHUB_WORKSPACE}/.github/workflows/scripts/release_linux.sh
+
+  deploy_windows:
+    runs-on: windows-latest
+    strategy:
+      matrix:
+        python-version: ["3.7", "3.8", "3.9", "3.10"]
+
+    steps:
+      - uses: actions/checkout@v2
+        with:
+          submodules: true
+      - name: Set up Python ${{ matrix.python-version }}
+        uses: actions/setup-python@v1
+        with:
+          python-version: ${{ matrix.python-version }}
+      - name: Build and publish
+        env:
+          TWINE_USERNAME: ${{ secrets.PYPI_USERNAME }}
+          TWINE_PASSWORD: ${{ secrets.PYPI_PASSWORD }}
+        run: |
+          ../../.github/workflows/scripts/release_windows.bat
