@@ -6,6 +6,7 @@ from typing import Any, Dict, List, Optional, Tuple
 
 # third party
 import pandas as pd
+import torch
 from IPython.display import display
 from pydantic import validate_arguments
 
@@ -18,7 +19,7 @@ from synthcity.plugins.core.constraints import Constraints
 from synthcity.plugins.core.dataloader import DataLoader
 from synthcity.utils.reproducibility import enable_reproducible_results
 from synthcity.utils.serialization import load_from_file, save_to_file
-import torch
+
 
 class Benchmarks:
     @staticmethod
@@ -132,13 +133,12 @@ class Benchmarks:
                     if synthetic_cache:
                         save_to_file(cache_file, X_syn)
 
-                X_gt = X_test if X_test is not None else X
-
                 evaluation = Metrics.evaluate(
                     X_test if X_test is not None else X,
                     X_syn,
                     metrics=metrics,
                     task_type=task_type,
+                    workspace=workspace,
                 )
 
                 mean_score = evaluation["mean"].to_dict()

@@ -12,6 +12,7 @@ from xgboost import XGBClassifier, XGBRegressor
 from synthcity.metrics.core import MetricEvaluator
 from synthcity.plugins.core.dataloader import DataLoader
 from synthcity.plugins.core.models.mlp import MLP
+from synthcity.utils.serialization import load_from_file, save_to_file
 
 
 class AttackEvaluator(MetricEvaluator):
@@ -32,6 +33,13 @@ class AttackEvaluator(MetricEvaluator):
         X_gt: DataLoader,
         X_syn: DataLoader,
     ) -> Dict:
+        cache_file = (
+            self._workspace
+            / f"sc_metric_cache_{self.type()}_{self.name()}_{X_gt.hash()}_{X_syn.hash()}_{self._reduction}.bkp"
+        )
+        if cache_file.exists() and self._use_cache:
+            return load_from_file(cache_file)
+
         if len(X_gt.sensitive_features) == 0:
             return {}
 
@@ -71,7 +79,11 @@ class AttackEvaluator(MetricEvaluator):
         if len(output) == 0:
             return {}
 
-        return {self._reduction: self.reduction()(output)}
+        results = {self._reduction: self.reduction()(output)}
+
+        save_to_file(cache_file, results)
+
+        return results
 
 
 class DataLeakageMLP(AttackEvaluator):

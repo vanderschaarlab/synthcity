@@ -23,6 +23,7 @@ class Schema(BaseModel):
 
     sampling_strategy: str = "marginal"  # uniform or marginal
     protected_cols = ["seq_id"]
+    random_state: int = 0
     data: Any = None
     domain: Dict = {}
 
@@ -45,30 +46,45 @@ class Schema(BaseModel):
             return v
 
         sampling_strategy = values["sampling_strategy"]
+        random_state = values["random_state"]
 
         if sampling_strategy == "marginal":
             for col in X.columns:
                 if X[col].dtype == "object" or len(X[col].unique()) < 10:
-                    feature_domain[col] = CategoricalDistribution(name=col, data=X[col])
+                    feature_domain[col] = CategoricalDistribution(
+                        name=col, data=X[col], random_state=random_state
+                    )
                 elif X[col].dtype in ["int", "int32", "int64", "uint32", "uint64"]:
-                    feature_domain[col] = IntegerDistribution(name=col, data=X[col])
+                    feature_domain[col] = IntegerDistribution(
+                        name=col, data=X[col], random_state=random_state
+                    )
                 elif X[col].dtype in ["float", "float32", "float64", "double"]:
-                    feature_domain[col] = FloatDistribution(name=col, data=X[col])
+                    feature_domain[col] = FloatDistribution(
+                        name=col, data=X[col], random_state=random_state
+                    )
                 else:
                     raise ValueError("unsupported format ", col)
         elif sampling_strategy == "uniform":
             for col in X.columns:
                 if X[col].dtype == "object" or len(X[col].unique()) < 10:
                     feature_domain[col] = CategoricalDistribution(
-                        name=col, choices=list(X[col].unique())
+                        name=col,
+                        choices=list(X[col].unique()),
+                        random_state=random_state,
                     )
                 elif X[col].dtype in ["int", "int32", "int64", "uint32", "uint64"]:
                     feature_domain[col] = IntegerDistribution(
-                        name=col, low=X[col].min(), high=X[col].max()
+                        name=col,
+                        low=X[col].min(),
+                        high=X[col].max(),
+                        random_state=random_state,
                     )
                 elif X[col].dtype in ["float", "float64", "double"]:
                     feature_domain[col] = FloatDistribution(
-                        name=col, low=X[col].min(), high=X[col].max()
+                        name=col,
+                        low=X[col].min(),
+                        high=X[col].max(),
+                        random_state=random_state,
                     )
                 else:
                     raise ValueError("unsupported format ", col)
@@ -136,8 +152,11 @@ class Schema(BaseModel):
             np.zeros((count, len(self.features()))), columns=self.features()
         )
 
+        print("sapling using ", self.random_state)
         for feature in self.features():
-            samples[feature] = self.domain[feature].sample(count)
+            samples[feature] = self.domain[feature].sample(
+                count, random_state=self.random_state
+            )
 
         return samples
 

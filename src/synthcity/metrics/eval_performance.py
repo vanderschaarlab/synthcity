@@ -37,6 +37,7 @@ from synthcity.plugins.core.models.time_series_survival.ts_surv_xgb import (
     XGBTimeSeriesSurvival,
 )
 from synthcity.plugins.core.models.ts_model import TimeSeriesModel
+from synthcity.utils.serialization import load_from_file, save_to_file
 
 
 class PerformanceEvaluator(MetricEvaluator):
@@ -146,6 +147,12 @@ class PerformanceEvaluator(MetricEvaluator):
         Returns:
             gt and syn performance scores
         """
+        cache_file = (
+            self._workspace
+            / f"sc_metric_cache_{self.type()}_{self.name()}_{X_gt.hash()}_{X_syn.hash()}_{self._reduction}.bkp"
+        )
+        if cache_file.exists() and self._use_cache:
+            return load_from_file(cache_file)
 
         id_X_gt, id_y_gt = X_gt.train().unpack()
         ood_X_gt, ood_y_gt = X_gt.test().unpack()
@@ -190,11 +197,15 @@ class PerformanceEvaluator(MetricEvaluator):
             syn_scores_id.append(synth_score_id)
             syn_scores_ood.append(synth_score_ood)
 
-        return {
+        results = {
             "gt": float(self.reduction()(real_scores)),
             "syn_id": float(self.reduction()(syn_scores_id)),
             "syn_ood": float(self.reduction()(syn_scores_ood)),
         }
+
+        save_to_file(cache_file, results)
+
+        return results
 
     @validate_arguments(config=dict(arbitrary_types_allowed=True))
     def _evaluate_survival_model(
@@ -211,6 +222,13 @@ class PerformanceEvaluator(MetricEvaluator):
         """
         assert X_gt.type() == "survival_analysis"
         assert X_syn.type() == "survival_analysis"
+
+        cache_file = (
+            self._workspace
+            / f"sc_metric_cache_{self.type()}_{self.name()}_{X_gt.hash()}_{X_syn.hash()}_{self._reduction}.bkp"
+        )
+        if cache_file.exists():
+            return load_from_file(cache_file)
 
         info = X_gt.info()
         time_horizons = info["time_horizons"]
@@ -281,7 +299,7 @@ class PerformanceEvaluator(MetricEvaluator):
 
         log.info(f"Synthetic OOD performance score: {score_syn_ood}")
 
-        return {
+        results = {
             "gt.c_index": float(score_gt["c_index"][0]),
             "gt.brier_score": float(score_gt["brier_score"][0]),
             "syn_id.c_index": float(score_syn_id["c_index"][0]),
@@ -289,6 +307,10 @@ class PerformanceEvaluator(MetricEvaluator):
             "syn_ood.c_index": float(score_syn_ood["c_index"][0]),
             "syn_ood.brier_score": float(score_syn_ood["brier_score"][0]),
         }
+
+        save_to_file(cache_file, results)
+
+        return results
 
     @validate_arguments(config=dict(arbitrary_types_allowed=True))
     def _evaluate_time_series_performance(
@@ -305,6 +327,13 @@ class PerformanceEvaluator(MetricEvaluator):
         """
         assert X_gt.type() == "time_series"
         assert X_syn.type() == "time_series"
+
+        cache_file = (
+            self._workspace
+            / f"sc_metric_cache_{self.type()}_{self.name()}_{X_gt.hash()}_{X_syn.hash()}_{self._reduction}.bkp"
+        )
+        if cache_file.exists():
+            return load_from_file(cache_file)
 
         (
             id_static_gt,
@@ -350,7 +379,6 @@ class PerformanceEvaluator(MetricEvaluator):
 
                 score = mean_squared_error(outcome_test, preds)
             except BaseException as e:
-                print(e)
                 log.error(f"regression evaluation failed {e}")
                 score = 100
 
@@ -402,11 +430,15 @@ class PerformanceEvaluator(MetricEvaluator):
             syn_scores_id.append(synth_score_id)
             syn_scores_ood.append(synth_score_ood)
 
-        return {
+        results = {
             "gt": float(self.reduction()(real_scores)),
             "syn_id": float(self.reduction()(syn_scores_id)),
             "syn_ood": float(self.reduction()(syn_scores_ood)),
         }
+
+        save_to_file(cache_file, results)
+
+        return results
 
     @validate_arguments(config=dict(arbitrary_types_allowed=True))
     def _evaluate_time_series_survival_performance(
@@ -423,6 +455,13 @@ class PerformanceEvaluator(MetricEvaluator):
         """
         assert X_gt.type() == "time_series_survival"
         assert X_syn.type() == "time_series_survival"
+
+        cache_file = (
+            self._workspace
+            / f"sc_metric_cache_{self.type()}_{self.name()}_{X_gt.hash()}_{X_syn.hash()}_{self._reduction}.bkp"
+        )
+        if cache_file.exists():
+            return load_from_file(cache_file)
 
         info = X_gt.info()
         time_horizons = info["time_horizons"]
@@ -529,7 +568,7 @@ class PerformanceEvaluator(MetricEvaluator):
 
         log.info(f"Synthetic OOD performance score: {score_syn_ood}")
 
-        return {
+        results = {
             "gt.c_index": float(score_gt["c_index"][0]),
             "gt.brier_score": float(score_gt["brier_score"][0]),
             "syn_id.c_index": float(score_syn_id["c_index"][0]),
@@ -537,6 +576,9 @@ class PerformanceEvaluator(MetricEvaluator):
             "syn_ood.c_index": float(score_syn_ood["c_index"][0]),
             "syn_ood.brier_score": float(score_syn_ood["brier_score"][0]),
         }
+        save_to_file(cache_file, results)
+
+        return results
 
 
 class PerformanceEvaluatorXGB(PerformanceEvaluator):
@@ -694,7 +736,7 @@ class PerformanceEvaluatorMLP(PerformanceEvaluator):
                 "task_type": "regression",
                 "n_static_units_in": len(info["static_features"]),
                 "n_temporal_units_in": len(info["temporal_features"]),
-                "n_temporal_window": len(info["window_len"]),
+                "n_temporal_window": info["window_len"],
                 "output_shape": [info["outcome_len"]],
             }
             return self._evaluate_time_series_performance(

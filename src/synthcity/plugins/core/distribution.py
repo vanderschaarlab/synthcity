@@ -14,6 +14,7 @@ from synthcity.plugins.core.constraints import Constraints
 class Distribution(BaseModel, metaclass=ABCMeta):
     name: str
     data: Optional[pd.Series] = None
+    random_state: int = 0
     # DP parameters
     marginal_distribution: Optional[pd.Series] = None
 
@@ -49,6 +50,8 @@ class Distribution(BaseModel, metaclass=ABCMeta):
         )
 
     def sample_marginal(self, count: int = 1) -> Any:
+        np.random.seed(self.random_state)
+
         if self.marginal_distribution is None:
             return None
 
@@ -121,6 +124,7 @@ class CategoricalDistribution(Distribution):
         return [self.name, self.choices]
 
     def sample(self, count: int = 1) -> Any:
+        np.random.seed(self.random_state)
         msamples = self.sample_marginal(count)
         if msamples is not None:
             return msamples
@@ -195,6 +199,7 @@ class FloatDistribution(Distribution):
         return [self.name, self.low, self.high]
 
     def sample(self, count: int = 1) -> Any:
+        np.random.seed(self.random_state)
         msamples = self.sample_marginal(count)
         if msamples is not None:
             return msamples
@@ -259,6 +264,7 @@ class IntegerDistribution(Distribution):
         return [self.name, self.low, self.high, self.step]
 
     def sample(self, count: int = 1) -> Any:
+        np.random.seed(self.random_state)
         msamples = self.sample_marginal(count)
         if msamples is not None:
             return msamples
