@@ -1,4 +1,5 @@
 # stdlib
+from abc import abstractmethod
 from typing import Any, Dict, Optional, Tuple
 
 # third party
@@ -22,6 +23,7 @@ from synthcity.plugins.core.dataloader import DataLoader
 from synthcity.plugins.core.models.survival_analysis.metrics import (
     nonparametric_distance,
 )
+from synthcity.utils.serialization import load_from_file, save_to_file
 
 
 class StatisticalEvaluator(MetricEvaluator):
@@ -31,6 +33,23 @@ class StatisticalEvaluator(MetricEvaluator):
     @staticmethod
     def type() -> str:
         return "stats"
+
+    @abstractmethod
+    def _evaluate(self, X_gt: DataLoader, X_syn: DataLoader) -> Dict:
+        ...
+
+    @validate_arguments(config=dict(arbitrary_types_allowed=True))
+    def evaluate(self, X_gt: DataLoader, X_syn: DataLoader) -> Dict:
+        cache_file = (
+            self._workspace
+            / f"sc_metric_cache_{self.type()}_{self.name()}_{X_gt.hash()}_{X_syn.hash()}_{self._reduction}.bkp"
+        )
+        if cache_file.exists() and self._use_cache:
+            return load_from_file(cache_file)
+
+        results = self._evaluate(X_gt, X_syn)
+        save_to_file(cache_file, results)
+        return results
 
 
 class InverseKLDivergence(StatisticalEvaluator):
@@ -53,7 +72,7 @@ class InverseKLDivergence(StatisticalEvaluator):
         return "maximize"
 
     @validate_arguments(config=dict(arbitrary_types_allowed=True))
-    def evaluate(self, X_gt: DataLoader, X_syn: DataLoader) -> Dict:
+    def _evaluate(self, X_gt: DataLoader, X_syn: DataLoader) -> Dict:
         freqs = get_frequency(
             X_gt.dataframe(), X_syn.dataframe(), n_histogram_bins=self._n_histogram_bins
         )
@@ -85,7 +104,7 @@ class KolmogorovSmirnovTest(StatisticalEvaluator):
         return "maximize"
 
     @validate_arguments(config=dict(arbitrary_types_allowed=True))
-    def evaluate(self, X_gt: DataLoader, X_syn: DataLoader) -> Dict:
+    def _evaluate(self, X_gt: DataLoader, X_syn: DataLoader) -> Dict:
         res = []
         for col in X_gt.columns:
             statistic, _ = ks_2samp(X_gt[col], X_syn[col])
@@ -117,7 +136,7 @@ class ChiSquaredTest(StatisticalEvaluator):
         return "maximize"
 
     @validate_arguments(config=dict(arbitrary_types_allowed=True))
-    def evaluate(self, X_gt: DataLoader, X_syn: DataLoader) -> Dict:
+    def _evaluate(self, X_gt: DataLoader, X_syn: DataLoader) -> Dict:
         res = []
         freqs = get_frequency(
             X_gt.dataframe(), X_syn.dataframe(), n_histogram_bins=self._n_histogram_bins
@@ -161,7 +180,7 @@ class MaximumMeanDiscrepancy(StatisticalEvaluator):
         return "minimize"
 
     @validate_arguments(config=dict(arbitrary_types_allowed=True))
-    def evaluate(
+    def _evaluate(
         self,
         X_gt: DataLoader,
         X_syn: DataLoader,
@@ -224,7 +243,7 @@ class InverseCDFDistance(StatisticalEvaluator):
         return "minimize"
 
     @validate_arguments(config=dict(arbitrary_types_allowed=True))
-    def evaluate(
+    def _evaluate(
         self,
         X_gt: DataLoader,
         X_syn: DataLoader,
@@ -293,11 +312,10 @@ class JensenShannonDistance(StatisticalEvaluator):
         return stats_, stats_gt, stats_syn
 
     @validate_arguments(config=dict(arbitrary_types_allowed=True))
-    def evaluate(
+    def _evaluate(
         self,
         X_gt: DataLoader,
         X_syn: DataLoader,
-        normalizdde: bool = True,
     ) -> Dict:
         stats_, _, _ = self._evaluate_stats(X_gt, X_syn)
 
@@ -347,7 +365,7 @@ class FeatureCorrelation(StatisticalEvaluator):
         return stats_gt, stats_syn
 
     @validate_arguments(config=dict(arbitrary_types_allowed=True))
-    def evaluate(
+    def _evaluate(
         self,
         X_gt: DataLoader,
         X_syn: DataLoader,
@@ -380,7 +398,7 @@ class WassersteinDistance(StatisticalEvaluator):
         return "minimize"
 
     @validate_arguments(config=dict(arbitrary_types_allowed=True))
-    def evaluate(
+    def _evaluate(
         self,
         X: DataLoader,
         X_syn: DataLoader,
@@ -414,12 +432,29 @@ class PRDCScore(StatisticalEvaluator):
         return "maximize"
 
     @validate_arguments(config=dict(arbitrary_types_allowed=True))
-    def evaluate(
+    def _evaluate(
         self,
         X: DataLoader,
         X_syn: DataLoader,
     ) -> Dict:
-        return self._compute_prdc(X.numpy(), X_syn.numpy())
+        X_ = X.numpy()
+        X_syn_ = X_syn.numpy()
+
+        # Default representation
+        results = self._compute_prdc(X_, X_syn_)
+
+        # OneClass representation
+        emb = "_OC"
+        oneclass_model = self._get_oneclass_model(X_)
+        X_ = self._oneclass_predict(oneclass_model, X_)
+        X_syn_ = self._oneclass_predict(oneclass_model, X_syn_)
+
+        local_results = self._compute_prdc(X_, X_syn_)
+
+        for key in local_results:
+            results[f"{key}{emb}"] = local_results[key]
+
+        return results
 
     def _compute_pairwise_distance(
         self, data_x: np.ndarray, data_y: Optional[np.ndarray] = None
@@ -537,12 +572,14 @@ class AlphaPrecision(StatisticalEvaluator):
         self,
         X: np.ndarray,
         X_syn: np.ndarray,
+        emb_center: Optional[np.ndarray] = None,
     ) -> Tuple:
         assert len(X) == len(
             X_syn
         ), "The real and synthetic data mush have the same length"
 
-        emb_center = np.mean(X, axis=0)
+        if emb_center is None:
+            emb_center = np.mean(X.numpy(), axis=0)
 
         n_steps = 30
         alphas = np.linspace(0, 1, n_steps)
@@ -617,11 +654,19 @@ class AlphaPrecision(StatisticalEvaluator):
         )
 
     @validate_arguments(config=dict(arbitrary_types_allowed=True))
-    def evaluate(
+    def _evaluate(
         self,
         X: DataLoader,
         X_syn: DataLoader,
     ) -> Dict:
+
+        results = {}
+
+        X_ = X.numpy()
+        X_syn_ = X_syn.numpy()
+
+        # Default representation
+        emb_center = np.mean(X.numpy(), axis=0)
 
         (
             alphas,
@@ -630,13 +675,33 @@ class AlphaPrecision(StatisticalEvaluator):
             Delta_precision_alpha,
             Delta_coverage_beta,
             authenticity,
-        ) = self.metrics(X.numpy(), X_syn.numpy())
+        ) = self.metrics(X_, X_syn_, emb_center=emb_center)
 
-        return {
-            "delta_precision_alpha": Delta_precision_alpha,
-            "delta_coverage_beta": Delta_coverage_beta,
-            "authenticity": authenticity,
-        }
+        results["delta_precision_alpha"] = Delta_precision_alpha
+        results["delta_coverage_beta"] = Delta_coverage_beta
+        results["authenticity"] = authenticity
+
+        # OneClass representation
+        emb = "_OC"
+        oneclass_model = self._get_oneclass_model(X_)
+        X_ = self._oneclass_predict(oneclass_model, X_)
+        X_syn_ = self._oneclass_predict(oneclass_model, X_syn_)
+        emb_center = oneclass_model.c.detach().cpu().numpy()
+
+        (
+            alphas,
+            alpha_precision_curve,
+            beta_coverage_curve,
+            Delta_precision_alpha,
+            Delta_coverage_beta,
+            authenticity,
+        ) = self.metrics(X_, X_syn_, emb_center=emb_center)
+
+        results[f"delta_precision_alpha{emb}"] = Delta_precision_alpha
+        results[f"delta_coverage_beta{emb}"] = Delta_coverage_beta
+        results[f"authenticity{emb}"] = authenticity
+
+        return results
 
 
 class SurvivalKMDistance(StatisticalEvaluator):
@@ -652,7 +717,7 @@ class SurvivalKMDistance(StatisticalEvaluator):
         return "minimize"
 
     @validate_arguments(config=dict(arbitrary_types_allowed=True))
-    def evaluate(
+    def _evaluate(
         self,
         X: DataLoader,
         X_syn: DataLoader,

@@ -1,4 +1,5 @@
 # stdlib
+from abc import abstractmethod
 from collections import Counter
 from typing import Any, Dict
 
@@ -13,6 +14,7 @@ from sklearn.neighbors import NearestNeighbors
 # synthcity absolute
 from synthcity.metrics._utils import get_features
 from synthcity.plugins.core.dataloader import DataLoader
+from synthcity.utils.serialization import load_from_file, save_to_file
 
 # synthcity relative
 from .core import MetricEvaluator
@@ -25,6 +27,23 @@ class PrivacyEvaluator(MetricEvaluator):
     @staticmethod
     def type() -> str:
         return "privacy"
+
+    @abstractmethod
+    def _evaluate(self, X_gt: DataLoader, X_syn: DataLoader) -> Dict:
+        ...
+
+    @validate_arguments(config=dict(arbitrary_types_allowed=True))
+    def evaluate(self, X_gt: DataLoader, X_syn: DataLoader) -> Dict:
+        cache_file = (
+            self._workspace
+            / f"sc_metric_cache_{self.type()}_{self.name()}_{X_gt.hash()}_{X_syn.hash()}_{self._reduction}.bkp"
+        )
+        if cache_file.exists() and self._use_cache:
+            return load_from_file(cache_file)
+
+        results = self._evaluate(X_gt, X_syn)
+        save_to_file(cache_file, results)
+        return results
 
 
 class kAnonymization(PrivacyEvaluator):
@@ -58,7 +77,7 @@ class kAnonymization(PrivacyEvaluator):
         return int(np.min(values))
 
     @validate_arguments(config=dict(arbitrary_types_allowed=True))
-    def evaluate(self, X_gt: DataLoader, X_syn: DataLoader) -> Dict:
+    def _evaluate(self, X_gt: DataLoader, X_syn: DataLoader) -> Dict:
         return {
             "gt": self.evaluate_data(X_gt),
             "syn": (self.evaluate_data(X_syn) + 1e-8),
@@ -101,7 +120,7 @@ class lDiversityDistinct(PrivacyEvaluator):
         return int(np.min(values))
 
     @validate_arguments(config=dict(arbitrary_types_allowed=True))
-    def evaluate(self, X_gt: DataLoader, X_syn: DataLoader) -> Dict:
+    def _evaluate(self, X_gt: DataLoader, X_syn: DataLoader) -> Dict:
         return {
             "gt": self.evaluate_data(X_gt),
             "syn": (self.evaluate_data(X_syn) + 1e-8),
@@ -123,7 +142,7 @@ class kMap(PrivacyEvaluator):
         return "maximize"
 
     @validate_arguments(config=dict(arbitrary_types_allowed=True))
-    def evaluate(self, X_gt: DataLoader, X_syn: DataLoader) -> Dict:
+    def _evaluate(self, X_gt: DataLoader, X_syn: DataLoader) -> Dict:
         features = get_features(X_gt, X_gt.sensitive_features)
 
         values = []
@@ -158,7 +177,7 @@ class DeltaPresence(PrivacyEvaluator):
         return "maximize"
 
     @validate_arguments(config=dict(arbitrary_types_allowed=True))
-    def evaluate(self, X_gt: DataLoader, X_syn: DataLoader) -> Dict:
+    def _evaluate(self, X_gt: DataLoader, X_syn: DataLoader) -> Dict:
         features = get_features(X_gt, X_gt.sensitive_features)
 
         values = []
@@ -200,10 +219,23 @@ class IdentifiabilityScore(PrivacyEvaluator):
         return "minimize"
 
     @validate_arguments(config=dict(arbitrary_types_allowed=True))
-    def evaluate(
+    def _evaluate(
         self,
         X_gt: DataLoader,
         X_syn: DataLoader,
+    ) -> Dict:
+        results = self._compute_scores(X_gt, X_syn)
+
+        oc_results = self._compute_scores(X_gt, X_syn, "OC")
+
+        for key in oc_results:
+            results[key] = oc_results[key]
+
+        return results
+
+    @validate_arguments(config=dict(arbitrary_types_allowed=True))
+    def _compute_scores(
+        self, X_gt: DataLoader, X_syn: DataLoader, emb: str = ""
     ) -> Dict:
         """Compare Wasserstein distance between original data and synthetic data.
 
@@ -214,6 +246,16 @@ class IdentifiabilityScore(PrivacyEvaluator):
         Returns:
             WD_value: Wasserstein distance
         """
+        X_gt_ = X_gt.numpy()
+        X_syn_ = X_syn.numpy()
+
+        if emb == "OC":
+            emb = f"_{emb}"
+            oneclass_model = self._get_oneclass_model(X_gt_)
+            X_gt_ = self._oneclass_predict(oneclass_model, X_gt_)
+            X_syn_ = self._oneclass_predict(oneclass_model, X_syn_)
+        else:
+            assert emb == "", emb
 
         # Entropy computation
         def compute_entropy(labels: np.ndarray) -> np.ndarray:
@@ -234,15 +276,15 @@ class IdentifiabilityScore(PrivacyEvaluator):
             W[i] = compute_entropy(X_gt.numpy()[:, i])
 
         # Normalization
-        X_hat = X_gt.numpy().copy()
-        X_syn_hat = X_syn.numpy().copy()
+        X_hat = X_gt_
+        X_syn_hat = X_syn_
 
         eps = 1e-16
         W = np.ones_like(W)
 
         for i in range(x_dim):
-            X_hat[:, i] = X_gt.numpy()[:, i] * 1.0 / (W[i] + eps)
-            X_syn_hat[:, i] = X_syn.numpy()[:, i] * 1.0 / (W[i] + eps)
+            X_hat[:, i] = X_gt_[:, i] * 1.0 / (W[i] + eps)
+            X_syn_hat[:, i] = X_syn_[:, i] * 1.0 / (W[i] + eps)
 
         # r_i computation
         nbrs = NearestNeighbors(n_neighbors=2).fit(X_hat)
@@ -256,4 +298,4 @@ class IdentifiabilityScore(PrivacyEvaluator):
         R_Diff = distance_hat[:, 0] - distance[:, 1]
         identifiability_value = np.sum(R_Diff < 0) / float(no)
 
-        return {"score": identifiability_value}
+        return {f"score{emb}": identifiability_value}

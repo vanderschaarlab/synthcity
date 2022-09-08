@@ -57,6 +57,7 @@ class Plugin(Serializable, metaclass=ABCMeta):
         sampling_patience: int = 500,
         strict: bool = True,
         device: Any = DEVICE,
+        random_state: int = 0,
     ) -> None:
         """
 
@@ -73,6 +74,7 @@ class Plugin(Serializable, metaclass=ABCMeta):
         self.sampling_patience = sampling_patience
         self.strict = strict
         self.device = device
+        self.random_state = random_state
 
     @staticmethod
     @abstractmethod
@@ -127,6 +129,7 @@ class Plugin(Serializable, metaclass=ABCMeta):
         self._schema = Schema(
             data=X,
             sampling_strategy=self.sampling_strategy,
+            random_state=self.random_state,
         )
 
         return self._fit(X, *args, **kwargs)
