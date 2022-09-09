@@ -229,6 +229,17 @@ def test_evaluate_prdc(test_plugin: Plugin) -> None:
     X_gen = test_plugin.generate(1000)
 
     syn_score, rnd_score = _eval_plugin(PRDCScore, Xloader, X_gen)
+    for key in [
+        "precision",
+        "recall",
+        "density",
+        "coverage",
+        "precision_OC",
+        "recall_OC",
+        "density_OC",
+        "coverage_OC",
+    ]:
+        assert key in syn_score
 
     for key in syn_score:
         assert syn_score[key] >= 0
@@ -250,6 +261,17 @@ def test_evaluate_alpha_precision(test_plugin: Plugin) -> None:
     X_gen = test_plugin.generate(len(X))
 
     syn_score, rnd_score = _eval_plugin(AlphaPrecision, Xloader, X_gen)
+
+    for key in [
+        "delta_precision_alpha",
+        "delta_coverage_beta",
+        "authenticity",
+        "delta_precision_alpha_OC",
+        "delta_coverage_beta_OC",
+        "authenticity_OC",
+    ]:
+        assert key in syn_score
+        assert key in rnd_score
 
     assert syn_score["delta_precision_alpha"] > rnd_score["delta_precision_alpha"]
     assert syn_score["authenticity"] < rnd_score["authenticity"]

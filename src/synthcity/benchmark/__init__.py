@@ -6,6 +6,7 @@ from typing import Any, Dict, List, Optional, Tuple
 
 # third party
 import pandas as pd
+import torch
 from IPython.display import display
 from pydantic import validate_arguments
 
@@ -26,6 +27,7 @@ class Benchmarks:
     def evaluate(
         tests: List[Tuple[str, str, dict]],  # test name, plugin name, plugin args
         X: DataLoader,
+        X_test: Optional[DataLoader] = None,
         metrics: Optional[Dict] = None,
         repeats: int = 3,
         synthetic_size: Optional[int] = None,
@@ -85,6 +87,8 @@ class Benchmarks:
 
             for repeat in range(repeats):
                 enable_reproducible_results(repeat)
+                torch.cuda.empty_cache()
+
                 cache_file = (
                     workspace
                     / f"{experiment_name}_{testcase}_{plugin}_{kwargs_hash}_{repeat}.bkp"
@@ -95,7 +99,7 @@ class Benchmarks:
                 )
 
                 log.info(
-                    f"[testcase] Experiment repeat: {repeat} task type: {task_type} Train df hash = {X.train().hash()}"
+                    f"[testcase] Experiment repeat: {repeat} task type: {task_type} Train df hash = {experiment_name}"
                 )
 
                 if generator_file.exists() and synthetic_reuse_if_exists:
@@ -130,10 +134,11 @@ class Benchmarks:
                         save_to_file(cache_file, X_syn)
 
                 evaluation = Metrics.evaluate(
-                    X,
+                    X_test if X_test is not None else X,
                     X_syn,
                     metrics=metrics,
                     task_type=task_type,
+                    workspace=workspace,
                 )
 
                 mean_score = evaluation["mean"].to_dict()

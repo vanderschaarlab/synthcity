@@ -137,7 +137,7 @@ class TabularEncoder(TransformerMixin, BaseEstimator):
         self,
         max_clusters: int = 10,
         weight_threshold: float = 0.005,
-        categorical_limit: int = 15,
+        categorical_limit: int = 20,
         whitelist: list = [],
     ) -> None:
         """Create a data transformer.

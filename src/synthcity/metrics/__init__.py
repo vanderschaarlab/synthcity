@@ -1,4 +1,5 @@
 # stdlib
+from pathlib import Path
 from typing import Dict, List, Optional, Union
 
 # third party
@@ -97,7 +98,10 @@ class Metrics:
         metrics: Optional[Dict] = None,
         task_type: str = "classification",
         random_state: int = 0,
+        workspace: Path = Path("workspace"),
     ) -> pd.DataFrame:
+        workspace.mkdir(parents=True, exist_ok=True)
+
         supported_tasks = [
             "classification",
             "regression",
@@ -146,6 +150,7 @@ class Metrics:
                     n_histogram_bins=n_histogram_bins,
                     task_type=task_type,
                     random_state=random_state,
+                    workspace=workspace,
                 ),
                 X_gt.sample(eval_cnt),
                 X_syn.sample(eval_cnt),

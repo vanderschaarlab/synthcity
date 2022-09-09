@@ -72,10 +72,10 @@ class NormalizingFlowsPlugin(Plugin):
     @validate_arguments(config=dict(arbitrary_types_allowed=True))
     def __init__(
         self,
-        n_iter: int = 500,
+        n_iter: int = 1000,
         n_layers_hidden: int = 1,
         n_units_hidden: int = 100,
-        batch_size: int = 100,
+        batch_size: int = 500,
         num_transform_blocks: int = 1,
         dropout: float = 0.1,
         batch_norm: bool = False,
@@ -189,7 +189,28 @@ class NormalizingFlowsPlugin(Plugin):
         return self
 
     def _generate(self, count: int, syn_schema: Schema, **kwargs: Any) -> pd.DataFrame:
-        return self._safe_generate(self.model.generate, count, syn_schema)
+        def _internal_generate(count : int) -> pd.DataFrame:
+            batch = min(5000, count)
+
+            result = self.model.generate(1)
+            max_retries = count / batch + 1
+
+            count -= 1
+            retries = 0
+
+            while count > 0 and retries < max_retries:
+                batch = min(batch, count)
+                try:
+                    result = pd.concat([result, self.model.generate(batch)], ignore_index = True)
+                except BaseException:
+                    pass
+
+                count -= batch
+                retries += 1
+
+            return result
+
+        return self._safe_generate(_internal_generate, count, syn_schema)
 
 
 plugin = NormalizingFlowsPlugin

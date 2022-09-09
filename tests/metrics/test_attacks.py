@@ -74,7 +74,6 @@ def test_evaluate_sensitive_data_leakage(evaluator_t: Type) -> None:
     assert score < 1
 
     # Random noise
-
     test_plugin = Plugins().get("uniform_sampler")
     test_plugin.fit(Xloader)
     X_gen = test_plugin.generate(2 * len(X))
