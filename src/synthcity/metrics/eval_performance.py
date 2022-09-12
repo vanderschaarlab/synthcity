@@ -7,7 +7,7 @@ import numpy as np
 import pandas as pd
 from pydantic import validate_arguments
 from sklearn.linear_model import LinearRegression, LogisticRegression
-from sklearn.metrics import mean_squared_error
+from sklearn.metrics import r2_score
 from sklearn.model_selection import KFold, StratifiedKFold
 from sklearn.preprocessing import LabelEncoder
 from xgboost import XGBClassifier, XGBRegressor
@@ -125,12 +125,12 @@ class PerformanceEvaluator(MetricEvaluator):
             estimator = model(**model_args).fit(X_train, y_train)
             y_pred = estimator.predict(X_test)
 
-            score = mean_squared_error(y_test, y_pred)
+            score = r2_score(y_test, y_pred)
         except BaseException as e:
             log.error(f"regression evaluation failed {e}")
-            score = 100
+            score = -1
 
-        return 1 / (1 + score)
+        return score
 
     @validate_arguments(config=dict(arbitrary_types_allowed=True))
     def _evaluate_standard_performance(
@@ -377,12 +377,12 @@ class PerformanceEvaluator(MetricEvaluator):
                     static_test, temporal_test, temporal_horizons_test
                 )
 
-                score = mean_squared_error(outcome_test, preds)
+                score = r2_score(outcome_test, preds)
             except BaseException as e:
                 log.error(f"regression evaluation failed {e}")
-                score = 100
+                score = -1
 
-            return 1 / (1 + score)
+            return score
 
         for train_idx, test_idx in skf.split(id_static_gt):
             static_train_data = id_static_gt[train_idx]

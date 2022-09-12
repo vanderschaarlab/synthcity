@@ -5,7 +5,7 @@ from typing import Any, Dict, Tuple
 # third party
 import numpy as np
 import pandas as pd
-from sklearn.metrics import mean_squared_error, roc_auc_score
+from sklearn.metrics import r2_score, roc_auc_score
 from sklearn.model_selection import KFold, StratifiedKFold
 
 
@@ -73,14 +73,14 @@ def evaluate_regression(
         n_folds: int
             Number of cross-validation folds
         metric: str
-            rmse
+            r2
         seed: int
             Random seed
     """
     X = pd.DataFrame(X)
     Y = pd.DataFrame(Y)
 
-    metric = "rmse"
+    metric = "r2"
     metric_ = np.zeros(n_folds)
 
     indx = 0
@@ -98,7 +98,7 @@ def evaluate_regression(
 
         preds = model.predict(X_test)
 
-        metric_[indx] = mean_squared_error(Y_test, preds)
+        metric_[indx] = r2_score(Y_test, preds)
 
         indx += 1
 

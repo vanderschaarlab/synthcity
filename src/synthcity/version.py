@@ -1,4 +1,4 @@
-MAJOR_VERSION = "0.0"
-MINOR_VERSION = "1"
+__version__ = "0.0.2"
 
-__version__ = f"{MAJOR_VERSION}.{MINOR_VERSION}"
+MAJOR_VERSION = "0.0"
+MINOR_VERSION = "2"
