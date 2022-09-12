@@ -26,18 +26,16 @@ def compress_dataset(df: pd.DataFrame, cat_limit: int = 15) -> pd.DataFrame:
             except BaseException:
                 continue
 
-            if score > 0.98:
-                redundant.append(column)
         else:
             model = XGBRegressor()
 
             try:
-                score = evaluate_regression(model, X, y)["clf"]["rmse"][0]
+                score = evaluate_regression(model, X, y)["clf"]["r2"][0]
             except BaseException:
                 continue
 
-            if score < 1e-4:
-                redundant.append(column)
+        if score > 0.95:
+            redundant.append(column)
 
     df = df.drop(columns=redundant)
     covariates = df.columns
