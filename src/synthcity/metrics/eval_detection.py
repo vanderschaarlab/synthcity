@@ -77,7 +77,7 @@ class DetectionEvaluator(MetricEvaluator):
                 train_data.astype(float), train_labels
             )
 
-            test_pred = model.predict(test_data.astype(float))
+            test_pred = model.predict_proba(test_data.astype(float))[:, 1]
 
             score = roc_auc_score(test_labels, test_pred)
             res.append(score)
