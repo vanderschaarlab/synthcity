@@ -443,17 +443,6 @@ class PRDCScore(StatisticalEvaluator):
         # Default representation
         results = self._compute_prdc(X_, X_syn_)
 
-        # OneClass representation
-        emb = "_OC"
-        oneclass_model = self._get_oneclass_model(X_)
-        X_ = self._oneclass_predict(oneclass_model, X_)
-        X_syn_ = self._oneclass_predict(oneclass_model, X_syn_)
-
-        local_results = self._compute_prdc(X_, X_syn_)
-
-        for key in local_results:
-            results[f"{key}{emb}"] = local_results[key]
-
         return results
 
     def _compute_pairwise_distance(
@@ -664,22 +653,6 @@ class AlphaPrecision(StatisticalEvaluator):
 
         X_ = X.numpy()
         X_syn_ = X_syn.numpy()
-
-        # Default representation
-        emb_center = np.mean(X.numpy(), axis=0)
-
-        (
-            alphas,
-            alpha_precision_curve,
-            beta_coverage_curve,
-            Delta_precision_alpha,
-            Delta_coverage_beta,
-            authenticity,
-        ) = self.metrics(X_, X_syn_, emb_center=emb_center)
-
-        results["delta_precision_alpha"] = Delta_precision_alpha
-        results["delta_coverage_beta"] = Delta_coverage_beta
-        results["authenticity"] = authenticity
 
         # OneClass representation
         emb = "_OC"

@@ -234,10 +234,6 @@ def test_evaluate_prdc(test_plugin: Plugin) -> None:
         "recall",
         "density",
         "coverage",
-        "precision_OC",
-        "recall_OC",
-        "density_OC",
-        "coverage_OC",
     ]:
         assert key in syn_score
 
