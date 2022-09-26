@@ -15,6 +15,7 @@ from scipy.special import kl_div
 from scipy.stats import chisquare, ks_2samp
 from sklearn import metrics
 from sklearn.neighbors import NearestNeighbors
+from sklearn.preprocessing import MinMaxScaler
 
 # synthcity absolute
 from synthcity.metrics._utils import get_frequency
@@ -307,7 +308,12 @@ class JensenShannonDistance(StatisticalEvaluator):
                 axis=0,
                 fill_value=0,
             )
+            stats_gt[col] += 1
+            stats_syn[col] += 1
+
             stats_[col] = jensenshannon(stats_gt[col], stats_syn[col])
+            if np.isnan(stats_[col]):
+                print(col, stats_syn[col])
 
         return stats_, stats_gt, stats_syn
 
@@ -403,8 +409,20 @@ class WassersteinDistance(StatisticalEvaluator):
         X: DataLoader,
         X_syn: DataLoader,
     ) -> Dict:
-        X_ten = torch.from_numpy(X.numpy())
-        Xsyn_ten = torch.from_numpy(X_syn.numpy())
+        X_ = X.numpy()
+        X_syn_ = X_syn.numpy()
+        if len(X_) > len(X_syn_):
+            X_syn_ = np.concatenate(
+                [X_syn_, np.zeros((len(X_) - len(X_syn_), X_.shape[1]))]
+            )
+
+        scaler = MinMaxScaler().fit(X_)
+
+        X_ = scaler.transform(X_)
+        X_syn_ = scaler.transform(X_syn_)
+
+        X_ten = torch.from_numpy(X_)
+        Xsyn_ten = torch.from_numpy(X_syn_)
         OT_solver = SamplesLoss(loss="sinkhorn")
 
         return {"joint": OT_solver(X_ten, Xsyn_ten).cpu().numpy()}
@@ -469,7 +487,7 @@ class PRDCScore(StatisticalEvaluator):
         if data_y is None:
             data_y = data_x
 
-        dists = metrics.pairwise_distances(data_x, data_y, metric="euclidean")
+        dists = metrics.pairwise_distances(data_x, data_y)
         return dists
 
     def _get_kth_value(
