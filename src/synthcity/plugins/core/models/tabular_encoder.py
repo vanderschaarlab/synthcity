@@ -11,7 +11,7 @@ from typing import Any, List, Optional, Sequence, Tuple
 import numpy as np
 import pandas as pd
 from pydantic import validate_arguments
-from rdt.transformers import BayesGMMTransformer
+from rdt.transformers import ClusterBasedNormalizer
 from sklearn.base import BaseEstimator, TransformerMixin
 from sklearn.preprocessing import MinMaxScaler, OneHotEncoder
 
@@ -32,7 +32,6 @@ class BinEncoder(TransformerMixin, BaseEstimator):
     def __init__(
         self,
         max_clusters: int = 10,
-        weight_threshold: float = 0.001,
         categorical_limit: int = 15,
     ) -> None:
         """Create a data transformer.
@@ -40,11 +39,8 @@ class BinEncoder(TransformerMixin, BaseEstimator):
         Args:
             max_clusters (int):
                 Maximum number of Gaussian distributions in Bayesian GMM.
-            weight_threshold (float):
-                Weight threshold for a Gaussian distribution to be kept.
         """
         self.max_clusters = max_clusters
-        self.weight_threshold = weight_threshold
         self.categorical_limit = categorical_limit
 
     @validate_arguments(config=dict(arbitrary_types_allowed=True))
@@ -60,8 +56,9 @@ class BinEncoder(TransformerMixin, BaseEstimator):
                 A ``ColumnTransformInfo`` object.
         """
         column_name = data.name
-        gm = BayesGMMTransformer(
-            max_clusters=self.max_clusters, weight_threshold=self.weight_threshold
+        gm = ClusterBasedNormalizer(
+            model_missing_values=True,
+            max_clusters=min(self.max_clusters, len(data)),
         )
         gm.fit(data.to_frame(), [column_name])
         num_components = sum(gm.valid_component_indicator)
@@ -78,7 +75,7 @@ class BinEncoder(TransformerMixin, BaseEstimator):
     ) -> "BinEncoder":
         """Fit the ``BinEncoder``.
 
-        Fits a ``BayesGMMTransformer`` for continuous columns
+        Fits a ``ClusterBasedNormalizer`` for continuous columns
         """
         if discrete_columns is None:
             discrete_columns = []
@@ -136,7 +133,6 @@ class TabularEncoder(TransformerMixin, BaseEstimator):
     def __init__(
         self,
         max_clusters: int = 10,
-        weight_threshold: float = 0.005,
         categorical_limit: int = 20,
         whitelist: list = [],
     ) -> None:
@@ -145,11 +141,8 @@ class TabularEncoder(TransformerMixin, BaseEstimator):
         Args:
             max_clusters (int):
                 Maximum number of Gaussian distributions in Bayesian GMM.
-            weight_threshold (float):
-                Weight threshold for a Gaussian distribution to be kept.
         """
         self.max_clusters = max_clusters
-        self.weight_threshold = weight_threshold
         self.categorical_limit = categorical_limit
         self.whitelist = whitelist
 
@@ -166,8 +159,9 @@ class TabularEncoder(TransformerMixin, BaseEstimator):
                 A ``ColumnTransformInfo`` object.
         """
         column_name = data.name
-        gm = BayesGMMTransformer(
-            max_clusters=self.max_clusters, weight_threshold=self.weight_threshold
+        gm = ClusterBasedNormalizer(
+            model_missing_values=True,
+            max_clusters=min(len(data), self.max_clusters),
         )
         gm.fit(data.to_frame(), [column_name])
         num_components = sum(gm.valid_component_indicator)
@@ -209,7 +203,7 @@ class TabularEncoder(TransformerMixin, BaseEstimator):
     ) -> Any:
         """Fit the ``TabularEncoder``.
 
-        Fits a ``BayesGMMTransformer`` for continuous columns and a
+        Fits a ``ClusterBasedNormalizer`` for continuous columns and a
         ``OneHotEncoder`` for discrete columns.
 
         This step also counts the #columns in matrix data and span information.
@@ -310,7 +304,7 @@ class TabularEncoder(TransformerMixin, BaseEstimator):
     ) -> pd.DataFrame:
         gm = column_transform_info.transform
         data = pd.DataFrame(
-            column_data.values[:, :2], columns=list(gm.get_output_types())
+            column_data.values[:, :2], columns=list(gm.get_output_sdtypes())
         )
         data.iloc[:, 1] = np.argmax(column_data.values[:, 1:], axis=1)
         return gm.reverse_transform(data, [column_transform_info.column_name])
@@ -428,12 +422,10 @@ class TimeSeriesTabularEncoder(TransformerMixin, BaseEstimator):
     def __init__(
         self,
         max_clusters: int = 10,
-        weight_threshold: float = 0.005,
         categorical_limit: int = 15,
         whitelist: list = [],
     ) -> None:
         self.max_clusters = max_clusters
-        self.weight_threshold = weight_threshold
         self.categorical_limit = categorical_limit
         self.whitelist = whitelist
 
@@ -446,7 +438,6 @@ class TimeSeriesTabularEncoder(TransformerMixin, BaseEstimator):
         # Temporal
         self.temporal_encoder = TabularEncoder(
             max_clusters=self.max_clusters,
-            weight_threshold=self.weight_threshold,
             categorical_limit=self.categorical_limit,
             whitelist=self.whitelist,
         )
@@ -477,7 +468,6 @@ class TimeSeriesTabularEncoder(TransformerMixin, BaseEstimator):
         # Static
         self.static_encoder = TabularEncoder(
             max_clusters=self.max_clusters,
-            weight_threshold=self.weight_threshold,
             categorical_limit=self.categorical_limit,
             whitelist=self.whitelist,
         )
@@ -649,7 +639,6 @@ class TimeSeriesBinEncoder(TransformerMixin, BaseEstimator):
     def __init__(
         self,
         max_clusters: int = 10,
-        weight_threshold: float = 0.001,
         categorical_limit: int = 15,
     ) -> None:
         """Create a data transformer.
@@ -657,12 +646,9 @@ class TimeSeriesBinEncoder(TransformerMixin, BaseEstimator):
         Args:
             max_clusters (int):
                 Maximum number of Gaussian distributions in Bayesian GMM.
-            weight_threshold (float):
-                Weight threshold for a Gaussian distribution to be kept.
         """
         self.encoder = BinEncoder(
             max_clusters=max_clusters,
-            weight_threshold=weight_threshold,
             categorical_limit=categorical_limit,
         )
 

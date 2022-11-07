@@ -152,11 +152,8 @@ class Schema(BaseModel):
             np.zeros((count, len(self.features()))), columns=self.features()
         )
 
-        print("sapling using ", self.random_state)
         for feature in self.features():
-            samples[feature] = self.domain[feature].sample(
-                count, random_state=self.random_state
-            )
+            samples[feature] = self.domain[feature].sample(count)
 
         return samples
 
