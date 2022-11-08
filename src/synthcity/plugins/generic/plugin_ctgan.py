@@ -15,6 +15,8 @@ from synthcity.plugins.core.distribution import (
 from synthcity.plugins.core.plugin import Plugin
 from synthcity.plugins.core.schema import Schema
 
+pd.options.mode.chained_assignment = None
+
 
 class CTGANPlugin(Plugin):
     """CTGAN plugin.

@@ -94,6 +94,7 @@ def test_plugin_generate(strategy: str) -> None:
 
 
 @pytest.mark.parametrize("strategy", ["uncensoring", "survival_function"])
+@pytest.mark.slow
 def test_survival_plugin_generate_constraints(strategy: str) -> None:
     test_plugin = plugin(tte_strategy=strategy, **plugins_args)
 

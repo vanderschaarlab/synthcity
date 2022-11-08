@@ -27,7 +27,7 @@ def test_hyperparams() -> None:
     assert len(params.keys()) == 23
 
 
-@pytest.mark.parametrize("emb_rnn_type", ["GRU", "LSTM", "Transformer"])
+@pytest.mark.parametrize("emb_rnn_type", ["Transformer"])
 def test_train_prediction(emb_rnn_type: str) -> None:
     static, temporal, temporal_horizons, outcome = PBCDataloader(as_numpy=True).load()
     T, E = outcome
