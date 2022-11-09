@@ -110,7 +110,6 @@ class SyntheticDetectionXGB(DetectionEvaluator):
         model_args = {
             "n_jobs": -1,
             "verbosity": 0,
-            "use_label_encoder": False,
             "depth": 3,
             "random_state": self._random_state,
         }

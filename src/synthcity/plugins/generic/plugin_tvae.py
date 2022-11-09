@@ -15,6 +15,8 @@ from synthcity.plugins.core.distribution import (
 from synthcity.plugins.core.plugin import Plugin
 from synthcity.plugins.core.schema import Schema
 
+pd.options.mode.chained_assignment = None
+
 
 class TVAEPlugin(Plugin):
     """TVAE plugin based on the VAE-based Deep Learning data synthesizer which was presented at the NeurIPS 2020 conference by the paper titled Modeling Tabular data using Conditional GAN.

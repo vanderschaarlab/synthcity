@@ -1,6 +1,8 @@
 # third party
-from gansfer.utils.compression import compress_dataset
 from sklearn.datasets import load_diabetes
+
+# synthcity absolute
+from synthcity.utils.compression import compress_dataset
 
 
 def test_compression_sanity() -> None:

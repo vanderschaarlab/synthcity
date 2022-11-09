@@ -25,6 +25,7 @@ def test_hyperparams() -> None:
 
 
 @pytest.mark.parametrize("survival_base_learner", ["RNN", "Transformer", "LSTM", "GRU"])
+@pytest.mark.skip
 def test_train_prediction(survival_base_learner: str) -> None:
     static, temporal, temporal_horizons, outcome = PBCDataloader(as_numpy=True).load()
     T, E = outcome

@@ -61,7 +61,21 @@ def verify_serialization(model: Any, generate: bool = False) -> None:
     sanity_check(model, reloaded, generate=generate)
 
 
+def test_serialization_sanity() -> None:
+    generic_data = pd.DataFrame(load_iris()["data"])
+    plugins = Plugins(categories=["generic"])
+
+    # pre-training
+    syn_model = plugins.get("adsgan", strict=False)
+    verify_serialization(syn_model)
+
+    # post-training
+    syn_model.fit(generic_data)
+    verify_serialization(syn_model, generate=True)
+
+
 @pytest.mark.parametrize("plugin", Plugins(categories=["generic"]).list())
+@pytest.mark.slow
 def test_serialization_generic_plugins(plugin: str) -> None:
     generic_data = pd.DataFrame(load_iris()["data"])
     plugins = Plugins(categories=["generic"])

@@ -18,16 +18,15 @@ from synthcity.utils.datasets.time_series.sine import SineDataloader
 
 @pytest.mark.parametrize("encoder", [TabularEncoder, TimeSeriesTabularEncoder])
 def test_encoder_sanity(encoder: Any) -> None:
-    net = encoder(max_clusters=4, weight_threshold=0.1)
+    net = encoder(max_clusters=4)
 
     assert net.max_clusters == 4
-    assert net.weight_threshold == 0.1
 
 
 @pytest.mark.parametrize("max_clusters", [4, 10])
 def test_encoder_fit_no_discrete_param(max_clusters: int) -> None:
     X, _ = load_diabetes(return_X_y=True, as_frame=True)
-    net = TabularEncoder(max_clusters=max_clusters, weight_threshold=0.1)
+    net = TabularEncoder(max_clusters=max_clusters)
 
     net.fit(X)
 
@@ -46,7 +45,7 @@ def test_encoder_fit_no_discrete_param(max_clusters: int) -> None:
 @pytest.mark.parametrize("max_clusters", [4, 10])
 def test_encoder_fit_discrete_param(max_clusters: int) -> None:
     X, _ = load_diabetes(return_X_y=True, as_frame=True)
-    net = TabularEncoder(max_clusters=max_clusters, weight_threshold=0.1)
+    net = TabularEncoder(max_clusters=max_clusters)
 
     net.fit(X, discrete_columns=["sex"])
 
@@ -65,7 +64,7 @@ def test_encoder_fit_discrete_param(max_clusters: int) -> None:
 @pytest.mark.parametrize("max_clusters", [4, 10])
 def test_encoder_fit_transform(max_clusters: int) -> None:
     X, _ = load_diabetes(return_X_y=True, as_frame=True)
-    net = TabularEncoder(max_clusters=max_clusters, weight_threshold=0.1)
+    net = TabularEncoder(max_clusters=max_clusters)
 
     encoded = net.fit_transform(X)
     layout = net.layout()
@@ -90,7 +89,7 @@ def test_encoder_fit_transform(max_clusters: int) -> None:
 @pytest.mark.parametrize("max_clusters", [20, 50])
 def test_encoder_inverse_transform(max_clusters: int) -> None:
     X, _ = load_diabetes(return_X_y=True, as_frame=True)
-    net = TabularEncoder(max_clusters=max_clusters, weight_threshold=0.1)
+    net = TabularEncoder(max_clusters=max_clusters)
 
     net.fit(X)
 

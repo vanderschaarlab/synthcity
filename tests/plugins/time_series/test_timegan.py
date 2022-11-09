@@ -158,6 +158,7 @@ def test_sample_hyperparams() -> None:
         assert plugin(**args) is not None
 
 
+@pytest.mark.slow
 def test_timegan_plugin_generate_survival() -> None:
     (
         static_surv,
@@ -196,6 +197,7 @@ def test_timegan_plugin_generate_survival() -> None:
 @pytest.mark.parametrize(
     "sampling_strategy", ["none", "imbalanced_censoring", "imbalanced_time_censoring"]
 )
+@pytest.mark.slow
 def test_plugin_generate_survival_sampler(sampling_strategy: str) -> None:
     (
         static_surv,

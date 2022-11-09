@@ -68,6 +68,7 @@ def test_plugin_fit() -> None:
         GoogleStocksDataloader(),
     ],
 )
+@pytest.mark.slow
 def test_plugin_generate(source: Any) -> None:
     static_data, temporal_data, temporal_horizons, outcome = source.load()
     data = TimeSeriesDataLoader(
@@ -94,6 +95,7 @@ def test_sample_hyperparams() -> None:
         assert plugin(**args) is not None
 
 
+@pytest.mark.slow
 def test_plugin_generate_survival() -> None:
     (
         static_surv,

@@ -28,6 +28,7 @@ def test_hyperparams() -> None:
 
 
 @pytest.mark.parametrize("rnn_type", ["GRU", "LSTM", "Transformer"])
+@pytest.mark.slow
 def test_train_prediction(rnn_type: str) -> None:
     static, temporal, temporal_horizons, outcome = PBCDataloader(as_numpy=True).load()
     T, E = outcome

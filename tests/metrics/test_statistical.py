@@ -259,9 +259,6 @@ def test_evaluate_alpha_precision(test_plugin: Plugin) -> None:
     syn_score, rnd_score = _eval_plugin(AlphaPrecision, Xloader, X_gen)
 
     for key in [
-        "delta_precision_alpha",
-        "delta_coverage_beta",
-        "authenticity",
         "delta_precision_alpha_OC",
         "delta_coverage_beta_OC",
         "authenticity_OC",
@@ -269,8 +266,8 @@ def test_evaluate_alpha_precision(test_plugin: Plugin) -> None:
         assert key in syn_score
         assert key in rnd_score
 
-    assert syn_score["delta_precision_alpha"] > rnd_score["delta_precision_alpha"]
-    assert syn_score["authenticity"] < rnd_score["authenticity"]
+    assert syn_score["delta_precision_alpha_OC"] > rnd_score["delta_precision_alpha_OC"]
+    assert syn_score["authenticity_OC"] < rnd_score["authenticity_OC"]
 
     assert AlphaPrecision.name() == "alpha_precision"
     assert AlphaPrecision.type() == "stats"
