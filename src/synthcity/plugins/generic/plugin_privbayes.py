@@ -4,31 +4,63 @@ Adapted from:
     - https://github.com/DataResponsibly/DataSynthesizer
 """
 # stdlib
-import random
 from collections import namedtuple
-from typing import Any, Dict, List, Set, Tuple
+from itertools import combinations, product
+from math import ceil
+from typing import Any, List, Tuple
 
 # third party
 import numpy as np
 import pandas as pd
-from diffprivlib.mechanisms import Exponential
+from pgmpy.factors.discrete.CPD import TabularCPD
+from pgmpy.models import BayesianNetwork
+from pgmpy.sampling import BayesianModelSampling
 from pydantic import validate_arguments
-from thomas.core import BayesianNetwork
+from scipy.optimize import fsolve
+from sklearn.cluster import KMeans
+from sklearn.metrics import normalized_mutual_info_score
+from sklearn.preprocessing import LabelEncoder
 
 # synthcity absolute
+import synthcity.logger as log
 from synthcity.plugins.core.dataloader import DataLoader
 from synthcity.plugins.core.distribution import Distribution
 from synthcity.plugins.core.plugin import Plugin
 from synthcity.plugins.core.schema import Schema
 from synthcity.plugins.core.serializable import Serializable
-from synthcity.utils.dp import dp_conditional_distribution
-from synthcity.utils.statistics import (
-    cardinality,
-    compute_distribution,
-    joint_distribution,
-)
+from synthcity.utils.reproducibility import enable_reproducible_results
 
-APPair = namedtuple("APPair", ["attribute", "parents"])
+network_edge = namedtuple("network_edge", ["feature", "parents"])
+
+
+def usefulness_minus_target(
+    k: int,
+    num_attributes: int,
+    num_tuples: int,
+    target_usefulness: int = 5,
+    epsilon: float = 0.1,
+) -> int:
+    """Usefulness function in PrivBayes.
+
+    Parameters
+    ----------
+    k : int
+        Max number of degree in Bayesian networks construction
+    num_attributes : int
+        Number of attributes in dataset.
+    num_tuples : int
+        Number of tuples in dataset.
+    target_usefulness : int or float
+    epsilon : float
+        Parameter of differential privacy.
+    """
+    if k == num_attributes:
+        usefulness = target_usefulness
+    else:
+        usefulness = (
+            num_tuples * epsilon / ((num_attributes - k) * (2 ** (k + 3)))
+        )  # PrivBayes Lemma 3
+    return usefulness - target_usefulness
 
 
 class PrivBayes(Serializable):
@@ -46,268 +78,415 @@ class PrivBayes(Serializable):
     def __init__(
         self,
         epsilon: float = 1.0,
-        theta_usefulness: float = 4,
-        epsilon_split: float = 0.3,
-        score_function: str = "R",
+        K: int = 0,
+        n_bins: int = 100,
+        mi_thresh: float = 0.1,
+        target_usefulness: int = 5,
     ) -> None:
         super().__init__()
-        self.epsilon = epsilon
-        self.theta_usefulness = theta_usefulness
-        self.epsilon_split = epsilon_split  # also called Beta in paper
-        self.score_function = score_function
+        self.epsilon = (
+            epsilon / 2
+        )  # PrivBayes satisfies 2eps-differential privacy, eps1 + eps2 in the paper
+        self.K = K
+        self.n_bins = n_bins
+        self.target_usefulness = target_usefulness
+        self.mi_thresh = mi_thresh
 
     @validate_arguments(config=dict(arbitrary_types_allowed=True))
     def fit(self, data: pd.DataFrame) -> Any:
-        self.columns_ = list(data.columns)
-        self.n_records_fit_ = data.shape[0]
-        self.dtypes_fit_ = data.dtypes
+        self.n_columns = len(data.columns)
+        self.n_records_fit = len(data)
 
-        self._greedy_bayes(data)
-        cpt_ = self._compute_conditional_distributions(data)
-        self.model_ = BayesianNetwork.from_CPTs(
-            "PrivBayesNetwork", cpt_.values()
-        ).as_dict()
-        return self
+        # encode dataset
+        data, self.encoders = self._encode(data)
 
-    def sample(self, n_records: int) -> pd.DataFrame:
-        return self._generate_data(n_records)
+        # learn the DAG
+        self.dag = self._greedy_bayes(data)
 
-    @validate_arguments(config=dict(arbitrary_types_allowed=True))
-    def _greedy_bayes(self, data: pd.DataFrame) -> Any:
-        nodes, nodes_selected = self._init_network(data)
+        self.display_network()
 
-        # normally len(nodes) - 1, unless user initialized part of the network
-        self._n_nodes_dp_computed = len(nodes) - len(nodes_selected)
+        # learn the conditional probabilities
+        cpds = self._compute_noisy_conditional_distributions(data)
 
-        for i in range(len(nodes_selected), len(nodes)):
-            nodes_remaining = nodes - nodes_selected
+        # create the network
+        self.network = BayesianNetwork()
 
-            # select ap_pair candidates
-            ap_pairs = []
-            for node in nodes_remaining:
-                max_domain_size = self._max_domain_size(data, node)
-                max_parent_sets = self._max_parent_sets(
-                    data, nodes_selected, max_domain_size
-                )
+        for child, parents in self.dag:
+            self.network.add_node(child)
+            for parent in parents:
+                self.network.add_edge(parent, child)
+        self.network.add_cpds(*cpds)
 
-                # empty set - domain size of node violates theta_usefulness
-                if len(max_parent_sets) == 0 or (
-                    len(max_parent_sets) == 1 and len(max_parent_sets[0]) == 1
-                ):
-                    ap_pairs.append(APPair(node, parents=[]))
-                else:
-                    ap_pairs.extend(
-                        [APPair(node, parents=[p]) for p in max_parent_sets]
-                    )
+        log.info(f"[PrivBayes] network is valid = {self.network.check_model()}")
 
-            scores = self._compute_scores(data, ap_pairs)
-            sampled_pair = self._exponential_mechanism(ap_pairs, scores)
+        # create the model
+        self.model = BayesianModelSampling(self.network)
 
-            nodes_selected.add(sampled_pair.attribute)
-            self.network_.append(sampled_pair)
         return self
 
     @validate_arguments(config=dict(arbitrary_types_allowed=True))
-    def _max_domain_size(self, data: pd.DataFrame, node: str) -> int:
-        """Computes the maximum domain size a node can have to satisfy theta-usefulness"""
-        node_cardinality = cardinality(data[node])
-        max_domain_size = (
-            self.n_records_fit_ * (1 - self.epsilon_split) * self.epsilon
-        ) / (2 * len(self.columns_) * self.theta_usefulness * node_cardinality)
-        return max_domain_size
+    def sample(self, count: int) -> pd.DataFrame:
+        samples = self.model.forward_sample(size=count, show_progress=False)
+
+        return self._decode(samples)
+
+    def _encode(self, data: pd.DataFrame) -> Any:
+        data = data.copy()
+        encoders = {}
+
+        for col in data.columns:
+            if len(data[col].unique()) < self.n_bins:
+                encoders[col] = np.sort(data[col].unique())
+            else:
+                col_data = pd.cut(data[col], bins=self.n_bins)
+                encoders[col] = LabelEncoder().fit(col_data)
+                data[col] = encoders[col].transform(col_data)
+
+        return data, encoders
+
+    def _decode(self, data: pd.DataFrame) -> pd.DataFrame:
+        for col in data.columns:
+            if col not in self.encoders:
+                continue
+            if isinstance(self.encoders[col], LabelEncoder):
+                inversed = self.encoders[col].inverse_transform(data[col])
+                output = []
+                for interval in inversed:
+                    output.append(np.random.uniform(interval.left, interval.right))
+
+                data[col] = output
+            elif isinstance(self.encoders[col], np.ndarray):
+                assert data[col].max() < len(self.encoders[col])
+                data[col] = self.encoders[col][data[col]]
+            else:
+                raise RuntimeError(f"Invalid encoder {self.encoders[col]}")
+
+        return data
 
     @validate_arguments(config=dict(arbitrary_types_allowed=True))
-    def _max_parent_sets(
-        self, data: pd.DataFrame, v: Set, max_domain_size: float
-    ) -> List[Set]:
-        """Refer to algorithm 5 in paper - max parent set is 1) theta-useful and 2) maximal."""
-        if max_domain_size < 1:
-            return []
-        if len(v) == 0:
-            return []
+    def _greedy_bayes(self, data: pd.DataFrame) -> List:
+        """Construct a Bayesian Network (BN) using greedy algorithm."""
+        # prepare K
+        if self.K == 0:
+            self.K = self._compute_K(data)
 
-        x = np.random.choice(tuple(v))
-        x_domain_size = cardinality(data[x])
-        x = {x}
+        log.info(f"[PrivBayes] Using K = {self.K}")
+        # prepare data
+        data.columns = data.columns.astype(str)
+        num_tuples, num_attributes = data.shape
 
-        v_without_x = v - x
-
-        parent_sets1 = self._max_parent_sets(data, v_without_x, max_domain_size)
-        parent_sets2 = self._max_parent_sets(
-            data, v_without_x, max_domain_size / x_domain_size
-        )
-
-        for z in parent_sets2:
-            if z in parent_sets1:
-                parent_sets1.remove(z)
-            parent_sets1.append(z.union(x))
-        return parent_sets1
-
-    def _init_network(self, X: pd.DataFrame) -> Tuple[Set, Set]:
-        self._binary_columns = [c for c in X.columns if X[c].unique().size <= 2]
-        nodes = set(X.columns)
-
-        # if set_network is not called we start with a random first node
-        self.network_ = []
+        nodes = set(data.columns)
         nodes_selected = set()
 
-        root = np.random.choice(tuple(nodes))
-        self.network_.append(APPair(attribute=root, parents=[]))
+        # Init network
+        network = []
+        root = np.random.choice(data.columns)
+        network.append(network_edge(feature=root, parents=[]))
         nodes_selected.add(root)
-        return nodes, nodes_selected
 
-    def _compute_scores(self, data: pd.DataFrame, ap_pairs: list) -> list:
-        """Compute score for all ap_pairs"""
-        return [
-            self.mi_score(data, [pair.attribute], pair.parents) for pair in ap_pairs
-        ]
+        nodes_remaining = nodes - nodes_selected
 
-    def _score_sensitivity(self) -> float:
-        """Checks input score function and sets sensitivity"""
-        if self.score_function.upper() not in ["R", "MI"]:
-            raise ValueError("Score function must be 'R' or 'MI'")
+        while len(nodes_remaining) > 0:
+            parents_pair_list = []
+            mutual_info_list = []
 
-        if self.score_function.upper() == "R":
-            return (3 / self.n_records_fit_) + (2 / self.n_records_fit_**2)
+            num_parents = min(len(nodes_selected), self.K)
+            for candidate, split in product(
+                nodes_remaining, range(len(nodes_selected) - num_parents + 1)
+            ):
+                (
+                    candidate_pairs,
+                    candidate_mi,
+                ) = self._evaluate_parent_mutual_information(
+                    data,
+                    candidate=candidate,
+                    parent_candidates=nodes_selected,
+                    parent_limit=num_parents,
+                    split=split,
+                )
+                parents_pair_list.extend(candidate_pairs)
+                mutual_info_list.extend(candidate_mi)
 
-        # note: for simplicity we assume that all APPairs are non-binary, which is the upperbound of MI sensitivity
-        elif self.score_function.upper() == "MI":
-            return (2 / self.n_records_fit_) * np.log((self.n_records_fit_ + 1) / 2) + (
-                ((self.n_records_fit_ - 1) / self.n_records_fit_)
-                * np.log((self.n_records_fit_ + 1) / (self.n_records_fit_ - 1))
+            sampling_distribution = self._exponential_mechanism(
+                data,
+                parents_pair_list,
+                mutual_info_list,
+            )
+            candidate_idx = np.random.choice(
+                list(range(len(mutual_info_list))), p=sampling_distribution
+            )
+            sampled_pair = parents_pair_list[candidate_idx]
+            if self.mi_thresh >= mutual_info_list[candidate_idx]:
+                log.info("[PrivBayes] Weak MI score, using empty parent")
+                sampled_pair = network_edge(sampled_pair.feature, parents=[])
+
+            log.info(
+                f"[PrivBayes] Sampled {sampled_pair} with score {mutual_info_list[candidate_idx]}"
             )
 
-        raise RuntimeError(f"Invalid score function {self.score_function}")
+            nodes_selected.add(sampled_pair.feature)
+            network.append(sampled_pair)
 
-    @validate_arguments(config=dict(arbitrary_types_allowed=True))
-    def _exponential_mechanism(self, ap_pairs: list, scores: list) -> APPair:
-        """select APPair with exponential mechanism"""
-        local_epsilon = self.epsilon * self.epsilon_split / self._n_nodes_dp_computed
-        dp_mech = Exponential(
-            epsilon=local_epsilon,
-            sensitivity=self._score_sensitivity(),
-            utility=list(scores),
-            candidates=ap_pairs,
-        )
-        sampled_pair = dp_mech.randomise()
-        return sampled_pair
+            nodes_remaining = nodes - nodes_selected
+        return network
 
-    @validate_arguments(config=dict(arbitrary_types_allowed=True))
-    def _compute_conditional_distributions(self, data: pd.DataFrame) -> Any:
-        cpt_ = dict()
+    def _laplace_noise_parameter(self, k: int, num_attributes: int) -> float:
+        """The noises injected into conditional distributions.
 
-        local_epsilon = self.epsilon * (1 - self.epsilon_split) / len(self.columns_)
-
-        for idx, pair in enumerate(self.network_):
-            if len(pair.parents) == 0:
-                attributes = [pair.attribute]
-            else:
-                attributes = [*pair.parents, pair.attribute]
-
-            dp_cpt = dp_conditional_distribution(
-                data[attributes], epsilon=local_epsilon
-            )
-            cpt_[pair.attribute] = dp_cpt
-        return cpt_
-
-    @validate_arguments(config=dict(arbitrary_types_allowed=True))
-    def _generate_data(self, n_records: int) -> np.ndarray:
-        data_synth = np.empty([n_records, len(self.columns_)], dtype=object)
-
-        for i in range(n_records):
-            record = self._sample_record()
-            data_synth[i] = list(record.values())
-
-        # numpy.array to pandas.DataFrame with original column ordering
-        data_synth = pd.DataFrame(
-            data_synth, columns=[c.attribute for c in self.network_]
-        )
-        return data_synth
-
-    @validate_arguments(config=dict(arbitrary_types_allowed=True))
-    def _sample_record(self) -> Dict:
-        """samples a value column for column by conditioning for parents"""
-        record: Dict[str, list] = {}
-        for col_idx, pair in enumerate(self.network_):
-            node = BayesianNetwork.from_dict(self.model_)[pair.attribute]
-            node_cpt = node.cpt
-            node_states = node.states
-
-            if node.conditioning:
-                parent_values = [record[p] for p in node.conditioning]
-                node_probs = node_cpt[tuple(parent_values)]
-
-            else:
-                node_probs = node_cpt.values
-            # use random.choices over np.random.choice as np coerces, e.g. sample['nan', 1, 3.0] -> '1' (int to string)
-            sampled_node_value = random.choices(node_states, weights=node_probs, k=1)[
-                0
-            ]  # returns list
-
-            record[node.name] = sampled_node_value
-        return record
-
-    @staticmethod
-    def mi_score(data: pd.DataFrame, columns_a: list, columns_b: list) -> float:
-        if len(columns_b) == 0 or len(columns_a) == 0:
-            return 0
-        prob_a = compute_distribution(data[columns_a])
-        prob_b = compute_distribution(data[columns_b])
-        prob_joint = compute_distribution(data[columns_a + columns_b])
-
-        # todo: pull-request thomas to add option to normalize to remove 0's
-        # align
-        prob_div = prob_joint / (prob_b * prob_a)
-        prob_joint, prob_div = prob_joint.extend_and_reorder(prob_joint, prob_div)
-
-        # remove zeros as this will result in issues with log
-        prob_joint = prob_joint.values[prob_joint.values != 0]
-        prob_div = prob_div.values[prob_div.values != 0]
-        mi = np.sum(prob_joint * np.log(prob_div))
-        # mi = np.sum(p_nodeparents.values * np.log(p_nodeparents / (p_parents * p_node)))
-        return mi
-
-    @staticmethod
-    def r_score(data: pd.DataFrame, columns_a: list, columns_b: list) -> float:
-        """An alternative score function to mutual information with lower sensitivity - can be used on non-binary domains.
-        Relies on the L1 distance from a joint distribution to a joint distributions that minimizes mutual information.
-        Refer to Lemma 5.2
+        Note that these noises are over counts, instead of the probability distributions in PrivBayes Algorithm 1.
         """
-        if len(columns_b) == 0:
-            return 0
-        # compute distribution that minimizes mutual information
-        prob_a = compute_distribution(data[columns_a])
-        prob_b = compute_distribution(data[columns_b])
-        prob_independent = prob_b * prob_a
+        return (num_attributes - k) / self.epsilon
 
-        # compute joint distribution
-        prob_joint = joint_distribution(data[columns_a + columns_b])
-
-        # substract not part of thomas - need to ensure alignment
-        prob_joint, prob_independent = prob_joint.extend_and_reorder(
-            prob_joint, prob_independent
+    def _get_noisy_distribution_of_attributes(
+        self, data: pd.DataFrame, child: str, parents: list
+    ) -> pd.DataFrame:
+        # count attribute pairs
+        attributes = parents + [child]
+        data = data.copy().loc[:, attributes]
+        data = data.sort_values(attributes)
+        stats = (
+            data.groupby(parents + [child])
+            .size()
+            .reset_index()
+            .rename(columns={0: "count"})
         )
-        l1_distance = 0.5 * np.sum(np.abs(prob_joint.values - prob_independent.values))
-        return l1_distance
+
+        # add noise
+        k = len(attributes) - 1
+        num_tuples, num_attributes = data.shape
+        noise_para = self._laplace_noise_parameter(k, num_attributes)
+        laplace_noises = np.random.laplace(0, scale=noise_para, size=stats.index.size)
+
+        stats["count"] += laplace_noises
+        stats.loc[stats["count"] < 0, "count"] = 0
+
+        if len(parents) > 0:
+            output = pd.crosstab(
+                stats[child],
+                stats[parents].T.values,
+                values=stats["count"],
+                aggfunc="sum",
+                dropna=False,
+            )
+            output = output.fillna(0)
+            output += 1
+
+            assert len(output) == data[child].nunique()
+            assert output.shape[1] == data[parents].nunique().prod()
+
+            output = output.values
+            return output / (output.sum(axis=0) + 1e-8)
+        else:
+            output = stats[["count"]].values
+            return output / (output.sum() + 1e-8)
+
+    @validate_arguments(config=dict(arbitrary_types_allowed=True))
+    def _compute_noisy_conditional_distributions(self, data: pd.DataFrame) -> Any:
+        """See more in Algorithm 1 in PrivBayes."""
+        conditional_distributions = []
+
+        card = data.nunique()
+
+        # generate noisy distribution of root attribute.
+        for idx, (child, parents) in enumerate(self.dag):
+            node_values = self._get_noisy_distribution_of_attributes(
+                data, child, parents
+            )  # P(Xi, Πi)
+
+            assert np.isnan(node_values).sum() == 0
+
+            node_cpd = TabularCPD(
+                variable=child,
+                variable_card=card[child],
+                values=node_values,
+                evidence=parents,
+                evidence_card=card[parents].values,
+            )
+            conditional_distributions.append(node_cpd)
+
+        return conditional_distributions
+
+    def _normalize_given_distribution(self, frequencies: List[float]) -> np.ndarray:
+        distribution = np.array(frequencies, dtype=float)
+        distribution = distribution.clip(0)  # replace negative values with 0
+        summation = distribution.sum()
+        if summation <= 0:
+            return np.full_like(distribution, 1 / distribution.size)
+
+        if np.isinf(summation):
+            return self._normalize_given_distribution(np.isinf(distribution))
+        else:
+            return distribution / summation
+
+    def _calculate_sensitivity(
+        self, data: pd.DataFrame, child: str, parents: List[str]
+    ) -> float:
+        """Sensitivity function for Bayesian network construction. PrivBayes Lemma 4.1"""
+        num_tuples = len(data)
+        attr_to_is_binary = {attr: data[attr].unique().size <= 2 for attr in data}
+
+        if attr_to_is_binary[child] or (
+            len(parents) == 1 and attr_to_is_binary[parents[0]]
+        ):
+            a = np.log(num_tuples) / num_tuples
+            b = (num_tuples - 1) / num_tuples
+            b_inv = num_tuples / (num_tuples - 1)
+            return a + b * np.log(b_inv)
+        else:
+            a = (2 / num_tuples) * np.log((num_tuples + 1) / 2)
+            b = (1 - 1 / num_tuples) * np.log(1 + 2 / (num_tuples - 1))
+            return a + b
+
+    def _calculate_delta(self, data: pd.DataFrame, sensitivity: float) -> float:
+        """Computing delta, which is a factor when applying differential privacy.
+
+        More info is in PrivBayes Section 4.2 "A First-Cut Solution".
+        """
+        num_attributes = len(data.columns)
+        return (num_attributes - 1) * sensitivity / self.epsilon
+
+    @validate_arguments(config=dict(arbitrary_types_allowed=True))
+    def _evaluate_parent_mutual_information(
+        self,
+        data: pd.DataFrame,
+        candidate: str,
+        parent_candidates: List[str],
+        parent_limit: int,
+        split: int,
+    ) -> Tuple[List[network_edge], List[float]]:
+
+        assert candidate not in parent_candidates
+        if split + parent_limit > len(parent_candidates):
+            return [], []
+
+        parents_pair_list = []
+        mutual_info_list = []
+        for other_parents in combinations(parent_candidates[split:], parent_limit):
+            parents = list(other_parents)
+            parents_pair_list.append(network_edge(candidate, parents=parents))
+            score = self.mutual_info_score(data, parents, candidate)
+            mutual_info_list.append(score)
+
+        return parents_pair_list, mutual_info_list
+
+    @validate_arguments(config=dict(arbitrary_types_allowed=True))
+    def mutual_info_score(
+        self, data: pd.DataFrame, parents: List[str], candidate: str
+    ) -> float:
+        """Cluster the source columns, and compute the mutual information between the target and the clusters."""
+        if len(parents) == 0:
+            return 0
+
+        src = data[parents]
+        src_cluster = KMeans(n_clusters=self.n_bins).fit(src)
+
+        src_bins = src_cluster.predict(src)
+        target = data[candidate]
+        target_bins, _ = pd.cut(target, bins=self.n_bins, retbins=True)
+        target_bins = LabelEncoder().fit_transform(target_bins)
+
+        return normalized_mutual_info_score(src_bins, target_bins)
+
+    @validate_arguments(config=dict(arbitrary_types_allowed=True))
+    def _exponential_mechanism(
+        self,
+        data: pd.DataFrame,
+        parents_pair_list: List[network_edge],
+        mutual_info_list: List[float],
+    ) -> List:
+        """Applied in Exponential Mechanism to sample outcomes."""
+        delta_array = []
+        for (candidate, parents) in parents_pair_list:
+            sensitivity = self._calculate_sensitivity(data, candidate, parents)
+            delta = self._calculate_delta(data, sensitivity)
+            delta_array.append(delta)
+
+        mi_array = np.array(mutual_info_list) / (2 * np.array(delta_array))
+        mi_array = np.exp(mi_array)
+        mi_array = self._normalize_given_distribution(mi_array)
+        return mi_array
+
+    def _compute_K(self, data: pd.DataFrame) -> int:
+        """Calculate the maximum degree when constructing Bayesian networks. See PrivBayes Section 4.5."""
+        default_k = 3
+        num_tuples, num_attributes = data.shape
+
+        initial_usefulness = usefulness_minus_target(
+            default_k, num_attributes, num_tuples, 0, self.epsilon
+        )
+        log.info(
+            f"[PrivBayes] initial_usefulness = {initial_usefulness} self.target_usefulness = {self.target_usefulness}"
+        )
+        if initial_usefulness > self.target_usefulness:
+            return default_k
+
+        arguments = (num_attributes, num_tuples, self.target_usefulness, self.epsilon)
+        try:
+            ans = fsolve(
+                usefulness_minus_target,
+                np.array([int(num_attributes / 2)]),
+                args=arguments,
+            )[0]
+            ans = ceil(ans)
+        except RuntimeWarning:
+            ans = default_k
+        if ans < 1 or ans > num_attributes:
+            ans = default_k
+        return ans
+
+    def display_network(self) -> None:
+        length = 0
+        for child, _ in self.dag:
+            if len(child) > length:
+                length = len(child)
+
+        log.info("Constructed Bayesian network:")
+        for child, parents in self.dag:
+            log.info(
+                "    {0:{width}} has parents {1}.".format(child, parents, width=length)
+            )
 
 
 class PrivBayesPlugin(Plugin):
     """PrivBayes algorithm.
 
-    Paper: PrivBayes: Private Data Release via Bayesian Networks. (2017), Zhang J, Cormode G, Procopiuc CM, Srivastava D, Xiao X."""
+        Paper: PrivBayes: Private Data Release via Bayesian Networks. (2017), Zhang J, Cormode G, Procopiuc CM, Srivastava D, Xiao X.
+
+        Args:
+            epsilon: float
+                Differential privacy parameter
+            K:
+                Maximum number of parents for a node
+            n_bins: int
+                Number of bins for encoding the features
+            mi_thresh: int
+                Mutual information lower threshold. If the current score is lower, the [] parents are used.
+            target_usefulness: int
+                Def 4.7 in the paper: A noisy distribution is θ-useful if the ratio of average scale of
+    information to average scale of noise is no less than θ. 5-useful is the recommended value.
+            random_state: int
+                Random seed
+    """
 
     def __init__(
         self,
-        dp_epsilon: float = 1.0,
-        theta_usefulness: float = 4,
-        epsilon_split: float = 0.3,
+        epsilon: float = 1.0,
+        K: int = 0,
+        n_bins: int = 100,
+        mi_thresh: float = 0.1,
+        target_usefulness: int = 5,
+        random_state: int = 0,
         **kwargs: Any,
     ) -> None:
         super().__init__(**kwargs)
 
-        self.dp_epsilon = dp_epsilon
-        self.theta_usefulness = theta_usefulness
-        self.epsilon_split = epsilon_split
+        enable_reproducible_results(random_state)
+
+        self.epsilon = epsilon
+        self.K = K
+        self.n_bins = n_bins
+        self.mi_thresh = mi_thresh
+        self.target_usefulness = target_usefulness
 
     @staticmethod
     def name() -> str:
@@ -323,10 +502,11 @@ class PrivBayesPlugin(Plugin):
 
     def _fit(self, X: DataLoader, *args: Any, **kwargs: Any) -> "PrivBayesPlugin":
         self.model = PrivBayes(
-            epsilon=self.dp_epsilon,
-            theta_usefulness=self.theta_usefulness,
-            epsilon_split=self.epsilon_split,
-            score_function="R",
+            epsilon=self.epsilon,
+            K=self.K,
+            n_bins=self.n_bins,
+            mi_thresh=self.mi_thresh,
+            target_usefulness=self.target_usefulness,
         )
         self.model.fit(X.dataframe())
         return self

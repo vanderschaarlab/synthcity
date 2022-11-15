@@ -2,7 +2,6 @@
 import pandas as pd
 import pytest
 from generic_helpers import generate_fixtures
-from sklearn.datasets import load_iris
 
 # synthcity absolute
 from synthcity.plugins import Plugin
@@ -11,6 +10,15 @@ from synthcity.plugins.core.dataloader import GenericDataLoader
 from synthcity.plugins.generic.plugin_privbayes import plugin
 
 plugin_name = "privbayes"
+
+
+def get_dataset() -> pd.DataFrame:
+    df = pd.read_csv(
+        "https://archive.ics.uci.edu/ml/machine-learning-databases/00291/airfoil_self_noise.dat",
+        header=None,
+        sep="\\t",
+    )
+    return df
 
 
 @pytest.mark.parametrize("test_plugin", generate_fixtures(plugin_name, plugin))
@@ -35,18 +43,14 @@ def test_plugin_hyperparams(test_plugin: Plugin) -> None:
 
 @pytest.mark.parametrize("test_plugin", generate_fixtures(plugin_name, plugin))
 def test_plugin_fit(test_plugin: Plugin) -> None:
-    X = pd.DataFrame(load_iris()["data"])
+    X = get_dataset()
     test_plugin.fit(GenericDataLoader(X))
 
 
 @pytest.mark.parametrize("test_plugin", generate_fixtures(plugin_name, plugin))
-def test_plugin_generate(test_plugin: Plugin) -> None:
-    X = pd.DataFrame(load_iris()["data"])
+def test_plugin_generate_privbayes(test_plugin: Plugin) -> None:
+    X = get_dataset()
     test_plugin.fit(GenericDataLoader(X))
-
-    X_gen = test_plugin.generate()
-    assert len(X_gen) == len(X)
-    assert test_plugin.schema_includes(X_gen)
 
     X_gen = test_plugin.generate(50)
     assert len(X_gen) == 50
@@ -56,19 +60,12 @@ def test_plugin_generate(test_plugin: Plugin) -> None:
 
 @pytest.mark.parametrize("test_plugin", generate_fixtures(plugin_name, plugin))
 def test_plugin_generate_constraints(test_plugin: Plugin) -> None:
-    X = pd.DataFrame(load_iris()["data"])
+    X = get_dataset()
     test_plugin.fit(GenericDataLoader(X))
 
     constraints = Constraints(
         rules=[
-            ("0", "le", 6),
-            ("0", "ge", 4.3),
-            ("1", "le", 4.4),
-            ("1", "ge", 3),
-            ("2", "le", 5.5),
-            ("2", "ge", 1.0),
-            ("3", "le", 2),
-            ("3", "ge", 0.1),
+            ("5", "ge", 120),
         ]
     )
 
