@@ -84,9 +84,10 @@ class PrivBayes(Serializable):
         target_usefulness: int = 5,
     ) -> None:
         super().__init__()
-        self.epsilon = (
-            epsilon / 2
-        )  # PrivBayes satisfies 2eps-differential privacy, eps1 + eps2 in the paper
+        # PrivBayes satisfies 2eps-differential privacy, eps1 + eps2 in the paper
+        # eps1 = eps/2 is for the greedy bayes
+        # eps2 = eps/2 is for the noisy conditionals
+        self.epsilon = epsilon / 2
         self.K = K
         self.n_bins = n_bins
         self.target_usefulness = target_usefulness
