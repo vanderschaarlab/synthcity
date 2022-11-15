@@ -15,6 +15,10 @@ from synthcity.utils.serialization import dataframe_hash
 
 
 class DataLoader(metaclass=ABCMeta):
+    """
+    Base class for data loading and splitting
+
+    """
     def __init__(
         self,
         data_type: str,
