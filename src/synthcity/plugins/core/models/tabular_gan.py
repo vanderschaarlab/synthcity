@@ -104,9 +104,6 @@ class TabularGAN(torch.nn.Module):
         discriminator_lr: float = 1e-3,
         discriminator_weight_decay: float = 1e-3,
         discriminator_opt_betas: tuple = (0.9, 0.999),
-        discriminator_extra_penalties: list = [
-            "gradient_penalty"
-        ],  # "identifiability_penalty", "gradient_penalty"
         batch_size: int = 64,
         n_iter_print: int = 50,
         random_state: int = 0,
@@ -159,7 +156,6 @@ class TabularGAN(torch.nn.Module):
             discriminator_loss=discriminator_loss,
             discriminator_lr=discriminator_lr,
             discriminator_weight_decay=discriminator_weight_decay,
-            discriminator_extra_penalties=discriminator_extra_penalties,
             discriminator_opt_betas=discriminator_opt_betas,
             lambda_gradient_penalty=lambda_gradient_penalty,
             lambda_identifiability_penalty=lambda_identifiability_penalty,

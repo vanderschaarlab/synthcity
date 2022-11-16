@@ -89,7 +89,7 @@ class GAN(nn.Module):
         generator_weight_decay: float = 1e-3,
         generator_residual: bool = True,
         generator_opt_betas: tuple = (0.9, 0.999),
-        generator_extra_penalties: list = [],  # "gradient_penalty", "identifiability_penalty"
+        generator_extra_penalties: list = [],  # "identifiability_penalty"
         discriminator_n_layers_hidden: int = 3,
         discriminator_n_units_hidden: int = 300,
         discriminator_nonlin: str = "leaky_relu",
@@ -100,9 +100,6 @@ class GAN(nn.Module):
         discriminator_lr: float = 2e-4,
         discriminator_weight_decay: float = 1e-3,
         discriminator_opt_betas: tuple = (0.9, 0.999),
-        discriminator_extra_penalties: list = [
-            "gradient_penalty"
-        ],  # "gradient_penalty", "identifiability_penalty"
         batch_size: int = 64,
         n_iter_print: int = 10,
         random_state: int = 0,
@@ -116,10 +113,6 @@ class GAN(nn.Module):
         super(GAN, self).__init__()
 
         extra_penalty_list = ["gradient_penalty", "identifiability_penalty"]
-        for penalty in discriminator_extra_penalties:
-            assert (
-                penalty in extra_penalty_list
-            ), f"Unsupported dscriminator penalty {penalty}"
         for penalty in generator_extra_penalties:
             assert (
                 penalty in extra_penalty_list
@@ -127,7 +120,6 @@ class GAN(nn.Module):
 
         log.info(f"Training GAN on device {device}. features = {n_features}")
         self.device = device
-        self.discriminator_extra_penalties = discriminator_extra_penalties
         self.generator_extra_penalties = generator_extra_penalties
         self.generator_nonlin_out = generator_nonlin_out
 
@@ -342,8 +334,6 @@ class GAN(nn.Module):
         batch_size = min(self.batch_size, len(X))
 
         for epoch in range(self.discriminator_n_iter):
-            self.discriminator.zero_grad()
-
             # Train with all-real batch
             real_X = X.to(self.device)
             real_X = self._append_optional_cond(real_X, cond)
@@ -371,17 +361,19 @@ class GAN(nn.Module):
             fake_fake_output = fake_output[((1 - fake_labels) * fake_output) != 0]
             errD_fake = torch.mean(torch.concat((fake_real_output, fake_fake_output)))
 
-            errD = -errD_real + errD_fake
-            errD += self._extra_penalties(
-                self.discriminator_extra_penalties,
+            penalty = self._loss_gradient_penalty(
                 real_samples=real_X,
                 fake_samples=fake,
                 batch_size=batch_size,
                 fake_labels_generator=fake_labels_generator,
                 true_labels_generator=true_labels_generator,
             )
+            errD = -errD_real + errD_fake
 
+            self.discriminator.optimizer.zero_grad()
+            penalty.backward(retain_graph=True)
             errD.backward()
+
             # Update D
             if self.clipping_value > 0:
                 torch.nn.utils.clip_grad_norm_(
