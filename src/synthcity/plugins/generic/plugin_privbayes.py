@@ -231,19 +231,19 @@ class PrivBayes(Serializable):
             nodes_remaining = nodes - nodes_selected
         return network
 
-    def _laplace_noise_parameter(self, k: int, num_attributes: int) -> float:
+    def _laplace_noise_parameter(self, n_items: int, n_features: int) -> float:
         """The noises injected into conditional distributions.
 
         Note that these noises are over counts, instead of the probability distributions in PrivBayes Algorithm 1.
         """
-        return (num_attributes - k) / self.epsilon
+        return 2 * (n_features - self.K) / (n_items * self.epsilon)
 
     def _get_noisy_distribution_of_attributes(
-        self, data: pd.DataFrame, child: str, parents: list
+        self, raw_data: pd.DataFrame, child: str, parents: list
     ) -> pd.DataFrame:
         # count attribute pairs
         attributes = parents + [child]
-        data = data.copy().loc[:, attributes]
+        data = raw_data.copy().loc[:, attributes]
         data = data.sort_values(attributes)
         stats = (
             data.groupby(parents + [child])
@@ -253,9 +253,7 @@ class PrivBayes(Serializable):
         )
 
         # add noise
-        k = len(attributes) - 1
-        num_tuples, num_attributes = data.shape
-        noise_para = self._laplace_noise_parameter(k, num_attributes)
+        noise_para = self._laplace_noise_parameter(*raw_data.shape)
         laplace_noises = np.random.laplace(0, scale=noise_para, size=stats.index.size)
 
         stats["count"] += laplace_noises
