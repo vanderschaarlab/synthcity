@@ -7,7 +7,7 @@ Adapted from:
 from collections import namedtuple
 from itertools import combinations, product
 from math import ceil
-from typing import Any, List, Tuple
+from typing import Any, List, Optional, Tuple
 
 # third party
 import numpy as np
@@ -80,7 +80,7 @@ class PrivBayes(Serializable):
         epsilon: float = 1.0,
         K: int = 0,
         n_bins: int = 100,
-        mi_thresh: float = 0.1,
+        mi_thresh: float = 0.01,
         target_usefulness: int = 5,
     ) -> None:
         super().__init__()
@@ -103,6 +103,9 @@ class PrivBayes(Serializable):
 
         # learn the DAG
         self.dag = self._greedy_bayes(data)
+        self.ordered_nodes = []
+        for attr, _ in self.dag:
+            self.ordered_nodes.append(attr)
 
         self.display_network()
 
@@ -238,18 +241,14 @@ class PrivBayes(Serializable):
         """
         return 2 * (n_features - self.K) / (n_items * self.epsilon)
 
-    def _get_noisy_distribution_of_attributes(
-        self, raw_data: pd.DataFrame, child: str, parents: list
+    def _get_noisy_counts_for_attributes(
+        self, raw_data: pd.DataFrame, attributes: list
     ) -> pd.DataFrame:
         # count attribute pairs
-        attributes = parents + [child]
         data = raw_data.copy().loc[:, attributes]
         data = data.sort_values(attributes)
         stats = (
-            data.groupby(parents + [child])
-            .size()
-            .reset_index()
-            .rename(columns={0: "count"})
+            data.groupby(attributes).size().reset_index().rename(columns={0: "count"})
         )
 
         # add noise
@@ -259,9 +258,14 @@ class PrivBayes(Serializable):
         stats["count"] += laplace_noises
         stats.loc[stats["count"] < 0, "count"] = 0
 
+        return stats
+
+    def _get_noisy_distribution_from_counts(
+        self, stats: pd.DataFrame, attribute: str, parents: list
+    ) -> pd.DataFrame:
         if len(parents) > 0:
             output = pd.crosstab(
-                stats[child],
+                stats[attribute],
                 stats[parents].T.values,
                 values=stats["count"],
                 aggfunc="sum",
@@ -270,33 +274,77 @@ class PrivBayes(Serializable):
             output = output.fillna(0)
             output += 1
 
-            assert len(output) == data[child].nunique()
-            assert output.shape[1] == data[parents].nunique().prod()
-
             output = output.values
             return output / (output.sum(axis=0) + 1e-8)
         else:
             output = stats[["count"]].values
             return output / (output.sum() + 1e-8)
 
+    def _get_noisy_distribution_for_attribute(
+        self,
+        data: pd.DataFrame,
+        attribute: str,
+        parents: list,
+        counts: Optional[pd.DataFrame] = None,
+    ) -> pd.DataFrame:
+        # count attribute pairs
+        attributes = parents + [attribute]
+        if counts is None:
+            counts = self._get_noisy_counts_for_attributes(data, attributes)
+        else:
+            counts = counts[attributes + ["count"]]
+            counts = counts.sort_values(attributes)
+            counts = (
+                counts.groupby(attributes)
+                .sum()
+                .reset_index()
+                .rename(columns={0: "count"})
+            )
+
+        output = self._get_noisy_distribution_from_counts(counts, attribute, parents)
+
+        assert len(output) == data[attribute].nunique()
+        assert output.shape[1] == data[parents].nunique().prod()
+
+        return output
+
     @validate_arguments(config=dict(arbitrary_types_allowed=True))
-    def _compute_noisy_conditional_distributions(self, data: pd.DataFrame) -> Any:
+    def _compute_noisy_conditional_distributions(
+        self, data: pd.DataFrame
+    ) -> np.ndarray:
         """See more in Algorithm 1 in PrivBayes."""
         conditional_distributions = []
 
         card = data.nunique()
 
-        # generate noisy distribution of root attribute.
-        for idx, (child, parents) in enumerate(self.dag):
-            node_values = self._get_noisy_distribution_of_attributes(
-                data, child, parents
-            )  # P(Xi, Πi)
+        first_K_attr_counts = self._get_noisy_counts_for_attributes(
+            data, self.ordered_nodes[0 : self.K]
+        )
+        # generate noisy conditionals for Pr[Xi | Πi] (i ∈ [0, d) ).
+        for idx in range(0, len(self.dag)):
+            attribute, parents = self.dag[idx]
 
-            assert np.isnan(node_values).sum() == 0
+            if idx < self.K:
+                node_values = self._get_noisy_distribution_for_attribute(
+                    data,
+                    attribute,
+                    parents,
+                    counts=first_K_attr_counts,
+                )  # P*(Xi | Πi)
+            else:
+                node_values = self._get_noisy_distribution_for_attribute(
+                    data, attribute, parents
+                )  # P*(Xi | Πi)
+
+            if len(parents) == 0:
+                assert np.allclose(node_values.sum().sum(), 1), node_values
+            else:
+                assert np.allclose(node_values.sum(axis=0), 1), node_values
+            assert np.isnan(node_values).sum() == 0, node_values
 
             node_cpd = TabularCPD(
-                variable=child,
-                variable_card=card[child],
+                variable=attribute,
+                variable_card=card[attribute],
                 values=node_values,
                 evidence=parents,
                 evidence_card=card[parents].values,
@@ -472,7 +520,7 @@ class PrivBayesPlugin(Plugin):
         epsilon: float = 1.0,
         K: int = 0,
         n_bins: int = 100,
-        mi_thresh: float = 0.1,
+        mi_thresh: float = 0.01,
         target_usefulness: int = 5,
         random_state: int = 0,
         **kwargs: Any,
