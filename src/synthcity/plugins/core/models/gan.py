@@ -511,9 +511,10 @@ class GAN(nn.Module):
             create_graph=True,
             retain_graph=True,
             only_inputs=True,
+            allow_unused=True,
         )[0]
         gradients = gradients.view(gradients.size(0), -1)
-        gradient_penalty = ((gradients.norm(2, dim=1) - 1) ** 2).mean()
+        gradient_penalty = ((gradients.norm(2, dim=-1) - 1) ** 2).mean()
         return self.lambda_gradient_penalty * gradient_penalty
 
     def _loss_identifiability_penalty(
