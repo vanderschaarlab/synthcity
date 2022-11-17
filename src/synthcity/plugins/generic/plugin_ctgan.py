@@ -3,7 +3,7 @@ from typing import Any, List
 
 # third party
 import pandas as pd
-from sdv.tabular import CTGAN
+from ctgan import CTGANSynthesizer
 
 # synthcity absolute
 from synthcity.plugins.core.dataloader import DataLoader
@@ -75,11 +75,13 @@ class CTGANPlugin(Plugin):
         discriminator_steps: int = 1,
         n_iter: int = 2000,
         pac: int = 10,
+        cat_limit: int = 15,
         **kwargs: Any
     ) -> None:
         super().__init__(**kwargs)
 
-        self.model = CTGAN(
+        self.cat_limit = cat_limit
+        self.model = CTGANSynthesizer(
             embedding_dim=embedding_n_units,
             generator_dim=tuple(generator_n_units for i in range(generator_n_layers)),
             generator_lr=generator_lr,
@@ -124,7 +126,13 @@ class CTGANPlugin(Plugin):
         ]
 
     def _fit(self, X: DataLoader, *args: Any, **kwargs: Any) -> "CTGANPlugin":
-        self.model.fit(X.dataframe())
+        discrete_columns = []
+
+        for col in X.columns:
+            if len(X[col].unique()) < self.cat_limit:
+                discrete_columns.append(col)
+
+        self.model.fit(X.dataframe(), discrete_columns=discrete_columns)
         return self
 
     def _generate(self, count: int, syn_schema: Schema, **kwargs: Any) -> pd.DataFrame:

@@ -3,7 +3,7 @@ from typing import Any, List
 
 # third party
 import pandas as pd
-from sdv.tabular import TVAE
+from ctgan import TVAESynthesizer
 
 # synthcity absolute
 from synthcity.plugins.core.dataloader import DataLoader
@@ -61,10 +61,12 @@ class TVAEPlugin(Plugin):
         batch_size: int = 500,
         n_iter: int = 2000,
         loss_factor: int = 1,
+        cat_limit: int = 15,
         **kwargs: Any
     ) -> None:
         super().__init__(**kwargs)
-        self.model = TVAE(
+        self.cat_limit = cat_limit
+        self.model = TVAESynthesizer(
             embedding_dim=embedding_n_units,
             compress_dims=list(compress_n_units for i in range(compress_n_layers)),
             decompress_dims=list(
@@ -99,7 +101,13 @@ class TVAEPlugin(Plugin):
         ]
 
     def _fit(self, X: DataLoader, *args: Any, **kwargs: Any) -> "TVAEPlugin":
-        self.model.fit(X.dataframe())
+        discrete_columns = []
+
+        for col in X.columns:
+            if len(X[col].unique()) < self.cat_limit:
+                discrete_columns.append(col)
+
+        self.model.fit(X.dataframe(), discrete_columns=discrete_columns)
         return self
 
     def _generate(self, count: int, syn_schema: Schema, **kwargs: Any) -> pd.DataFrame:

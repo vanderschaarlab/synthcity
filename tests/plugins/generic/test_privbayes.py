@@ -1,7 +1,7 @@
 # third party
-import pandas as pd
 import pytest
 from generic_helpers import generate_fixtures
+from helpers import get_airfoil_dataset
 
 # synthcity absolute
 from synthcity.plugins import Plugin
@@ -10,15 +10,6 @@ from synthcity.plugins.core.dataloader import GenericDataLoader
 from synthcity.plugins.generic.plugin_privbayes import plugin
 
 plugin_name = "privbayes"
-
-
-def get_dataset() -> pd.DataFrame:
-    df = pd.read_csv(
-        "https://archive.ics.uci.edu/ml/machine-learning-databases/00291/airfoil_self_noise.dat",
-        header=None,
-        sep="\\t",
-    )
-    return df
 
 
 @pytest.mark.parametrize("test_plugin", generate_fixtures(plugin_name, plugin))
@@ -43,13 +34,13 @@ def test_plugin_hyperparams(test_plugin: Plugin) -> None:
 
 @pytest.mark.parametrize("test_plugin", generate_fixtures(plugin_name, plugin))
 def test_plugin_fit(test_plugin: Plugin) -> None:
-    X = get_dataset()
+    X = get_airfoil_dataset()
     test_plugin.fit(GenericDataLoader(X))
 
 
 @pytest.mark.parametrize("test_plugin", generate_fixtures(plugin_name, plugin))
 def test_plugin_generate_privbayes(test_plugin: Plugin) -> None:
-    X = get_dataset()
+    X = get_airfoil_dataset()
     test_plugin.fit(GenericDataLoader(X))
 
     X_gen = test_plugin.generate(50)
@@ -60,7 +51,7 @@ def test_plugin_generate_privbayes(test_plugin: Plugin) -> None:
 
 @pytest.mark.parametrize("test_plugin", generate_fixtures(plugin_name, plugin))
 def test_plugin_generate_constraints(test_plugin: Plugin) -> None:
-    X = get_dataset()
+    X = get_airfoil_dataset()
     test_plugin.fit(GenericDataLoader(X))
 
     constraints = Constraints(
