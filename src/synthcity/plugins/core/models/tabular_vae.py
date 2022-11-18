@@ -98,6 +98,7 @@ class TabularVAE(nn.Module):
         encoder_dropout: float = 0.1,
         encoder_whitelist: list = [],
         device: Any = DEVICE,
+        robust_divergence_beta: int = 2,  # used for loss_strategy = robust_divergence
         dataloader_sampler: Optional[BaseSampler] = None,
     ) -> None:
         super(TabularVAE, self).__init__()
@@ -187,6 +188,7 @@ class TabularVAE(nn.Module):
             dataloader_sampler=dataloader_sampler,
             device=device,
             extra_loss_cbks=[_cond_loss],
+            robust_divergence_beta=robust_divergence_beta,
         )
 
     @validate_arguments(config=dict(arbitrary_types_allowed=True))

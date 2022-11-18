@@ -10,9 +10,10 @@ from synthcity.metrics import PerformanceEvaluatorXGB
 from synthcity.plugins import Plugin
 from synthcity.plugins.core.constraints import Constraints
 from synthcity.plugins.core.dataloader import GenericDataLoader
-from synthcity.plugins.generic.plugin_adsgan import plugin
+from synthcity.plugins.generic.plugin_tvae import plugin
 
-plugin_name = "adsgan"
+plugin_name = "tvae"
+plugin_args = {"n_iter": 100}
 
 
 @pytest.mark.parametrize("test_plugin", generate_fixtures(plugin_name, plugin))
@@ -32,29 +33,23 @@ def test_plugin_type(test_plugin: Plugin) -> None:
 
 @pytest.mark.parametrize("test_plugin", generate_fixtures(plugin_name, plugin))
 def test_plugin_hyperparams(test_plugin: Plugin) -> None:
-    assert len(test_plugin.hyperparameter_space()) == 14
+    assert len(test_plugin.hyperparameter_space()) == 12
 
 
-def test_plugin_fit() -> None:
-    test_plugin = plugin(
-        n_iter=100, generator_n_layers_hidden=1, generator_n_units_hidden=10
-    )
-
-    df = pd.DataFrame(load_iris()["data"])
-    X = GenericDataLoader(df)
-
-    test_plugin.fit(X)
+@pytest.mark.parametrize(
+    "test_plugin", generate_fixtures(plugin_name, plugin, plugin_args)
+)
+def test_plugin_fit(test_plugin: Plugin) -> None:
+    X = get_airfoil_dataset()
+    test_plugin.fit(GenericDataLoader(X))
 
 
-def test_plugin_generate() -> None:
-    test_plugin = plugin(
-        n_iter=100, generator_n_layers_hidden=1, generator_n_units_hidden=10
-    )
-
-    df = get_airfoil_dataset()
-    X = GenericDataLoader(df)
-
-    test_plugin.fit(X)
+@pytest.mark.parametrize(
+    "test_plugin", generate_fixtures(plugin_name, plugin, plugin_args)
+)
+def test_plugin_generate(test_plugin: Plugin) -> None:
+    X = get_airfoil_dataset()
+    test_plugin.fit(GenericDataLoader(X))
 
     X_gen = test_plugin.generate()
     assert len(X_gen) == len(X)
@@ -65,34 +60,12 @@ def test_plugin_generate() -> None:
     assert test_plugin.schema_includes(X_gen)
 
 
-def test_plugin_conditional() -> None:
-    test_plugin = plugin(
-        n_iter=100,
-        generator_n_layers_hidden=1,
-        generator_n_units_hidden=10,
-        n_units_conditional=1,
-    )
-    Xraw, y = load_iris(as_frame=True, return_X_y=True)
-    X = GenericDataLoader(Xraw)
-    test_plugin.fit(X, cond=y)
-
-    X_gen = test_plugin.generate()
-    assert len(X_gen) == len(X)
-    assert test_plugin.schema_includes(X_gen)
-
-    X_gen = test_plugin.generate(50, cond=y.sample(50))
-    assert len(X_gen) == 50
-    assert test_plugin.schema_includes(X_gen)
-
-
-def test_plugin_generate_constraints() -> None:
-    test_plugin = plugin(
-        n_iter=100, generator_n_layers_hidden=1, generator_n_units_hidden=10
-    )
-
-    Xraw = pd.DataFrame(load_iris()["data"])
-    X = GenericDataLoader(Xraw)
-    test_plugin.fit(X)
+@pytest.mark.parametrize(
+    "test_plugin", generate_fixtures(plugin_name, plugin, plugin_args)
+)
+def test_plugin_generate_constraints(test_plugin: Plugin) -> None:
+    X = pd.DataFrame(load_iris()["data"])
+    test_plugin.fit(GenericDataLoader(X))
 
     constraints = Constraints(
         rules=[
@@ -107,15 +80,15 @@ def test_plugin_generate_constraints() -> None:
         ]
     )
 
-    X_gen = test_plugin.generate(constraints=constraints)
+    X_gen = test_plugin.generate(constraints=constraints).dataframe()
     assert len(X_gen) == len(X)
     assert test_plugin.schema_includes(X_gen)
-    assert constraints.filter(X_gen.dataframe()).sum() == len(X_gen)
+    assert constraints.filter(X_gen).sum() == len(X_gen)
 
-    X_gen = test_plugin.generate(count=50, constraints=constraints)
+    X_gen = test_plugin.generate(count=50, constraints=constraints).dataframe()
     assert len(X_gen) == 50
     assert test_plugin.schema_includes(X_gen)
-    assert constraints.filter(X_gen.dataframe()).sum() == len(X_gen)
+    assert constraints.filter(X_gen).sum() == len(X_gen)
     assert list(X_gen.columns) == list(X.columns)
 
 
@@ -127,7 +100,7 @@ def test_sample_hyperparams() -> None:
 
 
 @pytest.mark.slow
-def test_eval_performance() -> None:
+def test_eval_performance_tvae() -> None:
     results = []
 
     Xraw, y = load_iris(return_X_y=True, as_frame=True)
@@ -135,7 +108,7 @@ def test_eval_performance() -> None:
     X = GenericDataLoader(Xraw)
 
     for retry in range(2):
-        test_plugin = plugin(n_iter=200)
+        test_plugin = plugin(n_iter=500)
         evaluator = PerformanceEvaluatorXGB()
 
         test_plugin.fit(X)

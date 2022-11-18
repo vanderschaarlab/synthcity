@@ -1,6 +1,4 @@
-"""TVAE with robust_divergence
-
-Algorithm 1 in "Robust Variational Autoencoder for Tabular Data with β Divergence"
+"""TVAE re-implementation
 """
 # stdlib
 from typing import Any, List, Optional, Union
@@ -26,7 +24,7 @@ from synthcity.plugins.core.plugin import Plugin
 from synthcity.plugins.core.schema import Schema
 
 
-class RTVAEPlugin(Plugin):
+class TVAEPlugin(Plugin):
     """RTVAE plugin.
 
     Args:
@@ -89,7 +87,6 @@ class RTVAEPlugin(Plugin):
         encoder_nonlin: str = "leaky_relu",
         encoder_dropout: float = 0.1,
         data_encoder_max_clusters: int = 10,
-        robust_divergence_beta: int = 2,  # used only for loss_strategy "robust_divergence"
         dataloader_sampler: Optional[sampler.Sampler] = None,
         **kwargs: Any
     ) -> None:
@@ -112,11 +109,9 @@ class RTVAEPlugin(Plugin):
         self.data_encoder_max_clusters = data_encoder_max_clusters
         self.dataloader_sampler = dataloader_sampler
 
-        self.robust_divergence_beta = robust_divergence_beta
-
     @staticmethod
     def name() -> str:
-        return "rtvae"
+        return "tvae"
 
     @staticmethod
     def type() -> str:
@@ -148,7 +143,7 @@ class RTVAEPlugin(Plugin):
             FloatDistribution(name="encoder_dropout", low=0, high=0.2),
         ]
 
-    def _fit(self, X: DataLoader, *args: Any, **kwargs: Any) -> "RTVAEPlugin":
+    def _fit(self, X: DataLoader, *args: Any, **kwargs: Any) -> "TVAEPlugin":
         features = X.shape[1]
         self.model = TabularVAE(
             X.dataframe(),
@@ -174,8 +169,6 @@ class RTVAEPlugin(Plugin):
             clipping_value=self.clipping_value,
             encoder_max_clusters=self.data_encoder_max_clusters,
             dataloader_sampler=self.dataloader_sampler,
-            loss_strategy="robust_divergence",
-            robust_divergence_beta=self.robust_divergence_beta,
         )
         self.model.fit(X.dataframe(), **kwargs)
 
@@ -189,4 +182,4 @@ class RTVAEPlugin(Plugin):
         return self._safe_generate(self.model.generate, count, syn_schema, cond=cond)
 
 
-plugin = RTVAEPlugin
+plugin = TVAEPlugin
