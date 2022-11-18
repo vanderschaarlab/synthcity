@@ -120,7 +120,6 @@ class AdsGANPlugin(Plugin):
         self.discriminator_nonlin = discriminator_nonlin
         self.discriminator_n_iter = discriminator_n_iter
         self.discriminator_dropout = discriminator_dropout
-        self.discriminator_extra_penalties = ["gradient_penalty"]
         self.discriminator_opt_betas = discriminator_opt_betas
 
         self.lr = lr
@@ -209,7 +208,6 @@ class AdsGANPlugin(Plugin):
             discriminator_lr=self.lr,
             discriminator_weight_decay=self.weight_decay,
             discriminator_opt_betas=self.discriminator_opt_betas,
-            discriminator_extra_penalties=self.discriminator_extra_penalties,
             encoder=self.encoder,
             clipping_value=self.clipping_value,
             lambda_gradient_penalty=self.lambda_gradient_penalty,

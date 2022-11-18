@@ -3,6 +3,7 @@ import numpy as np
 import pandas as pd
 import pytest
 from generic_helpers import generate_fixtures
+from helpers import get_airfoil_dataset
 from sklearn.datasets import load_iris
 
 # synthcity absolute
@@ -51,7 +52,7 @@ def test_plugin_generate() -> None:
         n_iter=100, generator_n_layers_hidden=1, generator_n_units_hidden=10
     )
 
-    df = pd.DataFrame(load_iris()["data"])
+    df = get_airfoil_dataset()
     X = GenericDataLoader(df)
 
     test_plugin.fit(X)

@@ -90,6 +90,7 @@ class GAN(nn.Module):
         generator_residual: bool = True,
         generator_opt_betas: tuple = (0.9, 0.999),
         generator_extra_penalties: list = [],  # "identifiability_penalty"
+        generator_extra_penalty_cbks: List[Callable] = [],
         discriminator_n_layers_hidden: int = 3,
         discriminator_n_units_hidden: int = 300,
         discriminator_nonlin: str = "leaky_relu",
@@ -112,7 +113,7 @@ class GAN(nn.Module):
     ) -> None:
         super(GAN, self).__init__()
 
-        extra_penalty_list = ["gradient_penalty", "identifiability_penalty"]
+        extra_penalty_list = ["identifiability_penalty"]
         for penalty in generator_extra_penalties:
             assert (
                 penalty in extra_penalty_list
@@ -121,6 +122,7 @@ class GAN(nn.Module):
         log.info(f"Training GAN on device {device}. features = {n_features}")
         self.device = device
         self.generator_extra_penalties = generator_extra_penalties
+        self.generator_extra_penalty_cbks = generator_extra_penalty_cbks
         self.generator_nonlin_out = generator_nonlin_out
 
         self.n_features = n_features
@@ -296,10 +298,12 @@ class GAN(nn.Module):
         output = self.discriminator(fake).squeeze().float()
         # Calculate G's loss based on this output
         errG = -torch.mean(output)
-        if self.generator_nonlin_out is not None:
-            errG += self._loss_cond(real_X_raw, fake_raw, self.generator_nonlin_out)
+        for extra_loss in self.generator_extra_penalty_cbks:
+            errG += extra_loss(
+                real_X_raw, fake_raw, cond=cond, nonlin_out=self.generator_nonlin_out
+            )
 
-        errG -= self._extra_penalties(
+        errG += self._extra_penalties(
             self.generator_extra_penalties,
             real_samples=real_X,
             fake_samples=fake,
@@ -526,24 +530,6 @@ class GAN(nn.Module):
         return self.lambda_identifiability_penalty * torch.sqrt(
             nn.MSELoss()(real_samples, fake_samples)
         )
-
-    def _loss_cond(
-        self,
-        real_samples: torch.tensor,
-        fake_samples: torch.Tensor,
-        activations: List,
-    ) -> torch.Tensor:
-        st = 0
-        loss = 0
-        for activation, length in activations:
-            if activation == "softmax":
-                loss += nn.functional.cross_entropy(
-                    fake_samples[:, st : st + length],
-                    torch.argmax(real_samples[:, st : st + length], dim=1),
-                )
-
-            st += length
-        return loss
 
     def _append_optional_cond(
         self, X: torch.Tensor, cond: Optional[torch.Tensor]
