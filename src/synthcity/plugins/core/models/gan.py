@@ -300,7 +300,9 @@ class GAN(nn.Module):
         errG = -torch.mean(output)
         for extra_loss in self.generator_extra_penalty_cbks:
             errG += extra_loss(
-                real_X_raw, fake_raw, cond=cond, nonlin_out=self.generator_nonlin_out
+                real_X_raw,
+                fake_raw,
+                cond=cond,
             )
 
         errG += self._extra_penalties(

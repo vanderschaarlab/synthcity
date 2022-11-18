@@ -1,5 +1,5 @@
 # stdlib
-from typing import Any, List, Optional, Tuple
+from typing import Any, Callable, List, Optional, Tuple
 
 # third party
 import numpy as np
@@ -203,6 +203,7 @@ class VAE(nn.Module):
         robust_divergence_beta: int = 2,  # used for loss_strategy = robust_divergence
         dataloader_sampler: Optional[sampler.Sampler] = None,
         device: Any = DEVICE,
+        extra_loss_cbks: List[Callable] = [],
     ) -> None:
         super(VAE, self).__init__()
 
@@ -221,7 +222,7 @@ class VAE(nn.Module):
         self.loss_strategy = loss_strategy
         self.robust_divergence_beta = robust_divergence_beta
         self.dataloader_sampler = dataloader_sampler
-
+        self.extra_loss_cbks = extra_loss_cbks
         self.random_state = random_state
         torch.manual_seed(self.random_state)
         self.n_units_conditional = n_units_conditional
@@ -367,6 +368,7 @@ class VAE(nn.Module):
                     X,
                     mu,
                     logvar,
+                    cond_mb,
                 )
                 loss.backward()
                 torch.nn.utils.clip_grad_norm_(self.parameters(), self.clipping_value)
@@ -400,14 +402,19 @@ class VAE(nn.Module):
         real: Tensor,
         mu: Tensor,
         logvar: Tensor,
+        cond: Optional[torch.Tensor] = None,
     ) -> Tensor:
-
         if self.loss_strategy == "robust_divergence":
-            return self._loss_function_robust_divergence(
+            loss = self._loss_function_robust_divergence(
                 reconstructed, real, mu, logvar
             )
+        else:
+            loss = self._loss_function_standard(reconstructed, real, mu, logvar)
 
-        return self._loss_function_standard(reconstructed, real, mu, logvar)
+        for extra_cbk in self.extra_loss_cbks:
+            loss += extra_cbk(real, reconstructed, cond)
+
+        return loss
 
     def _loss_function_standard(
         self,

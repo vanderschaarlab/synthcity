@@ -1,5 +1,5 @@
 # stdlib
-from typing import Any, Callable, List, Optional, Union
+from typing import Any, Callable, Optional, Union
 
 # third party
 import numpy as np
@@ -9,7 +9,7 @@ from pydantic import validate_arguments
 
 # synthcity absolute
 from synthcity.utils.constants import DEVICE
-from synthcity.utils.samplers import ConditionalDatasetSampler
+from synthcity.utils.samplers import BaseSampler, ConditionalDatasetSampler
 
 # synthcity relative
 from .gan import GAN
@@ -115,7 +115,7 @@ class TabularGAN(torch.nn.Module):
         encoder_max_clusters: int = 20,
         encoder: Any = None,
         encoder_whitelist: list = [],
-        dataloader_sampler: Optional[torch.utils.data.sampler.Sampler] = None,
+        dataloader_sampler: Optional[BaseSampler] = None,
         device: Any = DEVICE,
     ) -> None:
         super(TabularGAN, self).__init__()
@@ -140,7 +140,6 @@ class TabularGAN(torch.nn.Module):
             real_samples: torch.tensor,
             fake_samples: torch.Tensor,
             cond: Optional[torch.Tensor],
-            nonlin_out: List,
         ) -> torch.Tensor:
             if cond is None:
                 return 0
@@ -244,17 +243,8 @@ class TabularGAN(torch.nn.Module):
         else:
             X_enc = self.encode(X)
 
-        extra_cond = None
-        if isinstance(self.dataloader_sampler, ConditionalDatasetSampler):
-            extra_cond, _ = self.dataloader_sampler.get_train_conditionals()
-
-        if extra_cond is not None:
-            assert len(extra_cond) == len(X)
-
-            if cond is None:
-                cond = extra_cond
-            else:
-                cond = np.concatenate([extra_cond, np.asarray(cond)], axis=1)
+        extra_cond = self.dataloader_sampler.get_train_conditionals()
+        cond = self._merge_conditionals(cond, extra_cond)
 
         self.model.fit(
             np.asarray(X_enc),
@@ -265,9 +255,30 @@ class TabularGAN(torch.nn.Module):
         return self
 
     def generate(self, count: int, cond: Optional[pd.DataFrame] = None) -> pd.DataFrame:
-        samples = self.model.generate(count, cond)
+        extra_cond = self.dataloader_sampler.sample_conditional(count)
+        cond = self._merge_conditionals(cond, extra_cond)
+
+        samples = self.model.generate(count, cond=cond)
         return self.decode(pd.DataFrame(samples))
 
     @validate_arguments(config=dict(arbitrary_types_allowed=True))
     def forward(self, count: int, cond: Optional[pd.DataFrame] = None) -> torch.Tensor:
         return self.model.forward(count, cond)
+
+    def _merge_conditionals(
+        self,
+        cond: Optional[Union[pd.DataFrame, pd.Series, np.ndarray]],
+        extra_cond: Optional[np.ndarray],
+    ) -> Optional[np.ndarray]:
+        if extra_cond is None and cond is None:
+            return None
+
+        if extra_cond is None:
+            return cond
+
+        if cond is None:
+            cond = extra_cond
+        else:
+            cond = np.concatenate([extra_cond, np.asarray(cond)], axis=1)
+
+        return cond

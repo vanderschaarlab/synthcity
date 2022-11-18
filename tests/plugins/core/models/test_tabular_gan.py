@@ -1,6 +1,7 @@
 # third party
 import numpy as np
 import pytest
+from helpers import get_airfoil_dataset
 from sklearn.datasets import load_iris
 
 # synthcity absolute
@@ -86,7 +87,7 @@ def test_basic_network(
 
 
 def test_gan_classification() -> None:
-    X, _ = load_iris(return_X_y=True, as_frame=True)
+    X = get_airfoil_dataset()
 
     model = TabularGAN(
         X,

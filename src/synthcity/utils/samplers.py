@@ -1,5 +1,5 @@
 # stdlib
-from typing import Any, Generator, List, Tuple
+from typing import Any, Generator, List, Optional, Tuple
 
 # third party
 import numpy as np
@@ -13,7 +13,22 @@ from synthcity.plugins.core.models.tabular_encoder import ColumnTransformInfo
 from synthcity.utils.constants import DEVICE
 
 
-class ImbalancedDatasetSampler(torch.utils.data.sampler.Sampler):
+class BaseSampler(torch.utils.data.sampler.Sampler):
+    """DataSampler samples the conditional vector and corresponding data."""
+
+    def get_train_conditionals(self) -> np.ndarray:
+        return None
+
+    @validate_arguments(config=dict(arbitrary_types_allowed=True))
+    def sample_conditional(self, batch: int) -> Optional[Tuple]:
+        return None
+
+    def conditional_dimension(self) -> int:
+        """Return the total number of categories."""
+        return 0
+
+
+class ImbalancedDatasetSampler(BaseSampler):
     """Samples elements randomly from a given list of indices for imbalanced dataset"""
 
     @validate_arguments(config=dict(arbitrary_types_allowed=True))
@@ -46,7 +61,7 @@ class ImbalancedDatasetSampler(torch.utils.data.sampler.Sampler):
         return self.num_samples
 
 
-class ConditionalDatasetSampler(torch.utils.data.sampler.Sampler):
+class ConditionalDatasetSampler(BaseSampler):
     """DataSampler samples the conditional vector and corresponding data."""
 
     @validate_arguments(config=dict(arbitrary_types_allowed=True))
@@ -70,43 +85,39 @@ class ConditionalDatasetSampler(torch.utils.data.sampler.Sampler):
         r = np.expand_dims(np.random.rand(probs.shape[0]), axis=1)
         return (probs.cumsum(axis=1) > r).argmax(axis=1)
 
-    def get_train_conditionals(self) -> Tuple[np.ndarray, np.ndarray]:
-        return self._train_conditional, self._train_mask
+    def get_train_conditionals(self) -> np.ndarray:
+        return self._train_conditional
 
     @validate_arguments(config=dict(arbitrary_types_allowed=True))
-    def sample_conditional(self, batch: int) -> Tuple:
+    def sample_conditional(self, batch: int, with_ids: bool = False) -> Any:
         """Generate the conditional vector for training.
 
         Returns:
             cond (batch x #categories):
                 The conditional vector.
-            mask (batch x #discrete columns):
-                A one-hot vector indicating the selected discrete column.
             discrete column id (batch):
                 Integer representation of mask.
             category_id_in_col (batch):
                 Selected category in the selected discrete column.
         """
-        assert self._n_discrete_columns > 0
+        if self._n_discrete_columns == 0:
+            return None
 
         discrete_column_id = np.random.choice(
             np.arange(self._n_discrete_columns), batch
         )
 
-        cond = torch.zeros(
-            (batch, self._n_conditional_dimension), device=self._device
-        ).float()
-        mask = torch.zeros(
-            (batch, self._n_discrete_columns), device=self._device
-        ).float()
-        mask[np.arange(batch), discrete_column_id] = 1
+        cond = np.zeros((batch, self._n_conditional_dimension)).astype(float)
         category_id_in_col = self._random_choice_prob_index(discrete_column_id)
         category_id = (
             self._categorical_feat_offset[discrete_column_id] + category_id_in_col
         )
         cond[np.arange(batch), category_id] = 1
 
-        return cond, mask, discrete_column_id, category_id_in_col
+        if with_ids:
+            return cond, discrete_column_id, category_id_in_col
+
+        return cond
 
     @validate_arguments(config=dict(arbitrary_types_allowed=True))
     def sample_conditional_indices(
@@ -226,9 +237,8 @@ class ConditionalDatasetSampler(torch.utils.data.sampler.Sampler):
 
         (
             self._train_conditional,
-            self._train_mask,
             categoricals,
             categoricals_vals,
-        ) = self.sample_conditional(self._num_samples)
+        ) = self.sample_conditional(self._num_samples, with_ids=True)
 
         self._indices = self.sample_conditional_indices(categoricals, categoricals_vals)

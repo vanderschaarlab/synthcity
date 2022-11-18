@@ -1,15 +1,16 @@
 # stdlib
-from typing import Any, Optional
+from typing import Any, Optional, Union
 
 # third party
+import numpy as np
 import pandas as pd
 import torch
 from pydantic import validate_arguments
 from torch import nn
-from torch.utils.data import sampler
 
 # synthcity absolute
 from synthcity.utils.constants import DEVICE
+from synthcity.utils.samplers import BaseSampler, ConditionalDatasetSampler
 
 # synthcity relative
 from .tabular_encoder import TabularEncoder
@@ -97,13 +98,64 @@ class TabularVAE(nn.Module):
         encoder_dropout: float = 0.1,
         encoder_whitelist: list = [],
         device: Any = DEVICE,
-        dataloader_sampler: Optional[sampler.Sampler] = None,
+        dataloader_sampler: Optional[BaseSampler] = None,
     ) -> None:
         super(TabularVAE, self).__init__()
         self.columns = X.columns
         self.encoder = TabularEncoder(
             max_clusters=encoder_max_clusters, whitelist=encoder_whitelist
         ).fit(X)
+
+        if dataloader_sampler is None:
+            dataloader_sampler = ConditionalDatasetSampler(
+                self.encoder.transform(X),
+                self.encoder.layout(),
+            )
+            n_units_conditional += dataloader_sampler.conditional_dimension()
+
+        self.dataloader_sampler = dataloader_sampler
+
+        def _cond_loss(
+            real_samples: torch.tensor,
+            fake_samples: torch.Tensor,
+            cond: Optional[torch.Tensor],
+        ) -> torch.Tensor:
+            if cond is None:
+                return 0
+
+            losses = []
+
+            idx = 0
+            cond_idx = 0
+
+            for item in self.encoder.layout():
+                length = item.output_dimensions
+
+                if item.column_type != "discrete":
+                    idx += length
+                    continue
+
+                # create activate feature mask
+                mask = cond[:, cond_idx : cond_idx + length].sum(axis=1).bool()
+
+                # fake_samples are after the Softmax activation
+                # we filter active features in the mask
+                item_loss = torch.nn.NLLLoss()(
+                    torch.log(fake_samples[mask, idx : idx + length]),
+                    torch.argmax(real_samples[mask, idx : idx + length], dim=1),
+                )
+                losses.append(item_loss)
+
+                cond_idx += length
+                idx += length
+
+            assert idx == real_samples.shape[1]
+
+            if len(losses) == 0:
+                return 0
+
+            loss = torch.stack(losses, dim=-1)
+            return loss.sum() / len(real_samples)
 
         self.model = VAE(
             self.encoder.n_features(),
@@ -134,6 +186,7 @@ class TabularVAE(nn.Module):
             encoder_dropout=encoder_dropout,
             dataloader_sampler=dataloader_sampler,
             device=device,
+            extra_loss_cbks=[_cond_loss],
         )
 
     @validate_arguments(config=dict(arbitrary_types_allowed=True))
@@ -148,16 +201,44 @@ class TabularVAE(nn.Module):
     def fit(
         self,
         X: pd.DataFrame,
+        cond: Optional[Union[pd.DataFrame, pd.Series]] = None,
         **kwargs: Any,
     ) -> Any:
         X_enc = self.encode(X)
-        self.model.fit(X_enc, **kwargs)
+
+        extra_cond = self.dataloader_sampler.get_train_conditionals()
+        cond = self._merge_conditionals(cond, extra_cond)
+
+        self.model.fit(X_enc, cond, **kwargs)
         return self
 
-    def generate(self, count: int, **kwargs: Any) -> pd.DataFrame:
-        samples = self.model.generate(count, **kwargs)
+    def generate(
+        self, count: int, cond: Optional[pd.DataFrame] = None, **kwargs: Any
+    ) -> pd.DataFrame:
+        extra_cond = self.dataloader_sampler.sample_conditional(count)
+        cond = self._merge_conditionals(cond, extra_cond)
+
+        samples = self.model.generate(count, cond=cond)
         return self.decode(pd.DataFrame(samples))
 
     @validate_arguments(config=dict(arbitrary_types_allowed=True))
     def forward(self, count: int) -> torch.Tensor:
         return self.model.forward(count)
+
+    def _merge_conditionals(
+        self,
+        cond: Optional[Union[pd.DataFrame, pd.Series, np.ndarray]],
+        extra_cond: Optional[np.ndarray],
+    ) -> Optional[np.ndarray]:
+        if extra_cond is None and cond is None:
+            return None
+
+        if extra_cond is None:
+            return cond
+
+        if cond is None:
+            cond = extra_cond
+        else:
+            cond = np.concatenate([extra_cond, np.asarray(cond)], axis=1)
+
+        return cond

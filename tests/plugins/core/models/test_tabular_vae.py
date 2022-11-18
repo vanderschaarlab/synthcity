@@ -1,5 +1,6 @@
 # third party
 import pytest
+from helpers import get_airfoil_dataset
 from sklearn.datasets import load_iris
 
 # synthcity absolute
@@ -79,7 +80,7 @@ def test_basic_network(
 
 @pytest.mark.parametrize("loss_strategy", ["standard", "robust_divergence"])
 def test_vae_classification(loss_strategy: str) -> None:
-    X, _ = load_iris(return_X_y=True, as_frame=True)
+    X = get_airfoil_dataset()
 
     model = TabularVAE(
         X,
