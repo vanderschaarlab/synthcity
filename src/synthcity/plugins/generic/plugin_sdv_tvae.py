@@ -18,7 +18,7 @@ from synthcity.plugins.core.schema import Schema
 pd.options.mode.chained_assignment = None
 
 
-class TVAEPlugin(Plugin):
+class OriginalTVAEPlugin(Plugin):
     """TVAE plugin based on the VAE-based Deep Learning data synthesizer which was presented at the NeurIPS 2020 conference by the paper titled Modeling Tabular data using Conditional GAN.
 
     Args:
@@ -100,7 +100,7 @@ class TVAEPlugin(Plugin):
             IntegerDistribution(name="loss_factor", low=1, high=5),
         ]
 
-    def _fit(self, X: DataLoader, *args: Any, **kwargs: Any) -> "TVAEPlugin":
+    def _fit(self, X: DataLoader, *args: Any, **kwargs: Any) -> "OriginalTVAEPlugin":
         discrete_columns = []
 
         for col in X.columns:
@@ -114,4 +114,4 @@ class TVAEPlugin(Plugin):
         return self._safe_generate(self.model.sample, count, syn_schema)
 
 
-plugin = TVAEPlugin
+plugin = OriginalTVAEPlugin

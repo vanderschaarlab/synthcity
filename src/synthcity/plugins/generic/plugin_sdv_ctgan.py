@@ -18,7 +18,7 @@ from synthcity.plugins.core.schema import Schema
 pd.options.mode.chained_assignment = None
 
 
-class CTGANPlugin(Plugin):
+class OriginalCTGANPlugin(Plugin):
     """CTGAN plugin.
 
     CTGAN model is based on the GAN-based Deep Learning data synthesizer which was presented at the NeurIPS 2020 conference by the paper titled Modeling Tabular data using Conditional GAN.
@@ -125,7 +125,7 @@ class CTGANPlugin(Plugin):
             CategoricalDistribution(name="discriminator_decay", choices=[1e-3, 1e-6]),
         ]
 
-    def _fit(self, X: DataLoader, *args: Any, **kwargs: Any) -> "CTGANPlugin":
+    def _fit(self, X: DataLoader, *args: Any, **kwargs: Any) -> "OriginalCTGANPlugin":
         discrete_columns = []
 
         for col in X.columns:
@@ -139,4 +139,4 @@ class CTGANPlugin(Plugin):
         return self._safe_generate(self.model.sample, count, syn_schema)
 
 
-plugin = CTGANPlugin
+plugin = OriginalCTGANPlugin
