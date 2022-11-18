@@ -212,18 +212,24 @@ class TabularVAE(nn.Module):
         self.model.fit(X_enc, cond, **kwargs)
         return self
 
+    @validate_arguments(config=dict(arbitrary_types_allowed=True))
     def generate(
-        self, count: int, cond: Optional[pd.DataFrame] = None, **kwargs: Any
+        self,
+        count: int,
+        cond: Optional[Union[pd.DataFrame, np.ndarray]] = None,
+        **kwargs: Any,
     ) -> pd.DataFrame:
-        extra_cond = self.dataloader_sampler.sample_conditional(count)
-        cond = self._merge_conditionals(cond, extra_cond)
-
-        samples = self.model.generate(count, cond=cond)
+        samples = self(count, cond)
         return self.decode(pd.DataFrame(samples))
 
     @validate_arguments(config=dict(arbitrary_types_allowed=True))
-    def forward(self, count: int) -> torch.Tensor:
-        return self.model.forward(count)
+    def forward(
+        self, count: int, cond: Optional[Union[pd.DataFrame, np.ndarray]] = None
+    ) -> torch.Tensor:
+        extra_cond = self.dataloader_sampler.sample_conditional(count)
+        cond = self._merge_conditionals(cond, extra_cond)
+
+        return self.model.generate(count, cond=cond)
 
     def _merge_conditionals(
         self,

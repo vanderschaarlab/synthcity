@@ -159,6 +159,12 @@ class TabularGAN(torch.nn.Module):
                 # create activate feature mask
                 mask = cond[:, cond_idx : cond_idx + length].sum(axis=1).bool()
 
+                if mask.sum() == 0:
+                    idx += length
+                    continue
+
+                assert (fake_samples[mask, idx : idx + length] > 0).all()
+
                 # fake_samples are after the Softmax activation
                 # we filter active features in the mask
                 item_loss = torch.nn.NLLLoss()(
@@ -245,7 +251,6 @@ class TabularGAN(torch.nn.Module):
 
         extra_cond = self.dataloader_sampler.get_train_conditionals()
         cond = self._merge_conditionals(cond, extra_cond)
-
         self.model.fit(
             np.asarray(X_enc),
             np.asarray(cond),
@@ -254,17 +259,22 @@ class TabularGAN(torch.nn.Module):
         )
         return self
 
-    def generate(self, count: int, cond: Optional[pd.DataFrame] = None) -> pd.DataFrame:
+    @validate_arguments(config=dict(arbitrary_types_allowed=True))
+    def generate(
+        self, count: int, cond: Optional[Union[pd.DataFrame, np.ndarray]] = None
+    ) -> pd.DataFrame:
+        samples = self(count, cond)
+        return self.decode(pd.DataFrame(samples))
+
+    def forward(
+        self, count: int, cond: Optional[Union[pd.DataFrame, np.ndarray]] = None
+    ) -> torch.Tensor:
         extra_cond = self.dataloader_sampler.sample_conditional(count)
         cond = self._merge_conditionals(cond, extra_cond)
 
-        samples = self.model.generate(count, cond=cond)
-        return self.decode(pd.DataFrame(samples))
+        return self.model.generate(count, cond=cond)
 
     @validate_arguments(config=dict(arbitrary_types_allowed=True))
-    def forward(self, count: int, cond: Optional[pd.DataFrame] = None) -> torch.Tensor:
-        return self.model.forward(count, cond)
-
     def _merge_conditionals(
         self,
         cond: Optional[Union[pd.DataFrame, pd.Series, np.ndarray]],

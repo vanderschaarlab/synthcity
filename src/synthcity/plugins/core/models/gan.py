@@ -310,8 +310,6 @@ class GAN(nn.Module):
             real_samples=real_X,
             fake_samples=fake,
             batch_size=batch_size,
-            fake_labels_generator=fake_labels_generator,
-            true_labels_generator=true_labels_generator,
         )
 
         # Calculate gradients for G
@@ -323,6 +321,8 @@ class GAN(nn.Module):
                 self.generator.parameters(), self.clipping_value
             )
         self.generator.optimizer.step()
+
+        assert not torch.isnan(errG)
 
         # Return loss
         return errG.item()
@@ -351,10 +351,12 @@ class GAN(nn.Module):
             noise = torch.randn(batch_size, self.n_units_latent, device=self.device)
             noise = self._append_optional_cond(noise, cond)
 
-            fake = self.generator(noise)
-            fake = self._append_optional_cond(fake, cond)
+            fake_raw = self.generator(noise)
+            fake = self._append_optional_cond(fake_raw, cond)
 
-            fake_labels = fake_labels_generator(fake).to(self.device).squeeze().float()
+            fake_labels = (
+                fake_labels_generator(fake_raw).to(self.device).squeeze().float()
+            )
             fake_output = self.discriminator(fake.detach()).squeeze()
 
             # Compute errors. Some fake inputs might be marked as real for privacy guarantees.
@@ -371,8 +373,6 @@ class GAN(nn.Module):
                 real_samples=real_X,
                 fake_samples=fake,
                 batch_size=batch_size,
-                fake_labels_generator=fake_labels_generator,
-                true_labels_generator=true_labels_generator,
             )
             errD = -errD_real + errD_fake
 
@@ -388,6 +388,8 @@ class GAN(nn.Module):
             self.discriminator.optimizer.step()
 
             errors.append(errD.item())
+
+        assert not np.isnan(np.mean(errors))
 
         return np.mean(errors)
 
@@ -471,8 +473,6 @@ class GAN(nn.Module):
         real_samples: torch.tensor,
         fake_samples: torch.Tensor,
         batch_size: int,
-        fake_labels_generator: Callable,
-        true_labels_generator: Callable,
     ) -> torch.Tensor:
         """Calculates additional penalties for the training"""
         err: torch.Tensor = 0
@@ -482,8 +482,6 @@ class GAN(nn.Module):
                     real_samples=real_samples,
                     fake_samples=fake_samples,
                     batch_size=batch_size,
-                    fake_labels_generator=fake_labels_generator,
-                    true_labels_generator=true_labels_generator,
                 )
             elif penalty == "identifiability_penalty":
                 err += self._loss_identifiability_penalty(
@@ -497,8 +495,6 @@ class GAN(nn.Module):
         real_samples: torch.tensor,
         fake_samples: torch.Tensor,
         batch_size: int,
-        fake_labels_generator: Callable,
-        true_labels_generator: Callable,
     ) -> torch.Tensor:
         """Calculates the gradient penalty loss for WGAN GP"""
         # Random weight term for interpolation between real and fake samples
@@ -508,7 +504,8 @@ class GAN(nn.Module):
             alpha * real_samples + ((1 - alpha) * fake_samples)
         ).requires_grad_(True)
         d_interpolated = self.discriminator(interpolated).squeeze()
-        labels = true_labels_generator(interpolated).to(self.device).squeeze()
+        labels = torch.ones((len(interpolated),), device=self.device)
+
         # Get gradient w.r.t. interpolates
         gradients = torch.autograd.grad(
             outputs=d_interpolated,

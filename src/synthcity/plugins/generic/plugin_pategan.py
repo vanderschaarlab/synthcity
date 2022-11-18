@@ -6,7 +6,7 @@ International Conference on Learning Representations (ICLR), 2019.
 Paper link: https://openreview.net/forum?id=S1zk9iRqF7
 """
 # stdlib
-from typing import Any, Dict, List, Tuple
+from typing import Any, Dict, List, Optional, Tuple
 
 # third party
 import numpy as np
@@ -39,15 +39,13 @@ class Teachers(Serializable):
     @validate_arguments(config=dict(arbitrary_types_allowed=True))
     def __init__(
         self,
-        n_teachers: int,
-        partition_size: int,
-        lamda: float = 1,  # PATE noise size
+        samples_per_teacher: int,
+        lamda: float = 1e-3,  # PATE noise size
         template: str = "xgboost",
     ) -> None:
         super().__init__()
 
-        self.n_teachers = n_teachers
-        self.partition_size = partition_size
+        self.samples_per_teacher = samples_per_teacher
         self.lamda = lamda
         self.model_args: dict = {}
         if template == "xgboost":
@@ -67,6 +65,10 @@ class Teachers(Serializable):
     def fit(self, X: np.ndarray, generator: Any) -> Any:
         # 1. train teacher models
         self.teacher_models: list = []
+        self.n_teachers = round(len(X) / self.samples_per_teacher)
+        log.info(
+            f"[pategan] Using {self.n_teachers} teachers for dataset {len(X)} items"
+        )
 
         permutations = np.random.permutation(len(X))
 
@@ -74,26 +76,28 @@ class Teachers(Serializable):
         for tidx in range(self.n_teachers):
             log.debug(f"  >> Training teacher {tidx}")
             teacher_idx = permutations[
-                int(tidx * self.partition_size) : int((tidx + 1) * self.partition_size)
+                int(tidx * self.samples_per_teacher) : int(
+                    (tidx + 1) * self.samples_per_teacher
+                )
             ]
             teacher_X = X[teacher_idx, :]
 
-            g_mb = generator(self.partition_size).detach().cpu()
+            g_mb = np.asarray(generator(len(teacher_X)))
 
             idx = np.random.permutation(len(teacher_X[:, 0]))
-            x_mb = teacher_X[idx[: self.partition_size], :]
+            x_mb = teacher_X[idx[: self.samples_per_teacher], :]
 
             x_comb = np.concatenate((x_mb, g_mb), axis=0)
             y_comb = np.concatenate(
                 (
                     np.ones(
                         [
-                            self.partition_size,
+                            len(teacher_X),
                         ]
                     ),
                     np.zeros(
                         [
-                            self.partition_size,
+                            len(teacher_X),
                         ]
                     ),
                 ),
@@ -101,6 +105,7 @@ class Teachers(Serializable):
             )
 
             model = self.model_template(**self.model_args)
+            log.info(f"Training teacher {tidx}. {x_comb.shape} and {y_comb.shape}")
             model.fit(x_comb, y_comb)
 
             self.teacher_models.append(model)
@@ -163,12 +168,12 @@ class PATEGAN(Serializable):
         clipping_value: int = 0,
         encoder_max_clusters: int = 20,
         # Privacy
-        n_teachers: int = 10,
+        samples_per_teacher: int = 1000,
         teacher_template: str = "linear",
         epsilon: float = 1.0,
-        delta: float = 0.00001,
-        lamda: float = 1,
-        alpha: int = 20,
+        delta: Optional[float] = None,
+        lamda: float = 1e-3,
+        alpha: int = 100,
         encoder: Any = None,
     ) -> None:
         super().__init__()
@@ -190,10 +195,10 @@ class PATEGAN(Serializable):
         self.random_state = random_state
         self.clipping_value = clipping_value
         # Privacy
-        self.n_teachers = n_teachers
+        self.samples_per_teacher = samples_per_teacher
         self.teacher_template = teacher_template
         self.epsilon = epsilon
-        self.delta = delta
+        self.delta = None
         self.lamda = lamda
         self.alpha = alpha
         self.encoder_max_clusters = encoder_max_clusters
@@ -207,6 +212,10 @@ class PATEGAN(Serializable):
         self.columns = X_train.columns
 
         features = X_train.shape[1]
+        if self.delta is None:
+            self.delta = 1 / (len(X_train) * np.sqrt(len(X_train)))
+
+        log.info(f"[pategan] using delta = {self.delta}")
 
         self.model = TabularGAN(
             X_train,
@@ -234,13 +243,10 @@ class PATEGAN(Serializable):
             clipping_value=self.clipping_value,
             encoder_max_clusters=self.encoder_max_clusters,
             encoder=self.encoder,
-            n_iter_print=2,
+            n_iter_print=100,
         )
         X_train_enc = self.model.encode(X_train)
-
-        partition_data_no = len(X_train_enc)
-        if self.n_teachers > 0:
-            partition_data_no = int(len(X_train_enc) / self.n_teachers)
+        self.n_teachers = round(len(X_train_enc) / self.samples_per_teacher)
 
         # alpha initialize
         self.alpha_dict = np.zeros([self.alpha])
@@ -260,8 +266,7 @@ class PATEGAN(Serializable):
 
             # 1. Train teacher models
             teachers = Teachers(
-                self.n_teachers,
-                partition_data_no,
+                samples_per_teacher=self.samples_per_teacher,
                 lamda=self.lamda,
                 template=self.teacher_template,
             )
@@ -283,13 +288,8 @@ class PATEGAN(Serializable):
                     )
                     return torch.zeros((len(X),))
 
-                for j in range(len(X_batch)):
-                    n0, n1 = n0_mb[j], n1_mb[j]
-                    # Update moments accountant
-                    q = self._update_moments_accountant(n0, n1)
-
-                    # Compute alpha
-                    self._update_alpha(q)
+                # Compute alpha
+                self._update_alpha(n0_mb, n1_mb)
 
                 # PATE labels for X
                 return torch.from_numpy(
@@ -303,10 +303,13 @@ class PATEGAN(Serializable):
             # epsilon_hat computation
             curr_list: List = []
             for lidx in range(self.alpha):
-                temp_alpha = (self.alpha_dict[lidx] + np.log(1 / self.delta)) / float(
+                local_alpha = (self.alpha_dict[lidx] - np.log(self.delta)) / float(
                     lidx + 1
                 )
-                curr_list = curr_list + [temp_alpha]
+                log.info(
+                    f"[pategan] local_alpha[{lidx}] = {self.alpha_dict[lidx]} - {np.log(self.delta)}"
+                )
+                curr_list.append(local_alpha)
 
             epsilon_hat = np.min(curr_list)
             log.debug(f"[pategan it {it}] 3. eps update {epsilon_hat}")
@@ -315,29 +318,26 @@ class PATEGAN(Serializable):
         return self
 
     @validate_arguments(config=dict(arbitrary_types_allowed=True))
-    def _update_moments_accountant(self, n0: int, n1: int) -> float:
+    def _update_moments_accountant(self, n0: np.ndarray, n1: np.ndarray) -> np.ndarray:
         # Update moments accountant
-        q = (
-            np.log(2 + self.lamda * abs(n0 - n1))
-            - np.log(4.0)
-            - (self.lamda * abs(n0 - n1))
-        )
-        return np.exp(q)
+        qbase = self.lamda * np.abs(n0 - n1)
+        return (2 + qbase) / (4 * np.exp(qbase))
 
     @validate_arguments(config=dict(arbitrary_types_allowed=True))
-    def _update_alpha(self, q: float) -> Dict:
+    def _update_alpha(self, n0: np.ndarray, n1: np.ndarray) -> Dict:
+        # Update moments accountant
+        q = self._update_moments_accountant(n0, n1)
         # Compute alpha
         for lidx in range(self.alpha):
-            temp1 = 2 * (self.lamda**2) * (lidx + 1) * (lidx + 2)
-            temp2 = (1 - q) * (
-                ((1 - q) / (1 - q * np.exp(2 * self.lamda) + 1e-8)) ** (lidx + 1)
-            ) + q * np.exp(2 * self.lamda * (lidx + 1))
-            self.alpha_dict[lidx] += np.min([temp1, np.log(temp2)])
+            upper = 2 * self.lamda**2 * (lidx + 1) * (lidx + 2)
+            t = (1 - q) * np.power((1 - q) / (1 - np.exp(2 * self.lamda) * q), lidx + 1)
+            t = np.log(t + q * np.exp(2 * self.lamda * lidx + 1))
+            self.alpha_dict[lidx] += np.clip(t, a_min=0, a_max=upper).sum()
         return self.alpha_dict
 
     @validate_arguments(config=dict(arbitrary_types_allowed=True))
     def sample(self, count: int) -> np.ndarray:
-        samples = self.model(count).detach().cpu().numpy()
+        samples = self.model(count)
         return self.model.decode(pd.DataFrame(samples))
 
 
@@ -375,8 +375,6 @@ class PATEGANPlugin(Plugin):
             random_state used
         clipping_value: int, default 0
             Gradients clipping value. Zero disables the feature
-        n_teachers: int
-            Number of teachers to train
         teacher_template: str
             Model to use for the teachers. Can be linear, xgboost.
         epsilon: float
@@ -402,8 +400,8 @@ class PATEGANPlugin(Plugin):
     def __init__(
         self,
         # GAN
-        n_iter: int = 10,
-        generator_n_iter: int = 10,
+        n_iter: int = 1000,
+        generator_n_iter: int = 50,
         generator_n_layers_hidden: int = 2,
         generator_n_units_hidden: int = 100,
         generator_nonlin: str = "tanh",
@@ -420,12 +418,12 @@ class PATEGANPlugin(Plugin):
         clipping_value: int = 0,
         encoder_max_clusters: int = 20,
         # Privacy
-        n_teachers: int = 10,
+        samples_per_teacher: int = 100,
         teacher_template: str = "xgboost",
-        epsilon: float = 10.0,
-        delta: float = 0.00001,
-        lamda: float = 1,
-        alpha: int = 20,
+        epsilon: float = 1.0,
+        delta: Optional[float] = None,
+        lamda: float = 1e-3,
+        alpha: int = 100,
         encoder: Any = None,
         **kwargs: Any,
     ) -> None:
@@ -451,7 +449,7 @@ class PATEGANPlugin(Plugin):
             encoder_max_clusters=encoder_max_clusters,
             encoder=encoder,
             # Privacy
-            n_teachers=n_teachers,
+            samples_per_teacher=samples_per_teacher,
             teacher_template=teacher_template,
             epsilon=epsilon,
             delta=delta,
@@ -492,16 +490,18 @@ class PATEGANPlugin(Plugin):
             CategoricalDistribution(name="lr", choices=[1e-3, 2e-4, 1e-4]),
             CategoricalDistribution(name="weight_decay", choices=[1e-3, 1e-4]),
             CategoricalDistribution(name="batch_size", choices=[64, 128, 256, 512]),
-            IntegerDistribution(name="n_teachers", low=5, high=15),
+            IntegerDistribution(
+                name="samples_per_teacher", low=100, high=2000, step=100
+            ),
             CategoricalDistribution(
                 name="teacher_template", choices=["linear", "xgboost"]
             ),
             IntegerDistribution(name="encoder_max_clusters", low=2, high=20),
-            FloatDistribution(name="lamda", low=1, high=10),
+            FloatDistribution(name="lamda", low=0, high=1),
             CategoricalDistribution(
                 name="delta", choices=[1e-3, 1e-4, 1e-5, 1e-6, 1e-7, 1e-8]
             ),
-            IntegerDistribution(name="alpha", low=2, high=50),
+            IntegerDistribution(name="alpha", low=10, high=500),
         ]
 
     def _fit(self, X: DataLoader, *args: Any, **kwargs: Any) -> "PATEGANPlugin":
