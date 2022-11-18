@@ -2,8 +2,7 @@
 import numpy as np
 import pandas as pd
 import pytest
-from generic_helpers import generate_fixtures
-from helpers import get_airfoil_dataset
+from helpers import generate_fixtures, get_airfoil_dataset
 from sklearn.datasets import load_iris
 
 # synthcity absolute
@@ -14,6 +13,11 @@ from synthcity.plugins.core.dataloader import GenericDataLoader
 from synthcity.plugins.generic.plugin_pategan import plugin
 
 plugin_name = "pategan"
+plugin_args = {
+    "generator_n_layers_hidden": 1,
+    "generator_n_units_hidden": 10,
+    "lamda": 0.1,
+}
 
 
 @pytest.mark.parametrize("test_plugin", generate_fixtures(plugin_name, plugin))
@@ -36,14 +40,16 @@ def test_plugin_hyperparams(test_plugin: Plugin) -> None:
     assert len(test_plugin.hyperparameter_space()) == 20
 
 
-@pytest.mark.parametrize("test_plugin", generate_fixtures(plugin_name, plugin))
+@pytest.mark.parametrize(
+    "test_plugin", generate_fixtures(plugin_name, plugin, plugin_args)
+)
 def test_plugin_fit(test_plugin: Plugin) -> None:
     X = pd.DataFrame(load_iris()["data"])
     test_plugin.fit(GenericDataLoader(X))
 
 
 def test_plugin_generate_pategan() -> None:
-    test_plugin = plugin(generator_n_layers_hidden=1, generator_n_units_hidden=10)
+    test_plugin = plugin(**plugin_args)
     X = get_airfoil_dataset()
 
     test_plugin.fit(GenericDataLoader(X))
@@ -58,7 +64,7 @@ def test_plugin_generate_pategan() -> None:
 
 
 def test_plugin_generate_constraints() -> None:
-    test_plugin = plugin(generator_n_layers_hidden=1, generator_n_units_hidden=10)
+    test_plugin = plugin(**plugin_args)
     X = pd.DataFrame(load_iris()["data"])
     test_plugin.fit(GenericDataLoader(X))
 
@@ -103,7 +109,7 @@ def test_eval_performance() -> None:
     X = GenericDataLoader(Xraw)
 
     for retry in range(2):
-        test_plugin = plugin(n_iter=200)
+        test_plugin = plugin(n_iter=200, generator_n_layers_hidden=1, n_teachers=2)
         evaluator = PerformanceEvaluatorXGB()
 
         test_plugin.fit(X)

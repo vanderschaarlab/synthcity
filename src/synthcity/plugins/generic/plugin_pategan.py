@@ -39,6 +39,7 @@ class Teachers(Serializable):
     @validate_arguments(config=dict(arbitrary_types_allowed=True))
     def __init__(
         self,
+        n_teachers: int,
         samples_per_teacher: int,
         lamda: float = 1e-3,  # PATE noise size
         template: str = "xgboost",
@@ -46,6 +47,7 @@ class Teachers(Serializable):
         super().__init__()
 
         self.samples_per_teacher = samples_per_teacher
+        self.n_teachers = n_teachers
         self.lamda = lamda
         self.model_args: dict = {}
         if template == "xgboost":
@@ -65,16 +67,10 @@ class Teachers(Serializable):
     def fit(self, X: np.ndarray, generator: Any) -> Any:
         # 1. train teacher models
         self.teacher_models: list = []
-        self.n_teachers = round(len(X) / self.samples_per_teacher)
-        log.info(
-            f"[pategan] Using {self.n_teachers} teachers for dataset {len(X)} items"
-        )
 
         permutations = np.random.permutation(len(X))
 
-        log.debug("Training teachers")
         for tidx in range(self.n_teachers):
-            log.debug(f"  >> Training teacher {tidx}")
             teacher_idx = permutations[
                 int(tidx * self.samples_per_teacher) : int(
                     (tidx + 1) * self.samples_per_teacher
@@ -105,7 +101,6 @@ class Teachers(Serializable):
             )
 
             model = self.model_template(**self.model_args)
-            log.info(f"Training teacher {tidx}. {x_comb.shape} and {y_comb.shape}")
             model.fit(x_comb, y_comb)
 
             self.teacher_models.append(model)
@@ -150,11 +145,11 @@ class PATEGAN(Serializable):
     def __init__(
         self,
         # GAN
-        max_iter: int = 10,
+        max_iter: int = 1000,
         generator_n_layers_hidden: int = 2,
         generator_n_units_hidden: int = 100,
         generator_nonlin: str = "tanh",
-        generator_n_iter: int = 5,
+        generator_n_iter: int = 10,
         generator_dropout: float = 0,
         discriminator_n_layers_hidden: int = 2,
         discriminator_n_units_hidden: int = 100,
@@ -168,11 +163,11 @@ class PATEGAN(Serializable):
         clipping_value: int = 0,
         encoder_max_clusters: int = 20,
         # Privacy
-        samples_per_teacher: int = 1000,
+        n_teachers: int = 10,
         teacher_template: str = "linear",
         epsilon: float = 1.0,
         delta: Optional[float] = None,
-        lamda: float = 1e-3,
+        lamda: float = 1e-4,
         alpha: int = 100,
         encoder: Any = None,
     ) -> None:
@@ -195,7 +190,7 @@ class PATEGAN(Serializable):
         self.random_state = random_state
         self.clipping_value = clipping_value
         # Privacy
-        self.samples_per_teacher = samples_per_teacher
+        self.n_teachers = n_teachers
         self.teacher_template = teacher_template
         self.epsilon = epsilon
         self.delta = None
@@ -243,10 +238,10 @@ class PATEGAN(Serializable):
             clipping_value=self.clipping_value,
             encoder_max_clusters=self.encoder_max_clusters,
             encoder=self.encoder,
-            n_iter_print=100,
+            n_iter_print=self.generator_n_iter - 2,
         )
         X_train_enc = self.model.encode(X_train)
-        self.n_teachers = round(len(X_train_enc) / self.samples_per_teacher)
+        self.samples_per_teacher = int(len(X_train_enc) / self.n_teachers)
 
         # alpha initialize
         self.alpha_dict = np.zeros([self.alpha])
@@ -258,14 +253,17 @@ class PATEGAN(Serializable):
         it = 0
         while epsilon_hat < self.epsilon and it < self.max_iter:
             it += 1
-            log.debug(
+            log.info(
                 f"[pategan it {it}] epsilon_hat = {epsilon_hat}. self.epsilon = {self.epsilon}"
             )
 
-            log.debug(f"[pategan it {it}] 1. Train teacher models")
+            log.debug(
+                f"[pategan it {it}] 1. Train teacher models n_teachers = {self.n_teachers} samples_per_teacher = {self.samples_per_teacher}"
+            )
 
             # 1. Train teacher models
             teachers = Teachers(
+                n_teachers=self.n_teachers,
                 samples_per_teacher=self.samples_per_teacher,
                 lamda=self.lamda,
                 template=self.teacher_template,
@@ -306,13 +304,9 @@ class PATEGAN(Serializable):
                 local_alpha = (self.alpha_dict[lidx] - np.log(self.delta)) / float(
                     lidx + 1
                 )
-                log.info(
-                    f"[pategan] local_alpha[{lidx}] = {self.alpha_dict[lidx]} - {np.log(self.delta)}"
-                )
                 curr_list.append(local_alpha)
 
             epsilon_hat = np.min(curr_list)
-            log.debug(f"[pategan it {it}] 3. eps update {epsilon_hat}")
 
         log.debug("pategan training done")
         return self
@@ -401,7 +395,7 @@ class PATEGANPlugin(Plugin):
         self,
         # GAN
         n_iter: int = 1000,
-        generator_n_iter: int = 50,
+        generator_n_iter: int = 100,
         generator_n_layers_hidden: int = 2,
         generator_n_units_hidden: int = 100,
         generator_nonlin: str = "tanh",
@@ -418,11 +412,11 @@ class PATEGANPlugin(Plugin):
         clipping_value: int = 0,
         encoder_max_clusters: int = 20,
         # Privacy
-        samples_per_teacher: int = 100,
+        n_teachers: int = 10,
         teacher_template: str = "xgboost",
         epsilon: float = 1.0,
         delta: Optional[float] = None,
-        lamda: float = 1e-3,
+        lamda: float = 1e-4,
         alpha: int = 100,
         encoder: Any = None,
         **kwargs: Any,
@@ -449,7 +443,7 @@ class PATEGANPlugin(Plugin):
             encoder_max_clusters=encoder_max_clusters,
             encoder=encoder,
             # Privacy
-            samples_per_teacher=samples_per_teacher,
+            n_teachers=n_teachers,
             teacher_template=teacher_template,
             epsilon=epsilon,
             delta=delta,
@@ -490,9 +484,7 @@ class PATEGANPlugin(Plugin):
             CategoricalDistribution(name="lr", choices=[1e-3, 2e-4, 1e-4]),
             CategoricalDistribution(name="weight_decay", choices=[1e-3, 1e-4]),
             CategoricalDistribution(name="batch_size", choices=[64, 128, 256, 512]),
-            IntegerDistribution(
-                name="samples_per_teacher", low=100, high=2000, step=100
-            ),
+            IntegerDistribution(name="n_teachers", low=5, high=200),
             CategoricalDistribution(
                 name="teacher_template", choices=["linear", "xgboost"]
             ),

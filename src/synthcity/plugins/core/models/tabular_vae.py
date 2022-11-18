@@ -216,7 +216,7 @@ class TabularVAE(nn.Module):
     def generate(
         self,
         count: int,
-        cond: Optional[Union[pd.DataFrame, np.ndarray]] = None,
+        cond: Optional[Union[pd.DataFrame, pd.Series, np.ndarray]] = None,
         **kwargs: Any,
     ) -> pd.DataFrame:
         samples = self(count, cond)
@@ -224,7 +224,9 @@ class TabularVAE(nn.Module):
 
     @validate_arguments(config=dict(arbitrary_types_allowed=True))
     def forward(
-        self, count: int, cond: Optional[Union[pd.DataFrame, np.ndarray]] = None
+        self,
+        count: int,
+        cond: Optional[Union[pd.DataFrame, pd.Series, np.ndarray]] = None,
     ) -> torch.Tensor:
         extra_cond = self.dataloader_sampler.sample_conditional(count)
         cond = self._merge_conditionals(cond, extra_cond)

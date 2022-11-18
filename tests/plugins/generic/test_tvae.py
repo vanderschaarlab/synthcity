@@ -1,8 +1,7 @@
 # third party
 import pandas as pd
 import pytest
-from generic_helpers import generate_fixtures
-from helpers import get_airfoil_dataset
+from helpers import generate_fixtures, get_airfoil_dataset
 from sklearn.datasets import load_iris
 
 # synthcity absolute

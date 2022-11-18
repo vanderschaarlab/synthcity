@@ -163,12 +163,13 @@ class TabularGAN(torch.nn.Module):
                     idx += length
                     continue
 
-                assert (fake_samples[mask, idx : idx + length] > 0).all()
-
+                assert (
+                    fake_samples[mask, idx : idx + length] >= 0
+                ).all(), fake_samples[mask, idx : idx + length]
                 # fake_samples are after the Softmax activation
                 # we filter active features in the mask
                 item_loss = torch.nn.NLLLoss()(
-                    torch.log(fake_samples[mask, idx : idx + length]),
+                    torch.log(fake_samples[mask, idx : idx + length] + 1e-3),
                     torch.argmax(real_samples[mask, idx : idx + length], dim=1),
                 )
                 losses.append(item_loss)
@@ -239,7 +240,7 @@ class TabularGAN(torch.nn.Module):
     def fit(
         self,
         X: pd.DataFrame,
-        cond: Optional[Union[pd.DataFrame, pd.Series]] = None,
+        cond: Optional[Union[pd.DataFrame, pd.Series, np.ndarray]] = None,
         fake_labels_generator: Optional[Callable] = None,
         true_labels_generator: Optional[Callable] = None,
         encoded: bool = False,
@@ -261,7 +262,9 @@ class TabularGAN(torch.nn.Module):
 
     @validate_arguments(config=dict(arbitrary_types_allowed=True))
     def generate(
-        self, count: int, cond: Optional[Union[pd.DataFrame, np.ndarray]] = None
+        self,
+        count: int,
+        cond: Optional[Union[pd.DataFrame, pd.Series, np.ndarray]] = None,
     ) -> pd.DataFrame:
         samples = self(count, cond)
         return self.decode(pd.DataFrame(samples))
