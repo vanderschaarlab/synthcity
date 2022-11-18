@@ -80,7 +80,7 @@ class TVAEPlugin(Plugin):
 
     @staticmethod
     def name() -> str:
-        return "tvae"
+        return "sdv_tvae"
 
     @staticmethod
     def type() -> str:

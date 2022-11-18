@@ -8,9 +8,9 @@ from sklearn.datasets import load_iris
 from synthcity.plugins import Plugin
 from synthcity.plugins.core.constraints import Constraints
 from synthcity.plugins.core.dataloader import GenericDataLoader
-from synthcity.plugins.generic.plugin_tvae import plugin
+from synthcity.plugins.generic.plugin_sdv_tvae import plugin
 
-plugin_name = "tvae"
+plugin_name = "sdv_tvae"
 plugin_args = {"n_iter": 10}
 
 

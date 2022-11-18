@@ -8,10 +8,10 @@ from sklearn.datasets import load_iris
 from synthcity.plugins import Plugin
 from synthcity.plugins.core.constraints import Constraints
 from synthcity.plugins.core.dataloader import GenericDataLoader
-from synthcity.plugins.generic.plugin_ctgan import plugin
+from synthcity.plugins.generic.plugin_sdv_ctgan import plugin
 from synthcity.utils.serialization import load, save
 
-plugin_name = "ctgan"
+plugin_name = "sdv_ctgan"
 plugin_args = {"n_iter": 10}
 
 

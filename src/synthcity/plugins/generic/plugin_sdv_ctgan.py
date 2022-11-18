@@ -100,7 +100,7 @@ class CTGANPlugin(Plugin):
 
     @staticmethod
     def name() -> str:
-        return "ctgan"
+        return "sdv_ctgan"
 
     @staticmethod
     def type() -> str:
