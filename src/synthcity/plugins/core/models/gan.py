@@ -477,17 +477,13 @@ class GAN(nn.Module):
         """Calculates additional penalties for the training"""
         err: torch.Tensor = 0
         for penalty in penalties:
-            if penalty == "gradient_penalty":
-                err += self._loss_gradient_penalty(
-                    real_samples=real_samples,
-                    fake_samples=fake_samples,
-                    batch_size=batch_size,
-                )
-            elif penalty == "identifiability_penalty":
+            if penalty == "identifiability_penalty":
                 err += self._loss_identifiability_penalty(
                     real_samples=real_samples,
                     fake_samples=fake_samples,
                 )
+            else:
+                raise RuntimeError(f"unknown penalty {penalty}")
         return err
 
     def _loss_gradient_penalty(
@@ -525,9 +521,10 @@ class GAN(nn.Module):
         real_samples: torch.tensor,
         fake_samples: torch.Tensor,
     ) -> torch.Tensor:
-        """Calculates the identifiability penalty"""
-        return self.lambda_identifiability_penalty * torch.sqrt(
-            nn.MSELoss()(real_samples, fake_samples)
+        """Calculates the identifiability penalty. Section C in the paper"""
+        return (
+            -self.lambda_identifiability_penalty
+            * (real_samples - fake_samples).square().sum(dim=-1).sqrt().mean()
         )
 
     def _append_optional_cond(

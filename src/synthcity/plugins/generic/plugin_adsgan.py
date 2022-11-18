@@ -87,7 +87,6 @@ class AdsGANPlugin(Plugin):
         generator_nonlin: str = "tanh",
         generator_dropout: float = 0.1,
         generator_opt_betas: tuple = (0.5, 0.999),
-        generator_extra_penalties: list = [],
         discriminator_n_layers_hidden: int = 2,
         discriminator_n_units_hidden: int = 500,
         discriminator_nonlin: str = "leaky_relu",
@@ -114,7 +113,7 @@ class AdsGANPlugin(Plugin):
         self.n_iter = n_iter
         self.generator_dropout = generator_dropout
         self.generator_opt_betas = generator_opt_betas
-        self.generator_extra_penalties = generator_extra_penalties
+        self.generator_extra_penalties = ["identifiability_penalty"]
         self.discriminator_n_layers_hidden = discriminator_n_layers_hidden
         self.discriminator_n_units_hidden = discriminator_n_units_hidden
         self.discriminator_nonlin = discriminator_nonlin
