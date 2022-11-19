@@ -169,7 +169,7 @@ class TabularGAN(torch.nn.Module):
                 # fake_samples are after the Softmax activation
                 # we filter active features in the mask
                 item_loss = torch.nn.NLLLoss()(
-                    torch.log(fake_samples[mask, idx : idx + length] + 1e-3),
+                    torch.log(fake_samples[mask, idx : idx + length] + 1e-8),
                     torch.argmax(real_samples[mask, idx : idx + length], dim=1),
                 )
                 losses.append(item_loss)

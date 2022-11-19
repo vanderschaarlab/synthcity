@@ -500,7 +500,7 @@ class TimeSeriesAutoEncoder(nn.Module):
                     f"Invalid reconstructed features. Expected {step}, got {reconstructed.shape}"
                 )
 
-            reconstruction_loss = torch.sum(torch.FloatTensor(loss))
+            reconstruction_loss = torch.sum(torch.stack(loss))
         else:
             reconstruction_loss = nn.MSELoss()(reconstructed, real)
 

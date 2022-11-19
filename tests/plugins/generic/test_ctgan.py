@@ -17,7 +17,7 @@ plugin_name = "ctgan"
 plugin_args = {
     "generator_n_layers_hidden": 1,
     "generator_n_units_hidden": 10,
-    "n_iter": 100,
+    "n_iter": 10,
 }
 
 

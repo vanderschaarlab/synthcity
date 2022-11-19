@@ -1,10 +1,12 @@
 # third party
+import numpy as np
 import pandas as pd
 import pytest
 from helpers import generate_fixtures, get_airfoil_dataset
 from sklearn.datasets import load_iris
 
 # synthcity absolute
+from synthcity.metrics import PerformanceEvaluatorXGB
 from synthcity.plugins import Plugin
 from synthcity.plugins.core.constraints import Constraints
 from synthcity.plugins.core.dataloader import GenericDataLoader
@@ -95,3 +97,24 @@ def test_sample_hyperparams() -> None:
         args = plugin.sample_hyperparameters()
 
         assert plugin(**args) is not None
+
+
+@pytest.mark.slow
+def test_eval_performance_sdv_tvae() -> None:
+    results = []
+
+    Xraw, y = load_iris(return_X_y=True, as_frame=True)
+    Xraw["target"] = y
+    X = GenericDataLoader(Xraw)
+
+    for retry in range(2):
+        test_plugin = plugin(n_iter=100)
+        evaluator = PerformanceEvaluatorXGB()
+
+        test_plugin.fit(X)
+        X_syn = test_plugin.generate()
+
+        results.append(evaluator.evaluate(X, X_syn)["syn_id"])
+
+    print(plugin.name(), np.mean(results))
+    assert np.mean(results) > 0.7

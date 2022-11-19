@@ -380,7 +380,8 @@ class MLP(nn.Module):
 
             batch_loss.backward()
 
-            torch.nn.utils.clip_grad_norm_(self.parameters(), self.clipping_value)
+            if self.clipping_value > 0:
+                torch.nn.utils.clip_grad_norm_(self.parameters(), self.clipping_value)
 
             self.optimizer.step()
 

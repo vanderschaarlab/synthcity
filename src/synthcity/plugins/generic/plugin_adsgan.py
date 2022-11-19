@@ -39,7 +39,7 @@ class AdsGANPlugin(Plugin):
             Number of hidden layers in the generator
         generator_n_units_hidden: int
             Number of hidden units in each layer of the Generator
-        generator_nonlin: string, default 'tanh'
+        generator_nonlin: string, default 'leaky_relu'
             Nonlinearity to use in the generator. Can be 'elu', 'relu', 'selu' or 'leaky_relu'.
         n_iter: int
             Maximum number of iterations in the Generator.
@@ -84,7 +84,7 @@ class AdsGANPlugin(Plugin):
         n_units_conditional: int = 0,
         generator_n_layers_hidden: int = 3,
         generator_n_units_hidden: int = 500,
-        generator_nonlin: str = "tanh",
+        generator_nonlin: str = "leaky_relu",
         generator_dropout: float = 0.1,
         generator_opt_betas: tuple = (0.5, 0.999),
         discriminator_n_layers_hidden: int = 2,

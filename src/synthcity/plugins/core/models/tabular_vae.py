@@ -62,8 +62,6 @@ class TabularVAE(nn.Module):
             random_state used
         n_iter_min: int
             Minimum number of iterations to go through before starting early stopping
-        clipping_value: int, default 1
-            Gradients clipping value
         encoder_max_clusters: int
             The max number of clusters to create for continuous columns when encoding
     """
@@ -80,7 +78,6 @@ class TabularVAE(nn.Module):
         batch_size: int = 64,
         n_iter_print: int = 10,
         random_state: int = 0,
-        clipping_value: int = 1,
         loss_strategy: str = "standard",
         encoder_max_clusters: int = 20,
         decoder_n_layers_hidden: int = 2,
@@ -99,7 +96,9 @@ class TabularVAE(nn.Module):
         encoder_whitelist: list = [],
         device: Any = DEVICE,
         robust_divergence_beta: int = 2,  # used for loss_strategy = robust_divergence
+        loss_factor: int = 1,  # used for standar losss
         dataloader_sampler: Optional[BaseSampler] = None,
+        clipping_value: int = 1,
     ) -> None:
         super(TabularVAE, self).__init__()
         self.columns = X.columns
@@ -139,10 +138,17 @@ class TabularVAE(nn.Module):
                 # create activate feature mask
                 mask = cond[:, cond_idx : cond_idx + length].sum(axis=1).bool()
 
+                if mask.sum() == 0:
+                    idx += length
+                    continue
+
+                assert (
+                    fake_samples[mask, idx : idx + length] >= 0
+                ).all(), fake_samples[mask, idx : idx + length]
                 # fake_samples are after the Softmax activation
                 # we filter active features in the mask
                 item_loss = torch.nn.NLLLoss()(
-                    torch.log(fake_samples[mask, idx : idx + length]),
+                    torch.log(fake_samples[mask, idx : idx + length] + 1e-8),
                     torch.argmax(real_samples[mask, idx : idx + length], dim=1),
                 )
                 losses.append(item_loss)
@@ -166,7 +172,6 @@ class TabularVAE(nn.Module):
             n_iter=n_iter,
             lr=lr,
             weight_decay=weight_decay,
-            clipping_value=clipping_value,
             random_state=random_state,
             n_iter_print=n_iter_print,
             loss_strategy=loss_strategy,
@@ -189,6 +194,8 @@ class TabularVAE(nn.Module):
             device=device,
             extra_loss_cbks=[_cond_loss],
             robust_divergence_beta=robust_divergence_beta,
+            loss_factor=loss_factor,
+            clipping_value=clipping_value,
         )
 
     @validate_arguments(config=dict(arbitrary_types_allowed=True))

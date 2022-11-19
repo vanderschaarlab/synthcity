@@ -32,7 +32,7 @@ class TVAEPlugin(Plugin):
             Number of hidden layers in the decoder
         decoder_n_units_hidden: int
             Number of hidden units in each layer of the decoder
-        decoder_nonlin: string, default 'tanh'
+        decoder_nonlin: string, default 'leaky_relu'
             Nonlinearity to use in the decoder. Can be 'elu', 'relu', 'selu' or 'leaky_relu'.
         decoder_dropout: float
             Dropout value. If 0, the dropout is not used.
@@ -54,8 +54,6 @@ class TVAEPlugin(Plugin):
             Batch size
         random_state: int
             random_state used
-        clipping_value: int, default 1
-            Gradients clipping value
         encoder_max_clusters: int
             The max number of clusters to create for continuous columns when encoding
 
@@ -73,25 +71,28 @@ class TVAEPlugin(Plugin):
         self,
         n_iter: int = 1000,
         n_units_conditional: int = 0,
-        lr: float = 1e-4,
-        weight_decay: float = 1e-3,
-        batch_size: int = 100,
+        n_units_embedding: int = 500,
+        lr: float = 1e-3,
+        weight_decay: float = 1e-5,
+        batch_size: int = 500,
         random_state: int = 0,
-        clipping_value: int = 1,
-        decoder_n_layers_hidden: int = 2,
-        decoder_n_units_hidden: int = 100,
-        decoder_nonlin: str = "tanh",
+        decoder_n_layers_hidden: int = 3,
+        decoder_n_units_hidden: int = 500,
+        decoder_nonlin: str = "leaky_relu",
         decoder_dropout: float = 0,
-        encoder_n_layers_hidden: int = 2,
-        encoder_n_units_hidden: int = 100,
+        encoder_n_layers_hidden: int = 3,
+        encoder_n_units_hidden: int = 500,
         encoder_nonlin: str = "leaky_relu",
         encoder_dropout: float = 0.1,
+        loss_factor: int = 1,
         data_encoder_max_clusters: int = 10,
         dataloader_sampler: Optional[sampler.Sampler] = None,
+        clipping_value: int = 1,
         **kwargs: Any
     ) -> None:
         super().__init__(**kwargs)
         self.n_units_conditional = n_units_conditional
+        self.n_units_embedding = n_units_embedding
         self.decoder_n_layers_hidden = decoder_n_layers_hidden
         self.decoder_n_units_hidden = decoder_n_units_hidden
         self.decoder_nonlin = decoder_nonlin
@@ -105,9 +106,10 @@ class TVAEPlugin(Plugin):
         self.weight_decay = weight_decay
         self.batch_size = batch_size
         self.random_state = random_state
-        self.clipping_value = clipping_value
         self.data_encoder_max_clusters = data_encoder_max_clusters
         self.dataloader_sampler = dataloader_sampler
+        self.loss_factor = loss_factor
+        self.clipping_value = clipping_value
 
     @staticmethod
     def name() -> str:
@@ -125,6 +127,7 @@ class TVAEPlugin(Plugin):
             IntegerDistribution(name="decoder_n_layers_hidden", low=1, high=5),
             CategoricalDistribution(name="weight_decay", choices=[1e-3, 1e-4]),
             CategoricalDistribution(name="batch_size", choices=[64, 128, 256, 512]),
+            IntegerDistribution(name="n_units_embedding", low=50, high=500, step=50),
             IntegerDistribution(
                 name="decoder_n_units_hidden", low=50, high=500, step=50
             ),
@@ -144,10 +147,9 @@ class TVAEPlugin(Plugin):
         ]
 
     def _fit(self, X: DataLoader, *args: Any, **kwargs: Any) -> "TVAEPlugin":
-        features = X.shape[1]
         self.model = TabularVAE(
             X.dataframe(),
-            n_units_embedding=features,
+            n_units_embedding=self.n_units_embedding,
             n_units_conditional=self.n_units_conditional,
             batch_size=self.batch_size,
             lr=self.lr,
@@ -166,9 +168,10 @@ class TVAEPlugin(Plugin):
             encoder_nonlin=self.encoder_nonlin,
             encoder_batch_norm=False,
             encoder_dropout=self.encoder_dropout,
-            clipping_value=self.clipping_value,
             encoder_max_clusters=self.data_encoder_max_clusters,
             dataloader_sampler=self.dataloader_sampler,
+            loss_factor=self.loss_factor,
+            clipping_value=self.clipping_value,
         )
         self.model.fit(X.dataframe(), **kwargs)
 

@@ -148,7 +148,7 @@ class PATEGAN(Serializable):
         max_iter: int = 1000,
         generator_n_layers_hidden: int = 2,
         generator_n_units_hidden: int = 100,
-        generator_nonlin: str = "tanh",
+        generator_nonlin: str = "leaky_relu",
         generator_n_iter: int = 10,
         generator_dropout: float = 0,
         discriminator_n_layers_hidden: int = 2,
@@ -343,7 +343,7 @@ class PATEGANPlugin(Plugin):
             Number of hidden layers in the generator
         generator_n_units_hidden: int
             Number of hidden units in each layer of the Generator
-        generator_nonlin: string, default 'tanh'
+        generator_nonlin: string, default 'leaky_relu'
             Nonlinearity to use in the generator. Can be 'elu', 'relu', 'selu' or 'leaky_relu'.
         n_iter: int
             Maximum number of iterations in the Generator.
@@ -398,7 +398,7 @@ class PATEGANPlugin(Plugin):
         generator_n_iter: int = 100,
         generator_n_layers_hidden: int = 2,
         generator_n_units_hidden: int = 100,
-        generator_nonlin: str = "tanh",
+        generator_nonlin: str = "leaky_relu",
         generator_dropout: float = 0,
         discriminator_n_layers_hidden: int = 2,
         discriminator_n_units_hidden: int = 100,

@@ -13,7 +13,7 @@ from synthcity.plugins.core.dataloader import GenericDataLoader
 from synthcity.plugins.generic.plugin_rtvae import plugin
 
 plugin_name = "rtvae"
-plugin_args = {"n_iter": 100}
+plugin_args = {"n_iter": 10, "decoder_n_layers_hidden": 1, "encoder_n_layers_hidden": 1}
 
 
 @pytest.mark.parametrize("test_plugin", generate_fixtures(plugin_name, plugin))
@@ -33,7 +33,7 @@ def test_plugin_type(test_plugin: Plugin) -> None:
 
 @pytest.mark.parametrize("test_plugin", generate_fixtures(plugin_name, plugin))
 def test_plugin_hyperparams(test_plugin: Plugin) -> None:
-    assert len(test_plugin.hyperparameter_space()) == 12
+    assert len(test_plugin.hyperparameter_space()) == 13
 
 
 @pytest.mark.parametrize(
@@ -100,7 +100,7 @@ def test_sample_hyperparams() -> None:
 
 
 @pytest.mark.slow
-def test_eval_performance() -> None:
+def test_eval_performance_rtvae() -> None:
     results = []
 
     Xraw, y = load_iris(return_X_y=True, as_frame=True)
@@ -108,7 +108,7 @@ def test_eval_performance() -> None:
     X = GenericDataLoader(Xraw)
 
     for retry in range(2):
-        test_plugin = plugin(n_iter=500)
+        test_plugin = plugin(n_iter=100)
         evaluator = PerformanceEvaluatorXGB()
 
         test_plugin.fit(X)
