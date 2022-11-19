@@ -117,6 +117,11 @@ class TabularGAN(torch.nn.Module):
         encoder_whitelist: list = [],
         dataloader_sampler: Optional[BaseSampler] = None,
         device: Any = DEVICE,
+        # privacy settings
+        dp_enabled: bool = False,
+        dp_epsilon: float = 3,
+        dp_delta: float = 1e-3,
+        dp_max_grad_norm: float = 2,
     ) -> None:
         super(TabularGAN, self).__init__()
         self.columns = X.columns
@@ -226,6 +231,11 @@ class TabularGAN(torch.nn.Module):
             n_iter_min=n_iter_min,
             dataloader_sampler=dataloader_sampler,
             device=device,
+            # privacy
+            dp_enabled=dp_enabled,
+            dp_epsilon=dp_epsilon,
+            dp_delta=dp_delta,
+            dp_max_grad_norm=dp_max_grad_norm,
         )
 
     @validate_arguments(config=dict(arbitrary_types_allowed=True))

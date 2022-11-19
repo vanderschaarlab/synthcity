@@ -4,6 +4,7 @@ from typing import Any, Callable, List, Optional, Tuple
 # third party
 import numpy as np
 import torch
+from opacus import PrivacyEngine
 from pydantic import validate_arguments
 from torch import nn
 from torch.utils.data import DataLoader, TensorDataset, sampler
@@ -110,6 +111,11 @@ class GAN(nn.Module):
         lambda_identifiability_penalty: float = 0.1,
         dataloader_sampler: Optional[sampler.Sampler] = None,
         device: Any = DEVICE,
+        # privacy settings
+        dp_enabled: bool = False,
+        dp_epsilon: float = 3,
+        dp_delta: float = 1e-3,
+        dp_max_grad_norm: float = 2,
     ) -> None:
         super(GAN, self).__init__()
 
@@ -189,6 +195,12 @@ class GAN(nn.Module):
         self.fake_labels_generator = gen_fake_labels
         self.true_labels_generator = gen_true_labels
         self.dataloader_sampler = dataloader_sampler
+
+        # privacy
+        self.dp_enabled = dp_enabled
+        self.dp_epsilon = dp_epsilon
+        self.dp_delta = dp_delta
+        self.dp_max_grad_norm = dp_max_grad_norm
 
     def fit(
         self,
@@ -377,8 +389,21 @@ class GAN(nn.Module):
             errD = -errD_real + errD_fake
 
             self.discriminator.optimizer.zero_grad()
-            penalty.backward(retain_graph=True)
-            errD.backward()
+            if self.dp_enabled:
+                # Adversarial loss
+                # 1. split fwd-bkwd on fake and real images into two explicit blocks.
+                # 2. no need to compute per_sample_gardients on fake data, disable hooks.
+                # 3. re-enable hooks to obtain per_sample_gardients for real data.
+                # fake fwd-bkwd
+                self.discriminator.disable_hooks()
+                penalty.backward(retain_graph=True)
+                errD_fake.backward(retain_graph=True)
+
+                self.discriminator.enable_hooks()
+                errD_real.backward()  # HACK: calling bkwd without zero_grad() accumulates param gradients
+            else:
+                penalty.backward(retain_graph=True)
+                errD.backward()
 
             # Update D
             if self.clipping_value > 0:
@@ -445,6 +470,25 @@ class GAN(nn.Module):
 
         # Load Dataset
         loader = self.dataloader(X, cond)
+
+        # Privacy
+        if self.dp_enabled:
+            privacy_engine = PrivacyEngine()
+
+            (
+                self.discriminator,
+                self.discriminator.optimizer,
+                loader,
+            ) = privacy_engine.make_private_with_epsilon(
+                module=self.discriminator,
+                optimizer=self.discriminator.optimizer,
+                data_loader=loader,
+                epochs=self.generator_n_iter,
+                target_epsilon=self.dp_epsilon,
+                target_delta=self.dp_delta,
+                max_grad_norm=self.dp_max_grad_norm,
+                poisson_sampling=False,
+            )
 
         # Train loop
         for i in range(self.generator_n_iter):
