@@ -475,19 +475,27 @@ class VAE(nn.Module):
 
         for activation, length in self.decoder_nonlin_out:
             step_end = step + length
+            feature_recon = reconstructed[:, step:step_end]
+            feature_real = real[:, step:step_end]
             if activation == "softmax":
-                cat_probs = torch.argmax(reconstructed[:, step:step_end], dim=-1)
-                _, cat_probs = torch.unique(cat_probs, return_counts=True)
-                cat_probs = (cat_probs / N) ** (beta + 1)
+                # cat_probs = torch.argmax(feature_real, dim=-1)
+                # _, cat_probs = torch.unique(cat_probs, return_counts=True)
+                # cat_probs = (cat_probs / N) ** (beta + 1)
 
-                discr_loss = torch.sum((reconstructed[:, step:step_end] ** beta - 1))
-                discr_loss = -(beta + 1) / (beta * N) * discr_loss
-                discr_loss += torch.sum(cat_probs)
+                # discr_loss = torch.sum((feature_recon ** beta - 1))
+                # discr_loss = -(beta + 1) / (beta * N) * discr_loss
+                # discr_loss += torch.sum(cat_probs)
+
+                # TODO: debug why robust cross entropy is not working
+                discr_loss = nn.NLLLoss(reduction="sum")(
+                    torch.log(reconstructed[:, step:step_end] + 1e-8),
+                    torch.argmax(real[:, step:step_end], dim=-1),
+                )
 
                 loss.append(discr_loss)
             else:
-                cont_loss = (-beta / (2 * std**2)) * (
-                    reconstructed[:, step:step_end] - real[:, step:step_end]
+                cont_loss = (-beta / (2 * std**2)) * torch.norm(
+                    feature_recon - feature_real, p=2
                 ) ** 2
                 cont_loss = (1 / (2 * np.pi * std**2) ** (beta / 2)) * torch.exp(
                     cont_loss
