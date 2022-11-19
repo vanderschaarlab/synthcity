@@ -131,6 +131,7 @@ def test_gan_generation_with_dp() -> None:
         n_features=X.shape[1],
         n_units_latent=50,
         generator_n_iter=50,
+        n_iter_print=10,
         dp_enabled=True,
     )
     model.fit(X)

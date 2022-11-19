@@ -8,6 +8,7 @@ import torch
 from pydantic import validate_arguments
 
 # synthcity absolute
+import synthcity.logger as log
 from synthcity.utils.constants import DEVICE
 from synthcity.utils.samplers import BaseSampler, ConditionalDatasetSampler
 
@@ -120,7 +121,7 @@ class TabularGAN(torch.nn.Module):
         # privacy settings
         dp_enabled: bool = False,
         dp_epsilon: float = 3,
-        dp_delta: float = 1e-3,
+        dp_delta: Optional[float] = None,
         dp_max_grad_norm: float = 2,
     ) -> None:
         super(TabularGAN, self).__init__()
@@ -191,6 +192,7 @@ class TabularGAN(torch.nn.Module):
 
             return loss.sum() / len(real_samples)
 
+        log.info(f"Feature layout : {self.encoder.layout()}")
         self.model = GAN(
             self.encoder.n_features(),
             n_units_latent=n_units_latent,

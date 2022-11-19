@@ -113,8 +113,8 @@ class GAN(nn.Module):
         device: Any = DEVICE,
         # privacy settings
         dp_enabled: bool = False,
+        dp_delta: Optional[float] = None,
         dp_epsilon: float = 3,
-        dp_delta: float = 1e-3,
         dp_max_grad_norm: float = 2,
     ) -> None:
         super(GAN, self).__init__()
@@ -198,8 +198,8 @@ class GAN(nn.Module):
 
         # privacy
         self.dp_enabled = dp_enabled
-        self.dp_epsilon = dp_epsilon
         self.dp_delta = dp_delta
+        self.dp_epsilon = dp_epsilon
         self.dp_max_grad_norm = dp_max_grad_norm
 
     def fit(
@@ -473,6 +473,9 @@ class GAN(nn.Module):
 
         # Privacy
         if self.dp_enabled:
+            if self.dp_delta is None:
+                self.dp_delta = 1 / len(X)
+
             privacy_engine = PrivacyEngine()
 
             (
@@ -502,6 +505,10 @@ class GAN(nn.Module):
                 log.debug(
                     f"[{i}/{self.generator_n_iter}]\tLoss_D: {d_loss}\tLoss_G: {g_loss}"
                 )
+                if self.dp_enabled:
+                    log.debug(
+                        f"[{i}/{self.generator_n_iter}] Privacy budget: epsilon = {privacy_engine.get_epsilon(self.dp_delta)} delta = {self.dp_delta}"
+                    )
 
         return self
 
