@@ -1,6 +1,6 @@
 # third party
 import pytest
-from helpers import generate_fixtures, get_airfoil_dataset
+from generic_helpers import generate_fixtures, get_airfoil_dataset
 
 # synthcity absolute
 from synthcity.plugins import Plugin
