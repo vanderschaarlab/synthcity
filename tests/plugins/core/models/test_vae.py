@@ -36,7 +36,7 @@ def test_network_config() -> None:
     )
 
     assert len(net.decoder.model) == 4
-    assert len(net.encoder.model) == 3
+    assert len(net.encoder.shared) == 3
     assert net.batch_size == 64
     assert net.n_iter == 1001
     assert net.lr == 1e-3
@@ -73,7 +73,7 @@ def test_basic_network(
     assert net.n_iter == 10
     assert net.lr == lr
     assert len(net.decoder.model) == hidden + 1
-    assert len(net.encoder.model) == hidden
+    assert len(net.encoder.shared) == hidden
 
 
 @pytest.mark.parametrize("loss_strategy", ["standard", "robust_divergence"])
