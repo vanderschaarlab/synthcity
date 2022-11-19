@@ -109,7 +109,9 @@ def test_eval_performance() -> None:
     X = GenericDataLoader(Xraw)
 
     for retry in range(2):
-        test_plugin = plugin(n_iter=200, generator_n_layers_hidden=1, n_teachers=2)
+        test_plugin = plugin(
+            n_iter=200, generator_n_layers_hidden=1, n_teachers=2, lamda=2e-4
+        )
         evaluator = PerformanceEvaluatorXGB()
 
         test_plugin.fit(X)
@@ -117,4 +119,5 @@ def test_eval_performance() -> None:
 
         results.append(evaluator.evaluate(X, X_syn)["syn_id"])
 
+    print(plugin.name(), np.mean(results))
     assert np.mean(results) > 0.7

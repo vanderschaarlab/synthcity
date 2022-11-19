@@ -109,7 +109,7 @@ def test_sample_hyperparams() -> None:
 
 
 @pytest.mark.slow
-def test_eval_performance() -> None:
+def test_eval_performance_ctgan() -> None:
     results = []
 
     Xraw, y = load_iris(return_X_y=True, as_frame=True)
