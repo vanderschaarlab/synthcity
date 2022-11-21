@@ -15,9 +15,44 @@ from synthcity.utils.serialization import dataframe_hash
 
 
 class DataLoader(metaclass=ABCMeta):
-    """
-    Base class for data loading and splitting
+    """Base class for all data loaders.
 
+    Each derived class must implement the following methods:
+        unpack() - a method that unpacks the columns and returns features and labels (X, y).
+        decorate() - a method that creates a new instance of DataLoader by decorating the input data with the same DataLoader properties (e.g. sensitive features, target column, etc.)
+        dataframe() - a method that returns the pandas dataframe that contains all features and samples
+        numpy() - a method that returns the numpy array that contains all features and samples
+        info() - a method that returns a dictionary of DataLoader information
+        __len__() - a method that returns the number of samples in the DataLoader
+        satisfies() - a method that tests if the current DataLoader satisfies the constraint provided
+        match() - a method that returns a new DataLoader where the provided constraints are met
+        from_info() - a static method that creates a DataLoader from the data and the information dictionary
+        sample() - returns a new DataLoader that contains a random subset of N samples
+        drop() - returns a new DataLoader with a list of columns dropped
+        __getitem__() - getting features by names
+        __setitem__() - setting features by names
+        train() - returns a DataLoader containing the training set
+        test() - returns a DataLoader containing the testing set
+        fillna() - returns a DataLoader with NaN filled by the provided number(s)
+
+
+    If any method implementation is missing, the class constructor will fail.
+
+    Constructor Args:
+        data_type: str
+            The type of DataLoader, currently supports "generic", "time_series" and "survival".
+        data: Any
+            The object that contains the data
+        static_features: List[str]
+            List of feature names that are static features (as opposed to temporal features).
+        temporal_features:
+            List of feature names that are temporal features, i.e. observed over time.
+        sensitive_features: List[str]
+            Name of sensitive features.
+        important_features: List[str]
+            Default: None. Only relevant for SurvivalGAN method.
+        outcome_features:
+            The feature name that provides labels for downstream tasks.
     """
     def __init__(
         self,
@@ -137,6 +172,27 @@ class DataLoader(metaclass=ABCMeta):
 
 
 class GenericDataLoader(DataLoader):
+    """ Data loader for generic tabular data.
+
+    Constructor Args:
+        data: Union[pd.DataFrame, list, np.ndarray]
+            The dataset. Either a Pandas DataFrame or a Numpy Array.
+        sensitive_features: List[str]
+            Name of sensitive features.
+        important_features: List[str]
+            Default: None. Only relevant for SurvivalGAN method.
+        target_column: Optional[str]
+            The feature name that provides labels for downstream tasks.
+        random_state: int
+            Defaults to zero.
+
+    Example:
+        >>> from sklearn.datasets import load_diabetes
+        >>> from synthcity.plugins.core.dataloader import GenericDataLoader
+        >>> X, y = load_diabetes(return_X_y=True, as_frame=True)
+        >>> X["target"] = y
+        >>> loader = GenericDataLoader(X, target_column="target", sensitive_columns=["sex"],)
+    """
     @validate_arguments(config=dict(arbitrary_types_allowed=True))
     def __init__(
         self,
