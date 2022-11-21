@@ -483,15 +483,15 @@ class TimeSeriesAutoEncoder(nn.Module):
                         recon_slice = recon_slice.permute(
                             0, 2, 1
                         )  # batches, classes, len
-                    discr_loss = nn.functional.cross_entropy(
-                        recon_slice,
+                    discr_loss = nn.NLLLoss(reduction="sum")(
+                        torch.log(recon_slice + 1e-8),
                         torch.argmax(real[..., step:step_end], dim=-1),
                     )
                     loss.append(discr_loss)
                 else:
-                    cont_loss = nn.functional.mse_loss(
-                        reconstructed[..., step:step_end], real[..., step:step_end]
-                    )
+                    diff = reconstructed[..., step:step_end] - real[..., step:step_end]
+                    cont_loss = (50 * diff**2).sum()
+
                     loss.append(cont_loss)
                 step = step_end
 

@@ -38,7 +38,7 @@ def test_network_config() -> None:
     )
 
     assert len(net.model.decoder.model) == 4
-    assert len(net.model.encoder.model) == 3
+    assert len(net.model.encoder.shared) == 3
     assert net.model.batch_size == 64
     assert net.model.n_iter == 1001
     assert net.model.random_state == 77
