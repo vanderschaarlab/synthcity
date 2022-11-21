@@ -1,3 +1,10 @@
+"""Bayesian Network for generative modeling. Implemented using pgmpy backend.
+
+Reference: JAnkan, Ankur and Panda, Abinash,
+"pgmpy: Probabilistic graphical models using python,"
+Proceedings of the 14th Python in Science Conference (SCIPY 2015), 2015.
+"""
+
 # stdlib
 from typing import Any, List
 

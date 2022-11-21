@@ -17,7 +17,30 @@ from synthcity.utils.serialization import dataframe_hash, load_from_file, save_t
 
 
 class MetricEvaluator(metaclass=ABCMeta):
-    """Metric interface"""
+    """Base class for all metrics.
+
+    Each derived class must implement the following methods:
+        evaluate() - compare two datasets and return a dictionary of metrics.
+        direction() - direction of metric (bigger better or smaller better).
+        type() - type of the metric.
+        name() - name of the metric.
+
+    If any method implementation is missing, the class constructor will fail.
+
+    Constructor Args:
+        reduction: str
+            The way to aggregate metrics across folds. Default: 'mean'.
+        n_histogram_bins: int
+            The number of bins used in histogram calculation. Default: 10.
+        n_folds: int
+            The number of folds in cross validation. Default: 3.
+        task_type: str
+            The type of downstream task. Default: 'classification'.
+        workspace: Path
+            The directory to save intermediate models or results. Default: Path("workspace").
+        use_cache: bool
+            Whether to use cache. If True, it will try to load saved results in workspace directory where possible.
+    """
 
     @validate_arguments(config=dict(arbitrary_types_allowed=True))
     def __init__(
