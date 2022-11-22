@@ -92,13 +92,14 @@ class PrivBayes(Serializable):
         self.n_bins = n_bins
         self.target_usefulness = target_usefulness
         self.mi_thresh = mi_thresh
-        self.default_k = 2
+        self.default_k = 3
         self.mi_cache: dict = {}
 
     @validate_arguments(config=dict(arbitrary_types_allowed=True))
     def fit(self, data: pd.DataFrame) -> Any:
         self.n_columns = len(data.columns)
         self.n_records_fit = len(data)
+        self.mi_cache = {}
 
         # encode dataset
         data, self.encoders = self._encode(data)
