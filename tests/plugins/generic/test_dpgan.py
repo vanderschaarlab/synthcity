@@ -2,7 +2,7 @@
 import numpy as np
 import pandas as pd
 import pytest
-from generic_helpers import generate_fixtures, get_airfoil_dataset
+from generic_helpers import generate_fixtures
 from sklearn.datasets import load_iris
 
 # synthcity absolute
@@ -10,10 +10,15 @@ from synthcity.metrics import PerformanceEvaluatorXGB
 from synthcity.plugins import Plugin
 from synthcity.plugins.core.constraints import Constraints
 from synthcity.plugins.core.dataloader import GenericDataLoader
-from synthcity.plugins.generic.plugin_tvae import plugin
+from synthcity.plugins.generic.plugin_dpgan import plugin
+from synthcity.utils.serialization import load, save
 
-plugin_name = "tvae"
-plugin_args = {"n_iter": 10, "decoder_n_layers_hidden": 1, "encoder_n_layers_hidden": 1}
+plugin_name = "dpgan"
+plugin_args = {
+    "generator_n_layers_hidden": 1,
+    "generator_n_units_hidden": 10,
+    "n_iter": 10,
+}
 
 
 @pytest.mark.parametrize("test_plugin", generate_fixtures(plugin_name, plugin))
@@ -33,23 +38,28 @@ def test_plugin_type(test_plugin: Plugin) -> None:
 
 @pytest.mark.parametrize("test_plugin", generate_fixtures(plugin_name, plugin))
 def test_plugin_hyperparams(test_plugin: Plugin) -> None:
-    assert len(test_plugin.hyperparameter_space()) == 13
+    assert len(test_plugin.hyperparameter_space()) == 14
 
 
 @pytest.mark.parametrize(
     "test_plugin", generate_fixtures(plugin_name, plugin, plugin_args)
 )
 def test_plugin_fit(test_plugin: Plugin) -> None:
-    X = get_airfoil_dataset()
+    X = pd.DataFrame(load_iris()["data"])
     test_plugin.fit(GenericDataLoader(X))
 
 
 @pytest.mark.parametrize(
     "test_plugin", generate_fixtures(plugin_name, plugin, plugin_args)
 )
-def test_plugin_generate(test_plugin: Plugin) -> None:
-    X = get_airfoil_dataset()
+@pytest.mark.parametrize("serialize", [True, False])
+def test_plugin_generate(test_plugin: Plugin, serialize: bool) -> None:
+    X = pd.DataFrame(load_iris()["data"])
     test_plugin.fit(GenericDataLoader(X))
+
+    if serialize:
+        saved = save(test_plugin)
+        test_plugin = load(saved)
 
     X_gen = test_plugin.generate()
     assert len(X_gen) == len(X)
@@ -95,12 +105,11 @@ def test_plugin_generate_constraints(test_plugin: Plugin) -> None:
 def test_sample_hyperparams() -> None:
     for i in range(100):
         args = plugin.sample_hyperparameters()
-
         assert plugin(**args) is not None
 
 
 @pytest.mark.slow
-def test_eval_performance_tvae() -> None:
+def test_eval_performance_dpgan() -> None:
     results = []
 
     Xraw, y = load_iris(return_X_y=True, as_frame=True)
@@ -108,7 +117,7 @@ def test_eval_performance_tvae() -> None:
     X = GenericDataLoader(Xraw)
 
     for retry in range(2):
-        test_plugin = plugin(n_iter=100)
+        test_plugin = plugin(n_iter=300)
         evaluator = PerformanceEvaluatorXGB()
 
         test_plugin.fit(X)
@@ -116,5 +125,4 @@ def test_eval_performance_tvae() -> None:
 
         results.append(evaluator.evaluate(X, X_syn)["syn_id"])
 
-    print(plugin.name(), np.mean(results))
-    assert np.mean(results) > 0.7
+    assert np.max(results) > 0.7

@@ -25,7 +25,12 @@ from synthcity.plugins.core.dataloader import (
     TimeSeriesSurvivalDataLoader,
     create_from_info,
 )
-from synthcity.plugins.core.distribution import Distribution
+from synthcity.plugins.core.distribution import (
+    CategoricalDistribution,
+    Distribution,
+    FloatDistribution,
+    IntegerDistribution,
+)
 from synthcity.plugins.core.schema import Schema
 from synthcity.plugins.core.serializable import Serializable
 from synthcity.utils.constants import DEVICE
@@ -92,6 +97,26 @@ class Plugin(Serializable, metaclass=ABCMeta):
 
         for hp in param_space:
             results[hp.name] = hp.sample()[0]
+
+        return results
+
+    @classmethod
+    def sample_hyperparameters_optuna(
+        cls, trial: Any, *args: Any, **kwargs: Any
+    ) -> Dict[str, Any]:
+        param_space = cls.hyperparameter_space(*args, **kwargs)
+
+        results = {}
+
+        for hp in param_space:
+            if isinstance(hp, IntegerDistribution):
+                results[hp.name] = trial.suggest_int(hp.name, hp.low, hp.high, hp.step)
+            elif isinstance(hp, FloatDistribution):
+                results[hp.name] = trial.suggest_float(hp.name, hp.low, hp.high)
+            elif isinstance(hp, CategoricalDistribution):
+                results[hp.name] = trial.suggest_categorical(hp.name, hp.choices)
+            else:
+                raise RuntimeError(f"unknown distribution type {hp}")
 
         return results
 

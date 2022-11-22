@@ -1,5 +1,5 @@
 # stdlib
-from typing import Any, List, Optional, Tuple
+from typing import Any, Callable, List, Optional, Tuple
 
 # third party
 import numpy as np
@@ -34,7 +34,7 @@ class Encoder(nn.Module):
     ) -> None:
         super(Encoder, self).__init__()
         self.device = device
-        self.model = MLP(
+        self.shared = MLP(
             task_type="regression",
             n_units_in=n_units_in,
             n_units_out=n_units_hidden,
@@ -56,7 +56,7 @@ class Encoder(nn.Module):
         self, X: Tensor, cond: Optional[torch.Tensor] = None
     ) -> Tuple[Tensor, Tensor]:
         data = self._append_optional_cond(X, cond)
-        shared = self.model(data)
+        shared = self.shared(data)
         mu = self.mu_fc(shared)
         logvar = self.logvar_fc(shared)
         return mu, logvar
@@ -65,9 +65,9 @@ class Encoder(nn.Module):
         self, X: torch.Tensor, cond: Optional[torch.Tensor]
     ) -> torch.Tensor:
         if cond is None:
-            return X
+            return X.float()
 
-        return torch.cat([X, cond], dim=1)
+        return torch.cat([X, cond], dim=-1).float()
 
 
 class Decoder(nn.Module):
@@ -133,8 +133,6 @@ class VAE(nn.Module):
             When to log the training error
         random_state: int
             Random random_state
-        clipping_value: float
-            Gradients clipping value
         lr: float
             Learning rate
         weight_decay: float:
@@ -180,7 +178,6 @@ class VAE(nn.Module):
         n_iter: int = 500,
         n_iter_print: int = 10,
         random_state: int = 0,
-        clipping_value: int = 1,
         lr: float = 2e-4,
         weight_decay: float = 1e-3,
         # Decoder
@@ -203,6 +200,8 @@ class VAE(nn.Module):
         robust_divergence_beta: int = 2,  # used for loss_strategy = robust_divergence
         dataloader_sampler: Optional[sampler.Sampler] = None,
         device: Any = DEVICE,
+        extra_loss_cbks: List[Callable] = [],
+        clipping_value: int = 1,
     ) -> None:
         super(VAE, self).__init__()
 
@@ -213,7 +212,6 @@ class VAE(nn.Module):
         self.batch_size = batch_size
         self.n_iter = n_iter
         self.n_iter_print = n_iter_print
-        self.clipping_value = clipping_value
         self.loss_factor = loss_factor
         self.lr = lr
         self.weight_decay = weight_decay
@@ -221,10 +219,11 @@ class VAE(nn.Module):
         self.loss_strategy = loss_strategy
         self.robust_divergence_beta = robust_divergence_beta
         self.dataloader_sampler = dataloader_sampler
-
+        self.extra_loss_cbks = extra_loss_cbks
         self.random_state = random_state
         torch.manual_seed(self.random_state)
         self.n_units_conditional = n_units_conditional
+        self.clipping_value = clipping_value
 
         self.encoder = Encoder(
             n_features + n_units_conditional,
@@ -351,7 +350,6 @@ class VAE(nn.Module):
 
         for epoch in range(self.n_iter):
             for id_, data in enumerate(loader):
-                optimizer.zero_grad()
                 cond_mb: Optional[torch.Tensor] = None
 
                 if self.n_units_conditional > 0:
@@ -361,16 +359,22 @@ class VAE(nn.Module):
 
                 mu, logvar = self.encoder(X, cond_mb)
                 embedding = self._reparameterize(mu, logvar)
+
                 reconstructed = self.decoder(embedding, cond_mb)
                 loss = self._loss_function(
                     reconstructed,
                     X,
                     mu,
                     logvar,
+                    cond_mb,
                 )
-                loss.backward()
-                torch.nn.utils.clip_grad_norm_(self.parameters(), self.clipping_value)
 
+                optimizer.zero_grad()
+                if self.clipping_value > 0:
+                    torch.nn.utils.clip_grad_norm_(
+                        self.parameters(), self.clipping_value
+                    )
+                loss.backward()
                 optimizer.step()
             if epoch % self.n_iter_print == 0:
                 log.debug(f"[{epoch}/{self.n_iter}] Loss: {loss.detach()}")
@@ -400,14 +404,19 @@ class VAE(nn.Module):
         real: Tensor,
         mu: Tensor,
         logvar: Tensor,
+        cond: Optional[torch.Tensor] = None,
     ) -> Tensor:
-
         if self.loss_strategy == "robust_divergence":
-            return self._loss_function_robust_divergence(
+            loss = self._loss_function_robust_divergence(
                 reconstructed, real, mu, logvar
             )
+        else:
+            loss = self._loss_function_standard(reconstructed, real, mu, logvar)
 
-        return self._loss_function_standard(reconstructed, real, mu, logvar)
+        for extra_cbk in self.extra_loss_cbks:
+            loss += extra_cbk(real, reconstructed, cond)
+
+        return loss
 
     def _loss_function_standard(
         self,
@@ -421,16 +430,17 @@ class VAE(nn.Module):
         loss = []
         for activation, length in self.decoder_nonlin_out:
             step_end = step + length
+            # reconstructed is after the activation
             if activation == "softmax":
-                discr_loss = nn.functional.cross_entropy(
-                    reconstructed[:, step:step_end],
+                discr_loss = nn.NLLLoss(reduction="sum")(
+                    torch.log(reconstructed[:, step:step_end] + 1e-8),
                     torch.argmax(real[:, step:step_end], dim=-1),
                 )
                 loss.append(discr_loss)
             else:
-                cont_loss = nn.functional.mse_loss(
-                    reconstructed[:, step:step_end], real[:, step:step_end]
-                )
+                diff = reconstructed[:, step:step_end] - real[:, step:step_end]
+                cont_loss = (50 * diff**2).sum()
+
                 loss.append(cont_loss)
             step = step_end
 
@@ -439,9 +449,13 @@ class VAE(nn.Module):
                 f"Invalid reconstructed features. Expected {step}, got {reconstructed.shape}"
             )
 
-        reconstruction_loss = torch.sum(torch.FloatTensor(loss))
+        reconstruction_loss = torch.sum(torch.stack(loss)) / real.shape[0]
+        KLD_loss = (-0.5 * torch.sum(1 + logvar - mu**2 - logvar.exp())) / real.shape[
+            0
+        ]
 
-        KLD_loss = torch.mean(-0.5 * torch.sum(1 + logvar - mu**2 - logvar.exp()))
+        assert not torch.isnan(reconstruction_loss)
+        assert not torch.isnan(KLD_loss)
 
         return reconstruction_loss * self.loss_factor + KLD_loss
 
@@ -461,19 +475,27 @@ class VAE(nn.Module):
 
         for activation, length in self.decoder_nonlin_out:
             step_end = step + length
+            feature_recon = reconstructed[:, step:step_end]
+            feature_real = real[:, step:step_end]
             if activation == "softmax":
-                cat_probs = torch.argmax(reconstructed[:, step:step_end], dim=-1)
-                _, cat_probs = torch.unique(cat_probs, return_counts=True)
-                cat_probs = (cat_probs / N) ** (beta + 1)
+                # cat_probs = torch.argmax(feature_real, dim=-1)
+                # _, cat_probs = torch.unique(cat_probs, return_counts=True)
+                # cat_probs = (cat_probs / N) ** (beta + 1)
 
-                discr_loss = torch.sum((reconstructed[:, step:step_end] ** beta - 1))
-                discr_loss = -(beta + 1) / (beta * N) * discr_loss
-                discr_loss += torch.sum(cat_probs)
+                # discr_loss = torch.sum((feature_recon ** beta - 1))
+                # discr_loss = -(beta + 1) / (beta * N) * discr_loss
+                # discr_loss += torch.sum(cat_probs)
+
+                # TODO: debug why robust cross entropy is not working
+                discr_loss = nn.NLLLoss(reduction="sum")(
+                    torch.log(reconstructed[:, step:step_end] + 1e-8),
+                    torch.argmax(real[:, step:step_end], dim=-1),
+                )
 
                 loss.append(discr_loss)
             else:
-                cont_loss = (-beta / (2 * std**2)) * (
-                    reconstructed[:, step:step_end] - real[:, step:step_end]
+                cont_loss = (-beta / (2 * std**2)) * torch.norm(
+                    feature_recon - feature_real, p=2
                 ) ** 2
                 cont_loss = (1 / (2 * np.pi * std**2) ** (beta / 2)) * torch.exp(
                     cont_loss
@@ -490,8 +512,10 @@ class VAE(nn.Module):
                 f"Invalid reconstructed features. Expected {step}, got {reconstructed.shape}"
             )
 
-        reconstruction_loss = torch.sum(torch.FloatTensor(loss))
+        reconstruction_loss = torch.sum(torch.stack(loss)) / real.shape[0]
 
-        KLD_loss = torch.mean(-0.5 * torch.sum(1 + logvar - mu**2 - logvar.exp()))
+        KLD_loss = (-0.5 * torch.sum(1 + logvar - mu**2 - logvar.exp())) / real.shape[
+            0
+        ]
 
         return reconstruction_loss * self.loss_factor + KLD_loss

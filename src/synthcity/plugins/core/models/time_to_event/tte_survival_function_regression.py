@@ -51,13 +51,11 @@ class SurvivalFunctionTimeToEvent(TimeToEventPlugin):
         Tlog = np.log(T + 1e-8)
 
         xgb_params = {
-            "n_jobs": -1,
-            "n_estimators": 200,
+            "n_jobs": 2,
+            "n_estimators": 100,
             "verbosity": 0,
-            "depth": 5,
+            "depth": 3,
             "random_state": 0,
-            "booster": "dart",
-            "tree_method": "hist",
         }
 
         self.tte_regressor = XGBRegressor(**xgb_params).fit(data, Tlog)

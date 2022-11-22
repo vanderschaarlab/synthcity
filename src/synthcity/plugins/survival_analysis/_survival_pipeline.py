@@ -99,13 +99,10 @@ class SurvivalPipeline(Plugin):
             raise ValueError(f"unsupported strategy {self.strategy}")
 
         xgb_params = {
-            "n_jobs": -1,
-            "n_estimators": 200,
+            "n_jobs": 2,
             "verbosity": 0,
-            "depth": 5,
+            "depth": 3,
             "random_state": 0,
-            "booster": "dart",
-            "tree_method": "hist",
         }
         self.censoring_predictor = XGBClassifier(**xgb_params).fit(Xcov, E)
 

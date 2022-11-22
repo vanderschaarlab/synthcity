@@ -12,6 +12,7 @@ from typing import Any, List, Optional, Tuple
 # third party
 import numpy as np
 import pandas as pd
+from joblib import Parallel, delayed
 from pgmpy.factors.discrete.CPD import TabularCPD
 from pgmpy.models import BayesianNetwork
 from pgmpy.sampling import BayesianModelSampling
@@ -31,6 +32,7 @@ from synthcity.plugins.core.serializable import Serializable
 from synthcity.utils.reproducibility import enable_reproducible_results
 
 network_edge = namedtuple("network_edge", ["feature", "parents"])
+dispatcher = Parallel(max_nbytes=None, backend="loky", n_jobs=8)
 
 
 def usefulness_minus_target(
@@ -92,6 +94,7 @@ class PrivBayes(Serializable):
         self.n_bins = n_bins
         self.target_usefulness = target_usefulness
         self.mi_thresh = mi_thresh
+        self.default_k = 2
 
     @validate_arguments(config=dict(arbitrary_types_allowed=True))
     def fit(self, data: pd.DataFrame) -> Any:
@@ -195,19 +198,21 @@ class PrivBayes(Serializable):
             mutual_info_list = []
 
             num_parents = min(len(nodes_selected), self.K)
-            for candidate, split in product(
-                nodes_remaining, range(len(nodes_selected) - num_parents + 1)
-            ):
-                (
-                    candidate_pairs,
-                    candidate_mi,
-                ) = self._evaluate_parent_mutual_information(
+
+            search_results = dispatcher(
+                delayed(self._evaluate_parent_mutual_information)(
                     data,
                     candidate=candidate,
                     parent_candidates=nodes_selected,
                     parent_limit=num_parents,
                     split=split,
                 )
+                for candidate, split in product(
+                    nodes_remaining, range(len(nodes_selected) - num_parents + 1)
+                )
+            )
+
+            for candidate_pairs, candidate_mi in search_results:
                 parents_pair_list.extend(candidate_pairs)
                 mutual_info_list.extend(candidate_mi)
 
@@ -425,7 +430,7 @@ class PrivBayes(Serializable):
             return 0
 
         src = data[parents]
-        src_cluster = KMeans(n_clusters=self.n_bins).fit(src)
+        src_cluster = KMeans(n_clusters=10).fit(src)
 
         src_bins = src_cluster.predict(src)
         target = data[candidate]
@@ -455,17 +460,16 @@ class PrivBayes(Serializable):
 
     def _compute_K(self, data: pd.DataFrame) -> int:
         """Calculate the maximum degree when constructing Bayesian networks. See PrivBayes Section 4.5."""
-        default_k = 3
         num_tuples, num_attributes = data.shape
 
         initial_usefulness = usefulness_minus_target(
-            default_k, num_attributes, num_tuples, 0, self.epsilon
+            self.default_k, num_attributes, num_tuples, 0, self.epsilon
         )
         log.info(
             f"[PrivBayes] initial_usefulness = {initial_usefulness} self.target_usefulness = {self.target_usefulness}"
         )
         if initial_usefulness > self.target_usefulness:
-            return default_k
+            return self.default_k
 
         arguments = (num_attributes, num_tuples, self.target_usefulness, self.epsilon)
         try:
@@ -476,9 +480,9 @@ class PrivBayes(Serializable):
             )[0]
             ans = ceil(ans)
         except RuntimeWarning:
-            ans = default_k
+            ans = self.default_k
         if ans < 1 or ans > num_attributes:
-            ans = default_k
+            ans = self.default_k
         return ans
 
     def display_network(self) -> None:

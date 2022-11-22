@@ -1,16 +1,23 @@
 # third party
+import numpy as np
 import pandas as pd
 import pytest
-from generic_helpers import generate_fixtures
-from sklearn.datasets import load_diabetes, load_iris
+from generic_helpers import generate_fixtures, get_airfoil_dataset
+from sklearn.datasets import load_iris
 
 # synthcity absolute
+from synthcity.metrics import PerformanceEvaluatorXGB
 from synthcity.plugins import Plugin
 from synthcity.plugins.core.constraints import Constraints
 from synthcity.plugins.core.dataloader import GenericDataLoader
 from synthcity.plugins.generic.plugin_pategan import plugin
 
 plugin_name = "pategan"
+plugin_args = {
+    "generator_n_layers_hidden": 1,
+    "generator_n_units_hidden": 10,
+    "lamda": 0.1,
+}
 
 
 @pytest.mark.parametrize("test_plugin", generate_fixtures(plugin_name, plugin))
@@ -33,15 +40,18 @@ def test_plugin_hyperparams(test_plugin: Plugin) -> None:
     assert len(test_plugin.hyperparameter_space()) == 20
 
 
-@pytest.mark.parametrize("test_plugin", generate_fixtures(plugin_name, plugin))
+@pytest.mark.parametrize(
+    "test_plugin", generate_fixtures(plugin_name, plugin, plugin_args)
+)
 def test_plugin_fit(test_plugin: Plugin) -> None:
     X = pd.DataFrame(load_iris()["data"])
     test_plugin.fit(GenericDataLoader(X))
 
 
-def test_plugin_generate() -> None:
-    test_plugin = plugin(generator_n_layers_hidden=1, generator_n_units_hidden=10)
-    X = pd.DataFrame(load_diabetes()["data"])
+def test_plugin_generate_pategan() -> None:
+    test_plugin = plugin(**plugin_args)
+    X = get_airfoil_dataset()
+
     test_plugin.fit(GenericDataLoader(X))
 
     X_gen = test_plugin.generate()
@@ -54,7 +64,7 @@ def test_plugin_generate() -> None:
 
 
 def test_plugin_generate_constraints() -> None:
-    test_plugin = plugin(generator_n_layers_hidden=1, generator_n_units_hidden=10)
+    test_plugin = plugin(**plugin_args)
     X = pd.DataFrame(load_iris()["data"])
     test_plugin.fit(GenericDataLoader(X))
 
@@ -88,3 +98,26 @@ def test_sample_hyperparams() -> None:
         args = plugin.sample_hyperparameters()
 
         assert plugin(**args) is not None
+
+
+@pytest.mark.slow
+def test_eval_performance() -> None:
+    results = []
+
+    Xraw, y = load_iris(return_X_y=True, as_frame=True)
+    Xraw["target"] = y
+    X = GenericDataLoader(Xraw)
+
+    for retry in range(2):
+        test_plugin = plugin(
+            n_iter=200, generator_n_layers_hidden=1, n_teachers=2, lamda=2e-4
+        )
+        evaluator = PerformanceEvaluatorXGB()
+
+        test_plugin.fit(X)
+        X_syn = test_plugin.generate()
+
+        results.append(evaluator.evaluate(X, X_syn)["syn_id"])
+
+    print(plugin.name(), np.mean(results))
+    assert np.mean(results) > 0.7

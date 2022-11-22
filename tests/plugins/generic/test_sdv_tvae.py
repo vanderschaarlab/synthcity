@@ -10,10 +10,10 @@ from synthcity.metrics import PerformanceEvaluatorXGB
 from synthcity.plugins import Plugin
 from synthcity.plugins.core.constraints import Constraints
 from synthcity.plugins.core.dataloader import GenericDataLoader
-from synthcity.plugins.generic.plugin_tvae import plugin
+from synthcity.plugins.generic.plugin_sdv_tvae import plugin
 
-plugin_name = "tvae"
-plugin_args = {"n_iter": 10, "decoder_n_layers_hidden": 1, "encoder_n_layers_hidden": 1}
+plugin_name = "sdv_tvae"
+plugin_args = {"n_iter": 10}
 
 
 @pytest.mark.parametrize("test_plugin", generate_fixtures(plugin_name, plugin))
@@ -33,7 +33,7 @@ def test_plugin_type(test_plugin: Plugin) -> None:
 
 @pytest.mark.parametrize("test_plugin", generate_fixtures(plugin_name, plugin))
 def test_plugin_hyperparams(test_plugin: Plugin) -> None:
-    assert len(test_plugin.hyperparameter_space()) == 13
+    assert len(test_plugin.hyperparameter_space()) == 9
 
 
 @pytest.mark.parametrize(
@@ -100,7 +100,7 @@ def test_sample_hyperparams() -> None:
 
 
 @pytest.mark.slow
-def test_eval_performance_tvae() -> None:
+def test_eval_performance_sdv_tvae() -> None:
     results = []
 
     Xraw, y = load_iris(return_X_y=True, as_frame=True)
