@@ -19,7 +19,20 @@ from synthcity.plugins.core.distribution import (
 
 
 class Schema(BaseModel):
-    """Utility class for defining the schema of a Dataset."""
+    """Utility class for defining the schema of a Dataset.
+
+    Constructor Args:
+        domain: Dict
+            A dictionary of feature_name: Distribution.
+        sampling_strategy: str
+            Taking value of "marginal" (default) or "uniform" (for debugging).
+        protected_cols: List[str]
+            List of columns that are exempt from distributional constraints (e.g. ID column)
+        random_state: int
+            Random seed (default 0)
+        data: Any
+            (Optional) the data set
+    """
 
     sampling_strategy: str = "marginal"  # uniform or marginal
     protected_cols = ["seq_id"]
@@ -152,15 +165,22 @@ class Schema(BaseModel):
             np.zeros((count, len(self.features()))), columns=self.features()
         )
 
-        print("sapling using ", self.random_state)
         for feature in self.features():
-            samples[feature] = self.domain[feature].sample(
-                count, random_state=self.random_state
-            )
+            samples[feature] = self.domain[feature].sample(count)
 
         return samples
 
     def adapt_dtypes(self, X: pd.DataFrame) -> pd.DataFrame:
+        """ Applying the data type to a new data frame
+
+        Args:
+            X: pd.DataFrame
+                A new data frame to be adapted.
+
+        Returns:
+            A data frame whose data types are coerced to be the same with the Schema.
+            If the data frame contains new features, these will be retained as is.
+        """
         for feature in self.domain:
             if feature not in X.columns:
                 continue

@@ -17,7 +17,9 @@ from .tabular_encoder import TabularEncoder
 
 class TabularFlows(nn.Module):
     """
-    Tabular Flows implementation.
+    Normalizing flow for tabular data.
+
+    This class combines normalizing flow and tabular encoder to form a generative model for tabular data.
 
     Args:
         n_iter: int

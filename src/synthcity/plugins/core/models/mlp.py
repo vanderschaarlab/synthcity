@@ -93,10 +93,10 @@ class ResidualLayer(LinearLayer):
     @validate_arguments(config=dict(arbitrary_types_allowed=True))
     def forward(self, X: torch.Tensor) -> torch.Tensor:
         if X.shape[-1] == 0:
-            return torch.zeros((len(X), self.n_units_out)).to(self.device)
+            return torch.zeros((*X.shape[:-1], self.n_units_out)).to(self.device)
 
         out = self.model(X.float())
-        return torch.cat([out, X], dim=1).to(self.device)
+        return torch.cat([out, X], dim=-1).to(self.device)
 
 
 class MultiActivationHead(nn.Module):
@@ -126,7 +126,7 @@ class MultiActivationHead(nn.Module):
         split = 0
         out = torch.zeros(X.shape).to(self.device)
         for activation, step in zip(self.activations, self.activation_lengths):
-            out[:, split : split + step] = activation(X[:, split : split + step])
+            out[..., split : split + step] = activation(X[..., split : split + step])
 
             split += step
 
@@ -135,7 +135,7 @@ class MultiActivationHead(nn.Module):
 
 class MLP(nn.Module):
     """
-    Basic neural net.
+    Fully connected or residual neural nets for classification and regression.
 
     Parameters
     ----------

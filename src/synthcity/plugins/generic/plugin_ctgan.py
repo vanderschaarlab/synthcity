@@ -1,3 +1,9 @@
+"""CTGAN Implementation.
+
+Reference: Xu, Lei, Maria Skoularidou, Alfredo Cuesta-Infante, and Kalyan Veeramachaneni.
+"Modeling tabular data using conditional gan." Advances in Neural Information Processing Systems 32 (2019).
+"""
+
 # stdlib
 from typing import Any, List
 
@@ -14,6 +20,8 @@ from synthcity.plugins.core.distribution import (
 )
 from synthcity.plugins.core.plugin import Plugin
 from synthcity.plugins.core.schema import Schema
+
+pd.options.mode.chained_assignment = None
 
 
 class CTGANPlugin(Plugin):

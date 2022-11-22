@@ -12,6 +12,22 @@ from synthcity.plugins.core.constraints import Constraints
 
 
 class Distribution(BaseModel, metaclass=ABCMeta):
+    """ Base class of all Distributions.
+
+    The Distribution class characterizes the **empirical** marginal distribution of the feature.
+    Each derived class must implement the following methods:
+        get() - Return the metadata of the Distribution.
+        sample() - Sample a value from the Distribution.
+        includes() - Test if another Distribution is included in the local one.
+        has() - Test if a value is included in the support of the Distribution.
+        as_constraint() - Convert the Distribution to a set of Constraints.
+        min() - Return the minimum of the support.
+        max() - Return the maximum of the support.
+        __eq__() - Testing equality of two Distributions.
+        dtype() - Return the data type
+
+    Examples of derived classes include CategoricalDistribution, FloatDistribution, and IntegerDistribution.
+    """
     name: str
     data: Optional[pd.Series] = None
     random_state: int = 0
@@ -308,6 +324,17 @@ class IntegerDistribution(Distribution):
 
 
 def constraint_to_distribution(constraints: Constraints, feature: str) -> Distribution:
+    """ Infer Distribution from Constraints.
+
+    Args:
+        constraints: Constraints
+            The Constraints on features.
+        feature: str
+            The name of the feature in question.
+
+    Returns:
+        The inferred Distribution.
+    """
     dist_name, dist_args = constraints.feature_params(feature)
 
     if dist_name == "categorical":

@@ -205,9 +205,17 @@ class DeltaPresence(PrivacyEvaluator):
 
 
 class IdentifiabilityScore(PrivacyEvaluator):
-    """Returns the maximum re-identification probability on the real dataset from the synthetic dataset.
+    """Returns the re-identification score on the real dataset from the synthetic dataset.
 
-    For each dataset partition, we report the maximum ratio of unique sensitive information between the real dataset and in the synthetic dataset.
+    We estimate the risk of re-identifying any real data point using synthetic data.
+    Intuitively, if the synthetic data are very close to the real data, the re-identification risk would be high.
+    The precise formulation of the re-identification score is given in the reference below.
+
+    Reference: Jinsung Yoon, Lydia N. Drumright, Mihaela van der Schaar,
+    "Anonymization through Data Synthesis using Generative Adversarial Networks (ADS-GAN):
+    A harmonizing advancement for AI in medicine,"
+    IEEE Journal of Biomedical and Health Informatics (JBHI), 2019.
+    Paper link: https://ieeexplore.ieee.org/document/9034117
     """
 
     @staticmethod

@@ -17,7 +17,10 @@ from synthcity.utils.serialization import load_from_file, save_to_file
 
 
 class DetectionEvaluator(MetricEvaluator):
-    """Train a SKLearn classifier to detect the synthetic data.
+    """Train a SKLearn classifier to detect the synthetic data from real data.
+
+    Synthetic and real data are combined to form a new dataset.
+    K-fold cross validation is performed to see how well a classifier can distinguish real from synthetic.
 
     Returns:
         The average AUCROC score for detecting synthetic data.
@@ -110,7 +113,6 @@ class SyntheticDetectionXGB(DetectionEvaluator):
         model_args = {
             "n_jobs": -1,
             "verbosity": 0,
-            "use_label_encoder": False,
             "depth": 3,
             "random_state": self._random_state,
         }

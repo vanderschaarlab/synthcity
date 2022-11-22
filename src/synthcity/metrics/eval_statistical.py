@@ -563,6 +563,18 @@ class PRDCScore(StatisticalEvaluator):
 
 
 class AlphaPrecision(StatisticalEvaluator):
+    """ Evaluates the alpha-precision, beta-recall, and authenticity scores.
+
+    The class evaluates the synthetic data using a tuple of three metrics:
+    alpha-precision, beta-recall, and authenticity.
+    Note that these metrics can be evaluated for each synthetic data point (which are useful for auditing and
+    post-processing). Here we average the scores to reflect the overall quality of the data.
+    The formal definitions can be found in the reference below:
+
+    Alaa, Ahmed, Boris Van Breugel, Evgeny S. Saveliev, and Mihaela van der Schaar. "How faithful is your synthetic
+    data? sample-level metrics for evaluating and auditing generative models."
+    In International Conference on Machine Learning, pp. 290-306. PMLR, 2022.
+    """
     def __init__(self, **kwargs: Any) -> None:
         super().__init__(**kwargs)
 

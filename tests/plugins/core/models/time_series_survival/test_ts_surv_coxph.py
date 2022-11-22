@@ -32,6 +32,7 @@ def test_hyperparams() -> None:
     ["haar", "sym2"],
 )
 @pytest.mark.parametrize("wavelet_mode", ["symmetric"])
+@pytest.mark.slow
 def test_train_prediction_coxph_wavelet(wavelet_type: str, wavelet_mode: str) -> None:
     static, temporal, temporal_horizons, outcome = PBCDataloader(as_numpy=True).load()
     T, E = outcome
@@ -57,7 +58,6 @@ def test_train_prediction_coxph_wavelet(wavelet_type: str, wavelet_mode: str) ->
 @pytest.mark.parametrize(
     "output_type",
     [
-        "Transformer",
         "MLP",
     ],
 )
