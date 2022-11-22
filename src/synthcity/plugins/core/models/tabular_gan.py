@@ -18,7 +18,9 @@ from .tabular_encoder import TabularEncoder
 
 class TabularGAN(torch.nn.Module):
     """
-    Tabular GAN implementation.
+    GAN for tabular data.
+
+    This class combines GAN and tabular encoder to form a generative model for tabular data.
 
     Args:
         n_units_in: int

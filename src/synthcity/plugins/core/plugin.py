@@ -38,6 +38,7 @@ from synthcity.utils.constants import DEVICE
 
 class Plugin(Serializable, metaclass=ABCMeta):
     """Base class for all plugins.
+
     Each derived class must implement the following methods:
         type() - a static method that returns the type of the plugin. e.g., debug, generative, bayesian, etc.
         name() - a static method that returns the name of the plugin. e.g., ctgan, random_noise, etc.

@@ -11,6 +11,31 @@ import synthcity.logger as log
 
 
 class Constraints(BaseModel):
+    """Constraints on data.
+
+    The Constraints class allows users to specify constraints on the features. Examples include the feature value range, allowed item set, and data type.
+    These constraints can be used to filter out invalid values in synthetic datasets.
+
+    Constructor Args:
+        rules: List[Tuple]
+            Each tuple in the list specifies a constraint on a feature. The tuple has the form of (feature, op, thresh),
+            where feature is the feature name to apply constraint on, op takes values in [
+                    "<",
+                    ">=",
+                    "<=",
+                    ">",
+                    "==",
+                    "lt",
+                    "le",
+                    "gt",
+                    "ge",
+                    "eq",
+                    "in",
+                    "dtype",
+                ],
+            and thresh is the threshold or data type.
+    """
+
     rules: list = []
 
     @validator("rules")
@@ -185,6 +210,7 @@ class Constraints(BaseModel):
             yield x
 
     def features(self) -> List:
+        """Return list of feature names in an undefined order"""
         results = []
         for feature, _, _ in self.rules:
             results.append(feature)
@@ -192,6 +218,19 @@ class Constraints(BaseModel):
         return list(set(results))
 
     def feature_constraints(self, ref_feature: str) -> List:
+        """Get constraints for a given feature
+
+        Args:
+            ref_feature: str
+                The name of the feature of interest.
+
+        Returns:
+            A list of tuples of (op, threshold). For example:
+
+            [('le', 3.), ('gt', 1.)]
+
+            If ref_feature has no constraint, None will be returned.
+        """
         results = []
         for feature, op, threshold in self.rules:
             if feature != ref_feature:
@@ -201,6 +240,21 @@ class Constraints(BaseModel):
         return results
 
     def feature_params(self, feature: str) -> Tuple:
+        """ Provide the parameters of Distribution from the Constraint
+
+        This is to be used with the constraint_to_distribution function in distribution module.
+
+        Args:
+            feature: str
+                The name of the feature of interest.
+
+        Returns:
+            dist_template: str
+                The type of inferred distribution from ("categorical", "float", "integer")
+            dist_args: Dict
+                The arguments to the constructor of the Distribution.
+        """
+
         rules = self.feature_constraints(feature)
 
         dist_template = "float"

@@ -41,6 +41,11 @@ from synthcity.utils.serialization import load_from_file, save_to_file
 
 
 class PerformanceEvaluator(MetricEvaluator):
+    """Evaluating synthetic data based on downstream performance.
+
+    This implements the train-on-synthetic test-on-real methodology for evaluation.
+    """
+
     def __init__(self, **kwargs: Any) -> None:
         super().__init__(**kwargs)
 
@@ -582,7 +587,9 @@ class PerformanceEvaluator(MetricEvaluator):
 
 
 class PerformanceEvaluatorXGB(PerformanceEvaluator):
-    """Train an XGBoost classifier or regressor on the synthetic data and evaluate the performance on real test data. Returns the average performance discrepancy between training on real data vs on synthetic data.
+    """Train an XGBoost classifier or regressor on the synthetic data and evaluate the performance on real test data.
+
+    Returns the average performance discrepancy between training on real data vs on synthetic data.
 
     Score:
         close to 0: similar performance
@@ -648,7 +655,9 @@ class PerformanceEvaluatorXGB(PerformanceEvaluator):
 
 
 class PerformanceEvaluatorLinear(PerformanceEvaluator):
-    """Train a Linear classifier or regressor on the synthetic data and evaluate the performance on real test data. Returns the average performance discrepancy between training on real data vs on synthetic data.
+    """Train a Linear classifier or regressor on the synthetic data and evaluate the performance on real test data.
+
+    Returns the average performance discrepancy between training on real data vs on synthetic data.
 
     Score:
         close to 0: similar performance
@@ -689,7 +698,9 @@ class PerformanceEvaluatorLinear(PerformanceEvaluator):
 
 
 class PerformanceEvaluatorMLP(PerformanceEvaluator):
-    """Train a Neural Net classifier or regressor on the synthetic data and evaluate the performance on real test data. Returns the average performance discrepancy between training on real data vs on synthetic data.
+    """Train a Neural Net classifier or regressor on the synthetic data and evaluate the performance on real test data.
+
+    Returns the average performance discrepancy between training on real data vs on synthetic data.
 
     Score:
         close to 0: similar performance

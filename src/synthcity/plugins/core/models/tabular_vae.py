@@ -19,7 +19,9 @@ from .vae import VAE
 
 class TabularVAE(nn.Module):
     """
-    Tabular VAE implementation.
+    VAE for tabular data.
+
+    This class combines VAE and tabular encoder to form a generative model for tabular data.
 
     Args:
         n_units_in: int

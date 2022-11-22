@@ -153,7 +153,7 @@ class MultiActivationHead(nn.Module):
 
 class MLP(nn.Module):
     """
-    Basic neural net.
+    Fully connected or residual neural nets for classification and regression.
 
     Parameters
     ----------

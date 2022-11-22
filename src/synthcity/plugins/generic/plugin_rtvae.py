@@ -1,6 +1,7 @@
-"""TVAE with robust_divergence
+""" Tabular VAE with robust beta divergence.
 
-Algorithm 1 in "Robust Variational Autoencoder for Tabular Data with β Divergence"
+Reference: Akrami, Haleh, Anand A. Joshi, Jian Li, Sergül Aydöre, and Richard M. Leahy.
+"A robust variational autoencoder using beta divergence." Knowledge-Based Systems 238 (2022): 107886.
 """
 # stdlib
 from typing import Any, List, Optional, Union
@@ -61,7 +62,7 @@ class RTVAEPlugin(Plugin):
 
     Example:
         >>> from synthcity.plugins import Plugins
-        >>> plugin = Plugins().get("adsgan")
+        >>> plugin = Plugins().get("rtvae")
         >>> from sklearn.datasets import load_iris
         >>> X = load_iris()
         >>> plugin.fit(X)
