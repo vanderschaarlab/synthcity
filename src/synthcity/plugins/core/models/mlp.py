@@ -14,6 +14,23 @@ from synthcity.utils.constants import DEVICE
 from synthcity.utils.reproducibility import enable_reproducible_results
 
 
+class GumbelSoftmax(nn.Module):
+    def __init__(
+        self, tau: float = 0.2, hard: bool = False, eps: float = 1e-10, dim: int = -1
+    ) -> None:
+        super(GumbelSoftmax, self).__init__()
+
+        self.tau = tau
+        self.hard = hard
+        self.eps = eps
+        self.dim = dim
+
+    def forward(self, logits: torch.Tensor) -> torch.Tensor:
+        return nn.functional.gumbel_softmax(
+            logits, tau=self.tau, hard=self.hard, eps=self.eps, dim=self.dim
+        )
+
+
 def get_nonlin(name: str) -> nn.Module:
     if name == "none":
         return nn.Identity()
@@ -30,7 +47,7 @@ def get_nonlin(name: str) -> nn.Module:
     elif name == "sigmoid":
         return nn.Sigmoid()
     elif name == "softmax":
-        return nn.Softmax(dim=-1)
+        return GumbelSoftmax()
     else:
         raise ValueError(f"Unknown nonlinearity {name}")
 
@@ -125,6 +142,7 @@ class MultiActivationHead(nn.Module):
 
         split = 0
         out = torch.zeros(X.shape).to(self.device)
+
         for activation, step in zip(self.activations, self.activation_lengths):
             out[..., split : split + step] = activation(X[..., split : split + step])
 
@@ -271,7 +289,7 @@ class MLP(nn.Module):
             layers.append(MultiActivationHead(activations, device=device))
         elif self.task_type == "classification":
             layers.append(
-                MultiActivationHead([(nn.Softmax(dim=-1), n_units_out)], device=device)
+                MultiActivationHead([(GumbelSoftmax(), n_units_out)], device=device)
             )
 
         self.model = nn.Sequential(*layers).to(self.device)
@@ -362,7 +380,8 @@ class MLP(nn.Module):
 
             batch_loss.backward()
 
-            torch.nn.utils.clip_grad_norm_(self.parameters(), self.clipping_value)
+            if self.clipping_value > 0:
+                torch.nn.utils.clip_grad_norm_(self.parameters(), self.clipping_value)
 
             self.optimizer.step()
 

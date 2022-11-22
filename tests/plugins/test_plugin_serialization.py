@@ -116,7 +116,7 @@ def test_serialization_ts_plugins(plugin: str) -> None:
     verify_serialization(syn_model, generate=True)
 
 
-@pytest.mark.parametrize("plugin", Plugins(categories=["survival_analysis"]).list())
+@pytest.mark.parametrize("plugin", ["survival_gan"])
 def test_serialization_surv_plugins(plugin: str) -> None:
     X = load_rossi()
     surv_data = SurvivalAnalysisDataLoader(

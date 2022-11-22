@@ -32,7 +32,7 @@ class BinEncoder(TransformerMixin, BaseEstimator):
     def __init__(
         self,
         max_clusters: int = 10,
-        categorical_limit: int = 15,
+        categorical_limit: int = 10,
     ) -> None:
         """Create a data transformer.
 
@@ -133,7 +133,7 @@ class TabularEncoder(TransformerMixin, BaseEstimator):
     def __init__(
         self,
         max_clusters: int = 10,
-        categorical_limit: int = 20,
+        categorical_limit: int = 10,
         whitelist: list = [],
     ) -> None:
         """Create a data transformer.
@@ -422,7 +422,7 @@ class TimeSeriesTabularEncoder(TransformerMixin, BaseEstimator):
     def __init__(
         self,
         max_clusters: int = 10,
-        categorical_limit: int = 15,
+        categorical_limit: int = 10,
         whitelist: list = [],
     ) -> None:
         self.max_clusters = max_clusters
@@ -639,7 +639,7 @@ class TimeSeriesBinEncoder(TransformerMixin, BaseEstimator):
     def __init__(
         self,
         max_clusters: int = 10,
-        categorical_limit: int = 15,
+        categorical_limit: int = 10,
     ) -> None:
         """Create a data transformer.
 

@@ -41,10 +41,11 @@ from synthcity.utils.serialization import load_from_file, save_to_file
 
 
 class PerformanceEvaluator(MetricEvaluator):
-    """ Evaluating synthetic data based on downstream performance.
+    """Evaluating synthetic data based on downstream performance.
 
     This implements the train-on-synthetic test-on-real methodology for evaluation.
     """
+
     def __init__(self, **kwargs: Any) -> None:
         super().__init__(**kwargs)
 
@@ -609,7 +610,7 @@ class PerformanceEvaluatorXGB(PerformanceEvaluator):
             return self._evaluate_survival_model(
                 XGBSurvivalAnalysis,
                 {
-                    "n_jobs": -1,
+                    "n_jobs": 2,
                     "verbosity": 0,
                     "depth": 3,
                     "strategy": "debiased_bce",  # "weibull", "debiased_bce"
@@ -620,7 +621,7 @@ class PerformanceEvaluatorXGB(PerformanceEvaluator):
             )
         elif self._task_type == "classification" or self._task_type == "regression":
             xgb_clf_args = {
-                "n_jobs": -1,
+                "n_jobs": 2,
                 "verbosity": 0,
                 "depth": 3,
                 "random_state": self._random_state,
@@ -640,7 +641,7 @@ class PerformanceEvaluatorXGB(PerformanceEvaluator):
             return self._evaluate_time_series_survival_performance(
                 XGBTimeSeriesSurvival,
                 {
-                    "n_jobs": -1,
+                    "n_jobs": 2,
                     "verbosity": 0,
                     "depth": 3,
                     "strategy": "debiased_bce",  # "weibull", "debiased_bce"

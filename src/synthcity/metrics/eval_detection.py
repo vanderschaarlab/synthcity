@@ -111,7 +111,7 @@ class SyntheticDetectionXGB(DetectionEvaluator):
     def evaluate(self, X_gt: DataLoader, X_syn: DataLoader) -> Dict:
         model_template = XGBClassifier
         model_args = {
-            "n_jobs": -1,
+            "n_jobs": 2,
             "verbosity": 0,
             "depth": 3,
             "random_state": self._random_state,

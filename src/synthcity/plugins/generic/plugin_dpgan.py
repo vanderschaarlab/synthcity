@@ -1,4 +1,4 @@
-"""Conditional GAN implementation
+"""DP GAN implementation
 """
 # stdlib
 from typing import Any, List, Optional, Union
@@ -24,8 +24,8 @@ from synthcity.plugins.core.schema import Schema
 from synthcity.utils.constants import DEVICE
 
 
-class CTGANPlugin(Plugin):
-    """CTGAN plugin.
+class DPGANPlugin(Plugin):
+    """DPGAN plugin.
 
     Args:
         generator_n_layers_hidden: int
@@ -75,12 +75,12 @@ class CTGANPlugin(Plugin):
         self,
         n_iter: int = 2000,
         n_units_conditional: int = 0,
-        generator_n_layers_hidden: int = 2,
+        generator_n_layers_hidden: int = 3,
         generator_n_units_hidden: int = 500,
         generator_nonlin: str = "relu",
         generator_dropout: float = 0.1,
         generator_opt_betas: tuple = (0.5, 0.999),
-        discriminator_n_layers_hidden: int = 2,
+        discriminator_n_layers_hidden: int = 3,
         discriminator_n_units_hidden: int = 500,
         discriminator_nonlin: str = "leaky_relu",
         discriminator_n_iter: int = 1,
@@ -88,14 +88,18 @@ class CTGANPlugin(Plugin):
         discriminator_opt_betas: tuple = (0.5, 0.999),
         lr: float = 1e-3,
         weight_decay: float = 1e-3,
-        batch_size: int = 500,
+        batch_size: int = 200,
         random_state: int = 0,
         clipping_value: int = 1,
         lambda_gradient_penalty: float = 10,
-        encoder_max_clusters: int = 10,
+        encoder_max_clusters: int = 5,
         encoder: Any = None,
         dataloader_sampler: Optional[sampler.Sampler] = None,
         device: Any = DEVICE,
+        # privacy settings
+        dp_epsilon: float = 4,
+        dp_delta: Optional[float] = None,
+        dp_max_grad_norm: float = 2,
         **kwargs: Any
     ) -> None:
         super().__init__(**kwargs)
@@ -126,9 +130,15 @@ class CTGANPlugin(Plugin):
 
         self.device = device
 
+        # privacy
+        self.dp_enabled = True
+        self.dp_epsilon = dp_epsilon
+        self.dp_delta = dp_delta
+        self.dp_max_grad_norm = dp_max_grad_norm
+
     @staticmethod
     def name() -> str:
-        return "ctgan"
+        return "dpgan"
 
     @staticmethod
     def type() -> str:
@@ -162,7 +172,7 @@ class CTGANPlugin(Plugin):
             IntegerDistribution(name="encoder_max_clusters", low=2, high=20),
         ]
 
-    def _fit(self, X: DataLoader, *args: Any, **kwargs: Any) -> "CTGANPlugin":
+    def _fit(self, X: DataLoader, *args: Any, **kwargs: Any) -> "DPGANPlugin":
         features = X.shape[1]
         cond: Optional[Union[pd.DataFrame, pd.Series]] = None
         if self.n_units_conditional > 0:
@@ -203,6 +213,11 @@ class CTGANPlugin(Plugin):
             encoder_max_clusters=self.encoder_max_clusters,
             dataloader_sampler=self.dataloader_sampler,
             device=self.device,
+            # privacy
+            dp_enabled=self.dp_enabled,
+            dp_epsilon=self.dp_epsilon,
+            dp_delta=self.dp_delta,
+            dp_max_grad_norm=self.dp_max_grad_norm,
         )
         self.model.fit(X.dataframe(), cond=cond)
 
@@ -216,4 +231,4 @@ class CTGANPlugin(Plugin):
         return self._safe_generate(self.model.generate, count, syn_schema, cond=cond)
 
 
-plugin = CTGANPlugin
+plugin = DPGANPlugin

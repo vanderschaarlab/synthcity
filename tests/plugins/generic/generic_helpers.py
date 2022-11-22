@@ -1,6 +1,9 @@
 # stdlib
 from typing import Dict, List, Type
 
+# third party
+import pandas as pd
+
 # synthcity absolute
 from synthcity.plugins import Plugin
 from synthcity.plugins.generic import GenericPlugins as Plugins
@@ -19,3 +22,12 @@ def generate_fixtures(name: str, plugin: Type, plugin_args: Dict = {}) -> List:
         return load(buff)
 
     return [from_api(), from_module(), from_serde()]
+
+
+def get_airfoil_dataset() -> pd.DataFrame:
+    df = pd.read_csv(
+        "https://archive.ics.uci.edu/ml/machine-learning-databases/00291/airfoil_self_noise.dat",
+        header=None,
+        sep="\\t",
+    )
+    return df

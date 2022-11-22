@@ -1,6 +1,7 @@
 # third party
 import numpy as np
 import pytest
+from helpers import get_airfoil_dataset
 from sklearn.datasets import load_iris
 
 # synthcity absolute
@@ -86,7 +87,7 @@ def test_basic_network(
 
 
 def test_gan_classification() -> None:
-    X, _ = load_iris(return_X_y=True, as_frame=True)
+    X = get_airfoil_dataset()
 
     model = TabularGAN(
         X,
@@ -118,3 +119,21 @@ def test_gan_conditional() -> None:
 
     generated = model.generate(5, np.ones(5))
     assert generated.shape == (5, X.shape[1])
+
+
+def test_gan_generation_with_dp() -> None:
+    X = get_airfoil_dataset()
+
+    model = TabularGAN(
+        X,
+        n_units_latent=50,
+        generator_n_iter=10,
+        encoder_max_clusters=5,
+        dp_enabled=True,
+    )
+    model.fit(X)
+
+    generated = model.generate(10)
+
+    assert (X.columns == generated.columns).all()
+    assert generated.shape == (10, X.shape[1])

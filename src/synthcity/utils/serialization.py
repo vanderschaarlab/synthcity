@@ -1,4 +1,5 @@
 # stdlib
+import hashlib
 from pathlib import Path
 from typing import Any, Union
 
@@ -26,4 +27,13 @@ def load_from_file(path: Union[str, Path]) -> Any:
 
 
 def dataframe_hash(df: pd.DataFrame) -> str:
-    return str(abs(pd.util.hash_pandas_object(df).sum()))
+    cols = sorted(list(df.columns))
+
+    return str(abs(pd.util.hash_pandas_object(df[cols].fillna(0)).sum()))
+
+
+def dataframe_cols_hash(df: pd.DataFrame) -> str:
+    df.columns = df.columns.map(str)
+    cols = "--".join(list(sorted(df.columns)))
+
+    return hashlib.md5(cols.encode()).hexdigest()

@@ -86,10 +86,8 @@ def test_basic_network(
     assert net.discriminator.lr == lr
 
 
-@pytest.mark.parametrize(
-    "discriminator_extra_loss", [[], ["gradient_penalty"], ["identifiability_penalty"]]
-)
-def test_gan_classification(discriminator_extra_loss: list) -> None:
+@pytest.mark.parametrize("generator_extra_penalties", [[], ["identifiability_penalty"]])
+def test_gan_generation(generator_extra_penalties: list) -> None:
     X, _ = load_digits(return_X_y=True)
     X = MinMaxScaler().fit_transform(X)
 
@@ -97,7 +95,7 @@ def test_gan_classification(discriminator_extra_loss: list) -> None:
         n_features=X.shape[1],
         n_units_latent=50,
         generator_n_iter=10,
-        discriminator_extra_penalties=discriminator_extra_loss,
+        generator_extra_penalties=generator_extra_penalties,
     )
     model.fit(X)
 
@@ -123,3 +121,21 @@ def test_gan_conditional() -> None:
 
     generated = model.generate(5, np.ones(5))
     assert generated.shape == (5, X.shape[1])
+
+
+def test_gan_generation_with_dp() -> None:
+    X, _ = load_iris(return_X_y=True)
+    X = MinMaxScaler().fit_transform(X)
+
+    model = GAN(
+        n_features=X.shape[1],
+        n_units_latent=50,
+        generator_n_iter=50,
+        n_iter_print=10,
+        dp_enabled=True,
+    )
+    model.fit(X)
+
+    generated = model.generate(10)
+
+    assert generated.shape == (10, X.shape[1])

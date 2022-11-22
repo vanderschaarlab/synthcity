@@ -39,7 +39,7 @@ class AdsGANPlugin(Plugin):
             Number of hidden layers in the generator
         generator_n_units_hidden: int
             Number of hidden units in each layer of the Generator
-        generator_nonlin: string, default 'tanh'
+        generator_nonlin: string, default 'leaky_relu'
             Nonlinearity to use in the generator. Can be 'elu', 'relu', 'selu' or 'leaky_relu'.
         n_iter: int
             Maximum number of iterations in the Generator.
@@ -84,11 +84,10 @@ class AdsGANPlugin(Plugin):
         n_units_conditional: int = 0,
         generator_n_layers_hidden: int = 3,
         generator_n_units_hidden: int = 500,
-        generator_nonlin: str = "tanh",
+        generator_nonlin: str = "relu",
         generator_dropout: float = 0.1,
         generator_opt_betas: tuple = (0.5, 0.999),
-        generator_extra_penalties: list = [],
-        discriminator_n_layers_hidden: int = 2,
+        discriminator_n_layers_hidden: int = 3,
         discriminator_n_units_hidden: int = 500,
         discriminator_nonlin: str = "leaky_relu",
         discriminator_n_iter: int = 1,
@@ -96,12 +95,12 @@ class AdsGANPlugin(Plugin):
         discriminator_opt_betas: tuple = (0.5, 0.999),
         lr: float = 1e-3,
         weight_decay: float = 1e-3,
-        batch_size: int = 10000,
+        batch_size: int = 200,
         random_state: int = 0,
-        clipping_value: int = 0,
+        clipping_value: int = 1,
         lambda_gradient_penalty: float = 10,
         lambda_identifiability_penalty: float = 0.1,
-        encoder_max_clusters: int = 10,
+        encoder_max_clusters: int = 5,
         encoder: Any = None,
         dataloader_sampler: Optional[sampler.Sampler] = None,
         device: Any = DEVICE,
@@ -114,13 +113,12 @@ class AdsGANPlugin(Plugin):
         self.n_iter = n_iter
         self.generator_dropout = generator_dropout
         self.generator_opt_betas = generator_opt_betas
-        self.generator_extra_penalties = generator_extra_penalties
+        self.generator_extra_penalties = ["identifiability_penalty"]
         self.discriminator_n_layers_hidden = discriminator_n_layers_hidden
         self.discriminator_n_units_hidden = discriminator_n_units_hidden
         self.discriminator_nonlin = discriminator_nonlin
         self.discriminator_n_iter = discriminator_n_iter
         self.discriminator_dropout = discriminator_dropout
-        self.discriminator_extra_penalties = ["gradient_penalty"]
         self.discriminator_opt_betas = discriminator_opt_betas
 
         self.lr = lr
@@ -156,7 +154,6 @@ class AdsGANPlugin(Plugin):
             CategoricalDistribution(
                 name="generator_nonlin", choices=["relu", "leaky_relu", "tanh", "elu"]
             ),
-            IntegerDistribution(name="n_iter", low=100, high=1000, step=100),
             FloatDistribution(name="generator_dropout", low=0, high=0.2),
             IntegerDistribution(name="discriminator_n_layers_hidden", low=1, high=4),
             IntegerDistribution(
@@ -166,11 +163,9 @@ class AdsGANPlugin(Plugin):
                 name="discriminator_nonlin",
                 choices=["relu", "leaky_relu", "tanh", "elu"],
             ),
-            IntegerDistribution(name="discriminator_n_iter", low=1, high=5),
             FloatDistribution(name="discriminator_dropout", low=0, high=0.2),
             CategoricalDistribution(name="lr", choices=[1e-3, 2e-4, 1e-4]),
             CategoricalDistribution(name="weight_decay", choices=[1e-3, 1e-4]),
-            CategoricalDistribution(name="batch_size", choices=[100, 200, 500]),
             IntegerDistribution(name="encoder_max_clusters", low=2, high=20),
         ]
 
@@ -209,7 +204,6 @@ class AdsGANPlugin(Plugin):
             discriminator_lr=self.lr,
             discriminator_weight_decay=self.weight_decay,
             discriminator_opt_betas=self.discriminator_opt_betas,
-            discriminator_extra_penalties=self.discriminator_extra_penalties,
             encoder=self.encoder,
             clipping_value=self.clipping_value,
             lambda_gradient_penalty=self.lambda_gradient_penalty,
