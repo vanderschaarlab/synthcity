@@ -12,7 +12,6 @@ from typing import Any, List, Optional, Tuple
 # third party
 import numpy as np
 import pandas as pd
-from joblib import Parallel, delayed
 from pgmpy.factors.discrete.CPD import TabularCPD
 from pgmpy.models import BayesianNetwork
 from pgmpy.sampling import BayesianModelSampling
@@ -32,7 +31,6 @@ from synthcity.plugins.core.serializable import Serializable
 from synthcity.utils.reproducibility import enable_reproducible_results
 
 network_edge = namedtuple("network_edge", ["feature", "parents"])
-dispatcher = Parallel(max_nbytes=None, backend="loky", n_jobs=8)
 
 
 def usefulness_minus_target(
@@ -95,6 +93,7 @@ class PrivBayes(Serializable):
         self.target_usefulness = target_usefulness
         self.mi_thresh = mi_thresh
         self.default_k = 2
+        self.mi_cache: dict = {}
 
     @validate_arguments(config=dict(arbitrary_types_allowed=True))
     def fit(self, data: pd.DataFrame) -> Any:
@@ -199,20 +198,19 @@ class PrivBayes(Serializable):
 
             num_parents = min(len(nodes_selected), self.K)
 
-            search_results = dispatcher(
-                delayed(self._evaluate_parent_mutual_information)(
+            for candidate, split in product(
+                nodes_remaining, range(len(nodes_selected) - num_parents + 1)
+            ):
+                (
+                    candidate_pairs,
+                    candidate_mi,
+                ) = self._evaluate_parent_mutual_information(
                     data,
                     candidate=candidate,
                     parent_candidates=nodes_selected,
                     parent_limit=num_parents,
                     split=split,
                 )
-                for candidate, split in product(
-                    nodes_remaining, range(len(nodes_selected) - num_parents + 1)
-                )
-            )
-
-            for candidate_pairs, candidate_mi in search_results:
                 parents_pair_list.extend(candidate_pairs)
                 mutual_info_list.extend(candidate_mi)
 
@@ -413,10 +411,21 @@ class PrivBayes(Serializable):
 
         parents_pair_list = []
         mutual_info_list = []
+
+        if candidate not in self.mi_cache:
+            self.mi_cache[candidate] = {}
+
         for other_parents in combinations(parent_candidates[split:], parent_limit):
             parents = list(other_parents)
+            parents_key = "_".join(sorted(parents))
+
+            if parents_key in self.mi_cache[candidate]:
+                score = self.mi_cache[candidate][parents_key]
+            else:
+                score = self.mutual_info_score(data, parents, candidate)
+                self.mi_cache[candidate][parents_key] = score
+
             parents_pair_list.append(network_edge(candidate, parents=parents))
-            score = self.mutual_info_score(data, parents, candidate)
             mutual_info_list.append(score)
 
         return parents_pair_list, mutual_info_list
