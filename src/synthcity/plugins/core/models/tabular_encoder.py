@@ -59,6 +59,7 @@ class BinEncoder(TransformerMixin, BaseEstimator):
         gm = ClusterBasedNormalizer(
             model_missing_values=True,
             max_clusters=min(self.max_clusters, len(data)),
+            enforce_min_max_values=True,
         )
         gm.fit(data.to_frame(), [column_name])
         num_components = sum(gm.valid_component_indicator)
