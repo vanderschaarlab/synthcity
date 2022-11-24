@@ -35,9 +35,9 @@ def test_plugin_hyperparams(test_plugin: Plugin) -> None:
 
 @pytest.mark.parametrize(
     "struct_learning_search_method",
-    ["hillclimb", "mmhc", "pc", "tree_search", "exhaustive"],
+    ["hillclimb", "mmhc"],
 )
-@pytest.mark.parametrize("struct_learning_score", ["k2", "bdeu", "bic", "bds"])
+@pytest.mark.parametrize("struct_learning_score", ["k2", "bdeu"])
 def test_plugin_fit(
     struct_learning_search_method: str, struct_learning_score: str
 ) -> None:
@@ -54,6 +54,22 @@ def test_plugin_fit(
     "test_plugin", generate_fixtures(plugin_name, plugin, plugin_args)
 )
 def test_plugin_generate(test_plugin: Plugin) -> None:
+    X = pd.DataFrame(load_iris()["data"])
+    test_plugin.fit(GenericDataLoader(X))
+
+    X_gen = test_plugin.generate()
+    assert len(X_gen) == len(X)
+    assert test_plugin.schema_includes(X_gen)
+
+    X_gen = test_plugin.generate(50)
+    assert len(X_gen) == 50
+    assert test_plugin.schema_includes(X_gen)
+    assert list(X_gen.columns) == list(X.columns)
+
+
+def test_plugin_generate_and_learn_dag() -> None:
+    test_plugin = plugin(struct_learning_enabled=True, **plugin_args)
+
     X = pd.DataFrame(load_iris()["data"])
     test_plugin.fit(GenericDataLoader(X))
 

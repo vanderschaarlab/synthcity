@@ -15,9 +15,10 @@ import torch
 from decaf import DECAF, DataModule
 
 # synthcity absolute
+import synthcity.logger as log
 from synthcity.plugins.core.dataloader import DataLoader
 from synthcity.plugins.core.distribution import CategoricalDistribution, Distribution
-from synthcity.plugins.core.models.tabular_encoder import TabularEncoder
+from synthcity.plugins.core.models import TabularGAN
 from synthcity.plugins.core.plugin import Plugin
 from synthcity.plugins.core.schema import Schema
 
@@ -40,10 +41,22 @@ class DECAFPlugin(Plugin):
     def __init__(
         self,
         n_iter: int = 1000,
-        n_units_hidden: int = 500,
+        generator_n_layers_hidden: int = 2,
+        generator_n_units_hidden: int = 500,
+        generator_nonlin: str = "relu",
+        generator_dropout: float = 0.1,
+        generator_opt_betas: tuple = (0.5, 0.999),
+        discriminator_n_layers_hidden: int = 2,
+        discriminator_n_units_hidden: int = 500,
+        discriminator_nonlin: str = "leaky_relu",
+        discriminator_n_iter: int = 1,
+        discriminator_dropout: float = 0.1,
+        discriminator_opt_betas: tuple = (0.5, 0.999),
         lr: float = 1e-3,
-        batch_size: int = 200,
-        lambda_gp: float = 10,
+        batch_size: int = 500,
+        random_state: int = 0,
+        clipping_value: int = 1,
+        lambda_gradient_penalty: float = 10,
         lambda_privacy: float = 1,
         eps: float = 1e-8,
         alpha: float = 1,
@@ -58,16 +71,34 @@ class DECAFPlugin(Plugin):
         struct_learning_score: str = "k2",  # k2, bdeu, bic, bds
         struct_max_indegree: int = 4,
         encoder_max_clusters: int = 10,
+        device: Any = DEVICE,
         **kwargs: Any,
     ) -> None:
         super().__init__(**kwargs)
 
         self.n_iter = n_iter
-        self.n_units_hidden = n_units_hidden
+        self.generator_n_layers_hidden = generator_n_layers_hidden
+        self.generator_n_units_hidden = generator_n_units_hidden
+        self.generator_nonlin = generator_nonlin
+        self.generator_dropout = generator_dropout
+        self.generator_opt_betas = generator_opt_betas
+        self.discriminator_n_layers_hidden = discriminator_n_layers_hidden
+        self.discriminator_n_units_hidden = discriminator_n_units_hidden
+        self.discriminator_nonlin = discriminator_nonlin
+        self.discriminator_n_iter = discriminator_n_iter
+        self.discriminator_dropout = discriminator_dropout
+        self.discriminator_opt_betas = discriminator_opt_betas
+
         self.lr = lr
+        self.weight_decay = weight_decay
         self.batch_size = batch_size
-        self.lambda_gp = lambda_gp
+        self.random_state = random_state
+        self.clipping_value = clipping_value
+        self.lambda_gradient_penalty = lambda_gradient_penalty
         self.lambda_privacy = lambda_privacy
+
+        self.device = device
+
         self.eps = eps
         self.alpha = alpha
         self.rho = rho
@@ -82,7 +113,7 @@ class DECAFPlugin(Plugin):
         self.struct_learning_score = struct_learning_score
         self.struct_max_indegree = struct_max_indegree
 
-        self.encoder = TabularEncoder(max_clusters=encoder_max_clusters)
+        self.encoder_max_clusters = encoder_max_clusters
 
     @staticmethod
     def name() -> str:
@@ -139,26 +170,69 @@ class DECAFPlugin(Plugin):
     def _fit(
         self, X: DataLoader, *args: Any, dag: List[Tuple[int, int]] = [], **kwargs: Any
     ) -> "DECAFPlugin":
+        # train the baseline generator
+        log.info("[DECAF] train baseline generator")
+        features = X.shape[1]
+        self.baseline_generator = TabularGAN(
+            X.dataframe(),
+            n_units_latent=features,
+            batch_size=self.batch_size,
+            generator_n_layers_hidden=self.generator_n_layers_hidden,
+            generator_n_units_hidden=self.generator_n_units_hidden,
+            generator_nonlin=self.generator_nonlin,
+            generator_nonlin_out_discrete="softmax",
+            generator_nonlin_out_continuous="none",
+            generator_lr=self.lr,
+            generator_residual=True,
+            generator_n_iter=self.n_iter,
+            generator_batch_norm=False,
+            generator_dropout=0,
+            generator_weight_decay=self.weight_decay,
+            generator_opt_betas=self.generator_opt_betas,
+            generator_extra_penalties=[],
+            discriminator_n_units_hidden=self.discriminator_n_units_hidden,
+            discriminator_n_layers_hidden=self.discriminator_n_layers_hidden,
+            discriminator_n_iter=self.discriminator_n_iter,
+            discriminator_nonlin=self.discriminator_nonlin,
+            discriminator_batch_norm=False,
+            discriminator_dropout=self.discriminator_dropout,
+            discriminator_lr=self.lr,
+            discriminator_weight_decay=self.weight_decay,
+            discriminator_opt_betas=self.discriminator_opt_betas,
+            clipping_value=self.clipping_value,
+            lambda_gradient_penalty=self.lambda_gradient_penalty,
+            encoder_max_clusters=self.encoder_max_clusters,
+            device=self.device,
+        )
+        self.baseline_generator.fit(X.dataframe())
+
+        # train the debiasing generator
         df = X.dataframe()
-        df = self.encoder.fit_transform(df)
+        df = self.baseline_generator.encode(df)
 
         if dag == [] and self.struct_learning_enabled:
-            dag = self._get_dag(df).edges()
+            raw_dag = self._get_dag(df).edges()
+            for src, dst in raw_dag:
+                dag.append(
+                    (
+                        df.columns.values.tolist().index(src),
+                        df.columns.values.tolist().index(dst),
+                    )
+                )
+        log.info(f"[DECAF] using DAG {dag}")
 
         dm = DataModule(df)
         self.features = X.columns
         self.encoded_features = df.columns
 
-        # TODO: find workaround for data
-        self.raw_data = dm.dataset.x
-
+        log.info("[DECAF] train debiasing generator")
         self.model = DECAF(
             dm.dims[0],
             dag_seed=dag,
-            h_dim=self.n_units_hidden,
+            h_dim=self.generator_n_units_hidden,
             lr=self.lr,
             batch_size=self.batch_size,
-            lambda_gp=self.lambda_gp,
+            lambda_gp=self.lambda_gradient_penalty,
             lambda_privacy=self.lambda_privacy,
             eps=self.eps,
             alpha=self.alpha,
@@ -167,7 +241,7 @@ class DECAFPlugin(Plugin):
             grad_dag_loss=self.grad_dag_loss,
             l1_g=self.l1_g,
             l1_W=self.l1_W,
-            nonlin_out=self.encoder.activation_layout(
+            nonlin_out=self.baseline_generator.encoder.activation_layout(
                 discrete_activation="softmax",
                 continuous_activation="none",
             ),
@@ -181,11 +255,15 @@ class DECAFPlugin(Plugin):
 
     def _generate(self, count: int, syn_schema: Schema, **kwargs: Any) -> pd.DataFrame:
         def _sample(count: int) -> pd.DataFrame:
+            # generate baseline values
+            seed_values = self.baseline_generator(count)
+            seed_values = torch.from_numpy(seed_values).to(DEVICE)
+            # debias baseline values
             vals = (
-                self.model.gen_synthetic(self.raw_data, **kwargs).detach().cpu().numpy()
+                self.model.gen_synthetic(seed_values, **kwargs).detach().cpu().numpy()
             )
 
-            output = self.encoder.inverse_transform(
+            output = self.baseline_generator.decode(
                 pd.DataFrame(vals, columns=self.encoded_features)
             ).sample(count)
 
