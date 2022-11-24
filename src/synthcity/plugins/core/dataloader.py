@@ -187,6 +187,8 @@ class GenericDataLoader(DataLoader):
             Default: None. Only relevant for SurvivalGAN method.
         target_column: Optional[str]
             The feature name that provides labels for downstream tasks.
+        domain_column: Optional[str]
+            Optional domain label, used for domain adaptation algorithms.
         random_state: int
             Defaults to zero.
 
