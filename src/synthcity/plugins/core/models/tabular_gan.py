@@ -87,7 +87,7 @@ class TabularGAN(torch.nn.Module):
         generator_n_units_hidden: int = 150,
         generator_nonlin: str = "leaky_relu",
         generator_nonlin_out_discrete: str = "softmax",
-        generator_nonlin_out_continuous: str = "tanh",
+        generator_nonlin_out_continuous: str = "none",
         generator_n_iter: int = 1000,
         generator_batch_norm: bool = False,
         generator_dropout: float = 0.01,
