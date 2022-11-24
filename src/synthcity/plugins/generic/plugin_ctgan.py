@@ -179,7 +179,7 @@ class CTGANPlugin(Plugin):
             generator_n_units_hidden=self.generator_n_units_hidden,
             generator_nonlin=self.generator_nonlin,
             generator_nonlin_out_discrete="softmax",
-            generator_nonlin_out_continuous="tanh",
+            generator_nonlin_out_continuous="none",
             generator_lr=self.lr,
             generator_residual=True,
             generator_n_iter=self.n_iter,
