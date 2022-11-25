@@ -8,7 +8,13 @@ from pydantic import validate_arguments
 # synthcity absolute
 from synthcity.plugins.core.plugin import Plugin, PluginLoader  # noqa: F401,E402
 
-def_categories = ["generic", "survival_analysis", "time_series", "fairness"]
+def_categories = [
+    "generic",
+    "survival_analysis",
+    "time_series",
+    "fairness",
+    "domain_adaptation",
+]
 plugins = {}
 
 for cat in def_categories:
