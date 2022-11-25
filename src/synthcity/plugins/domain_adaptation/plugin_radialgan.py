@@ -1,4 +1,9 @@
-"""Conditional GAN implementation
+"""RadialGAN  PyTorch implementation
+
+Reference: Yoon, Jinsung and Jordon, James and van der Schaar, Mihaela
+    "RadialGAN: Leveraging multiple datasets to improve target-specific predictive models using Generative Adversarial Networks"
+
+Original implementation: https://github.com/vanderschaarlab/mlforhealthlabpub/blob/main/alg/RadialGAN/RadialGAN.py
 """
 # stdlib
 from typing import Any, List, Optional, Tuple
@@ -168,7 +173,7 @@ class RadialGAN(nn.Module):
                 nonlin=generator_nonlin,
                 nonlin_out=generator_nonlin_out,
                 batch_norm=False,
-                dropout=generator_dropout,
+                dropout=0,
                 random_state=random_state,
                 lr=generator_lr,
                 opt_betas=generator_opt_betas,
@@ -265,7 +270,7 @@ class RadialGAN(nn.Module):
         batch_size = len(X)
         if batch_size == 0:
             return 0
-        # Update the G network
+        # Update the M network
         self.mappers[domain].optimizer.zero_grad()
 
         real_X = X.to(self.device)
@@ -288,7 +293,7 @@ class RadialGAN(nn.Module):
             errs.append(errM)
 
         # Calculate gradients for M
-        errM = torch.stack(errs).mean()
+        errM = 0.1 * torch.sqrt(torch.stack(errs)).mean()
         errM.backward()
 
         # Update M
@@ -371,14 +376,11 @@ class RadialGAN(nn.Module):
             for other_domain in self.domains:
                 noise = torch.randn(batch_size, self.n_units_latent, device=self.device)
 
-                if other_domain == domain:
-                    fake = self.generators[other_domain](
-                        noise
-                    )  # generate fake data for domain <domain>
-                else:
-                    fake = self.generators[other_domain](
-                        noise
-                    )  # generate fake data for domain <other_domain>
+                fake = self.generators[other_domain](
+                    noise
+                )  # generate fake data for domain <other_domain>
+
+                if other_domain != domain:
                     fake = self.mappers[domain](
                         fake
                     )  # remap the generate data to domain <domain>
@@ -684,15 +686,16 @@ class TabularRadialGAN(torch.nn.Module):
     def generate(
         self,
         count: int,
+        domains: Optional[List[int]] = None,
     ) -> pd.DataFrame:
-        samples, domains = self(count)
+        samples, domains = self(count, domains=domains)
         samples = self.decode(pd.DataFrame(samples))
         samples[self.domain_column] = domains
 
         return samples
 
-    def forward(self, count: int) -> torch.Tensor:
-        return self.model.generate(count)
+    def forward(self, count: int, domains: Optional[List[int]] = None) -> torch.Tensor:
+        return self.model.generate(count, domains=domains)
 
 
 class RadialGANPlugin(Plugin):
@@ -863,8 +866,17 @@ class RadialGANPlugin(Plugin):
 
         return self
 
-    def _generate(self, count: int, syn_schema: Schema, **kwargs: Any) -> DataLoader:
-        return self._safe_generate(self.model.generate, count, syn_schema)
+    def _generate(
+        self,
+        count: int,
+        syn_schema: Schema,
+        domains: Optional[List[int]] = None,
+        **kwargs: Any,
+    ) -> DataLoader:
+        def _model_generate(count: int) -> pd.DataFrame:
+            return self.model.generate(count, domains)
+
+        return self._safe_generate(_model_generate, count, syn_schema)
 
 
 plugin = RadialGANPlugin
