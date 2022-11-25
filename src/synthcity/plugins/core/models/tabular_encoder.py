@@ -163,6 +163,7 @@ class TabularEncoder(TransformerMixin, BaseEstimator):
         gm = ClusterBasedNormalizer(
             model_missing_values=True,
             max_clusters=min(len(data), self.max_clusters),
+            enforce_min_max_values=True,
         )
         gm.fit(data.to_frame(), [column_name])
         num_components = sum(gm.valid_component_indicator)
