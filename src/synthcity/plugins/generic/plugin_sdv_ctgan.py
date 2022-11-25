@@ -59,7 +59,7 @@ class OriginalCTGANPlugin(Plugin):
 
     Example:
         >>> from synthcity.plugins import Plugins
-        >>> plugin = Plugins().get("ctgan")
+        >>> plugin = Plugins().get("sdv_ctgan")
         >>> from sklearn.datasets import load_iris
         >>> X = load_iris()
         >>> plugin.fit(X)

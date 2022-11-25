@@ -63,7 +63,7 @@ class DPGANPlugin(Plugin):
 
     Example:
         >>> from synthcity.plugins import Plugins
-        >>> plugin = Plugins().get("adsgan")
+        >>> plugin = Plugins().get("dpgan")
         >>> from sklearn.datasets import load_iris
         >>> X = load_iris()
         >>> plugin.fit(X)
