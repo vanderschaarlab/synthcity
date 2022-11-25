@@ -32,7 +32,7 @@ def test_plugin_type(test_plugin: Plugin) -> None:
 
 @pytest.mark.parametrize("test_plugin", generate_fixtures(plugin_name, plugin))
 def test_plugin_hyperparams(test_plugin: Plugin) -> None:
-    assert len(test_plugin.hyperparameter_space()) == 14
+    assert len(test_plugin.hyperparameter_space()) == 11
 
 
 def test_plugin_fit() -> None:
@@ -135,7 +135,7 @@ def test_eval_performance() -> None:
     X = GenericDataLoader(Xraw)
 
     for retry in range(2):
-        test_plugin = plugin(n_iter=200)
+        test_plugin = plugin(n_iter=500)
         evaluator = PerformanceEvaluatorXGB()
 
         test_plugin.fit(X)

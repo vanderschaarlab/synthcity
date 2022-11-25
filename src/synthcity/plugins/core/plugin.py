@@ -248,11 +248,13 @@ class Plugin(Serializable, metaclass=ABCMeta):
             iter_samples_df = pd.DataFrame(
                 iter_samples, columns=self.schema().features()
             )
+
             # validate schema
             iter_samples_df = self.schema().adapt_dtypes(iter_samples_df)
 
             if self.strict:
                 iter_samples_df = constraints.match(iter_samples_df)
+                iter_samples_df = iter_samples_df.drop_duplicates()
 
             data_synth = pd.concat([data_synth, iter_samples_df], ignore_index=True)
 
