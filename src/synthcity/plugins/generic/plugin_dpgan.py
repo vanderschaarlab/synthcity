@@ -173,7 +173,6 @@ class DPGANPlugin(Plugin):
         ]
 
     def _fit(self, X: DataLoader, *args: Any, **kwargs: Any) -> "DPGANPlugin":
-        features = X.shape[1]
         cond: Optional[Union[pd.DataFrame, pd.Series]] = None
         if self.n_units_conditional > 0:
             if "cond" not in kwargs:
@@ -182,7 +181,7 @@ class DPGANPlugin(Plugin):
 
         self.model = TabularGAN(
             X.dataframe(),
-            n_units_latent=features,
+            n_units_latent=self.generator_n_units_hidden,
             n_units_conditional=self.n_units_conditional,
             batch_size=self.batch_size,
             generator_n_layers_hidden=self.generator_n_layers_hidden,

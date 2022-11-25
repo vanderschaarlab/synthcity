@@ -206,7 +206,6 @@ class PATEGAN(Serializable):
     ) -> Any:
         self.columns = X_train.columns
 
-        features = X_train.shape[1]
         if self.delta is None:
             self.delta = 1 / (len(X_train) * np.sqrt(len(X_train)))
 
@@ -214,7 +213,7 @@ class PATEGAN(Serializable):
 
         self.model = TabularGAN(
             X_train,
-            n_units_latent=features,
+            n_units_latent=self.generator_n_units_hidden,
             batch_size=self.batch_size,
             generator_n_layers_hidden=self.generator_n_layers_hidden,
             generator_n_units_hidden=self.generator_n_units_hidden,
