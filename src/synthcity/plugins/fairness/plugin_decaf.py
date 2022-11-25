@@ -172,10 +172,9 @@ class DECAFPlugin(Plugin):
     ) -> "DECAFPlugin":
         # train the baseline generator
         log.info("[DECAF] train baseline generator")
-        features = X.shape[1]
         self.baseline_generator = TabularGAN(
             X.dataframe(),
-            n_units_latent=features,
+            n_units_latent=self.generator_n_units_hidden,
             batch_size=self.batch_size,
             generator_n_layers_hidden=self.generator_n_layers_hidden,
             generator_n_units_hidden=self.generator_n_units_hidden,

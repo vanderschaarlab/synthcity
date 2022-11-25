@@ -76,7 +76,7 @@ class RadialGAN(nn.Module):
     @validate_arguments(config=dict(arbitrary_types_allowed=True))
     def __init__(
         self,
-        n_domains: int,
+        domains: List[int],
         n_features: int,
         n_units_latent: int,
         generator_n_layers_hidden: int = 2,
@@ -102,50 +102,78 @@ class RadialGAN(nn.Module):
         clipping_value: int = 0,
         lambda_gradient_penalty: float = 10,
         device: Any = DEVICE,
+        dataloader_sampler: Any = None,
     ) -> None:
         super(RadialGAN, self).__init__()
+
+        self.domains = domains
+        assert len(self.domains) > 0
 
         log.info(f"Training RadialGAN on device {device}. features = {n_features}")
         self.device = device
         self.generator_nonlin_out = generator_nonlin_out
+        self.dataloader_sampler = dataloader_sampler
 
         self.n_features = n_features
         self.n_units_latent = n_units_latent
 
-        self.generator = MLP(
-            task_type="regression",
-            n_units_in=n_units_latent,
-            n_units_out=n_features,
-            n_layers_hidden=generator_n_layers_hidden,
-            n_units_hidden=generator_n_units_hidden,
-            nonlin=generator_nonlin,
-            nonlin_out=generator_nonlin_out,
-            n_iter=generator_n_iter,
-            batch_norm=False,
-            dropout=generator_dropout,
-            random_state=random_state,
-            lr=generator_lr,
-            residual=False,
-            opt_betas=generator_opt_betas,
-            device=device,
-        ).to(self.device)
+        self.generators = {}  # Domain generators
+        self.discriminators = {}  # Domain discriminators
+        self.mappers = {}  # Neural nets converting data to the current domain
 
-        self.discriminator = MLP(
-            task_type="regression",
-            n_units_in=n_features,
-            n_units_out=1,
-            n_layers_hidden=discriminator_n_layers_hidden,
-            n_units_hidden=discriminator_n_units_hidden,
-            nonlin=discriminator_nonlin,
-            nonlin_out=[("none", 1)],
-            n_iter=discriminator_n_iter,
-            batch_norm=False,
-            dropout=discriminator_dropout,
-            random_state=random_state,
-            lr=discriminator_lr,
-            opt_betas=discriminator_opt_betas,
-            device=device,
-        ).to(self.device)
+        for domain in domains:
+            self.generators[domain] = MLP(
+                task_type="regression",
+                n_units_in=n_units_latent,
+                n_units_out=n_features,
+                n_layers_hidden=generator_n_layers_hidden,
+                n_units_hidden=generator_n_units_hidden,
+                nonlin=generator_nonlin,
+                nonlin_out=generator_nonlin_out,
+                n_iter=generator_n_iter,
+                batch_norm=False,
+                dropout=generator_dropout,
+                random_state=random_state,
+                lr=generator_lr,
+                residual=False,
+                opt_betas=generator_opt_betas,
+                device=device,
+            ).to(self.device)
+
+        for domain in domains:
+            self.discriminators[domain] = MLP(
+                task_type="regression",
+                n_units_in=n_features,
+                n_units_out=1,
+                n_layers_hidden=discriminator_n_layers_hidden,
+                n_units_hidden=discriminator_n_units_hidden,
+                nonlin=discriminator_nonlin,
+                nonlin_out=[("none", 1)],
+                n_iter=discriminator_n_iter,
+                batch_norm=False,
+                dropout=discriminator_dropout,
+                random_state=random_state,
+                lr=discriminator_lr,
+                opt_betas=discriminator_opt_betas,
+                device=device,
+            ).to(self.device)
+
+        for domain in domains:
+            self.mappers[domain] = MLP(
+                task_type="regression",
+                n_units_in=n_features,
+                n_units_out=n_features,
+                n_layers_hidden=generator_n_layers_hidden,
+                n_units_hidden=generator_n_units_hidden,
+                nonlin=generator_nonlin,
+                nonlin_out=generator_nonlin_out,
+                batch_norm=False,
+                dropout=generator_dropout,
+                random_state=random_state,
+                lr=generator_lr,
+                opt_betas=generator_opt_betas,
+                device=device,
+            ).to(self.device)
 
         # training
         self.generator_n_iter = generator_n_iter
@@ -171,33 +199,57 @@ class RadialGAN(nn.Module):
     def fit(
         self,
         X: np.ndarray,
+        domains: np.ndarray,
     ) -> "RadialGAN":
         clear_cache()
 
         Xt = self._check_tensor(X)
+        domainst = self._check_tensor(domains)
         self._train(
             Xt,
+            domainst,
         )
 
         return self
 
-    def generate(self, count: int) -> np.ndarray:
+    def generate(
+        self, count: int, domains: Optional[List[int]] = None
+    ) -> Tuple[np.ndarray, np.ndarray]:
         clear_cache()
-        self.generator.eval()
+        for domain in self.generators:
+            self.generators[domain].eval()
 
         with torch.no_grad():
-            return self(count).detach().cpu().numpy()
+            samples, domains = self(count, domains)
+            samples = samples.detach().cpu().numpy()
+            domains = np.asarray(domains)
+
+            return samples, domains
 
     @validate_arguments(config=dict(arbitrary_types_allowed=True))
     def forward(
-        self,
-        count: int,
-    ) -> torch.Tensor:
-        fixed_noise = torch.randn(count, self.n_units_latent, device=self.device)
-        return self.generator(fixed_noise)
+        self, count: int, domains: Optional[List[int]] = None
+    ) -> Tuple[torch.Tensor, List]:
+        if domains is None:
+            domains = self.domains
+        batch_per_domain = count // len(domains) + 1
+        out = torch.tensor([]).to(self.device)
+        out_domains = []
+        for domain in domains:
+            fixed_noise = torch.randn(
+                batch_per_domain, self.n_units_latent, device=self.device
+            )
+            domain_generated = self.generators[domain](fixed_noise)
 
-    def dataloader(self, X: torch.Tensor) -> torch.utils.data.DataLoader:
-        dataset = TensorDataset(X)
+            out = torch.concat([out, domain_generated])
+            out_domains.extend([domain] * batch_per_domain)
+
+        return out, out_domains
+
+    def dataloader(
+        self, X: torch.Tensor, domains: torch.Tensor
+    ) -> torch.utils.data.DataLoader:
+        dataset = TensorDataset(X, domains)
         return torch.utils.data.DataLoader(
             dataset,
             batch_size=self.batch_size,
@@ -205,33 +257,89 @@ class RadialGAN(nn.Module):
             pin_memory=False,
         )
 
-    def _train_epoch_generator(
+    def _train_epoch_mapper(
         self,
+        domain: int,
         X: torch.Tensor,
     ) -> float:
+        batch_size = len(X)
+        if batch_size == 0:
+            return 0
         # Update the G network
-        self.generator.optimizer.zero_grad()
+        self.mappers[domain].optimizer.zero_grad()
 
         real_X = X.to(self.device)
-        batch_size = len(real_X)
 
         noise = torch.randn(batch_size, self.n_units_latent, device=self.device)
 
-        fake = self.generator(noise)
+        errs = []
+        for other_domain in self.domains:
+            if other_domain == domain:
+                continue
 
-        output = self.discriminator(fake).squeeze().float()
-        # Calculate G's loss based on this output
-        errG = -torch.mean(output)
+            fake = self.generators[other_domain](
+                noise
+            )  # generate fake data for <other_domain>
+            fake = self.mappers[domain](fake)  # remap data to domain <domain>
+
+            # Calculate M's loss based on this output
+            errM = nn.MSELoss()(fake, real_X)
+
+            errs.append(errM)
+
+        # Calculate gradients for M
+        errM = torch.stack(errs).mean()
+        errM.backward()
+
+        # Update M
+        if self.clipping_value > 0:
+            torch.nn.utils.clip_grad_norm_(
+                self.mappers[domain].parameters(), self.clipping_value
+            )
+        self.mappers[domain].optimizer.step()
+
+        assert not torch.isnan(errM)
+
+        # Return loss
+        return errM.item()
+
+    def _train_epoch_generator(
+        self,
+        domain: int,
+        X: torch.Tensor,
+    ) -> float:
+        batch_size = len(X)
+        if batch_size == 0:
+            return 0
+        # Update the G network
+        self.generators[domain].optimizer.zero_grad()
+
+        noise = torch.randn(batch_size, self.n_units_latent, device=self.device)
+
+        errs = []
+        for other_domain in self.domains:
+            fake = self.generators[domain](noise)  # generate fake data
+            if other_domain != domain:
+                fake = self.mappers[other_domain](
+                    fake
+                )  # remap data to domain <other_domain>
+
+            output = self.discriminators[other_domain](fake).squeeze().float()
+            # Calculate G's loss based on this output
+            errG = -torch.mean(output)
+
+            errs.append(errG)
 
         # Calculate gradients for G
+        errG = torch.stack(errs).mean()
         errG.backward()
 
         # Update G
         if self.clipping_value > 0:
             torch.nn.utils.clip_grad_norm_(
-                self.generator.parameters(), self.clipping_value
+                self.generators[domain].parameters(), self.clipping_value
             )
-        self.generator.optimizer.step()
+        self.generators[domain].optimizer.step()
 
         assert not torch.isnan(errG)
 
@@ -240,57 +348,84 @@ class RadialGAN(nn.Module):
 
     def _train_epoch_discriminator(
         self,
+        domain: int,
         X: torch.Tensor,
     ) -> float:
         # Update the D network
         errors = []
 
         batch_size = min(self.batch_size, len(X))
+        if batch_size == 0:
+            return 0
 
         for epoch in range(self.discriminator_n_iter):
             # Train with all-real batch
             real_X = X.to(self.device)
 
             real_labels = self.true_labels_generator(X).to(self.device).squeeze()
-            real_output = self.discriminator(real_X).squeeze().float()
+            real_output = self.discriminators[domain](real_X).squeeze().float()
 
             # Train with all-fake batch
-            noise = torch.randn(batch_size, self.n_units_latent, device=self.device)
+            errD_fakes = []
+            penalties = []
+            for other_domain in self.domains:
+                noise = torch.randn(batch_size, self.n_units_latent, device=self.device)
 
-            fake = self.generator(noise)
+                if other_domain == domain:
+                    fake = self.generators[other_domain](
+                        noise
+                    )  # generate fake data for domain <domain>
+                else:
+                    fake = self.generators[other_domain](
+                        noise
+                    )  # generate fake data for domain <other_domain>
+                    fake = self.mappers[domain](
+                        fake
+                    )  # remap the generate data to domain <domain>
 
-            fake_labels = (
-                self.fake_labels_generator(fake).to(self.device).squeeze().float()
-            )
-            fake_output = self.discriminator(fake.detach()).squeeze()
+                fake_labels = (
+                    self.fake_labels_generator(fake).to(self.device).squeeze().float()
+                )
+                fake_output = self.discriminators[domain](fake.detach()).squeeze()
 
-            # Compute errors. Some fake inputs might be marked as real for privacy guarantees.
+                # Compute errors. Some fake inputs might be marked as real for privacy guarantees.
 
-            real_real_output = real_output[(real_labels * real_output) != 0]
-            real_fake_output = fake_output[(fake_labels * fake_output) != 0]
-            errD_real = torch.mean(torch.concat((real_real_output, real_fake_output)))
+                real_real_output = real_output[(real_labels * real_output) != 0]
+                real_fake_output = fake_output[(fake_labels * fake_output) != 0]
+                errD_real = torch.mean(
+                    torch.concat((real_real_output, real_fake_output))
+                )
 
-            fake_real_output = real_output[((1 - real_labels) * real_output) != 0]
-            fake_fake_output = fake_output[((1 - fake_labels) * fake_output) != 0]
-            errD_fake = torch.mean(torch.concat((fake_real_output, fake_fake_output)))
+                fake_real_output = real_output[((1 - real_labels) * real_output) != 0]
+                fake_fake_output = fake_output[((1 - fake_labels) * fake_output) != 0]
 
-            penalty = self._loss_gradient_penalty(
-                real_samples=real_X,
-                fake_samples=fake,
-                batch_size=batch_size,
-            )
-            errD = -errD_real + errD_fake
+                errD_fake = torch.mean(
+                    torch.concat((fake_real_output, fake_fake_output))
+                )
 
-            self.discriminator.optimizer.zero_grad()
-            penalty.backward(retain_graph=True)
+                penalty = self._loss_gradient_penalty(
+                    domain=domain,
+                    real_samples=real_X,
+                    fake_samples=fake,
+                    batch_size=batch_size,
+                )
+                errD_fakes.append(errD_fake)
+                penalties.append(penalty)
+
+            errD_fake = torch.stack(errD_fakes)
+            penalty = torch.stack(penalties)
+            errD = -errD_real + errD_fake.mean()
+
+            self.discriminators[domain].optimizer.zero_grad()
+            torch.mean(penalty).backward(retain_graph=True)
             errD.backward()
 
             # Update D
             if self.clipping_value > 0:
                 torch.nn.utils.clip_grad_norm_(
-                    self.discriminator.parameters(), self.clipping_value
+                    self.discriminators[domain].parameters(), self.clipping_value
                 )
-            self.discriminator.optimizer.step()
+            self.discriminators[domain].optimizer.step()
 
             errors.append(errD.item())
 
@@ -301,44 +436,57 @@ class RadialGAN(nn.Module):
     def _train_epoch(
         self,
         loader: torch.utils.data.DataLoader,
-    ) -> Tuple[float, float]:
+    ) -> Tuple[float, float, float]:
         G_losses = []
         D_losses = []
+        M_losses = []
 
         for i, data in enumerate(loader):
-            X = data[0]
+            X, X_domains = data
 
-            D_losses.append(
-                self._train_epoch_discriminator(
-                    X,
+            for domain in self.domains:
+                X_batch = X[X_domains == domain]
+                D_losses.append(
+                    self._train_epoch_discriminator(
+                        domain,
+                        X_batch,
+                    )
                 )
-            )
-            G_losses.append(
-                self._train_epoch_generator(
-                    X,
+                G_losses.append(
+                    self._train_epoch_generator(
+                        domain,
+                        X_batch,
+                    )
                 )
-            )
+                M_losses.append(
+                    self._train_epoch_mapper(
+                        domain,
+                        X_batch,
+                    )
+                )
 
-        return np.mean(G_losses), np.mean(D_losses)
+        return np.mean(G_losses), np.mean(D_losses), np.mean(M_losses)
 
     def _train(
         self,
         X: torch.Tensor,
+        domains: torch.Tensor,
     ) -> "RadialGAN":
         X = self._check_tensor(X).float()
+        domains = self._check_tensor(domains).long()
 
         # Load Dataset
-        loader = self.dataloader(X)
+        loader = self.dataloader(X, domains)
 
         # Train loop
         for i in range(self.generator_n_iter):
-            g_loss, d_loss = self._train_epoch(
+            g_loss, d_loss, m_loss = self._train_epoch(
                 loader,
             )
             # Check how the generator is doing by saving G's output on fixed_noise
             if (i + 1) % self.n_iter_print == 0:
                 log.debug(
-                    f"[{i}/{self.generator_n_iter}]\tLoss_D: {d_loss}\tLoss_G: {g_loss}"
+                    f"[{i}/{self.generator_n_iter}]\tLoss_D: {d_loss}\tLoss_G: {g_loss}\tLoss_M: {m_loss}"
                 )
 
         return self
@@ -351,6 +499,7 @@ class RadialGAN(nn.Module):
 
     def _loss_gradient_penalty(
         self,
+        domain: int,
         real_samples: torch.tensor,
         fake_samples: torch.Tensor,
         batch_size: int,
@@ -362,7 +511,11 @@ class RadialGAN(nn.Module):
         interpolated = (
             alpha * real_samples + ((1 - alpha) * fake_samples)
         ).requires_grad_(True)
-        d_interpolated = self.discriminator(interpolated).squeeze()
+        if batch_size > 1:
+            d_interpolated = self.discriminators[domain](interpolated).squeeze()
+        else:
+            d_interpolated = self.discriminators[domain](interpolated)[0, :]
+
         labels = torch.ones((len(interpolated),), device=self.device)
 
         # Get gradient w.r.t. interpolates
@@ -465,11 +618,17 @@ class TabularRadialGAN(torch.nn.Module):
         device: Any = DEVICE,
     ) -> None:
         super(TabularRadialGAN, self).__init__()
+        domains = list(X[domain_column].unique())
+        X = X.drop(columns=[domain_column])
+
         self.columns = X.columns
+        self.domain_column = domain_column
+
         self.encoder = TabularEncoder(max_clusters=encoder_max_clusters).fit(X)
 
         self.model = RadialGAN(
-            self.encoder.n_features(),
+            domains=domains,
+            n_features=self.encoder.n_features(),
             n_units_latent=n_units_latent,
             batch_size=batch_size,
             generator_n_layers_hidden=generator_n_layers_hidden,
@@ -512,10 +671,12 @@ class TabularRadialGAN(torch.nn.Module):
         self,
         X: pd.DataFrame,
     ) -> Any:
+        domains = X[self.domain_column]
         X_enc = self.encode(X)
 
         self.model.fit(
             np.asarray(X_enc),
+            np.asarray(domains),
         )
         return self
 
@@ -524,8 +685,11 @@ class TabularRadialGAN(torch.nn.Module):
         self,
         count: int,
     ) -> pd.DataFrame:
-        samples = self(count)
-        return self.decode(pd.DataFrame(samples))
+        samples, domains = self(count)
+        samples = self.decode(pd.DataFrame(samples))
+        samples[self.domain_column] = domains
+
+        return samples
 
     def forward(self, count: int) -> torch.Tensor:
         return self.model.generate(count)
@@ -666,11 +830,11 @@ class RadialGANPlugin(Plugin):
     def _fit(self, X: DataLoader, *args: Any, **kwargs: Any) -> "RadialGANPlugin":
         if X.domain() is None:
             raise ValueError("Provide the 'domain_column' info to the DataLoader")
-        features = X.shape[1]
 
         self.model = TabularRadialGAN(
             X.dataframe(),
-            n_units_latent=features,
+            domain_column=X.domain(),
+            n_units_latent=self.generator_n_units_hidden,
             batch_size=self.batch_size,
             generator_n_layers_hidden=self.generator_n_layers_hidden,
             generator_n_units_hidden=self.generator_n_units_hidden,
