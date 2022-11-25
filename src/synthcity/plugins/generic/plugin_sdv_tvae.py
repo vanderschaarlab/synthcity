@@ -43,7 +43,7 @@ class OriginalTVAEPlugin(Plugin):
 
     Example:
         >>> from synthcity.plugins import Plugins
-        >>> plugin = Plugins().get("tvae")
+        >>> plugin = Plugins().get("sdv_tvae")
         >>> from sklearn.datasets import load_iris
         >>> X = load_iris()
         >>> plugin.fit(X)
