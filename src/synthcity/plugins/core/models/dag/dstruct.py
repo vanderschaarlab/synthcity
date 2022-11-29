@@ -103,7 +103,8 @@ class DStruct(pl.LightningModule):
 
         self.p = BetaP(K)
 
-    def training_step(self, X: torch.Tensor, batch_idx: int) -> None:
+    def training_step(self, batch: torch.Tensor, batch_idx: int) -> None:
+        (X,) = batch
         subsets = self.p(X)
 
         opts = self.optimizers()
@@ -213,9 +214,6 @@ class DStruct(pl.LightningModule):
 
         return A
 
-    def test_step(self, batch: torch.Tensor, batch_idx: int) -> None:
-        pass
-
 
 def get_dstruct_dag(
     X: pd.DataFrame,
@@ -228,12 +226,14 @@ def get_dstruct_dag(
     nt_rho_max: float = 1e18,  # maximum value for NATEARGS
     compress: bool = True,
 ) -> List:
+    pl.seed_everything(seed)
     n, dim = X.shape
     dsl = NOTEARS
-    dsl_config = {"dim": dim, "n": n, "sem_type": "sob"}
+    dsl_config = {"dim": dim, "sem_type": "sob"}
 
-    s = dim * (dim - 1) / 2 - 1
+    s = int(dim * (dim - 1) / 2 - 1)
     Dataset = CustomDataModule(X, batch_size=batch_size)
+    Dataset.setup(stage="fit")
 
     model = (
         DStruct(
@@ -242,6 +242,8 @@ def get_dstruct_dag(
             dsl_config=dsl_config,
             K=K,
             lmbda=lmbda,
+            h_tol=nt_h_tol,
+            rho_max=nt_rho_max,
             s=s,
         )
         .to(DEVICE)
@@ -273,7 +275,7 @@ def get_dstruct_dag(
     out = []
 
     for row in range(dim):
-        for col in range(row + 1, dim):
+        for col in range(dim):
             if dag[row][col] == 1:
                 out.append((row, col))
 

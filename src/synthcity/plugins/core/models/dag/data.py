@@ -8,9 +8,7 @@ import pandas as pd
 import pytorch_lightning as pl
 import scipy.stats as stats
 import torch
-from sklearn.model_selection import train_test_split
-from sklearn.preprocessing import MinMaxScaler
-from torch.utils.data import DataLoader
+from torch.utils.data import DataLoader, TensorDataset
 
 
 class P:
@@ -71,13 +69,8 @@ class CustomDataModule(pl.LightningDataModule):
 
         self.batch_size = batch_size
 
-        X = MinMaxScaler().fit_transform(X)
-        self.X_train, self.X_test = train_test_split(
-            np.asarray(X), train_size=train_size
-        )
+        X = np.asarray(X)
+        self.X = TensorDataset(torch.from_numpy(X))
 
     def train_dataloader(self) -> DataLoader:
-        return DataLoader(self.X_train, batch_size=self.batch_size)
-
-    def test_dataloader(self) -> DataLoader:
-        return DataLoader(self.X_test, batch_size=self.batch_size)
+        return DataLoader(self.X, batch_size=self.batch_size)
