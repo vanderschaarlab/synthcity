@@ -7,6 +7,7 @@ import pandas as pd
 import pytorch_lightning as pl
 import torch
 import torch.nn as nn
+from pytorch_lightning.callbacks import EarlyStopping
 
 # synthcity absolute
 import synthcity.plugins.core.models.dag.utils as ut
@@ -32,9 +33,9 @@ class NOTEARS(nn.Module):
 
         self.dim = dim
         self.notears: Union[NotearsMLP, NotearsSobolev] = (
-            NotearsMLP(dims=[dim, *nonlinear_dims]).to(DEVICE)
+            NotearsMLP(dims=[dim, *nonlinear_dims]).to(DEVICE).double()
             if sem_type == "mlp"
-            else NotearsSobolev(dim, 5).to(DEVICE)
+            else NotearsSobolev(dim, 5).to(DEVICE).double()
         )
 
         self.rho = rho
@@ -50,7 +51,7 @@ class NOTEARS(nn.Module):
         return self.notears.h_func()
 
     def loss(self, x: torch.Tensor, x_hat: torch.Tensor) -> torch.Tensor:
-        x = x.float()
+        x = x.double()
         loss = self._squared_loss(x, x_hat)
         h_val = self.notears.h_func()
         penalty = 0.5 * self.rho * h_val * h_val + self.alpha * h_val
@@ -95,7 +96,7 @@ class DStruct(pl.LightningModule):
 
         self.automatic_optimization = False
         self.dsl_list = nn.ModuleList(
-            [NOTEARS(dim=self.dim).to(DEVICE) for i in range(self.K)]
+            [NOTEARS(dim=self.dim).to(DEVICE).double() for i in range(self.K)]
         )
 
         for i, dsl in enumerate(self.dsl_list):
@@ -131,7 +132,7 @@ class DStruct(pl.LightningModule):
     def _dual_ascent_step(
         self, x: torch.Tensor, optimizer: torch.optim.Optimizer, dsl: NOTEARS
     ) -> Tuple[float, float, float]:
-        x = x.float()
+        x = x.double()
         h_new = 0
 
         while dsl.rho < self.rho_max:
@@ -196,7 +197,7 @@ class DStruct(pl.LightningModule):
     def _loss(self) -> torch.Tensor:
         As, A_comp = self.forward()
 
-        mask = torch.ones(A_comp.shape).to(DEVICE)
+        mask = torch.ones(A_comp.shape).to(DEVICE).double()
         mask.diagonal().zero_()
 
         A_comp.detach()
@@ -219,7 +220,7 @@ class DStruct(pl.LightningModule):
 
 def get_dstruct_dag(
     X: pd.DataFrame,
-    K: int = 3,  # amount of subsets for D-Struct
+    K: int = 5,  # amount of subsets for D-Struct
     n_iter: int = 100,
     lmbda: int = 1,
     batch_size: int = 256,
@@ -229,25 +230,33 @@ def get_dstruct_dag(
 ) -> List[Tuple[int, int]]:
     n, dim = X.shape
     dsl = NOTEARS
-    dsl_config = {"dim": dim, "sem_type": "sob"}
+    dsl_config = {"dim": dim, "n": n, "sem_type": "sob"}
 
     s = dim * (dim - 1) / 2 - 1
     Dataset = CustomDataModule(X, batch_size=batch_size)
 
-    model = DStruct(
-        dim=dim,
-        n=n,
-        dsl=dsl,
-        dsl_config=dsl_config,
-        K=K,
-        lmbda=lmbda,
-        s=s,
-    ).to(DEVICE)
+    model = (
+        DStruct(
+            dim=dim,
+            n=n,
+            dsl=dsl,
+            dsl_config=dsl_config,
+            K=K,
+            lmbda=lmbda,
+            s=s,
+        )
+        .to(DEVICE)
+        .double()
+    )
     trainer = pl.Trainer(
         accelerator=accelerator,
         devices=-1,
         log_every_n_steps=1,
         max_epochs=n_iter,
+        callbacks=[
+            EarlyStopping(monitor="h", stopping_threshold=nt_h_tol),
+            EarlyStopping(monitor="rho", stopping_threshold=nt_rho_max),
+        ],
     )
     trainer.fit(model, datamodule=Dataset)
 

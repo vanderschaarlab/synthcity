@@ -41,8 +41,8 @@ class NotearsMLP(nn.Module):
         self.priors = priors
 
         # fc1: variable splitting for l1
-        self.fc1_pos = nn.Linear(d, d * dims[1], bias=bias).to(DEVICE)
-        self.fc1_neg = nn.Linear(d, d * dims[1], bias=bias).to(DEVICE)
+        self.fc1_pos = nn.Linear(d, d * dims[1], bias=bias).to(DEVICE).double()
+        self.fc1_neg = nn.Linear(d, d * dims[1], bias=bias).to(DEVICE).double()
         self.fc1_pos.weight.bounds = self._bounds()
         self.fc1_neg.weight.bounds = self._bounds()
         # fc2: local linear layers
@@ -51,7 +51,7 @@ class NotearsMLP(nn.Module):
             layers.append(
                 LocallyConnected(d, dims[layer + 1], dims[layer + 2], bias=bias)
             )
-        self.fc2 = nn.ModuleList(layers).to(DEVICE)
+        self.fc2 = nn.ModuleList(layers).to(DEVICE).double()
 
     def _check(self, target: Any) -> bool:
         if len(self.priors) != 0:
@@ -93,10 +93,6 @@ class NotearsMLP(nn.Module):
         fc1_weight = fc1_weight.view(d, -1, d)  # [j, m1, i]
         A = torch.sum(fc1_weight * fc1_weight, dim=1).t()  # [i, j]
         h = trace_expm(A) - d  # (Zheng et al. 2018)
-        # A different formulation, slightly faster at the cost of numerical stability
-        # M = torch.eye(d) + A / d  # (Yu et al. 2019)
-        # E = torch.matrix_power(M, d - 1)
-        # h = (E.t() * M).sum() - d
         return h
 
     def l2_reg(self) -> torch.Tensor:

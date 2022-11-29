@@ -88,8 +88,7 @@ class LBFGSBScipy(torch.optim.Optimizer):
 
         def wrapped_closure(flat_params: torch.Tensor) -> tuple:
             """closure must call zero_grad() and backward()"""
-            flat_params = torch.from_numpy(flat_params).to(DEVICE)
-            flat_params = flat_params.to(torch.get_default_dtype())
+            flat_params = torch.from_numpy(flat_params).to(DEVICE).double()
             self._distribute_flat_params(flat_params)
             loss = closure()
             loss = loss.item()
@@ -106,8 +105,7 @@ class LBFGSBScipy(torch.optim.Optimizer):
             wrapped_closure, initial_params, method="L-BFGS-B", jac=True, bounds=bounds
         )
 
-        final_params = torch.from_numpy(sol.x).to(DEVICE)
-        final_params = final_params.to(torch.get_default_dtype())
+        final_params = torch.from_numpy(sol.x).to(DEVICE).double()
 
         self._distribute_flat_params(final_params)
 
