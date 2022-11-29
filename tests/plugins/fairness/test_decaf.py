@@ -35,7 +35,7 @@ def test_plugin_hyperparams(test_plugin: Plugin) -> None:
 
 @pytest.mark.parametrize(
     "struct_learning_search_method",
-    ["hillclimb", "mmhc", "d-struct"],
+    ["hillclimb", "d-struct"],
 )
 @pytest.mark.parametrize("struct_learning_score", ["k2", "bdeu"])
 def test_plugin_fit(
@@ -70,7 +70,7 @@ def test_plugin_generate(test_plugin: Plugin) -> None:
 
 @pytest.mark.parametrize(
     "struct_learning_search_method",
-    ["hillclimb", "mmhc", "d-struct"],
+    ["hillclimb", "d-struct"],
 )
 def test_get_dag(struct_learning_search_method: str) -> None:
     test_plugin = plugin(
@@ -87,7 +87,7 @@ def test_get_dag(struct_learning_search_method: str) -> None:
 
 @pytest.mark.parametrize(
     "struct_learning_search_method",
-    ["hillclimb", "mmhc", "d-struct"],
+    ["hillclimb", "d-struct"],
 )
 def test_plugin_generate_and_learn_dag(struct_learning_search_method: str) -> None:
     test_plugin = plugin(

@@ -251,7 +251,7 @@ def get_dstruct_dag(
     out = []
 
     for row in range(dim):
-        for col in range(dim):
+        for col in range(row + 1, dim):
             if dag[row][col] == 1:
                 out.append((row, col))
 
