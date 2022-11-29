@@ -76,7 +76,6 @@ class DStruct(pl.LightningModule):
         K: int = 3,
         lr: float = 0.001,
         lmbda: int = 2,
-        n: int = 200,
         s: int = 9,
         dag_type: str = "ER",
         h_tol: float = 1e-8,
@@ -227,7 +226,8 @@ def get_dstruct_dag(
     seed: int = 0,
     nt_h_tol: float = 1e-8,  # minimum value for NOTEARS
     nt_rho_max: float = 1e18,  # maximum value for NATEARGS
-) -> List[Tuple[int, int]]:
+    compress: bool = True,
+) -> List:
     n, dim = X.shape
     dsl = NOTEARS
     dsl_config = {"dim": dim, "n": n, "sem_type": "sob"}
@@ -238,7 +238,6 @@ def get_dstruct_dag(
     model = (
         DStruct(
             dim=dim,
-            n=n,
             dsl=dsl,
             dsl_config=dsl_config,
             K=K,
@@ -267,6 +266,9 @@ def get_dstruct_dag(
         if ut.is_dag(dag):
             print(f"Is DAG for {threshold}")
             break
+
+    if not compress:
+        return dag
 
     out = []
 

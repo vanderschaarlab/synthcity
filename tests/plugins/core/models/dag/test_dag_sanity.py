@@ -6,6 +6,7 @@ from scipy.special import expit as sigmoid
 
 # synthcity absolute
 from synthcity.plugins.core.models.dag.dstruct import get_dstruct_dag
+from synthcity.plugins.core.models.dag.utils import count_accuracy
 
 
 def simulate_nonlinear_sem(B: np.ndarray, n: int, sem_type: str = "mim") -> np.ndarray:
@@ -76,7 +77,7 @@ def simulate_nonlinear_sem(B: np.ndarray, n: int, sem_type: str = "mim") -> np.n
     return X
 
 
-def simulate_dag(d: int, s0: int, graph_type: str = "SF") -> pd.DataFrame:
+def simulate_dag(d: int, s0: int, graph_type: str = "ER") -> pd.DataFrame:
     """Simulate random DAG with some expected number of edges.
     Args:
         d (int): num of nodes
@@ -114,9 +115,13 @@ def simulate_dag(d: int, s0: int, graph_type: str = "SF") -> pd.DataFrame:
 
 
 def test_sanity() -> None:
-    orig_dag = simulate_dag(5, 9, graph_type="SF")
+    orig_dag = simulate_dag(5, 9)
     X = simulate_nonlinear_sem(orig_dag, 100)
 
-    dag = get_dstruct_dag(X, n_iter=15)
+    dag = get_dstruct_dag(X, n_iter=15, compress=False)
 
     assert len(dag) > 0
+    acc = count_accuracy(orig_dag, dag)
+
+    assert acc["fdr"] < 0.2
+    assert acc["tpr"] > 0.9
