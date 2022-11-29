@@ -73,7 +73,7 @@ class DStruct(pl.LightningModule):
         dim: int,
         dsl: Callable,
         dsl_config: dict,
-        K: int = 5,
+        K: int = 3,
         lr: float = 0.001,
         lmbda: int = 2,
         n: int = 200,
@@ -220,7 +220,7 @@ class DStruct(pl.LightningModule):
 
 def get_dstruct_dag(
     X: pd.DataFrame,
-    K: int = 5,  # amount of subsets for D-Struct
+    K: int = 3,  # amount of subsets for D-Struct
     n_iter: int = 100,
     lmbda: int = 1,
     batch_size: int = 256,

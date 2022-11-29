@@ -115,7 +115,7 @@ def simulate_dag(d: int, s0: int, graph_type: str = "SF") -> pd.DataFrame:
 
 def test_sanity() -> None:
     orig_dag = simulate_dag(5, 9, graph_type="SF")
-    X = simulate_nonlinear_sem(orig_dag, 2000)
+    X = simulate_nonlinear_sem(orig_dag, 100)
 
     dag = get_dstruct_dag(X, n_iter=15)
 
