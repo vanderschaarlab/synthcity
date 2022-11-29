@@ -262,7 +262,11 @@ def get_dstruct_dag(
 
     model.eval()
 
-    dag = model.get_dag()
+    for threshold in np.linspace(start=0, stop=1, num=100):
+        dag = model.get_dag(threshold=threshold)
+        if ut.is_dag(dag):
+            print(f"Is DAG for {threshold}")
+            break
 
     out = []
 
