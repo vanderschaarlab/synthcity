@@ -47,6 +47,7 @@ class NOTEARS(nn.Module):
         return self.notears.h_func()
 
     def loss(self, x: torch.Tensor, x_hat: torch.Tensor) -> torch.Tensor:
+        x = x.float()
         loss = self._squared_loss(x, x_hat)
         h_val = self.notears.h_func()
         penalty = 0.5 * self.rho * h_val * h_val + self.alpha * h_val
@@ -125,6 +126,7 @@ class DStruct(pl.LightningModule):
     def _dual_ascent_step(
         self, x: torch.Tensor, optimizer: torch.optim.Optimizer, dsl: NOTEARS
     ) -> Tuple[float, float, float]:
+        x = x.float()
         h_new = 0
 
         while dsl.rho < self.rho_max:
@@ -220,8 +222,6 @@ def get_dstruct_dag(
     nt_h_tol: float = 1e-8,  # minimum value for NOTEARS
     nt_rho_max: float = 1e18,  # maximum value for NATEARGS
 ) -> List[Tuple[int, int]]:
-    torch.set_default_dtype(torch.double)
-
     n, dim = X.shape
     dsl = NOTEARS
     dsl_config = {"dim": dim, "sem_type": "sob"}
