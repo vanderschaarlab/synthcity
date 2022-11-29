@@ -1,137 +1,16 @@
 # stdlib
-import os
 from abc import abstractmethod
-from pathlib import Path
 from typing import List, Optional
 
 # third party
 import numpy as np
+import pandas as pd
 import pytorch_lightning as pl
 import scipy.stats as stats
-import synthicty.plugins.core.models.dag.simulate as sm
 import torch
-from torch.utils.data import DataLoader, TensorDataset, random_split
-
-
-class Data(pl.LightningDataModule):
-    def __init__(
-        self,
-        dim: int = 20,  # Amount of vars
-        s0: int = 40,  # Expected amount of edges
-        N: int = 1000,  # Amount of samples
-        sem_type: str = "mim",  # SEM-type (
-        #   'mim' -> index model,
-        #   'mlp' -> multi layer perceptrion,
-        #   'gp' -> gaussian process,
-        #   'gp-add' -> addative gp)
-        dag_type: str = "ER",  # Random graph type (
-        #   'ER' -> Erdos-Renyi,
-        #   'SF' -> Scale Free,
-        #   'BP' -> BiPartite)
-        batch_size: int = 32,
-        train_size_ratio: float = 1.0,  # Ratio of train/test split
-        loc: str = "data/simulated/",  # Save location for simulated data
-        sort: bool = False,  # sort covariates
-        rand_sort: bool = False,  # random sort (permute) covariates
-    ):
-        super().__init__()
-
-        self.dim = dim
-        self.s0 = s0
-        self.N = N
-        self.sem_type = sem_type
-        self.dag_type = dag_type
-
-        self.batch_size = batch_size
-        self.train_size_ratio = train_size_ratio
-
-        self.loc = Path(loc)
-
-        self.DAG: Optional[np.ndarray] = None
-        self._simulate()
-        self._sample()
-
-    def _simulate(self) -> None:
-        self.DAG = sm.simulate_dag(self.dim, self.s0, self.dag_type)
-        self._id = hash(
-            self.DAG.__repr__() + self.DAG.__array_interface__["data"][0].__repr__()
-        )
-
-        path = self.loc / str(self._id)
-
-        os.makedirs(path, exist_ok=True)
-
-        np.savetxt(path / "DAG.csv", self.DAG, delimiter=",")
-
-    def _sample(self) -> None:
-        assert self.DAG is not None, "No DAG simulated yet"
-
-        self.X = sm.simulate_nonlinear_sem(self.DAG, self.N, self.sem_type)
-
-        np.savetxt(self.loc / str(self._id) / "X.csv", self.X, delimiter=",")
-
-    def setup(self, stage: Optional[str] = None) -> None:
-        assert self.DAG is not None, "No DAG simulated yet"
-        assert self.X is not None, "No SEM simulated yet"
-
-        DX = TensorDataset(torch.from_numpy(self.X))
-
-        self._train_size = int(np.floor(self.N * self.train_size_ratio))
-        self.train, self.test = random_split(
-            DX, [int(self._train_size), int(self.N - self._train_size)]
-        )
-
-    def resample(self) -> None:
-        """
-        Resamples a new DAG and SEM
-        Resets the train and test sets
-        Writes new data and DAG to self.loc
-            without overwriting previous data
-        """
-        self._simulate()
-        self._sample()
-        self.setup()
-
-    def train_dataloader(self) -> DataLoader:
-        return DataLoader(
-            self.train, batch_size=self.batch_size, num_workers=os.cpu_count()
-        )
-
-    def test_dataloader(self) -> DataLoader:
-        return DataLoader(
-            self.test, batch_size=len(self.test), num_workers=os.cpu_count()
-        )
-
-
-class Subset(pl.LightningDataModule):
-    def __init__(
-        self, X: np.ndarray, train_size_ratio: float = 0.5, batch_size: int = 256
-    ) -> None:
-        super().__init__()
-
-        self.train_size_ratio = train_size_ratio
-        self.batch_size = batch_size
-
-        self.X = X
-        self.N = self.X.shape[0]
-
-    def setup(self) -> None:
-        DX = TensorDataset(torch.from_numpy(self.X))
-
-        _train_size = np.floor(self.N * self.train_size_ratio)
-        self.train, self.test = random_split(
-            DX, [int(_train_size), int(self.N - _train_size)]
-        )
-
-    def train_dataloader(self) -> DataLoader:
-        return DataLoader(
-            self.train, batch_size=self.batch_size, num_workers=os.cpu_count()
-        )
-
-    def test_dataloader(self) -> DataLoader:
-        return DataLoader(
-            self.test, batch_size=self.batch_size, num_workers=os.cpu_count()
-        )
+from sklearn.model_selection import train_test_split
+from sklearn.preprocessing import MinMaxScaler
+from torch.utils.data import DataLoader
 
 
 class P:
@@ -182,3 +61,23 @@ class BetaP(P):
             X = batch[mask == 1]
             subsets.append(X)
         return subsets
+
+
+class CustomDataModule(pl.LightningDataModule):
+    def __init__(
+        self, X: pd.DataFrame, batch_size: int = 256, train_size: Optional[float] = None
+    ):
+        super().__init__()
+
+        self.batch_size = batch_size
+
+        X = MinMaxScaler().fit_transform(X)
+        self.X_train, self.X_test = train_test_split(
+            np.asarray(X), train_size=train_size
+        )
+
+    def train_dataloader(self) -> DataLoader:
+        return DataLoader(self.X_train, batch_size=self.batch_size)
+
+    def test_dataloader(self) -> DataLoader:
+        return DataLoader(self.X_test, batch_size=self.batch_size)

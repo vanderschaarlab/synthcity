@@ -1,15 +1,16 @@
 # stdlib
-from typing import Callable, Iterable, Tuple, Union
+from typing import Callable, Iterable, List, Tuple, Union
 
 # third party
 import numpy as np
+import pandas as pd
 import pytorch_lightning as pl
 import torch
 import torch.nn as nn
 
 # synthcity absolute
 import synthcity.plugins.core.models.dag.utils as ut
-from synthcity.plugins.core.models.dag.data import P
+from synthcity.plugins.core.models.dag.data import BetaP, CustomDataModule
 from synthcity.plugins.core.models.dag.dsl import NotearsMLP, NotearsSobolev
 
 
@@ -61,104 +62,12 @@ class NOTEARS(nn.Module):
         return x_hat, loss
 
 
-class lit_NOTEARS(pl.LightningModule):
-    def __init__(
-        self,
-        model: NOTEARS,
-        h_tol: float = 1e-8,
-        rho_max: float = 1e16,
-        w_threshold: float = 0.3,
-        n: int = 200,
-        s: int = 9,
-        K: int = 5,
-        dag_type: str = "ER",
-        dim: int = 5,
-    ) -> None:
-        super().__init__()
-
-        self.model = model
-        self.h = np.inf
-
-        self.h_tol, self.rho_max = h_tol, rho_max
-        self.w_threshold = w_threshold
-
-        # We need a way to cope with NOTEARS dual
-        #   ascent strategy.
-        self.automatic_optimization = False
-
-        if dag_type == "ER":
-            dag = 1
-        elif dag_type == "SF":
-            dag = 2
-        elif dag_type == "BP":
-            dag = 3
-
-        self.log_dict({"s": s, "dag_type": dag, "dim": dim, "n": n, "K": K})
-
-    def _dual_ascent_step(
-        self, x: torch.Tensor, optimizer: torch.optim.Optimizer
-    ) -> Tuple[float, float, float]:
-        h_new = 0
-
-        while self.model.rho < self.rho_max:
-
-            def closure() -> torch.Tensor:
-                optimizer.zero_grad()
-                _, loss = self.model(x)
-                self.manual_backward(loss)
-                return loss
-
-            optimizer.step(closure)
-
-            with torch.no_grad():
-                h_new = self.model.h_func().item()
-            if h_new > 0.25 * self.h:
-                self.model.rho *= 10
-            else:
-                break
-        self.model.alpha += self.model.rho * h_new
-        return self.model.alpha, self.model.rho, h_new
-
-    def training_step(self, batch: torch.Tensor, batch_idx: int) -> None:
-        opt = self.optimizers()
-
-        (X,) = batch
-
-        alpha, rho, h = self._dual_ascent_step(X, opt)
-        self.h = h
-
-        self.log("h", h, on_step=True, logger=True, prog_bar=True)
-        self.log("rho", rho, on_step=True, logger=True, prog_bar=True)
-        self.log("alpha", alpha, on_step=True, logger=True)
-
-    def configure_optimizers(self) -> torch.optim.Optimizer:
-        return ut.LBFGSBScipy(self.model.parameters())
-
-    def A(self, grad: bool = False) -> np.ndarray:
-        if grad:
-            B_est = self.model.notears.fc1_to_adj_grad()
-
-        else:
-            B_est = self.model.notears.fc1_to_adj()
-            B_est[np.abs(B_est) < self.w_threshold] = 0
-            B_est[B_est > 0] = 1
-
-        return B_est
-
-    def test_step(self, batch: torch.Tensor, batch_idx: int) -> None:
-        B_est = self.A()
-        B_true = self.trainer.datamodule.DAG
-
-        self.log_dict(ut.count_accuracy(B_true, B_est))
-
-
 class DStruct(pl.LightningModule):
     def __init__(
         self,
         dim: int,
         dsl: Callable,
         dsl_config: dict,
-        p: P,
         K: int = 5,
         lr: float = 0.001,
         lmbda: int = 2,
@@ -186,31 +95,32 @@ class DStruct(pl.LightningModule):
         for i, dsl in enumerate(self.dsl_list):
             self.dsl_list[i].h = np.inf
 
-        self.p = p
+        self.p = BetaP(K)
 
-    def training_step(self, batch: torch.Tensor, batch_idx: int) -> None:
-        (X,) = batch
+    def training_step(self, X: torch.Tensor, batch_idx: int) -> None:
         subsets = self.p(X)
 
         opts = self.optimizers()
         opt = opts[0]
         opt.zero_grad()
 
-        if self.current_epoch >= 0:
-            hs, rhos, alphas = [], [], []
-            for i, dsl in enumerate(self.dsl_list):
-                subset = subsets[i]
+        if self.current_epoch < 0:
+            return
 
-                alpha, rho, h = self._dual_ascent_step(subset, opts[i + 1], dsl)
-                dsl.h = h
+        hs, rhos, alphas = [], [], []
+        for i, dsl in enumerate(self.dsl_list):
+            subset = subsets[i]
 
-                hs.append(h)
-                rhos.append(rho)
-                alphas.append(alpha)
+            alpha, rho, h = self._dual_ascent_step(subset, opts[i + 1], dsl)
+            dsl.h = h
 
-            h, rho, alpha = np.max(hs), np.min(rhos), np.mean(alphas)
+            hs.append(h)
+            rhos.append(rho)
+            alphas.append(alpha)
 
-            self.log_dict({"h": h, "rho": rho, "alpha": alpha})
+        h, rho, alpha = np.max(hs), np.min(rhos), np.mean(alphas)
+
+        self.log_dict({"h": h, "rho": rho, "alpha": alpha})
 
     def _dual_ascent_step(
         self, x: torch.Tensor, optimizer: torch.optim.Optimizer, dsl: NOTEARS
@@ -291,17 +201,58 @@ class DStruct(pl.LightningModule):
             lloss += mse(A_est * mask, A_comp)
         return lloss
 
-    def A(self, threshold: float = 0.5) -> torch.Tensor:
+    def get_dag(self, threshold: float = 0.5) -> torch.Tensor:
         _, A = self.forward(threshold=threshold, grad=False)
 
         return A
 
     def test_step(self, batch: torch.Tensor, batch_idx: int) -> None:
-        for threshold in np.linspace(start=0, stop=1, num=100):
-            B_est = self.A(threshold)
-            if ut.is_dag(B_est):
-                self.log_dict({"DAG_threshold": threshold})
-                break
+        pass
 
-        B_true = self.trainer.datamodule.DAG
-        self.log_dict(ut.count_accuracy(B_true, B_est))
+
+def get_dstruct_dag(
+    X: pd.DataFrame,
+    K: int = 3,  # amount of subsets for D-Struct
+    epochs: int = 100,
+    lmbda: int = 1,
+    batch_size: int = 256,
+    seed: int = 0,
+    nt_h_tol: float = 1e-8,  # minimum value for NOTEARS
+    nt_rho_max: float = 1e18,  # maximum value for NATEARGS
+) -> List[Tuple[int, int]]:
+    torch.set_default_dtype(torch.double)
+
+    n, dim = X.shape
+    dsl = NOTEARS
+    dsl_config = {"dim": dim, "sem_type": "sob"}
+
+    s = dim * (dim - 1) / 2 - 1
+    Dataset = CustomDataModule(X, batch_size=batch_size)
+
+    model = DStruct(
+        dim=dim,
+        n=n,
+        dsl=dsl,
+        dsl_config=dsl_config,
+        K=K,
+        lmbda=lmbda,
+        s=s,
+    )
+    trainer = pl.Trainer(
+        log_every_n_steps=1,
+        max_epochs=epochs,
+    )
+    trainer.fit(model, datamodule=Dataset)
+
+    model.eval()
+
+    dag = model.get_dag()
+
+    out = []
+
+    for row in range(dim):
+        for col in range(dim):
+            if dag[row][col] == 1:
+                out.append((row, col))
+
+    return out
