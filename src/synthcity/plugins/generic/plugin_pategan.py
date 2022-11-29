@@ -394,7 +394,7 @@ class PATEGANPlugin(Plugin):
         self,
         # GAN
         n_iter: int = 1000,
-        generator_n_iter: int = 100,
+        generator_n_iter: int = 10,
         generator_n_layers_hidden: int = 3,
         generator_n_units_hidden: int = 500,
         generator_nonlin: str = "relu",
@@ -415,7 +415,7 @@ class PATEGANPlugin(Plugin):
         teacher_template: str = "xgboost",
         epsilon: float = 1.0,
         delta: Optional[float] = None,
-        lamda: float = 1e-4,
+        lamda: float = 1e-3,
         alpha: int = 100,
         encoder: Any = None,
         **kwargs: Any,
