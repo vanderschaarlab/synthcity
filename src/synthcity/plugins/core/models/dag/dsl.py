@@ -9,6 +9,8 @@ import torch.nn as nn
 # synthcity absolute
 from synthcity.plugins.core.models.dag.utils import LocallyConnected
 
+DEVICE = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+
 
 class TraceExpm(torch.autograd.Function):
     @staticmethod
@@ -39,8 +41,8 @@ class NotearsMLP(nn.Module):
         self.priors = priors
 
         # fc1: variable splitting for l1
-        self.fc1_pos = nn.Linear(d, d * dims[1], bias=bias)
-        self.fc1_neg = nn.Linear(d, d * dims[1], bias=bias)
+        self.fc1_pos = nn.Linear(d, d * dims[1], bias=bias).to(DEVICE)
+        self.fc1_neg = nn.Linear(d, d * dims[1], bias=bias).to(DEVICE)
         self.fc1_pos.weight.bounds = self._bounds()
         self.fc1_neg.weight.bounds = self._bounds()
         # fc2: local linear layers
@@ -49,7 +51,7 @@ class NotearsMLP(nn.Module):
             layers.append(
                 LocallyConnected(d, dims[layer + 1], dims[layer + 2], bias=bias)
             )
-        self.fc2 = nn.ModuleList(layers)
+        self.fc2 = nn.ModuleList(layers).to(DEVICE)
 
     def _check(self, target: Any) -> bool:
         if len(self.priors) != 0:

@@ -13,6 +13,9 @@ import synthcity.plugins.core.models.dag.utils as ut
 from synthcity.plugins.core.models.dag.data import BetaP, CustomDataModule
 from synthcity.plugins.core.models.dag.dsl import NotearsMLP, NotearsSobolev
 
+accelerator = "gpu" if torch.cuda.is_available() else "cpu"
+DEVICE = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+
 
 class NOTEARS(nn.Module):
     def __init__(
@@ -29,9 +32,9 @@ class NOTEARS(nn.Module):
 
         self.dim = dim
         self.notears: Union[NotearsMLP, NotearsSobolev] = (
-            NotearsMLP(dims=[dim, *nonlinear_dims])
+            NotearsMLP(dims=[dim, *nonlinear_dims]).to(DEVICE)
             if sem_type == "mlp"
-            else NotearsSobolev(dim, 5)
+            else NotearsSobolev(dim, 5).to(DEVICE)
         )
 
         self.rho = rho
@@ -91,7 +94,9 @@ class DStruct(pl.LightningModule):
         self.s = s
 
         self.automatic_optimization = False
-        self.dsl_list = nn.ModuleList([NOTEARS(dim=self.dim) for i in range(self.K)])
+        self.dsl_list = nn.ModuleList(
+            [NOTEARS(dim=self.dim).to(DEVICE) for i in range(self.K)]
+        )
 
         for i, dsl in enumerate(self.dsl_list):
             self.dsl_list[i].h = np.inf
@@ -191,7 +196,7 @@ class DStruct(pl.LightningModule):
     def _loss(self) -> torch.Tensor:
         As, A_comp = self.forward()
 
-        mask = torch.ones(A_comp.shape)
+        mask = torch.ones(A_comp.shape).to(DEVICE)
         mask.diagonal().zero_()
 
         A_comp.detach()
@@ -215,7 +220,7 @@ class DStruct(pl.LightningModule):
 def get_dstruct_dag(
     X: pd.DataFrame,
     K: int = 3,  # amount of subsets for D-Struct
-    epochs: int = 100,
+    n_iter: int = 100,
     lmbda: int = 1,
     batch_size: int = 256,
     seed: int = 0,
@@ -237,10 +242,12 @@ def get_dstruct_dag(
         K=K,
         lmbda=lmbda,
         s=s,
-    )
+    ).to(DEVICE)
     trainer = pl.Trainer(
+        accelerator=accelerator,
+        devices=-1,
         log_every_n_steps=1,
-        max_epochs=epochs,
+        max_epochs=n_iter,
     )
     trainer.fit(model, datamodule=Dataset)
 

@@ -9,8 +9,9 @@ import scipy.optimize as sopt
 import torch
 import torch.nn as nn
 
+DEVICE = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
-# Zheng et al.
+
 def is_dag(W: np.ndarray) -> bool:
     G = ig.Graph.Weighted_Adjacency(W.tolist())
     return G.is_dag()
@@ -46,7 +47,7 @@ class LBFGSBScipy(torch.optim.Optimizer):
             else:
                 view = p.grad.data.view(-1)
             views.append(view)
-        return torch.cat(views, 0)
+        return torch.cat(views, 0).to(DEVICE)
 
     def _gather_flat_bounds(self) -> list:
         bounds = []
@@ -66,7 +67,7 @@ class LBFGSBScipy(torch.optim.Optimizer):
             else:
                 view = p.data.view(-1)
             views.append(view)
-        return torch.cat(views, 0)
+        return torch.cat(views, 0).to(DEVICE)
 
     def _distribute_flat_params(self, params: dict) -> None:
         offset = 0
@@ -87,7 +88,7 @@ class LBFGSBScipy(torch.optim.Optimizer):
 
         def wrapped_closure(flat_params: torch.Tensor) -> tuple:
             """closure must call zero_grad() and backward()"""
-            flat_params = torch.from_numpy(flat_params)
+            flat_params = torch.from_numpy(flat_params).to(DEVICE)
             flat_params = flat_params.to(torch.get_default_dtype())
             self._distribute_flat_params(flat_params)
             loss = closure()
@@ -105,7 +106,7 @@ class LBFGSBScipy(torch.optim.Optimizer):
             wrapped_closure, initial_params, method="L-BFGS-B", jac=True, bounds=bounds
         )
 
-        final_params = torch.from_numpy(sol.x)
+        final_params = torch.from_numpy(sol.x).to(DEVICE)
         final_params = final_params.to(torch.get_default_dtype())
 
         self._distribute_flat_params(final_params)

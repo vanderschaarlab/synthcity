@@ -146,7 +146,12 @@ class DECAFPlugin(Plugin):
 
     def _get_dag(self, X: pd.DataFrame) -> Any:
         if self.struct_learning_search_method == "d-struct":
-            return get_dstruct_dag(X)
+            return get_dstruct_dag(
+                X,
+                batch_size=self.batch_size,
+                seed=self.random_state,
+                n_iter=self.n_iter,
+            )
 
         scoring_method = scoring_method = self._get_structure_scorer()(data=X)
         if self.struct_learning_search_method == "hillclimb":
@@ -172,7 +177,6 @@ class DECAFPlugin(Plugin):
             raise ValueError(f"invalid estimator {self.struct_learning_search_method}")
 
         raw_dag = raw_dag.edges()
-        print(raw_dag)
         dag = []
         for src, dst in raw_dag:
             dag.append(
@@ -229,7 +233,6 @@ class DECAFPlugin(Plugin):
         if dag == [] and self.struct_learning_enabled:
             dag = self._get_dag(df)
 
-        print(dag)
         log.info(f"[DECAF] using DAG {dag}")
 
         dm = DataModule(df)
@@ -258,7 +261,7 @@ class DECAFPlugin(Plugin):
             ),
         ).to(DEVICE)
         trainer = pl.Trainer(
-            accelerator=accelerator, max_epochs=self.n_iter, logger=False
+            accelerator=accelerator, max_epochs=self.n_iter, logger=False, devices=-1
         )
         trainer.fit(self.model, dm)
 
