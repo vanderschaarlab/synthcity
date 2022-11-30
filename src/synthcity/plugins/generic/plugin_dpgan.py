@@ -63,7 +63,7 @@ class DPGANPlugin(Plugin):
 
     Example:
         >>> from synthcity.plugins import Plugins
-        >>> plugin = Plugins().get("adsgan")
+        >>> plugin = Plugins().get("dpgan")
         >>> from sklearn.datasets import load_iris
         >>> X = load_iris()
         >>> plugin.fit(X)
@@ -75,12 +75,12 @@ class DPGANPlugin(Plugin):
         self,
         n_iter: int = 2000,
         n_units_conditional: int = 0,
-        generator_n_layers_hidden: int = 3,
+        generator_n_layers_hidden: int = 2,
         generator_n_units_hidden: int = 500,
         generator_nonlin: str = "relu",
         generator_dropout: float = 0.1,
         generator_opt_betas: tuple = (0.5, 0.999),
-        discriminator_n_layers_hidden: int = 3,
+        discriminator_n_layers_hidden: int = 2,
         discriminator_n_units_hidden: int = 500,
         discriminator_nonlin: str = "leaky_relu",
         discriminator_n_iter: int = 1,
@@ -88,7 +88,7 @@ class DPGANPlugin(Plugin):
         discriminator_opt_betas: tuple = (0.5, 0.999),
         lr: float = 1e-3,
         weight_decay: float = 1e-3,
-        batch_size: int = 200,
+        batch_size: int = 1000,
         random_state: int = 0,
         clipping_value: int = 1,
         lambda_gradient_penalty: float = 10,
@@ -173,7 +173,6 @@ class DPGANPlugin(Plugin):
         ]
 
     def _fit(self, X: DataLoader, *args: Any, **kwargs: Any) -> "DPGANPlugin":
-        features = X.shape[1]
         cond: Optional[Union[pd.DataFrame, pd.Series]] = None
         if self.n_units_conditional > 0:
             if "cond" not in kwargs:
@@ -182,14 +181,14 @@ class DPGANPlugin(Plugin):
 
         self.model = TabularGAN(
             X.dataframe(),
-            n_units_latent=features,
+            n_units_latent=self.generator_n_units_hidden,
             n_units_conditional=self.n_units_conditional,
             batch_size=self.batch_size,
             generator_n_layers_hidden=self.generator_n_layers_hidden,
             generator_n_units_hidden=self.generator_n_units_hidden,
             generator_nonlin=self.generator_nonlin,
             generator_nonlin_out_discrete="softmax",
-            generator_nonlin_out_continuous="tanh",
+            generator_nonlin_out_continuous="none",
             generator_lr=self.lr,
             generator_residual=True,
             generator_n_iter=self.n_iter,

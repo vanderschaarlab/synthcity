@@ -175,6 +175,9 @@ class DataLoader(metaclass=ABCMeta):
     def target_columns(self) -> list:
         ...
 
+    def domain(self) -> Optional[str]:
+        return None
+
 
 class GenericDataLoader(DataLoader):
     """Data loader for generic tabular data.
@@ -188,6 +191,8 @@ class GenericDataLoader(DataLoader):
             Default: None. Only relevant for SurvivalGAN method.
         target_column: Optional[str]
             The feature name that provides labels for downstream tasks.
+        domain_column: Optional[str]
+            Optional domain label, used for domain adaptation algorithms.
         random_state: int
             Defaults to zero.
 
@@ -206,6 +211,7 @@ class GenericDataLoader(DataLoader):
         sensitive_features: List[str] = [],
         important_features: List[str] = [],
         target_column: Optional[str] = None,
+        domain_column: Optional[str] = None,
         random_state: int = 0,
         train_size: float = 0.8,
         **kwargs: Any,
@@ -221,6 +227,8 @@ class GenericDataLoader(DataLoader):
         else:
             self.target_column = "---"
 
+        self.domain_column = domain_column
+
         super().__init__(
             data_type="generic",
             data=data,
@@ -235,6 +243,9 @@ class GenericDataLoader(DataLoader):
     @property
     def shape(self) -> tuple:
         return self.data.shape
+
+    def domain(self) -> Optional[str]:
+        return self.domain_column
 
     @property
     def columns(self) -> list:
@@ -266,6 +277,7 @@ class GenericDataLoader(DataLoader):
             "important_features": self.important_features,
             "outcome_features": self.outcome_features,
             "target_column": self.target_column,
+            "domain_column": self.domain_column,
         }
 
     def __len__(self) -> int:
@@ -279,6 +291,7 @@ class GenericDataLoader(DataLoader):
             target_column=self.target_column,
             random_state=self.random_state,
             train_size=self.train_size,
+            domain_column=self.domain_column,
         )
 
     def satisfies(self, constraints: Constraints) -> bool:
@@ -302,6 +315,7 @@ class GenericDataLoader(DataLoader):
             sensitive_features=info["sensitive_features"],
             important_features=info["important_features"],
             target_column=info["target_column"],
+            domain_column=info["domain_column"],
         )
 
     def __getitem__(self, feature: Union[str, list]) -> Any:

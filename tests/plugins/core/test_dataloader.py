@@ -79,6 +79,16 @@ def test_generic_dataloader_pack_unpack() -> None:
     assert yu.shape == y.shape
 
 
+def test_generic_dataloader_domain() -> None:
+    X, y = load_breast_cancer(return_X_y=True, as_frame=True)
+    X["domain"] = y
+
+    loader = GenericDataLoader(X, domain_column="domain")
+
+    assert loader.domain() == "domain"
+    assert loader.info()["domain_column"] == "domain"
+
+
 def test_survival_dataloader_sanity() -> None:
     df = load_rossi()
 

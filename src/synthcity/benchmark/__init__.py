@@ -1,6 +1,7 @@
 # stdlib
 import hashlib
 import json
+import random
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
 
@@ -85,7 +86,10 @@ class Benchmarks:
                 hash_object = hashlib.md5(kwargs_hash_raw)
                 kwargs_hash = hash_object.hexdigest()
 
-            for repeat in range(repeats):
+            repeats_list = list(range(repeats))
+            random.shuffle(repeats_list)
+
+            for repeat in repeats_list:
                 enable_reproducible_results(repeat)
                 torch.cuda.empty_cache()
 
