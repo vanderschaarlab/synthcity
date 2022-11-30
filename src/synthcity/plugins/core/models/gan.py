@@ -8,6 +8,7 @@ from opacus import PrivacyEngine
 from pydantic import validate_arguments
 from torch import nn
 from torch.utils.data import DataLoader, TensorDataset, sampler
+from tqdm import tqdm
 
 # synthcity absolute
 import synthcity.logger as log
@@ -494,7 +495,7 @@ class GAN(nn.Module):
             )
 
         # Train loop
-        for i in range(self.generator_n_iter):
+        for i in tqdm(range(self.generator_n_iter)):
             g_loss, d_loss = self._train_epoch(
                 loader,
                 fake_labels_generator=fake_labels_generator,
