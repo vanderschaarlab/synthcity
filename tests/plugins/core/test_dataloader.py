@@ -45,6 +45,8 @@ def test_generic_dataloader_sanity() -> None:
     assert (loader["target"].values == y.values).all()
     assert "target" not in loader.drop(columns=["target"]).columns
 
+    assert loader.target_columns() == ["target"]
+
 
 def test_generic_dataloader_info() -> None:
     X, y = load_breast_cancer(return_X_y=True, as_frame=True)
@@ -110,6 +112,7 @@ def test_survival_dataloader_sanity() -> None:
 
     assert (loader["arrest"].values == E.values).all()
     assert X.columns[0] not in loader.drop(columns=[X.columns[0]]).columns
+    assert loader.target_columns() == [target_column, time_to_event_column]
 
 
 def test_survival_dataloader_info() -> None:
@@ -220,6 +223,7 @@ def test_time_series_dataloader_sanity(source: Any) -> None:
     assert len(rnd_sample) == 10
 
     assert loader.hash() != ""
+    assert loader.target_columns() == outcome.columns
 
 
 @pytest.mark.parametrize("source", [SineDataloader, GoogleStocksDataloader])

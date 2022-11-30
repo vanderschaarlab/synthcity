@@ -57,7 +57,6 @@ def test_compression_sanity2() -> None:
         df[f"{col}_duplicated"] = df[col]
 
     compressed_df, _ = compress_dataset(df)
-    print(df.shape, compressed_df.shape)
 
     assert len(compressed_df) == len(df)
     assert compressed_df.shape[1] > 0

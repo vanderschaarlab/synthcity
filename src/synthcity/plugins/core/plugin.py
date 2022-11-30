@@ -64,6 +64,7 @@ class Plugin(Serializable, metaclass=ABCMeta):
         strict: bool = True,
         device: Any = DEVICE,
         random_state: int = 0,
+        workspace: Path = Path("workspace"),
     ) -> None:
         """
 
@@ -81,6 +82,9 @@ class Plugin(Serializable, metaclass=ABCMeta):
         self.strict = strict
         self.device = device
         self.random_state = random_state
+
+        workspace.mkdir(parents=True, exist_ok=True)
+        self.workspace = workspace
 
     @staticmethod
     @abstractmethod

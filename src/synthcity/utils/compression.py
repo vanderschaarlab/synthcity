@@ -133,7 +133,6 @@ def decompress_dataset(
 
         assert decoded.shape[1] == len(src_cols)
 
-        print(src_cols, dtypes)
         df[src_cols] = decoded.astype(dtypes)
         df = df.drop(columns=[cat_group])
 

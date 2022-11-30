@@ -54,6 +54,7 @@ class DataLoader(metaclass=ABCMeta):
         outcome_features:
             The feature name that provides labels for downstream tasks.
     """
+
     def __init__(
         self,
         data_type: str,
@@ -170,9 +171,13 @@ class DataLoader(metaclass=ABCMeta):
     def fillna(self, value: Any) -> "DataLoader":
         ...
 
+    @abstractmethod
+    def target_columns(self) -> list:
+        ...
+
 
 class GenericDataLoader(DataLoader):
-    """ Data loader for generic tabular data.
+    """Data loader for generic tabular data.
 
     Constructor Args:
         data: Union[pd.DataFrame, list, np.ndarray]
@@ -193,6 +198,7 @@ class GenericDataLoader(DataLoader):
         >>> X["target"] = y
         >>> loader = GenericDataLoader(X, target_column="target", sensitive_columns=["sex"],)
     """
+
     @validate_arguments(config=dict(arbitrary_types_allowed=True))
     def __init__(
         self,
@@ -233,6 +239,9 @@ class GenericDataLoader(DataLoader):
     @property
     def columns(self) -> list:
         return list(self.data.columns)
+
+    def target_columns(self) -> list:
+        return [self.target_column]
 
     def unpack(self, as_numpy: bool = False, pad: bool = False) -> Any:
         X = self.data.drop(columns=[self.target_column])
@@ -380,6 +389,9 @@ class SurvivalAnalysisDataLoader(DataLoader):
     @property
     def columns(self) -> list:
         return list(self.data.columns)
+
+    def target_columns(self) -> list:
+        return [self.target_column, self.time_to_event_column]
 
     def unpack(self, as_numpy: bool = False, pad: bool = False) -> Any:
         X = self.data.drop(columns=[self.target_column, self.time_to_event_column])
@@ -572,6 +584,9 @@ class TimeSeriesDataLoader(DataLoader):
     @property
     def columns(self) -> list:
         return self.data["seq_data"].columns
+
+    def target_columns(self) -> list:
+        return self.outcome_features
 
     @property
     def raw_columns(self) -> list:
