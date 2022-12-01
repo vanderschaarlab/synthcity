@@ -58,6 +58,7 @@ def test_plugin_generate() -> None:
 
     X_gen = test_plugin.generate()
     assert len(X_gen) == len(X)
+    assert X_gen.shape[1] == df.shape[1]
     assert test_plugin.schema_includes(X_gen)
 
     X_gen = test_plugin.generate(50)

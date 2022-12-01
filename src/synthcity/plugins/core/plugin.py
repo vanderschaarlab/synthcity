@@ -65,6 +65,7 @@ class Plugin(Serializable, metaclass=ABCMeta):
         device: Any = DEVICE,
         random_state: int = 0,
         workspace: Path = Path("workspace"),
+        compress_dataset: bool = True,
     ) -> None:
         """
 
@@ -82,6 +83,7 @@ class Plugin(Serializable, metaclass=ABCMeta):
         self.strict = strict
         self.device = device
         self.random_state = random_state
+        self.compress_dataset = compress_dataset
 
         workspace.mkdir(parents=True, exist_ok=True)
         self.workspace = workspace
@@ -154,9 +156,19 @@ class Plugin(Serializable, metaclass=ABCMeta):
         """
         if isinstance(X, (pd.DataFrame)):
             X = GenericDataLoader(X)
-
         self.data_info = X.info()
+
         self._schema = Schema(
+            data=X,
+            sampling_strategy=self.sampling_strategy,
+            random_state=self.random_state,
+        )
+
+        if self.compress_dataset:
+            X, compress_context = X.compress()
+            self.compress_context = compress_context
+
+        self._training_schema = Schema(
             data=X,
             sampling_strategy=self.sampling_strategy,
             random_state=self.random_state,
@@ -201,13 +213,21 @@ class Plugin(Serializable, metaclass=ABCMeta):
         if count is None:
             count = self.data_info["len"]
 
-        gen_constraints = self.schema().as_constraints()
+        # We use the training schema for the generation
+        gen_constraints = self.training_schema().as_constraints()
         if constraints is not None:
             gen_constraints = gen_constraints.extend(constraints)
 
         syn_schema = Schema.from_constraints(gen_constraints)
 
         X_syn = self._generate(count=count, syn_schema=syn_schema, **kwargs)
+        if self.compress_dataset:
+            X_syn = X_syn.decompress(self.compress_context)
+
+        # The dataset is decompressed here, we can use the public schema
+        gen_constraints = self.schema().as_constraints()
+        if constraints is not None:
+            gen_constraints = gen_constraints.extend(constraints)
 
         if not X_syn.satisfies(gen_constraints) and self.strict:
             raise RuntimeError(
@@ -215,7 +235,7 @@ class Plugin(Serializable, metaclass=ABCMeta):
             )
 
         if self.strict:
-            return X_syn.match(gen_constraints)
+            X_syn = X_syn.match(gen_constraints)
 
         return X_syn
 
@@ -245,16 +265,16 @@ class Plugin(Serializable, metaclass=ABCMeta):
     ) -> DataLoader:
         constraints = syn_schema.as_constraints()
 
-        data_synth = pd.DataFrame([], columns=self.schema().features())
+        data_synth = pd.DataFrame([], columns=self.training_schema().features())
         for it in range(self.sampling_patience):
             # sample
             iter_samples = gen_cbk(count, **kwargs)
             iter_samples_df = pd.DataFrame(
-                iter_samples, columns=self.schema().features()
+                iter_samples, columns=self.training_schema().features()
             )
 
             # validate schema
-            iter_samples_df = self.schema().adapt_dtypes(iter_samples_df)
+            iter_samples_df = self.training_schema().adapt_dtypes(iter_samples_df)
 
             if self.strict:
                 iter_samples_df = constraints.match(iter_samples_df)
@@ -265,7 +285,7 @@ class Plugin(Serializable, metaclass=ABCMeta):
             if len(data_synth) >= count:
                 break
 
-        data_synth = self.schema().adapt_dtypes(data_synth).head(count)
+        data_synth = self.training_schema().adapt_dtypes(data_synth).head(count)
 
         return create_from_info(data_synth, self.data_info)
 
@@ -277,7 +297,7 @@ class Plugin(Serializable, metaclass=ABCMeta):
 
         constraints = syn_schema.as_constraints()
 
-        data_synth = pd.DataFrame([], columns=self.schema().features())
+        data_synth = pd.DataFrame([], columns=self.training_schema().features())
         data_info = self.data_info
         offset = 0
         seq_offset = 0
@@ -311,7 +331,7 @@ class Plugin(Serializable, metaclass=ABCMeta):
             iter_samples_df = loader.dataframe()
             id_col = loader.info()["seq_id_feature"]
 
-            iter_samples_df = self.schema().adapt_dtypes(iter_samples_df)
+            iter_samples_df = self.training_schema().adapt_dtypes(iter_samples_df)
 
             if self.strict:
                 iter_samples_df = constraints.match(iter_samples_df)
@@ -326,7 +346,7 @@ class Plugin(Serializable, metaclass=ABCMeta):
             if offset >= count:
                 break
 
-        data_synth = self.schema().adapt_dtypes(data_synth)
+        data_synth = self.training_schema().adapt_dtypes(data_synth)
         return create_from_info(data_synth, data_info)
 
     @validate_arguments(config=dict(arbitrary_types_allowed=True))
@@ -350,6 +370,13 @@ class Plugin(Serializable, metaclass=ABCMeta):
             raise RuntimeError("Fit the model first")
 
         return self._schema
+
+    def training_schema(self) -> Schema:
+        """The internal schema"""
+        if self._training_schema is None:
+            raise RuntimeError("Fit the model first")
+
+        return self._training_schema
 
     @validate_arguments(config=dict(arbitrary_types_allowed=True))
     def plot(

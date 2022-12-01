@@ -13,9 +13,12 @@ from .evaluation import evaluate_classifier, evaluate_regression
 
 @validate_arguments(config=dict(arbitrary_types_allowed=True))
 def compress_dataset(
-    df: pd.DataFrame, cat_limit: int = 10, impute: bool = True
+    df: pd.DataFrame,
+    cat_limit: int = 10,
+    impute: bool = True,
 ) -> pd.DataFrame:
     df = df.copy()
+    original_dtypes = df.infer_objects().dtypes
 
     if impute:
         df = df.fillna(0)  # TODO: should we use a special symbol?
@@ -63,6 +66,8 @@ def compress_dataset(
             compressers[column] = {
                 "cols": list(src_cols),
                 "model": model,
+                "min": y.min(),
+                "max": y.max(),
             }
     df = df.drop(columns=redundant)
     covariates = df.columns
@@ -83,7 +88,7 @@ def compress_dataset(
     for cats in categoricals:
         if len(cats) <= 1:
             continue
-        cat_types = df[cats].infer_objects().dtypes.reset_index(drop=True)
+        cat_types = df[cats].infer_objects().dtypes
 
         aggr = df[cats].astype(str).agg(" ".join, 1)
 
@@ -103,6 +108,7 @@ def compress_dataset(
         "encoders": encoders,
         "compressers": compressers,
         "compressers_categoricals": compressers_categoricals,
+        "original_dtypes": original_dtypes,
     }
     return df, context
 
@@ -129,11 +135,11 @@ def decompress_dataset(
         dtypes = context["compressers_categoricals"][cat_group]["types"]
 
         df[cat_group] = encoder.inverse_transform(df[cat_group])
-        decoded = df[cat_group].str.split(" ", 1, expand=True)
+        decoded = df[cat_group].str.split(" ", -1, expand=True)
 
         assert decoded.shape[1] == len(src_cols)
 
-        df[src_cols] = decoded.astype(dtypes)
+        df[src_cols] = decoded.astype(dtypes.reset_index(drop=True))
         df = df.drop(columns=[cat_group])
 
     # decompress redundant
@@ -149,6 +155,8 @@ def decompress_dataset(
 
             model = context["compressers"][col]["model"]
             src_cols = context["compressers"][col]["cols"]
+            vmin = context["compressers"][col]["min"]
+            vmax = context["compressers"][col]["max"]
 
             if pd.Series(src_cols).isin(df.columns).sum() != len(
                 src_cols
@@ -157,10 +165,14 @@ def decompress_dataset(
 
             src_covs = df[src_cols]
             df[col] = model.predict(src_covs)
+            df[col].clip(lower=vmin, upper=vmax, inplace=True)
 
     # decode categoricals
     for col in context["encoders"]:
         assert col in df, f"Missing {col}"
         df[col] = context["encoders"][col].inverse_transform(df[col])
+
+    original_dtypes = context["original_dtypes"]
+    df = df.astype(original_dtypes.filter(df.columns))
 
     return df

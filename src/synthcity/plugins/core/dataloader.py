@@ -1,7 +1,7 @@
 # stdlib
 import random
 from abc import ABCMeta, abstractmethod
-from typing import Any, List, Optional, Tuple, Union
+from typing import Any, Dict, List, Optional, Tuple, Union
 
 # third party
 import numpy as np
@@ -11,6 +11,7 @@ from sklearn.model_selection import train_test_split
 
 # synthcity absolute
 from synthcity.plugins.core.constraints import Constraints
+from synthcity.utils.compression import compress_dataset, decompress_dataset
 from synthcity.utils.serialization import dataframe_hash
 
 
@@ -172,11 +173,26 @@ class DataLoader(metaclass=ABCMeta):
         ...
 
     @abstractmethod
-    def target_columns(self) -> list:
+    def compression_protected_features(self) -> list:
         ...
 
     def domain(self) -> Optional[str]:
         return None
+
+    def compress(
+        self,
+    ) -> Tuple["DataLoader", Dict]:
+        to_compress = self.data.drop(columns=self.compression_protected_features())
+        compressed, context = compress_dataset(to_compress)
+        for protected_col in self.compression_protected_features():
+            compressed[protected_col] = self.data[protected_col]
+
+        return self.decorate(compressed), context
+
+    def decompress(self, context: Dict) -> "DataLoader":
+        decompressed = decompress_dataset(self.data, context)
+
+        return self.decorate(decompressed)
 
 
 class GenericDataLoader(DataLoader):
@@ -251,8 +267,14 @@ class GenericDataLoader(DataLoader):
     def columns(self) -> list:
         return list(self.data.columns)
 
-    def target_columns(self) -> list:
-        return [self.target_column]
+    def compression_protected_features(self) -> list:
+        out = [self.target_column]
+        domain = self.domain()
+
+        if domain is not None:
+            out.append(domain)
+
+        return out
 
     def unpack(self, as_numpy: bool = False, pad: bool = False) -> Any:
         X = self.data.drop(columns=[self.target_column])
@@ -404,8 +426,14 @@ class SurvivalAnalysisDataLoader(DataLoader):
     def columns(self) -> list:
         return list(self.data.columns)
 
-    def target_columns(self) -> list:
-        return [self.target_column, self.time_to_event_column]
+    def compression_protected_features(self) -> list:
+        out = [self.target_column, self.time_to_event_column]
+        domain = self.domain()
+
+        if domain is not None:
+            out.append(domain)
+
+        return out
 
     def unpack(self, as_numpy: bool = False, pad: bool = False) -> Any:
         X = self.data.drop(columns=[self.target_column, self.time_to_event_column])
@@ -599,7 +627,7 @@ class TimeSeriesDataLoader(DataLoader):
     def columns(self) -> list:
         return self.data["seq_data"].columns
 
-    def target_columns(self) -> list:
+    def compression_protected_features(self) -> list:
         return self.outcome_features
 
     @property

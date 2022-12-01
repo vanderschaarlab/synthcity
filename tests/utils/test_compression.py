@@ -33,6 +33,12 @@ def test_compression_sanity() -> None:
     assert sorted(context["encoders"].keys()) == ["sex", "sex_dup"]
     assert len(context["compressers"]) == 2
 
+    for col in context["compressers"]:
+        assert "cols" in context["compressers"][col]
+        assert "model" in context["compressers"][col]
+        assert "min" in context["compressers"][col]
+        assert "max" in context["compressers"][col]
+
 
 def test_decompression_sanity() -> None:
     df = load_diabetes(as_frame=True, return_X_y=True)[0]

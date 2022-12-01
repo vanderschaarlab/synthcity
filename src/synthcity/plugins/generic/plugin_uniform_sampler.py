@@ -45,8 +45,8 @@ class UniformSamplerPlugin(Plugin):
     def _generate(self, count: int, syn_schema: Schema, **kwargs: Any) -> pd.DataFrame:
         def _sample(count: int) -> pd.DataFrame:
             X_rnd = pd.DataFrame(
-                np.zeros((count, len(self.schema().features()))),
-                columns=self.schema().features(),
+                np.zeros((count, len(self.training_schema().features()))),
+                columns=self.training_schema().features(),
             )
 
             for feature in syn_schema:
