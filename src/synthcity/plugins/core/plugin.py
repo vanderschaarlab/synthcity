@@ -168,14 +168,11 @@ class Plugin(Serializable, metaclass=ABCMeta):
         if self.compress_dataset:
             X_hash = X.hash()
             bkp_file = self.workspace / f"compressed_df_{X_hash}.bkp"
-            if bkp_file.exists():
-                X_compressed_context = load_from_file(bkp_file)
-            else:
+            if not bkp_file.exists():
                 X_compressed_context = X.compress()
                 save_to_file(bkp_file, X_compressed_context)
 
-            X, compress_context = X_compressed_context
-            self.compress_context = compress_context
+            X, self.compress_context = load_from_file(bkp_file)
 
         self._training_schema = Schema(
             data=X,

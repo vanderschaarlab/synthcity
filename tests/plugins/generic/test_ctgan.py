@@ -110,7 +110,8 @@ def test_sample_hyperparams() -> None:
 
 
 @pytest.mark.slow
-def test_eval_performance_ctgan() -> None:
+@pytest.mark.parametrize("compress_dataset", [True, False])
+def test_eval_performance_ctgan(compress_dataset: bool) -> None:
     results = []
 
     Xraw, y = load_iris(return_X_y=True, as_frame=True)
@@ -118,7 +119,7 @@ def test_eval_performance_ctgan() -> None:
     X = GenericDataLoader(Xraw)
 
     for retry in range(2):
-        test_plugin = plugin(n_iter=200)
+        test_plugin = plugin(n_iter=200, compress_dataset=compress_dataset)
         evaluator = PerformanceEvaluatorXGB()
 
         test_plugin.fit(X)
@@ -126,5 +127,5 @@ def test_eval_performance_ctgan() -> None:
 
         results.append(evaluator.evaluate(X, X_syn)["syn_id"])
 
-    print(plugin.name(), np.mean(results))
+    print(plugin.name(), results)
     assert np.mean(results) > 0.7

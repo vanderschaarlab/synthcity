@@ -125,4 +125,5 @@ def test_eval_performance_dpgan() -> None:
 
         results.append(evaluator.evaluate(X, X_syn)["syn_id"])
 
-    assert np.max(results) > 0.7
+    print(results)
+    assert np.mean(results) > 0.5

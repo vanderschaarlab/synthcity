@@ -182,7 +182,9 @@ class DataLoader(metaclass=ABCMeta):
     def compress(
         self,
     ) -> Tuple["DataLoader", Dict]:
-        to_compress = self.data.drop(columns=self.compression_protected_features())
+        to_compress = self.data.copy().drop(
+            columns=self.compression_protected_features()
+        )
         compressed, context = compress_dataset(to_compress)
         for protected_col in self.compression_protected_features():
             compressed[protected_col] = self.data[protected_col]

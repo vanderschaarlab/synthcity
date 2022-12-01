@@ -16,6 +16,7 @@ def compress_dataset(
     df: pd.DataFrame,
     cat_limit: int = 10,
     impute: bool = True,
+    score_threshold: float = 0.98,
 ) -> pd.DataFrame:
     df = df.copy()
     original_dtypes = df.infer_objects().dtypes
@@ -43,7 +44,7 @@ def compress_dataset(
         X = df[covariates].drop(columns=redundant + [column])
         y = df[column]
 
-        if len(df[column].unique()) < 10:
+        if len(df[column].unique()) < cat_limit:
             model = XGBClassifier()
             try:
                 score = evaluate_classifier(model, X, y)["clf"]["aucroc"][0]
@@ -58,7 +59,7 @@ def compress_dataset(
             except BaseException:
                 continue
 
-        if score > 0.95:
+        if score >= score_threshold:
             redundant.append(column)
             model.fit(X, y)
 
