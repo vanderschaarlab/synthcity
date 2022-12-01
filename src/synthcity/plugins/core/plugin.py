@@ -66,7 +66,7 @@ class Plugin(Serializable, metaclass=ABCMeta):
         device: Any = DEVICE,
         random_state: int = 0,
         workspace: Path = Path("workspace"),
-        compress_dataset: bool = True,
+        compress_dataset: bool = False,
     ) -> None:
         """
 
