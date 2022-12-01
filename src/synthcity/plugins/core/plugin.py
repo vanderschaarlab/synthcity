@@ -34,6 +34,7 @@ from synthcity.plugins.core.distribution import (
 from synthcity.plugins.core.schema import Schema
 from synthcity.plugins.core.serializable import Serializable
 from synthcity.utils.constants import DEVICE
+from synthcity.utils.serialization import load_from_file, save_to_file
 
 
 class Plugin(Serializable, metaclass=ABCMeta):
@@ -165,7 +166,15 @@ class Plugin(Serializable, metaclass=ABCMeta):
         )
 
         if self.compress_dataset:
-            X, compress_context = X.compress()
+            X_hash = X.hash()
+            bkp_file = self.workspace / f"compressed_df_{X_hash}.bkp"
+            if bkp_file.exists():
+                X_compressed_context = load_from_file(bkp_file)
+            else:
+                X_compressed_context = X.compress()
+                save_to_file(bkp_file, X_compressed_context)
+
+            X, compress_context = X_compressed_context
             self.compress_context = compress_context
 
         self._training_schema = Schema(
