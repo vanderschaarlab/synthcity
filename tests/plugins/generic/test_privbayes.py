@@ -44,4 +44,4 @@ def test_plugin_generate_privbayes(test_plugin: Plugin) -> None:
     X_gen = test_plugin.generate(50)
     assert len(X_gen) == 50
     assert test_plugin.schema_includes(X_gen)
-    assert list(X_gen.columns) == list(X.columns)
+    assert sorted(list(X_gen.columns)) == sorted(list(X.columns))
