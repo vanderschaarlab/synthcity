@@ -66,7 +66,7 @@ def test_serialization_sanity() -> None:
     plugins = Plugins(categories=["generic"])
 
     # pre-training
-    syn_model = plugins.get("adsgan", strict=False)
+    syn_model = plugins.get("adsgan", strict=False, n_iter=10)
     verify_serialization(syn_model)
 
     # post-training
@@ -117,6 +117,7 @@ def test_serialization_ts_plugins(plugin: str) -> None:
 
 
 @pytest.mark.parametrize("plugin", ["survival_gan"])
+@pytest.mark.slow
 def test_serialization_surv_plugins(plugin: str) -> None:
     X = load_rossi()
     surv_data = SurvivalAnalysisDataLoader(

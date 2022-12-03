@@ -31,7 +31,7 @@ def test_compression_sanity() -> None:
     assert "compressers_categoricals" in context
 
     assert sorted(context["encoders"].keys()) == ["sex", "sex_dup"]
-    assert len(context["compressers"]) == 2
+    assert len(context["compressers"]) == 1
 
     for col in context["compressers"]:
         assert "cols" in context["compressers"][col]

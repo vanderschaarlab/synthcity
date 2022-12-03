@@ -176,7 +176,7 @@ class Benchmarks:
             means.append(data)
 
         avg = pd.concat(means, axis=1)
-        avg.set_axis(results.keys(), axis=1, inplace=True)
+        avg = avg.set_axis(results.keys(), axis=1)
 
         if len(means) > 1:
             print()

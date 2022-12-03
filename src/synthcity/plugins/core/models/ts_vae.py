@@ -202,6 +202,7 @@ class TimeSeriesDecoder(nn.Module):
             n_temporal_units_hidden=n_units_hidden,
             mode=mode,
             nonlin=nonlin,
+            nonlin_out=temporal_nonlin_out,
             dropout=dropout,
             random_state=random_state,
             device=device,
@@ -482,7 +483,7 @@ class TimeSeriesAutoEncoder(nn.Module):
                     if len(recon_slice.shape) == 3:
                         recon_slice = recon_slice.permute(
                             0, 2, 1
-                        )  # batches, classes, len
+                        )  # batches, classes, seq_len
                     discr_loss = nn.NLLLoss(reduction="sum")(
                         torch.log(recon_slice + 1e-8),
                         torch.argmax(real[..., step:step_end], dim=-1),

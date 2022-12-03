@@ -67,6 +67,7 @@ def test_plugin_hyperparams(test_plugin: Plugin) -> None:
         "uncensoring",
     ],
 )
+@pytest.mark.slow
 def test_plugin_fit(dataloader_sampling_strategy: str, tte_strategy: str) -> None:
     test_plugin = plugin(
         tte_strategy=tte_strategy,
