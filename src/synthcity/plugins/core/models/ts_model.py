@@ -28,13 +28,11 @@ from tsai.models.XCM import XCM
 # synthcity absolute
 import synthcity.logger as log
 from synthcity.plugins.core.models.mlp import MLP, MultiActivationHead, get_nonlin
-from synthcity.plugins.core.models.wavelet import Wavelet
 from synthcity.utils.constants import DEVICE
 from synthcity.utils.reproducibility import enable_reproducible_results
 from synthcity.utils.samplers import ImbalancedDatasetSampler
 
 modes = [
-    "Wavelet",
     "LSTM",
     "GRU",
     "RNN",
@@ -53,7 +51,6 @@ modes = [
     "MiniRocket",
     "MiniRocketPlus",
     "Transformer",
-    "Wavelet",
     "TSiTPlus",
     "mWDNPlus",
 ]
@@ -520,15 +517,6 @@ class TimeSeriesLayer(nn.Module):
                 dropout=dropout,
                 n_layers=n_temporal_layers_hidden,
             )
-        elif mode == "Wavelet":
-            self.temporal_layer = Wavelet(
-                n_units_in=n_temporal_units_in,
-                n_units_window=n_temporal_window,
-                n_units_hidden=n_temporal_units_hidden,
-                dropout=dropout,
-                n_layers_hidden=n_temporal_layers_hidden,
-                device=device,
-            )
         elif mode == "TSiTPlus":
             self.temporal_layer = TSiTPlus(
                 c_in=n_temporal_units_in,
@@ -557,7 +545,7 @@ class TimeSeriesLayer(nn.Module):
         self.device = device
         self.mode = mode
 
-        if mode in ["RNN", "LSTM", "GRU", "Wavelet"]:
+        if mode in ["RNN", "LSTM", "GRU"]:
             self.out = WindowLinearLayer(
                 n_static_units_in=n_static_units_in,
                 n_temporal_units_in=n_temporal_units_hidden,
@@ -588,12 +576,6 @@ class TimeSeriesLayer(nn.Module):
     ) -> torch.Tensor:
         if self.mode in ["RNN", "LSTM", "GRU"]:
             X_interm, _ = self.temporal_layer(temporal_data)
-
-            assert torch.isnan(X_interm).sum() == 0
-
-            return self.out(static_data, X_interm)
-        elif self.mode in ["Wavelet"]:
-            X_interm = self.temporal_layer(temporal_data)
 
             assert torch.isnan(X_interm).sum() == 0
 
