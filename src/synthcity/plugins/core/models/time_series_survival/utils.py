@@ -102,23 +102,30 @@ def _compute_counts(
     event: np.ndarray, time: np.ndarray, order: Optional[np.ndarray] = None
 ) -> Tuple:
     """Count right censored and uncensored samples at each unique time point.
+
     Parameters
     ----------
     event : array
         Boolean event indicator.
+
     time : array
         Survival time or time of censoring.
+
     order : array or None
         Indices to order time in ascending order.
         If None, order will be computed.
+
     Returns
     -------
     times : array
         Unique time points.
+
     n_events : array
         Number of events at each time point.
+
     n_at_risk : array
         Number of samples that have not been censored or have not had an event at each time point.
+
     n_censored : array
         Number of censored samples at each time point.
     """
@@ -157,16 +164,13 @@ def _compute_counts(
     times = np.resize(uniq_times, j)
     n_events = np.resize(uniq_events, j)
     total_count = np.resize(uniq_counts, j)
+    n_censored = total_count - n_events
 
     # offset cumulative sum by one
     total_count = np.r_[0, total_count]
     n_at_risk = n_samples - np.cumsum(total_count)
 
-    return (
-        times,
-        n_events,
-        n_at_risk[:-1],
-    )
+    return times, n_events, n_at_risk[:-1], n_censored
 
 
 class BreslowEstimator:
@@ -275,4 +279,4 @@ class BreslowEstimator:
                 x=self.baseline_survival_.x,
                 y=np.power(self.baseline_survival_.y, risk_score[i]),
             )
-        return
+        return funcs
