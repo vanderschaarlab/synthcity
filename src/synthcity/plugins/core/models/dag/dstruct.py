@@ -251,7 +251,6 @@ def get_dstruct_dag(
     )
     trainer = pl.Trainer(
         accelerator=accelerator,
-        devices=-1,
         log_every_n_steps=1,
         max_epochs=n_iter,
         callbacks=[
