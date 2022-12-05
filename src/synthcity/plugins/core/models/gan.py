@@ -545,7 +545,7 @@ class GAN(nn.Module):
 
     def _train_test_split(self, X: torch.Tensor, cond: Optional[torch.Tensor]) -> Tuple:
         if self.patience_metric is None:
-            return X, cond, None, None
+            return X, None, cond, None
 
         total = torch.from_numpy(np.arange(0, len(X)))
         train_idx, test_idx = torch.utils.data.random_split(total, [0.8, 0.2])
