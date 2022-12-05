@@ -82,14 +82,6 @@ class GAN(nn.Module):
             random_state used
         clipping_value: int, default 0
             Gradients clipping value. Zero disables the feature
-        n_iter_print: int
-            Number of iterations after which to print updates and check the validation loss.
-        n_iter_min: int
-            Minimum number of iterations to go through before starting early stopping
-        patience: int
-            Max number of iterations without any improvement before early stopping is trigged.
-        patience_metric: Optional[WeightedMetrics]
-            If not None, the metric is used for evaluation the criterion for early stopping.
         lambda_gradient_penalty: float = 10
             Weight for the gradient penalty
         lambda_identifiability_penalty: float = 0.1
@@ -98,6 +90,15 @@ class GAN(nn.Module):
             Optional sampler for the dataloader, useful for conditional sampling
         device: Any = DEVICE
             CUDA/CPU
+        # early stopping
+        n_iter_print: int
+            Number of iterations after which to print updates and check the validation loss.
+        n_iter_min: int
+            Minimum number of iterations to go through before starting early stopping
+        patience: int
+            Max number of iterations without any improvement before early stopping is trigged.
+        patience_metric: Optional[WeightedMetrics]
+            If not None, the metric is used for evaluation the criterion for early stopping.
         # privacy settings
         dp_enabled: bool
             Train the discriminator with Differential Privacy guarantees
@@ -547,10 +548,12 @@ class GAN(nn.Module):
         if self.patience_metric is None:
             return X, None, cond, None
 
-        total = torch.from_numpy(np.arange(0, len(X)))
-        train_idx, test_idx = torch.utils.data.random_split(total, [0.8, 0.2])
+        total = np.arange(0, len(X))
+        np.random.shuffle(total)
+        split = int(len(total) * 0.8)
+        train_idx, test_idx = total[:split], total[split:]
 
-        X_train, X_val = X[train_idx, ...], X[test_idx, ...]
+        X_train, X_val = X[train_idx], X[test_idx]
         cond_train, cond_test = None, None
         if cond is not None:
             cond_train, cond_test = cond[train_idx], cond[test_idx]
@@ -565,6 +568,7 @@ class GAN(nn.Module):
         true_labels_generator: Optional[Callable] = None,
     ) -> "GAN":
         self._original_cond = cond
+
         X = self._check_tensor(X).float()
         X, X_val, cond, cond_val = self._train_test_split(X, cond)
 
@@ -618,7 +622,7 @@ class GAN(nn.Module):
                         X_val, cond_val, patience_score, patience
                     )
 
-                    if patience > self.patience:
+                    if patience > self.patience and i > self.n_iter_min:
                         log.debug(f"[{i}/{self.generator_n_iter}] Early stopping")
                         break
         return self

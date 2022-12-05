@@ -264,6 +264,7 @@ class TabularGAN(torch.nn.Module):
             clipping_value=clipping_value,
             n_iter_print=n_iter_print,
             random_state=random_state,
+            # early stopping
             n_iter_min=n_iter_min,
             dataloader_sampler=dataloader_sampler,
             device=device,

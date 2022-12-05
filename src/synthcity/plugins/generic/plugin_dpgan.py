@@ -11,6 +11,7 @@ from pydantic import validate_arguments
 from torch.utils.data import sampler
 
 # synthcity absolute
+from synthcity.metrics.weighted_metrics import WeightedMetrics
 from synthcity.plugins.core.dataloader import DataLoader
 from synthcity.plugins.core.distribution import (
     CategoricalDistribution,
@@ -60,6 +61,26 @@ class DPGANPlugin(Plugin):
             Gradients clipping value. Zero disables the feature
         encoder_max_clusters: int
             The max number of clusters to create for continuous columns when encoding
+        # early stopping
+        n_iter_print: int
+            Number of iterations after which to print updates and check the validation loss.
+        n_iter_min: int
+            Minimum number of iterations to go through before starting early stopping
+        patience: int
+            Max number of iterations without any improvement before early stopping is trigged.
+        patience_metric: Optional[WeightedMetrics]
+            If not None, the metric is used for evaluation the criterion for early stopping.
+        # privacy settings
+        dp_enabled: bool
+            Train the discriminator with Differential Privacy guarantees
+        dp_delta: Optional[float]
+            Optional DP delta: the probability of information accidentally being leaked. Usually 1 / len(dataset)
+        dp_epsilon: float = 3
+            DP epsilon: privacy budget, which is a measure of the amount of privacy that is preserved by a given algorithm. Epsilon is a number that represents the maximum amount of information that an adversary can learn about an individual from the output of a differentially private algorithm. The smaller the value of epsilon, the more private the algorithm is. For example, an algorithm with an epsilon of 0.1 preserves more privacy than an algorithm with an epsilon of 1.0.
+        dp_max_grad_norm: float
+            max grad norm used for gradient clipping
+        dp_secure_mode: bool = False,
+             if True uses noise generation approach robust to floating point arithmetic attacks.
 
     Example:
         >>> from synthcity.plugins import Plugins
@@ -101,6 +122,13 @@ class DPGANPlugin(Plugin):
         dp_delta: Optional[float] = None,
         dp_max_grad_norm: float = 2,
         dp_secure_mode: bool = False,
+        # early stopping
+        patience: int = 20,
+        patience_metric: Optional[WeightedMetrics] = WeightedMetrics(
+            metrics=[("detection", "detection_mlp")], weights=[1]
+        ),
+        n_iter_print: int = 50,
+        n_iter_min: int = 100,
         **kwargs: Any
     ) -> None:
         super().__init__(**kwargs)
@@ -130,6 +158,11 @@ class DPGANPlugin(Plugin):
         self.dataloader_sampler = dataloader_sampler
 
         self.device = device
+
+        self.patience = patience
+        self.patience_metric = patience_metric
+        self.n_iter_min = n_iter_min
+        self.n_iter_print = n_iter_print
 
         # privacy
         self.dp_enabled = True
@@ -220,6 +253,11 @@ class DPGANPlugin(Plugin):
             dp_delta=self.dp_delta,
             dp_max_grad_norm=self.dp_max_grad_norm,
             dp_secure_mode=self.dp_secure_mode,
+            # early stopping
+            patience=self.patience,
+            patience_metric=self.patience_metric,
+            n_iter_min=self.n_iter_min,
+            n_iter_print=self.n_iter_print,
         )
         self.model.fit(X.dataframe(), cond=cond)
 

@@ -1,5 +1,5 @@
 # stdlib
-from typing import Any
+from typing import Any, Tuple
 
 # third party
 import numpy as np
@@ -145,7 +145,14 @@ def test_gan_generation_with_dp() -> None:
     assert generated.shape == (10, X.shape[1])
 
 
-def test_gan_generation_with_early_stopping() -> None:
+@pytest.mark.parametrize(
+    "patience_metric",
+    [
+        ("detection", "detection_mlp"),
+        ("performance", "xgb"),
+    ],
+)
+def test_gan_generation_with_early_stopping(patience_metric: Tuple[str, str]) -> None:
     X, _ = load_iris(return_X_y=True)
     X = MinMaxScaler().fit_transform(X)
     actual_iter = 0
@@ -162,9 +169,7 @@ def test_gan_generation_with_early_stopping() -> None:
         n_iter_print=20,
         patience=2,
         batch_size=len(X),
-        patience_metric=WeightedMetrics(
-            metrics=[("detection", "detection_mlp")], weights=[1]
-        ),
+        patience_metric=WeightedMetrics(metrics=[patience_metric], weights=[1]),
         generator_extra_penalty_cbks=[_tracker],
     )
     model.fit(X)
