@@ -45,11 +45,22 @@ class PrivacyEvaluator(MetricEvaluator):
         save_to_file(cache_file, results)
         return results
 
+    @validate_arguments(config=dict(arbitrary_types_allowed=True))
+    def evaluate_default(
+        self,
+        X_gt: DataLoader,
+        X_syn: DataLoader,
+    ) -> float:
+        return self.evaluate(X_gt, X_syn)[self._default_metric]
+
 
 class kAnonymization(PrivacyEvaluator):
     """Returns the k-anon ratio between the real data and the syhnthetic data.
     For each dataset, it is computed the value k which satisfies the k-anonymity rule: each record is similar to at least another k-1 other records on the potentially identifying variables.
     """
+
+    def __init__(self, **kwargs: Any) -> None:
+        super().__init__(default_metric="syn", **kwargs)
 
     @staticmethod
     def name() -> str:
@@ -92,6 +103,9 @@ class lDiversityDistinct(PrivacyEvaluator):
     We simulate a set of the cluster over the dataset, and we return the minimum length of unique sensitive values for any cluster.
     """
 
+    def __init__(self, **kwargs: Any) -> None:
+        super().__init__(default_metric="syn", **kwargs)
+
     @staticmethod
     def name() -> str:
         return "distinct l-diversity"
@@ -133,6 +147,9 @@ class kMap(PrivacyEvaluator):
     The data satisfies k-map if every combination of values for the quasi-identifiers appears at least k times in the reidentification(synthetic) dataset.
     """
 
+    def __init__(self, **kwargs: Any) -> None:
+        super().__init__(default_metric="score", **kwargs)
+
     @staticmethod
     def name() -> str:
         return "k-map"
@@ -167,6 +184,9 @@ class DeltaPresence(PrivacyEvaluator):
 
     For each dataset partition, we report the maximum ratio of unique sensitive information between the real dataset and in the synthetic dataset.
     """
+
+    def __init__(self, **kwargs: Any) -> None:
+        super().__init__(default_metric="score", **kwargs)
 
     @staticmethod
     def name() -> str:
@@ -217,6 +237,9 @@ class IdentifiabilityScore(PrivacyEvaluator):
     IEEE Journal of Biomedical and Health Informatics (JBHI), 2019.
     Paper link: https://ieeexplore.ieee.org/document/9034117
     """
+
+    def __init__(self, **kwargs: Any) -> None:
+        super().__init__(default_metric="score_OC", **kwargs)
 
     @staticmethod
     def name() -> str:

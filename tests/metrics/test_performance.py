@@ -75,6 +75,10 @@ def test_evaluate_performance_classifier(
     assert evaluator.type() == "performance"
     assert evaluator.direction() == "maximize"
 
+    def_score = evaluator.evaluate_default(Xloader, GenericDataLoader(X_rnd))
+
+    assert def_score == score["syn_id"]
+
 
 @pytest.mark.parametrize("test_plugin", [Plugins().get("marginal_distributions")])
 @pytest.mark.parametrize(
@@ -119,6 +123,10 @@ def test_evaluate_performance_regression(
 
     assert score["syn_id"] <= good_score["syn_id"]
     assert score["syn_ood"] <= good_score["syn_ood"]
+
+    def_score = evaluator.evaluate_default(Xloader, GenericDataLoader(X_rnd))
+
+    assert def_score == score["syn_id"]
 
 
 @pytest.mark.slow
@@ -183,6 +191,12 @@ def test_evaluate_performance_survival_analysis(
     assert score["syn_ood.brier_score"] < 1
     assert good_score["gt.c_index"] < 1
     assert good_score["gt.brier_score"] < 1
+
+    def_score = evaluator.evaluate_default(
+        Xloader, create_from_info(X_rnd, Xloader.info())
+    )
+
+    assert def_score == score["syn_id.c_index"] - score["syn_id.brier_score"]
 
 
 @pytest.mark.parametrize("test_plugin", [Plugins().get("marginal_distributions")])
@@ -319,3 +333,7 @@ def test_evaluate_performance_time_series_survival(
 
     assert good_score["syn_id.c_index"] < 1
     assert good_score["syn_ood.c_index"] < 1
+
+    def_score = evaluator.evaluate_default(data, data_gen)
+
+    assert def_score == good_score["syn_id.c_index"] - good_score["syn_id.brier_score"]

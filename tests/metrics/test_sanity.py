@@ -72,6 +72,12 @@ def test_evaluate_data_mismatch_score(test_plugin: Plugin) -> None:
     assert evaluator.name() == "data_mismatch"
     assert evaluator.direction() == "minimize"
 
+    def_score = evaluator.evaluate_default(
+        GenericDataLoader(X),
+        GenericDataLoader(X_fail),
+    )
+    assert isinstance(def_score, float)
+
 
 @pytest.mark.parametrize("test_plugin", [Plugins().get("dummy_sampler")])
 def test_common_rows(test_plugin: Plugin) -> None:
@@ -93,6 +99,9 @@ def test_common_rows(test_plugin: Plugin) -> None:
     assert evaluator.type() == "sanity"
     assert evaluator.name() == "common_rows_proportion"
     assert evaluator.direction() == "minimize"
+
+    def_score = evaluator.evaluate_default(Xloader, X_gen)
+    assert isinstance(def_score, float)
 
 
 @pytest.mark.parametrize("test_plugin", [Plugins().get("dummy_sampler")])
@@ -120,6 +129,9 @@ def test_evaluate_avg_distance_nearest_synth_neighbor(test_plugin: Plugin) -> No
     assert evaluator.name() == "nearest_syn_neighbor_distance"
     assert evaluator.direction() == "minimize"
 
+    def_score = evaluator.evaluate_default(Xloader, X_gen)
+    assert isinstance(def_score, float)
+
 
 @pytest.mark.parametrize("test_plugin", [Plugins().get("dummy_sampler")])
 def test_evaluate_close_values(test_plugin: Plugin) -> None:
@@ -142,6 +154,9 @@ def test_evaluate_close_values(test_plugin: Plugin) -> None:
     assert evaluator.name() == "close_values_probability"
     assert evaluator.direction() == "maximize"
 
+    def_score = evaluator.evaluate_default(Xloader, X_gen)
+    assert isinstance(def_score, float)
+
 
 @pytest.mark.parametrize("test_plugin", [Plugins().get("dummy_sampler")])
 def test_evaluate_distant_values(test_plugin: Plugin) -> None:
@@ -163,3 +178,6 @@ def test_evaluate_distant_values(test_plugin: Plugin) -> None:
     assert evaluator.type() == "sanity"
     assert evaluator.name() == "distant_values_probability"
     assert evaluator.direction() == "minimize"
+
+    def_score = evaluator.evaluate_default(Xloader, X_gen)
+    assert isinstance(def_score, float)
