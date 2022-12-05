@@ -100,6 +100,7 @@ class DPGANPlugin(Plugin):
         dp_epsilon: float = 4,
         dp_delta: Optional[float] = None,
         dp_max_grad_norm: float = 2,
+        dp_secure_mode: bool = False,
         **kwargs: Any
     ) -> None:
         super().__init__(**kwargs)
@@ -135,6 +136,7 @@ class DPGANPlugin(Plugin):
         self.dp_epsilon = dp_epsilon
         self.dp_delta = dp_delta
         self.dp_max_grad_norm = dp_max_grad_norm
+        self.dp_secure_mode = dp_secure_mode
 
     @staticmethod
     def name() -> str:
@@ -217,6 +219,7 @@ class DPGANPlugin(Plugin):
             dp_epsilon=self.dp_epsilon,
             dp_delta=self.dp_delta,
             dp_max_grad_norm=self.dp_max_grad_norm,
+            dp_secure_mode=self.dp_secure_mode,
         )
         self.model.fit(X.dataframe(), cond=cond)
 
