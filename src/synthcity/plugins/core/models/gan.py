@@ -3,6 +3,7 @@ from typing import Any, Callable, List, Optional, Tuple
 
 # third party
 import numpy as np
+import pandas as pd
 import torch
 from opacus import PrivacyEngine
 from pydantic import validate_arguments
@@ -502,8 +503,59 @@ class GAN(nn.Module):
 
         return np.mean(G_losses), np.mean(D_losses)
 
-    def _evaluate_patience_metric(self, X: torch.Tensor) -> float:
-        return 0
+    def _init_patience_score(self) -> float:
+        if self.patience_metric is None:
+            return 0
+
+        if self.patience_metric.direction() == "minimize":
+            return np.inf
+        else:
+            return -np.inf
+
+    def _evaluate_patience_metric(
+        self,
+        X: torch.Tensor,
+        cond: Optional[torch.Tensor],
+        prev_score: float,
+        patience: int,
+    ) -> Tuple[float, int]:
+        if self.patience_metric is None:
+            return prev_score, patience
+
+        X_syn = self.generate(len(X), cond)
+        new_score = self.patience_metric.evaluate(
+            pd.DataFrame(X.detach().cpu().numpy()),
+            pd.DataFrame(X_syn),
+        )
+        score = prev_score
+        if self.patience_metric.direction() == "minimize":
+            if new_score > prev_score:
+                patience += 1
+            else:
+                patience = 0
+                score = new_score
+        else:
+            if new_score < prev_score:
+                patience += 1
+            else:
+                patience = 0
+                score = new_score
+
+        return score, patience
+
+    def _train_test_split(self, X: torch.Tensor, cond: Optional[torch.Tensor]) -> Tuple:
+        if self.patience_metric is None:
+            return X, cond, None, None
+
+        total = torch.from_numpy(np.arange(0, len(X)))
+        train_idx, test_idx = torch.utils.data.random_split(total, [0.8, 0.2])
+
+        X_train, X_val = X[train_idx, ...], X[test_idx, ...]
+        cond_train, cond_test = None, None
+        if cond is not None:
+            cond_train, cond_test = cond[train_idx], cond[test_idx]
+
+        return X_train, X_val, cond_train, cond_test
 
     def _train(
         self,
@@ -514,6 +566,7 @@ class GAN(nn.Module):
     ) -> "GAN":
         self._original_cond = cond
         X = self._check_tensor(X).float()
+        X, X_val, cond, cond_val = self._train_test_split(X, cond)
 
         # Load Dataset
         loader = self.dataloader(X, cond)
@@ -541,6 +594,9 @@ class GAN(nn.Module):
             )
 
         # Train loop
+        patience_score = self._init_patience_score()
+        patience = 0
+
         for i in tqdm(range(self.generator_n_iter)):
             g_loss, d_loss = self._train_epoch(
                 loader,
@@ -550,7 +606,7 @@ class GAN(nn.Module):
             # Check how the generator is doing by saving G's output on fixed_noise
             if (i + 1) % self.n_iter_print == 0:
                 log.debug(
-                    f"[{i}/{self.generator_n_iter}]\tLoss_D: {d_loss}\tLoss_G: {g_loss}"
+                    f"[{i}/{self.generator_n_iter}]\tLoss_D: {d_loss}\tLoss_G: {g_loss} Patience score: {patience_score} Patience : {patience}"
                 )
                 if self.dp_enabled:
                     log.debug(
@@ -558,8 +614,13 @@ class GAN(nn.Module):
                     )
 
                 if self.patience_metric is not None:
-                    self._evaluate_patience_metric(X)
+                    patience_score, patience = self._evaluate_patience_metric(
+                        X_val, cond_val, patience_score, patience
+                    )
 
+                    if patience > self.patience:
+                        log.debug(f"[{i}/{self.generator_n_iter}] Early stopping")
+                        break
         return self
 
     def _check_tensor(self, X: torch.Tensor) -> torch.Tensor:

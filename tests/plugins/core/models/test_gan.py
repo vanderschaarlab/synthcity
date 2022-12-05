@@ -1,3 +1,6 @@
+# stdlib
+from typing import Any
+
 # third party
 import numpy as np
 import pytest
@@ -145,19 +148,29 @@ def test_gan_generation_with_dp() -> None:
 def test_gan_generation_with_early_stopping() -> None:
     X, _ = load_iris(return_X_y=True)
     X = MinMaxScaler().fit_transform(X)
+    actual_iter = 0
+
+    def _tracker(*args: Any, **kwargs: Any) -> float:
+        nonlocal actual_iter
+        actual_iter += 1
+        return 0
 
     model = GAN(
         n_features=X.shape[1],
         n_units_latent=50,
-        generator_n_iter=50,
-        n_iter_print=10,
-        patience=5,
+        generator_n_iter=1000,
+        n_iter_print=20,
+        patience=2,
+        batch_size=len(X),
         patience_metric=WeightedMetrics(
             metrics=[("detection", "detection_mlp")], weights=[1]
         ),
+        generator_extra_penalty_cbks=[_tracker],
     )
     model.fit(X)
 
     generated = model.generate(10)
 
     assert generated.shape == (10, X.shape[1])
+
+    assert actual_iter < 1000

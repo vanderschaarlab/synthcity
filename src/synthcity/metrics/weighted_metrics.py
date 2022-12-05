@@ -71,6 +71,8 @@ class WeightedMetrics:
         if len(np.unique(directions)) != 1:
             raise ValueError("Metrics have different evaluation directions.")
 
+        self._direction = directions[0]
+
     @validate_arguments(config=dict(arbitrary_types_allowed=True))
     def evaluate(
         self,
@@ -104,3 +106,6 @@ class WeightedMetrics:
             )
 
         return score
+
+    def direction(self) -> str:
+        return self._direction
