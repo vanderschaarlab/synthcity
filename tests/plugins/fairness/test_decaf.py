@@ -38,6 +38,7 @@ def test_plugin_hyperparams(test_plugin: Plugin) -> None:
     ["hillclimb", "d-struct"],
 )
 @pytest.mark.parametrize("struct_learning_score", ["k2", "bdeu"])
+@pytest.mark.slow
 def test_plugin_fit(
     struct_learning_search_method: str, struct_learning_score: str
 ) -> None:

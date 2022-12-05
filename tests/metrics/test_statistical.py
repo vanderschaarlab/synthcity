@@ -240,7 +240,7 @@ def test_evaluate_prdc(test_plugin: Plugin) -> None:
     for key in syn_score:
         assert syn_score[key] >= 0
         assert rnd_score[key] >= 0
-        assert syn_score[key] > rnd_score[key]
+        assert syn_score[key] >= rnd_score[key]
 
     assert PRDCScore.name() == "prdc"
     assert PRDCScore.type() == "stats"

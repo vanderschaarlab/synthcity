@@ -53,6 +53,7 @@ def test_plugin_generate(test_plugin: Plugin) -> None:
 
     X_gen = test_plugin.generate()
     assert len(X_gen) == len(X)
+    assert X_gen.shape[1] == X.shape[1]
     assert test_plugin.schema_includes(X_gen)
 
     X_gen = test_plugin.generate(50)

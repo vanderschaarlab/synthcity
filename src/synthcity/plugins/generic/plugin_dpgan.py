@@ -75,12 +75,12 @@ class DPGANPlugin(Plugin):
         self,
         n_iter: int = 2000,
         n_units_conditional: int = 0,
-        generator_n_layers_hidden: int = 3,
+        generator_n_layers_hidden: int = 2,
         generator_n_units_hidden: int = 500,
         generator_nonlin: str = "relu",
         generator_dropout: float = 0.1,
         generator_opt_betas: tuple = (0.5, 0.999),
-        discriminator_n_layers_hidden: int = 3,
+        discriminator_n_layers_hidden: int = 2,
         discriminator_n_units_hidden: int = 500,
         discriminator_nonlin: str = "leaky_relu",
         discriminator_n_iter: int = 1,
@@ -100,6 +100,7 @@ class DPGANPlugin(Plugin):
         dp_epsilon: float = 4,
         dp_delta: Optional[float] = None,
         dp_max_grad_norm: float = 2,
+        dp_secure_mode: bool = False,
         **kwargs: Any
     ) -> None:
         super().__init__(**kwargs)
@@ -135,6 +136,7 @@ class DPGANPlugin(Plugin):
         self.dp_epsilon = dp_epsilon
         self.dp_delta = dp_delta
         self.dp_max_grad_norm = dp_max_grad_norm
+        self.dp_secure_mode = dp_secure_mode
 
     @staticmethod
     def name() -> str:
@@ -217,6 +219,7 @@ class DPGANPlugin(Plugin):
             dp_epsilon=self.dp_epsilon,
             dp_delta=self.dp_delta,
             dp_max_grad_norm=self.dp_max_grad_norm,
+            dp_secure_mode=self.dp_secure_mode,
         )
         self.model.fit(X.dataframe(), cond=cond)
 

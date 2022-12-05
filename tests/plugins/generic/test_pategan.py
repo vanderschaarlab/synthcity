@@ -57,6 +57,7 @@ def test_plugin_generate_pategan() -> None:
     X_gen = test_plugin.generate()
     assert len(X_gen) == len(X)
     assert test_plugin.schema_includes(X_gen)
+    assert X_gen.shape[1] == X.shape[1]
 
     X_gen = test_plugin.generate(50)
     assert len(X_gen) == 50

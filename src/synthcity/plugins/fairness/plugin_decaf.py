@@ -261,7 +261,9 @@ class DECAFPlugin(Plugin):
             ),
         ).to(DEVICE)
         trainer = pl.Trainer(
-            accelerator=accelerator, max_epochs=self.n_iter, logger=False, devices=-1
+            accelerator=accelerator,
+            max_epochs=self.n_iter,
+            logger=False,
         )
         trainer.fit(self.model, dm)
 

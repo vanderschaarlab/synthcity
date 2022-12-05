@@ -117,6 +117,7 @@ class GAN(nn.Module):
         dp_delta: Optional[float] = None,
         dp_epsilon: float = 3,
         dp_max_grad_norm: float = 2,
+        dp_secure_mode: bool = False,
     ) -> None:
         super(GAN, self).__init__()
 
@@ -202,6 +203,7 @@ class GAN(nn.Module):
         self.dp_delta = dp_delta
         self.dp_epsilon = dp_epsilon
         self.dp_max_grad_norm = dp_max_grad_norm
+        self.dp_secure_mode = dp_secure_mode
 
     def fit(
         self,
@@ -477,7 +479,7 @@ class GAN(nn.Module):
             if self.dp_delta is None:
                 self.dp_delta = 1 / len(X)
 
-            privacy_engine = PrivacyEngine()
+            privacy_engine = PrivacyEngine(secure_mode=self.dp_secure_mode)
 
             (
                 self.discriminator,
