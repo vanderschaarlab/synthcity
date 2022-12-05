@@ -35,7 +35,7 @@ def test_plugin_hyperparams(test_plugin: Plugin) -> None:
 
 @pytest.mark.parametrize(
     "struct_learning_search_method",
-    ["hillclimb", "mmhc"],
+    ["hillclimb", "d-struct"],
 )
 @pytest.mark.parametrize("struct_learning_score", ["k2", "bdeu"])
 def test_plugin_fit(
@@ -45,6 +45,7 @@ def test_plugin_fit(
         n_iter=50,
         struct_learning_search_method=struct_learning_search_method,
         struct_learning_score=struct_learning_score,
+        struct_learning_enabled=True,
     )
     X = pd.DataFrame(load_iris()["data"])
     test_plugin.fit(GenericDataLoader(X))
@@ -67,8 +68,33 @@ def test_plugin_generate(test_plugin: Plugin) -> None:
     assert list(X_gen.columns) == list(X.columns)
 
 
-def test_plugin_generate_and_learn_dag() -> None:
-    test_plugin = plugin(struct_learning_enabled=True, **plugin_args)
+@pytest.mark.parametrize(
+    "struct_learning_search_method",
+    ["hillclimb", "d-struct"],
+)
+def test_get_dag(struct_learning_search_method: str) -> None:
+    test_plugin = plugin(
+        struct_learning_enabled=True,
+        struct_learning_search_method=struct_learning_search_method,
+        **plugin_args
+    )
+
+    X = pd.DataFrame(load_iris()["data"])
+    dag = test_plugin._get_dag(X)
+
+    print(dag)
+
+
+@pytest.mark.parametrize(
+    "struct_learning_search_method",
+    ["hillclimb", "d-struct"],
+)
+def test_plugin_generate_and_learn_dag(struct_learning_search_method: str) -> None:
+    test_plugin = plugin(
+        struct_learning_enabled=True,
+        struct_learning_search_method=struct_learning_search_method,
+        **plugin_args
+    )
 
     X = pd.DataFrame(load_iris()["data"])
     test_plugin.fit(GenericDataLoader(X))
