@@ -13,7 +13,8 @@ from synthcity.plugins.core.distribution import (
     FloatDistribution,
     IntegerDistribution,
 )
-from synthcity.plugins.core.models import NormalizingFlows, TabularFlows
+from synthcity.plugins.core.models.flows import NormalizingFlows
+from synthcity.plugins.core.models.tabular_flows import TabularFlows
 from synthcity.plugins.core.plugin import Plugin
 from synthcity.plugins.core.schema import Schema
 
@@ -189,7 +190,7 @@ class NormalizingFlowsPlugin(Plugin):
         return self
 
     def _generate(self, count: int, syn_schema: Schema, **kwargs: Any) -> pd.DataFrame:
-        def _internal_generate(count : int) -> pd.DataFrame:
+        def _internal_generate(count: int) -> pd.DataFrame:
             batch = min(5000, count)
 
             result = self.model.generate(1)
@@ -201,7 +202,9 @@ class NormalizingFlowsPlugin(Plugin):
             while count > 0 and retries < max_retries:
                 batch = min(batch, count)
                 try:
-                    result = pd.concat([result, self.model.generate(batch)], ignore_index = True)
+                    result = pd.concat(
+                        [result, self.model.generate(batch)], ignore_index=True
+                    )
                 except BaseException:
                     pass
 

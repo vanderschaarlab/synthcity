@@ -167,6 +167,14 @@ class VAE(nn.Module):
             Parameter for the standard loss
         robust_divergence_beta: int
             Parameter for the robust_divergence loss
+        dataloader_sampler:
+            Custom sampler used by the dataloader, useful for conditional sampling.
+        device:
+            CPU/CUDA
+        extra_loss_cbks:
+            Custom loss callbacks. For example, for conditional loss.
+        clipping_value:
+            Gradients clipping value. Zero disables the feature
     """
 
     @validate_arguments(config=dict(arbitrary_types_allowed=True))

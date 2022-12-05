@@ -3,7 +3,7 @@ import pytest
 from sklearn.datasets import load_iris
 
 # synthcity absolute
-from synthcity.plugins.core.models import NormalizingFlows
+from synthcity.plugins.core.models.flows import NormalizingFlows
 
 
 def test_nf_sanity() -> None:

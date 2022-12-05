@@ -12,6 +12,7 @@ from tqdm import tqdm
 
 # synthcity absolute
 import synthcity.logger as log
+from synthcity.metrics.weighted_metrics import WeightedMetrics
 from synthcity.utils.constants import DEVICE
 from synthcity.utils.reproducibility import clear_cache, enable_reproducible_results
 
@@ -24,8 +25,12 @@ class GAN(nn.Module):
     Basic GAN implementation.
 
     Args:
-        n_units_in: int
+        n_features: int
             Number of features
+        n_units_latent: int
+            Number of latent units
+        n_units_conditional: int
+            Number of conditional units
         generator_n_layers_hidden: int
             Number of hidden layers in the generator
         generator_n_units_hidden: int
@@ -40,6 +45,18 @@ class GAN(nn.Module):
             Dropout value. If 0, the dropout is not used.
         generator_residual: bool
             Use residuals for the generator
+        generator_nonlin_out: Optional[List[Tuple[str, int]]]
+            List of activations. Useful with the TabularEncoder
+        generator_lr: float = 2e-4
+            Generator learning rate, used by the Adam optimizer
+        generator_weight_decay: float = 1e-3
+            Generator weight decay, used by the Adam optimizer
+        generator_opt_betas: tuple = (0.9, 0.999)
+            Generator initial decay rates, used by the Adam Optimizer
+        generator_extra_penalties: list
+            Additional penalties for the generator. Values: "identifiability_penalty"
+        generator_extra_penalty_cbks: List[Callable]
+            Additional loss callabacks for the generator. Used by the TabularGAN for the conditional loss
         discriminator_n_layers_hidden: int
             Number of hidden layers in the discriminator
         discriminator_n_units_hidden: int
@@ -52,25 +69,45 @@ class GAN(nn.Module):
             Enable/disable batch norm for the discriminator
         discriminator_dropout: float
             Dropout value for the discriminator. If 0, the dropout is not used.
-        lr: float
-            learning rate for optimizer. step_size equivalent in the JAX version.
-        weight_decay: float
-            l2 (ridge) penalty for the weights.
+        discriminator_lr: float
+            Discriminator learning rate, used by the Adam optimizer
+        discriminator_weight_decay: float
+            Discriminator weight decay, used by the Adam optimizer
+        discriminator_opt_betas: tuple
+            Initial weight decays for the Adam optimizer
         batch_size: int
             Batch size
-        n_iter_print: int
-            Number of iterations after which to print updates and check the validation loss.
         random_state: int
             random_state used
-        n_iter_min: int
-            Minimum number of iterations to go through before starting early stopping
         clipping_value: int, default 0
             Gradients clipping value. Zero disables the feature
-        criterion: str
-            Loss criterion:
-                - bce: Uses BCELoss for discriminating the outputs.
-                - wd: Uses the WGAN strategy for the critic.
-
+        n_iter_print: int
+            Number of iterations after which to print updates and check the validation loss.
+        n_iter_min: int
+            Minimum number of iterations to go through before starting early stopping
+        patience: int
+            Max number of iterations without any improvement before early stopping is trigged.
+        patience_metric: Optional[WeightedMetrics]
+            If not None, the metric is used for evaluation the criterion for early stopping.
+        lambda_gradient_penalty: float = 10
+            Weight for the gradient penalty
+        lambda_identifiability_penalty: float = 0.1
+            Weight for the identifiability penalty, if enabled
+        dataloader_sampler: Optional[sampler.Sampler]
+            Optional sampler for the dataloader, useful for conditional sampling
+        device: Any = DEVICE
+            CUDA/CPU
+        # privacy settings
+        dp_enabled: bool
+            Train the discriminator with Differential Privacy guarantees
+        dp_delta: Optional[float]
+            Optional DP delta: the probability of information accidentally being leaked. Usually 1 / len(dataset)
+        dp_epsilon: float = 3
+            DP epsilon: privacy budget, which is a measure of the amount of privacy that is preserved by a given algorithm. Epsilon is a number that represents the maximum amount of information that an adversary can learn about an individual from the output of a differentially private algorithm. The smaller the value of epsilon, the more private the algorithm is. For example, an algorithm with an epsilon of 0.1 preserves more privacy than an algorithm with an epsilon of 1.0.
+        dp_max_grad_norm: float
+            max grad norm used for gradient clipping
+        dp_secure_mode: bool = False,
+             if True uses noise generation approach robust to floating point arithmetic attacks.
     """
 
     @validate_arguments(config=dict(arbitrary_types_allowed=True))
@@ -79,6 +116,7 @@ class GAN(nn.Module):
         n_features: int,
         n_units_latent: int,
         n_units_conditional: int = 0,
+        # generator
         generator_n_layers_hidden: int = 2,
         generator_n_units_hidden: int = 250,
         generator_nonlin: str = "leaky_relu",
@@ -86,32 +124,34 @@ class GAN(nn.Module):
         generator_n_iter: int = 500,
         generator_batch_norm: bool = False,
         generator_dropout: float = 0,
-        generator_loss: Optional[Callable] = None,
         generator_lr: float = 2e-4,
         generator_weight_decay: float = 1e-3,
         generator_residual: bool = True,
         generator_opt_betas: tuple = (0.9, 0.999),
         generator_extra_penalties: list = [],  # "identifiability_penalty"
         generator_extra_penalty_cbks: List[Callable] = [],
+        # discriminator
         discriminator_n_layers_hidden: int = 3,
         discriminator_n_units_hidden: int = 300,
         discriminator_nonlin: str = "leaky_relu",
         discriminator_n_iter: int = 1,
         discriminator_batch_norm: bool = False,
         discriminator_dropout: float = 0.1,
-        discriminator_loss: Optional[Callable] = None,
         discriminator_lr: float = 2e-4,
         discriminator_weight_decay: float = 1e-3,
         discriminator_opt_betas: tuple = (0.9, 0.999),
+        # training
         batch_size: int = 64,
-        n_iter_print: int = 10,
         random_state: int = 0,
-        n_iter_min: int = 100,
         clipping_value: int = 0,
         lambda_gradient_penalty: float = 10,
         lambda_identifiability_penalty: float = 0.1,
         dataloader_sampler: Optional[sampler.Sampler] = None,
         device: Any = DEVICE,
+        n_iter_min: int = 100,
+        n_iter_print: int = 10,
+        patience: int = 20,
+        patience_metric: Optional[WeightedMetrics] = None,
         # privacy settings
         dp_enabled: bool = False,
         dp_delta: Optional[float] = None,
@@ -145,10 +185,8 @@ class GAN(nn.Module):
             n_units_hidden=generator_n_units_hidden,
             nonlin=generator_nonlin,
             nonlin_out=generator_nonlin_out,
-            n_iter=generator_n_iter,
             batch_norm=generator_batch_norm,
             dropout=generator_dropout,
-            loss=generator_loss,
             random_state=random_state,
             lr=generator_lr,
             residual=generator_residual,
@@ -164,10 +202,8 @@ class GAN(nn.Module):
             n_units_hidden=discriminator_n_units_hidden,
             nonlin=discriminator_nonlin,
             nonlin_out=[("none", 1)],
-            n_iter=discriminator_n_iter,
             batch_norm=discriminator_batch_norm,
             dropout=discriminator_dropout,
-            loss=discriminator_loss,
             random_state=random_state,
             lr=discriminator_lr,
             opt_betas=discriminator_opt_betas,
@@ -179,6 +215,8 @@ class GAN(nn.Module):
         self.discriminator_n_iter = discriminator_n_iter
         self.n_iter_print = n_iter_print
         self.n_iter_min = n_iter_min
+        self.patience = patience
+        self.patience_metric = patience_metric
         self.batch_size = batch_size
         self.clipping_value = clipping_value
 
@@ -298,6 +336,7 @@ class GAN(nn.Module):
         true_labels_generator: Callable,
     ) -> float:
         # Update the G network
+        self.generator.train()
         self.generator.optimizer.zero_grad()
 
         real_X_raw = X.to(self.device)
@@ -350,6 +389,8 @@ class GAN(nn.Module):
         true_labels_generator: Callable,
     ) -> float:
         # Update the D network
+        self.discriminator.train()
+
         errors = []
 
         batch_size = min(self.batch_size, len(X))
@@ -461,6 +502,9 @@ class GAN(nn.Module):
 
         return np.mean(G_losses), np.mean(D_losses)
 
+    def _evaluate_patience_metric(self, X: torch.Tensor) -> float:
+        return 0
+
     def _train(
         self,
         X: torch.Tensor,
@@ -512,6 +556,9 @@ class GAN(nn.Module):
                     log.debug(
                         f"[{i}/{self.generator_n_iter}] Privacy budget: epsilon = {privacy_engine.get_epsilon(self.dp_delta)} delta = {self.dp_delta}"
                     )
+
+                if self.patience_metric is not None:
+                    self._evaluate_patience_metric(X)
 
         return self
 

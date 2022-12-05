@@ -5,6 +5,7 @@ from sklearn.datasets import load_digits, load_iris
 from sklearn.preprocessing import MinMaxScaler
 
 # synthcity absolute
+from synthcity.metrics.weighted_metrics import WeightedMetrics
 from synthcity.plugins.core.models.gan import GAN
 
 
@@ -133,6 +134,27 @@ def test_gan_generation_with_dp() -> None:
         generator_n_iter=50,
         n_iter_print=10,
         dp_enabled=True,
+    )
+    model.fit(X)
+
+    generated = model.generate(10)
+
+    assert generated.shape == (10, X.shape[1])
+
+
+def test_gan_generation_with_early_stopping() -> None:
+    X, _ = load_iris(return_X_y=True)
+    X = MinMaxScaler().fit_transform(X)
+
+    model = GAN(
+        n_features=X.shape[1],
+        n_units_latent=50,
+        generator_n_iter=50,
+        n_iter_print=10,
+        patience=5,
+        patience_metric=WeightedMetrics(
+            metrics=[("detection", "detection_mlp")], weights=[1]
+        ),
     )
     model.fit(X)
 

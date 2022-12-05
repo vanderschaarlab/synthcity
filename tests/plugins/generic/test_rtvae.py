@@ -6,7 +6,7 @@ from generic_helpers import generate_fixtures
 from sklearn.datasets import load_iris
 
 # synthcity absolute
-from synthcity.metrics import PerformanceEvaluatorXGB
+from synthcity.metrics.eval import PerformanceEvaluatorXGB
 from synthcity.plugins import Plugin
 from synthcity.plugins.core.constraints import Constraints
 from synthcity.plugins.core.dataloader import GenericDataLoader
