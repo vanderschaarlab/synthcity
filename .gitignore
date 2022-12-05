@@ -63,3 +63,4 @@ data
 *.pdf
 *.pkl
 checkpoints
+lightning_logs

@@ -413,7 +413,7 @@ class PATEGANPlugin(Plugin):
         teacher_template: str = "xgboost",
         epsilon: float = 1.0,
         delta: Optional[float] = None,
-        lamda: float = 1e-4,
+        lamda: float = 1e-3,
         alpha: int = 100,
         encoder: Any = None,
         **kwargs: Any,

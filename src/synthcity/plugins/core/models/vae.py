@@ -8,6 +8,7 @@ from pydantic import validate_arguments
 from torch import Tensor, nn
 from torch.optim import Adam
 from torch.utils.data import DataLoader, TensorDataset, sampler
+from tqdm import tqdm
 
 # synthcity absolute
 import synthcity.logger as log
@@ -348,7 +349,7 @@ class VAE(nn.Module):
             lr=self.lr,
         )
 
-        for epoch in range(self.n_iter):
+        for epoch in tqdm(range(self.n_iter)):
             for id_, data in enumerate(loader):
                 cond_mb: Optional[torch.Tensor] = None
 

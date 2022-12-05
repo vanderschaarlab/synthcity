@@ -6,7 +6,7 @@ Reference: Yoon, Jinsung and Jordon, James and van der Schaar, Mihaela
 Original implementation: https://github.com/vanderschaarlab/mlforhealthlabpub/blob/main/alg/RadialGAN/RadialGAN.py
 """
 # stdlib
-from typing import Any, List, Optional, Tuple
+from typing import Any, Dict, List, Optional, Tuple
 
 # third party
 import numpy as np
@@ -17,6 +17,7 @@ import torch
 from pydantic import validate_arguments
 from torch import nn
 from torch.utils.data import TensorDataset
+from tqdm import tqdm
 
 # synthcity absolute
 import synthcity.logger as log
@@ -111,7 +112,7 @@ class RadialGAN(nn.Module):
     ) -> None:
         super(RadialGAN, self).__init__()
 
-        self.domains = domains
+        self.domains = list(np.unique(domains))
         assert len(self.domains) > 0
 
         log.info(f"Training RadialGAN on device {device}. features = {n_features}")
@@ -201,12 +202,19 @@ class RadialGAN(nn.Module):
         self.fake_labels_generator = gen_fake_labels
         self.true_labels_generator = gen_true_labels
 
+        self.domain_weights: Optional[Dict[int, float]] = None
+
     def fit(
         self,
         X: np.ndarray,
         domains: np.ndarray,
     ) -> "RadialGAN":
         clear_cache()
+
+        domain_keys, domain_counts = np.unique(domains, return_counts=True)
+        domain_counts = domain_counts.astype(float)
+        domain_counts /= np.sum(domain_counts) + 1e-8
+        self.domain_weights = {k: v for k, v in zip(domain_keys, domain_counts)}
 
         Xt = self._check_tensor(X)
         domainst = self._check_tensor(domains)
@@ -223,6 +231,7 @@ class RadialGAN(nn.Module):
         clear_cache()
         for domain in self.generators:
             self.generators[domain].eval()
+            self.mappers[domain].eval()
 
         with torch.no_grad():
             samples, domains = self(count, domains)
@@ -237,17 +246,24 @@ class RadialGAN(nn.Module):
     ) -> Tuple[torch.Tensor, List]:
         if domains is None:
             domains = self.domains
+
+        assert self.domain_weights is not None
+
         batch_per_domain = count // len(domains) + 1
         out = torch.tensor([]).to(self.device)
         out_domains = []
-        for domain in domains:
-            fixed_noise = torch.randn(
-                batch_per_domain, self.n_units_latent, device=self.device
-            )
-            domain_generated = self.generators[domain](fixed_noise)
+        for target_domain in domains:
+            for src_domain in self.domain_weights:
+                src_batch_size = int(batch_per_domain * self.domain_weights[src_domain])
+                fixed_noise = torch.randn(
+                    src_batch_size, self.n_units_latent, device=self.device
+                )
+                domain_generated = self.generators[src_domain](fixed_noise)
+                if src_domain != target_domain:
+                    domain_generated = self.mappers[target_domain](domain_generated)
 
-            out = torch.concat([out, domain_generated])
-            out_domains.extend([domain] * batch_per_domain)
+                out = torch.concat([out, domain_generated])
+                out_domains.extend([target_domain] * len(domain_generated))
 
         return out, out_domains
 
@@ -481,7 +497,7 @@ class RadialGAN(nn.Module):
         loader = self.dataloader(X, domains)
 
         # Train loop
-        for i in range(self.generator_n_iter):
+        for i in tqdm(range(self.generator_n_iter)):
             g_loss, d_loss, m_loss = self._train_epoch(
                 loader,
             )
