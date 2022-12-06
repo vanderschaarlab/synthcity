@@ -530,13 +530,13 @@ class GAN(nn.Module):
         )
         score = prev_score
         if self.patience_metric.direction() == "minimize":
-            if new_score > prev_score:
+            if new_score >= prev_score:
                 patience += 1
             else:
                 patience = 0
                 score = new_score
         else:
-            if new_score < prev_score:
+            if new_score <= prev_score:
                 patience += 1
             else:
                 patience = 0

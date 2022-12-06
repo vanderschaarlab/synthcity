@@ -141,9 +141,7 @@ class TabularGAN(torch.nn.Module):
         discriminator_weight_decay: float = 1e-3,
         discriminator_opt_betas: tuple = (0.9, 0.999),
         batch_size: int = 64,
-        n_iter_print: int = 100,
         random_state: int = 0,
-        n_iter_min: int = 100,
         clipping_value: int = 0,
         lambda_gradient_penalty: float = 10,
         lambda_identifiability_penalty: float = 0.1,
@@ -154,6 +152,8 @@ class TabularGAN(torch.nn.Module):
         device: Any = DEVICE,
         patience: int = 20,
         patience_metric: Optional[WeightedMetrics] = None,
+        n_iter_print: int = 50,
+        n_iter_min: int = 100,
         # privacy settings
         dp_enabled: bool = False,
         dp_epsilon: float = 3,
@@ -300,7 +300,7 @@ class TabularGAN(torch.nn.Module):
         else:
             X_enc = self.encode(X)
 
-        extra_cond = self.dataloader_sampler.get_train_conditionals()
+        extra_cond = self.dataloader_sampler.get_dataset_conditionals()
 
         cond = self._merge_conditionals(cond, extra_cond)
         if cond is not None:

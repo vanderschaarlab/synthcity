@@ -151,13 +151,15 @@ def test_gan_generation_with_dp() -> None:
     ],
 )
 def test_gan_generation_with_early_stopping(patience_metric: Tuple[str, str]) -> None:
-    X, _ = load_iris(return_X_y=True, as_frame=True)
+    X, y = load_iris(return_X_y=True, as_frame=True)
+    X["target"] = y
 
     model = TabularGAN(
         X,
         n_units_latent=50,
         generator_n_iter=1000,
         encoder_max_clusters=5,
+        patience=2,
         patience_metric=WeightedMetrics(metrics=[patience_metric], weights=[1]),
     )
     model.fit(X)
