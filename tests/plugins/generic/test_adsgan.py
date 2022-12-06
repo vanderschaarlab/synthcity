@@ -137,7 +137,7 @@ def test_eval_performance(compress_dataset: bool) -> None:
     X = GenericDataLoader(Xraw)
 
     for retry in range(2):
-        test_plugin = plugin(n_iter=500, compress_dataset=compress_dataset)
+        test_plugin = plugin(n_iter=5000, compress_dataset=compress_dataset)
         evaluator = PerformanceEvaluatorXGB()
 
         test_plugin.fit(X)

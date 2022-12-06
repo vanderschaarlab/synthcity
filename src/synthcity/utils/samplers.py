@@ -269,6 +269,9 @@ class ConditionalDatasetSampler(BaseSampler):
         )
 
         self._train_idx = [idx for idx in sampling_indices if idx in self._train_idx]
+        self._train_mapping = {
+            old_idx: new_idx for new_idx, old_idx in enumerate(self._train_idx)
+        }
 
     def train_test(self) -> Tuple:
         return self._train_idx, self._test_idx
