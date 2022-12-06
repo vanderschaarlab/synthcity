@@ -352,6 +352,22 @@ class VAE(nn.Module):
         eps = torch.randn_like(std)
         return eps * std + mu
 
+    def _train_test_split(self, X: torch.Tensor, cond: Optional[torch.Tensor]) -> Tuple:
+        if self.dataloader_sampler is not None:
+            train_idx, test_idx = self.dataloader_sampler.train_test()
+        else:
+            total = np.arange(0, len(X))
+            np.random.shuffle(total)
+            split = int(len(total) * 0.8)
+            train_idx, test_idx = total[:split], total[split:]
+
+        X_train, X_val = X[train_idx], X[test_idx]
+        cond_train, cond_test = None, None
+        if cond is not None:
+            cond_train, cond_test = cond[train_idx], cond[test_idx]
+
+        return X_train, X_val, cond_train, cond_test
+
     @validate_arguments(config=dict(arbitrary_types_allowed=True))
     def _train(
         self,
@@ -359,6 +375,8 @@ class VAE(nn.Module):
         cond: Optional[torch.Tensor] = None,
     ) -> Any:
         self._original_cond = cond
+
+        X, X_val, cond, cond_val = self._train_test_split(X, cond)
         loader = self._dataloader(X, cond)
 
         optimizer = Adam(
@@ -367,9 +385,11 @@ class VAE(nn.Module):
             lr=self.lr,
         )
 
-        prev_loss = np.inf
+        best_loss = np.inf
+        best_state_dict = None
         patience = 0
         for epoch in tqdm(range(self.n_iter)):
+            self.train()
             for id_, data in enumerate(loader):
                 cond_mb: Optional[torch.Tensor] = None
 
@@ -396,17 +416,41 @@ class VAE(nn.Module):
                     )
                 loss.backward()
                 optimizer.step()
+
             if epoch % self.n_iter_print == 0:
-                log.debug(f"[{epoch}/{self.n_iter}] Loss: {loss.detach()}")
-                if loss >= prev_loss:
+                self.eval()
+                mu, logvar = self.encoder(X_val, cond_val)
+                embedding = self._reparameterize(mu, logvar)
+                reconstructed = self.decoder(embedding, cond_val)
+
+                val_loss = (
+                    self._loss_function(
+                        reconstructed,
+                        X_val,
+                        mu,
+                        logvar,
+                        cond_val,
+                    )
+                    .detach()
+                    .item()
+                )
+
+                log.debug(f"[{epoch}/{self.n_iter}] Loss: {val_loss}")
+                if val_loss >= best_loss:
                     patience += 1
                 else:
-                    prev_loss = loss.detach().item()
+                    best_loss = val_loss
+                    best_state_dict = self.state_dict()
                     patience = 0
 
-                if patience > self.patience:
+                if patience >= self.patience and epoch >= self.n_iter_min:
                     log.debug(f"[{epoch}/{self.n_iter}] Early stopping")
                     break
+
+        if best_state_dict is not None:
+            self.load_state_dict(best_state_dict)
+
+        return self
 
     def _check_tensor(self, X: Tensor) -> Tensor:
         if isinstance(X, Tensor):

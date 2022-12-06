@@ -1,5 +1,5 @@
 # stdlib
-from typing import Any, Optional
+from typing import Any, Optional, Tuple
 
 # third party
 import numpy as np
@@ -160,9 +160,63 @@ class NormalizingFlows(nn.Module):
         with torch.no_grad():
             return self.flow.sample(count)
 
+    def _train_test_split(self, X: torch.Tensor) -> Tuple:
+        total = np.arange(0, len(X))
+        np.random.shuffle(total)
+        split = int(len(total) * 0.8)
+        train_idx, test_idx = total[:split], total[split:]
+
+        X_train, X_val = X[train_idx], X[test_idx]
+
+        return X_train, X_val
+
+    def _init_patience_score(self) -> float:
+        if self.patience_metric is None:
+            return 0
+
+        if self.patience_metric.direction() == "minimize":
+            return np.inf
+        else:
+            return -np.inf
+
+    def _evaluate_patience_metric(
+        self,
+        X: torch.Tensor,
+        prev_score: float,
+        patience: int,
+    ) -> Tuple[float, int, bool]:
+        save = False
+        if self.patience_metric is None:
+            return prev_score, patience, save
+
+        X_syn = self.generate(len(X))
+        new_score = self.patience_metric.evaluate(
+            pd.DataFrame(X.detach().cpu().numpy()),
+            pd.DataFrame(X_syn),
+        )
+        score = prev_score
+        if self.patience_metric.direction() == "minimize":
+            if new_score >= prev_score:
+                patience += 1
+            else:
+                patience = 0
+                score = new_score
+                save = True
+        else:
+            if new_score <= prev_score:
+                patience += 1
+            else:
+                patience = 0
+                score = new_score
+                save = True
+
+        return score, patience, save
+
     def fit(self, X: pd.DataFrame) -> Any:
         # Load Dataset
         X = self._check_tensor(X).float().to(self.device)
+        X, X_val = self._train_test_split(X)
+
         loader = self.dataloader(X)
 
         # Prepare flow
@@ -177,14 +231,35 @@ class NormalizingFlows(nn.Module):
         optimizer = optim.Adam(self.flow.parameters(), lr=self.lr)
 
         # Train
+        patience_score = self._init_patience_score()
+        patience = 0
+        best_state_dict = None
 
         for it in range(self.n_iter):
+            self.train()
             for _, data in enumerate(loader):
                 optimizer.zero_grad()
                 loss = -self.flow.log_prob(inputs=data[0]).mean()
-                print(loss)
+                assert torch.isnan(loss).sum() == 0, data
+
                 loss.backward()
                 optimizer.step()
+
+            if (it + 1) % self.n_iter_print == 0:
+                self.eval()
+
+                if self.patience_metric is not None:
+                    patience_score, patience, save = self._evaluate_patience_metric(
+                        X_val, patience_score, patience
+                    )
+                    if save:
+                        best_state_dict = self.state_dict()
+
+                if patience >= self.patience and it >= self.n_iter_min:
+                    break
+
+        if best_state_dict is not None:
+            self.load_state_dict(best_state_dict)
 
         return self
 

@@ -29,7 +29,13 @@ def test_nf_sanity() -> None:
 
 
 @pytest.mark.parametrize("base_distribution", ["standard_normal"])
-@pytest.mark.parametrize("linear_transform_type", ["lu", "permutation", "svd"])
+@pytest.mark.parametrize(
+    "linear_transform_type",
+    [
+        "lu",
+        "permutation",
+    ],
+)
 @pytest.mark.parametrize(
     "base_transform_type",
     [

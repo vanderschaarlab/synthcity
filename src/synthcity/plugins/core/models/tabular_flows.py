@@ -1,5 +1,5 @@
 # stdlib
-from typing import Any
+from typing import Any, Optional
 
 # third party
 import pandas as pd
@@ -8,6 +8,7 @@ from pydantic import validate_arguments
 from torch import nn
 
 # synthcity absolute
+from synthcity.metrics.weighted_metrics import WeightedMetrics
 from synthcity.utils.constants import DEVICE
 
 # synthcity relative
@@ -65,7 +66,15 @@ class TabularFlows(nn.Module):
                     Ref: Durkan et al, "Neural Spline Flows".
                 - rq-autoregressive : Rational Quadratic Autoregressive Transform
                     Ref: Durkan et al, "Neural Spline Flows".
-
+        # early stopping
+        n_iter_print: int
+            Number of iterations after which to print updates and check the validation loss.
+        n_iter_min: int
+            Minimum number of iterations to go through before starting early stopping
+        patience: int
+            Max number of iterations without any improvement before early stopping is trigged.
+        patience_metric: WeightedMetrics
+            Metric evaluator
     """
 
     @validate_arguments(config=dict(arbitrary_types_allowed=True))
@@ -89,6 +98,11 @@ class TabularFlows(nn.Module):
         encoder_max_clusters: int = 20,
         encoder_whitelist: list = [],
         device: Any = DEVICE,
+        # early stopping
+        n_iter_min: int = 100,
+        n_iter_print: int = 10,
+        patience: int = 10,
+        patience_metric: Optional[WeightedMetrics] = None,
     ) -> None:
         super(TabularFlows, self).__init__()
         self.columns = X.columns
@@ -112,6 +126,10 @@ class TabularFlows(nn.Module):
             linear_transform_type=linear_transform_type,
             base_transform_type=base_transform_type,
             device=device,
+            n_iter_min=n_iter_min,
+            n_iter_print=n_iter_print,
+            patience=patience,
+            patience_metric=patience_metric,
         )
 
     @validate_arguments(config=dict(arbitrary_types_allowed=True))

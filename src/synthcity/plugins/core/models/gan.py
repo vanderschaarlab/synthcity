@@ -519,9 +519,10 @@ class GAN(nn.Module):
         cond: Optional[torch.Tensor],
         prev_score: float,
         patience: int,
-    ) -> Tuple[float, int]:
+    ) -> Tuple[float, int, bool]:
+        save = False
         if self.patience_metric is None:
-            return prev_score, patience
+            return prev_score, patience, save
 
         X_syn = self.generate(len(X), cond)
         new_score = self.patience_metric.evaluate(
@@ -535,14 +536,16 @@ class GAN(nn.Module):
             else:
                 patience = 0
                 score = new_score
+                save = True
         else:
             if new_score <= prev_score:
                 patience += 1
             else:
                 patience = 0
                 score = new_score
+                save = True
 
-        return score, patience
+        return score, patience, save
 
     def _train_test_split(self, X: torch.Tensor, cond: Optional[torch.Tensor]) -> Tuple:
         if self.patience_metric is None:
@@ -603,6 +606,7 @@ class GAN(nn.Module):
         # Train loop
         patience_score = self._init_patience_score()
         patience = 0
+        best_state_dict = None
 
         for i in tqdm(range(self.generator_n_iter)):
             g_loss, d_loss = self._train_epoch(
@@ -621,13 +625,19 @@ class GAN(nn.Module):
                     )
 
                 if self.patience_metric is not None:
-                    patience_score, patience = self._evaluate_patience_metric(
+                    patience_score, patience, save = self._evaluate_patience_metric(
                         X_val, cond_val, patience_score, patience
                     )
+                    if save:
+                        best_state_dict = self.state_dict()
 
-                    if patience > self.patience and i > self.n_iter_min:
+                    if patience >= self.patience and i >= self.n_iter_min:
                         log.debug(f"[{i}/{self.generator_n_iter}] Early stopping")
                         break
+
+        if best_state_dict is not None:
+            self.load_state_dict(best_state_dict)
+
         return self
 
     def _check_tensor(self, X: torch.Tensor) -> torch.Tensor:
