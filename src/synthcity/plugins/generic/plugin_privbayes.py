@@ -20,6 +20,7 @@ from scipy.optimize import fsolve
 from sklearn.cluster import KMeans
 from sklearn.metrics import normalized_mutual_info_score
 from sklearn.preprocessing import LabelEncoder
+from tqdm import tqdm
 
 # synthcity absolute
 import synthcity.logger as log
@@ -193,7 +194,10 @@ class PrivBayes(Serializable):
 
         nodes_remaining = nodes - nodes_selected
 
-        while len(nodes_remaining) > 0:
+        for i in tqdm(range(len(nodes_remaining))):
+            if len(nodes_remaining) == 0:
+                break
+
             parents_pair_list = []
             mutual_info_list = []
 

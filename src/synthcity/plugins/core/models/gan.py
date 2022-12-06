@@ -8,6 +8,7 @@ from opacus import PrivacyEngine
 from pydantic import validate_arguments
 from torch import nn
 from torch.utils.data import DataLoader, TensorDataset, sampler
+from tqdm import tqdm
 
 # synthcity absolute
 import synthcity.logger as log
@@ -116,6 +117,7 @@ class GAN(nn.Module):
         dp_delta: Optional[float] = None,
         dp_epsilon: float = 3,
         dp_max_grad_norm: float = 2,
+        dp_secure_mode: bool = False,
     ) -> None:
         super(GAN, self).__init__()
 
@@ -201,6 +203,7 @@ class GAN(nn.Module):
         self.dp_delta = dp_delta
         self.dp_epsilon = dp_epsilon
         self.dp_max_grad_norm = dp_max_grad_norm
+        self.dp_secure_mode = dp_secure_mode
 
     def fit(
         self,
@@ -476,7 +479,7 @@ class GAN(nn.Module):
             if self.dp_delta is None:
                 self.dp_delta = 1 / len(X)
 
-            privacy_engine = PrivacyEngine()
+            privacy_engine = PrivacyEngine(secure_mode=self.dp_secure_mode)
 
             (
                 self.discriminator,
@@ -494,7 +497,7 @@ class GAN(nn.Module):
             )
 
         # Train loop
-        for i in range(self.generator_n_iter):
+        for i in tqdm(range(self.generator_n_iter)):
             g_loss, d_loss = self._train_epoch(
                 loader,
                 fake_labels_generator=fake_labels_generator,

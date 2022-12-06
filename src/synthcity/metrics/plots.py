@@ -148,10 +148,10 @@ def plot_tsne(
 ) -> None:
     fig, ax = plt.subplots(1, 1, figsize=(12, 10))
 
-    tsne_gt = TSNE(n_components=2, random_state=0)
+    tsne_gt = TSNE(n_components=2, random_state=0, learning_rate="auto", init="pca")
     proj_gt = pd.DataFrame(tsne_gt.fit_transform(X_gt.dataframe()))
 
-    tsne_syn = TSNE(n_components=2, random_state=0)
+    tsne_syn = TSNE(n_components=2, random_state=0, learning_rate="auto", init="pca")
     proj_syn = pd.DataFrame(tsne_syn.fit_transform(X_syn.dataframe()))
 
     ax.scatter(x=proj_gt[0], y=proj_gt[1], s=10, label="Real data")

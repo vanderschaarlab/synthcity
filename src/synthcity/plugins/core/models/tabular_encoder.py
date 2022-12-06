@@ -235,7 +235,7 @@ class TabularEncoder(TransformerMixin, BaseEstimator):
             column_hash = dataframe_hash(raw_data[[column_name]])
             bkp_file = (
                 self.workspace
-                / f"encoder_cache_{column_hash}_{column_name[:10]}_{self.max_clusters}_{self.categorical_limit}.bkp"
+                / f"encoder_cache_{column_hash}_{column_name[:50]}_{self.max_clusters}_{self.categorical_limit}.bkp"
             )
 
             log.info(f"Encoding {column_name} {column_hash}")

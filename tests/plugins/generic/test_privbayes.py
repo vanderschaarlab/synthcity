@@ -36,12 +36,12 @@ def test_plugin_fit(test_plugin: Plugin) -> None:
     test_plugin.fit(GenericDataLoader(X))
 
 
-@pytest.mark.parametrize("test_plugin", generate_fixtures(plugin_name, plugin))
-def test_plugin_generate_privbayes(test_plugin: Plugin) -> None:
+def test_plugin_generate_privbayes() -> None:
     X = get_airfoil_dataset()
+    test_plugin = plugin()
     test_plugin.fit(GenericDataLoader(X))
 
     X_gen = test_plugin.generate(50)
     assert len(X_gen) == 50
     assert test_plugin.schema_includes(X_gen)
-    assert list(X_gen.columns) == list(X.columns)
+    assert sorted(list(X_gen.columns)) == sorted(list(X.columns))

@@ -124,6 +124,7 @@ class TabularGAN(torch.nn.Module):
         dp_epsilon: float = 3,
         dp_delta: Optional[float] = None,
         dp_max_grad_norm: float = 2,
+        dp_secure_mode: bool = False,
     ) -> None:
         super(TabularGAN, self).__init__()
         self.columns = X.columns
@@ -238,6 +239,7 @@ class TabularGAN(torch.nn.Module):
             dp_epsilon=dp_epsilon,
             dp_delta=dp_delta,
             dp_max_grad_norm=dp_max_grad_norm,
+            dp_secure_mode=dp_secure_mode,
         )
 
     @validate_arguments(config=dict(arbitrary_types_allowed=True))

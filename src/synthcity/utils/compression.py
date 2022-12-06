@@ -136,7 +136,7 @@ def decompress_dataset(
         dtypes = context["compressers_categoricals"][cat_group]["types"]
 
         df[cat_group] = encoder.inverse_transform(df[cat_group])
-        decoded = df[cat_group].str.split(" ", -1, expand=True)
+        decoded = df[cat_group].str.split(" ", n=-1, expand=True)
 
         assert decoded.shape[1] == len(src_cols)
 

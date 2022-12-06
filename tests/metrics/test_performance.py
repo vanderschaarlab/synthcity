@@ -94,7 +94,7 @@ def test_evaluate_performance_regression(
     Xloader = GenericDataLoader(X, target_column="target")
 
     test_plugin.fit(Xloader)
-    X_gen = test_plugin.generate(100)
+    X_gen = test_plugin.generate(1000)
 
     evaluator = evaluator_t()
     good_score = evaluator.evaluate(

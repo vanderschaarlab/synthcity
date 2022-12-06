@@ -7,7 +7,6 @@ import pandas as pd
 import torch
 from pydantic import validate_arguments
 from sklearn.utils import shuffle
-from sksurv.linear_model.coxph import BreslowEstimator
 from torch import nn
 
 # synthcity absolute
@@ -19,7 +18,10 @@ from synthcity.plugins.core.distribution import (
     IntegerDistribution,
 )
 from synthcity.plugins.core.models.mlp import MLP
-from synthcity.plugins.core.models.time_series_survival.utils import get_padded_features
+from synthcity.plugins.core.models.time_series_survival.utils import (
+    BreslowEstimator,
+    get_padded_features,
+)
 from synthcity.plugins.core.models.transformer import TransformerModel
 from synthcity.utils.constants import DEVICE
 from synthcity.utils.reproducibility import enable_reproducible_results

@@ -19,6 +19,7 @@ import synthcity.logger as log
 from synthcity.plugins.core.dataloader import DataLoader
 from synthcity.plugins.core.distribution import CategoricalDistribution, Distribution
 from synthcity.plugins.core.models import TabularGAN
+from synthcity.plugins.core.models.dag.dstruct import get_dstruct_dag
 from synthcity.plugins.core.plugin import Plugin
 from synthcity.plugins.core.schema import Schema
 
@@ -67,7 +68,7 @@ class DECAFPlugin(Plugin):
         l1_W: float = 1,
         struct_learning_enabled: bool = False,
         struct_learning_n_iter: int = 1000,
-        struct_learning_search_method: str = "tree_search",  # hillclimb, pc, tree_search, mmhc, exhaustive
+        struct_learning_search_method: str = "tree_search",  # hillclimb, pc, tree_search, mmhc, exhaustive, d-struct
         struct_learning_score: str = "k2",  # k2, bdeu, bic, bds
         struct_max_indegree: int = 4,
         encoder_max_clusters: int = 10,
@@ -144,28 +145,48 @@ class DECAFPlugin(Plugin):
         }[self.struct_learning_score]
 
     def _get_dag(self, X: pd.DataFrame) -> Any:
+        if self.struct_learning_search_method == "d-struct":
+            return get_dstruct_dag(
+                X,
+                batch_size=self.batch_size,
+                seed=self.random_state,
+                n_iter=self.n_iter,
+            )
+
         scoring_method = scoring_method = self._get_structure_scorer()(data=X)
         if self.struct_learning_search_method == "hillclimb":
-            return estimators.HillClimbSearch(data=X).estimate(
+            raw_dag = estimators.HillClimbSearch(data=X).estimate(
                 scoring_method=scoring_method,
                 max_indegree=self.struct_max_indegree,
                 max_iter=self.struct_learning_n_iter,
                 show_progress=False,
             )
         elif self.struct_learning_search_method == "pc":
-            return estimators.PC(data=X).estimate(
+            raw_dag = estimators.PC(data=X).estimate(
                 scoring_method=scoring_method, show_progress=False
             )
         elif self.struct_learning_search_method == "tree_search":
-            return estimators.TreeSearch(data=X).estimate(show_progress=False)
+            raw_dag = estimators.TreeSearch(data=X).estimate(show_progress=False)
         elif self.struct_learning_search_method == "mmhc":
-            return estimators.MmhcEstimator(data=X).estimate(
+            raw_dag = estimators.MmhcEstimator(data=X).estimate(
                 scoring_method=scoring_method,
             )
         elif self.struct_learning_search_method == "exhaustive":
-            return estimators.ExhaustiveSearch(data=X).estimate()
+            raw_dag = estimators.ExhaustiveSearch(data=X).estimate()
         else:
             raise ValueError(f"invalid estimator {self.struct_learning_search_method}")
+
+        raw_dag = raw_dag.edges()
+        dag = []
+        for src, dst in raw_dag:
+            dag.append(
+                (
+                    X.columns.values.tolist().index(src),
+                    X.columns.values.tolist().index(dst),
+                )
+            )
+
+        return dag
 
     def _fit(
         self, X: DataLoader, *args: Any, dag: List[Tuple[int, int]] = [], **kwargs: Any
@@ -210,14 +231,8 @@ class DECAFPlugin(Plugin):
         df = self.baseline_generator.encode(df)
 
         if dag == [] and self.struct_learning_enabled:
-            raw_dag = self._get_dag(df).edges()
-            for src, dst in raw_dag:
-                dag.append(
-                    (
-                        df.columns.values.tolist().index(src),
-                        df.columns.values.tolist().index(dst),
-                    )
-                )
+            dag = self._get_dag(df)
+
         log.info(f"[DECAF] using DAG {dag}")
 
         dm = DataModule(df)
@@ -246,7 +261,9 @@ class DECAFPlugin(Plugin):
             ),
         ).to(DEVICE)
         trainer = pl.Trainer(
-            accelerator=accelerator, max_epochs=self.n_iter, logger=False
+            accelerator=accelerator,
+            max_epochs=self.n_iter,
+            logger=False,
         )
         trainer.fit(self.model, dm)
 
