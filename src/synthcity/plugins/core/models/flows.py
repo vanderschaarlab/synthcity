@@ -25,6 +25,7 @@ from nflows.transforms.svd import SVDLinear
 from torch import nn, optim
 from torch.nn import functional as F
 from torch.utils.data import DataLoader, TensorDataset
+from tqdm import tqdm
 
 # synthcity absolute
 from synthcity.metrics.weighted_metrics import WeightedMetrics
@@ -235,7 +236,7 @@ class NormalizingFlows(nn.Module):
         patience = 0
         best_state_dict = None
 
-        for it in range(self.n_iter):
+        for it in tqdm(range(self.n_iter)):
             self.train()
             for _, data in enumerate(loader):
                 optimizer.zero_grad()
