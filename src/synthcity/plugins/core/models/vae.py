@@ -130,8 +130,6 @@ class VAE(nn.Module):
             Training batch size
         n_iter: int
             Number of training iterations
-        n_iter_print: int
-            When to log the training error
         random_state: int
             Random random_state
         lr: float
@@ -175,6 +173,15 @@ class VAE(nn.Module):
             Custom loss callbacks. For example, for conditional loss.
         clipping_value:
             Gradients clipping value. Zero disables the feature
+        # early stopping
+        n_iter_print: int
+            Number of iterations after which to print updates and check the validation loss.
+        n_iter_min: int
+            Minimum number of iterations to go through before starting early stopping
+        patience: int
+            Max number of iterations without any improvement before early stopping is trigged.
+        patience_metric: Optional[WeightedMetrics]
+            If not None, the metric is used for evaluation the criterion for early stopping.
     """
 
     @validate_arguments(config=dict(arbitrary_types_allowed=True))
@@ -185,7 +192,6 @@ class VAE(nn.Module):
         n_units_conditional: int = 0,
         batch_size: int = 100,
         n_iter: int = 500,
-        n_iter_print: int = 10,
         random_state: int = 0,
         lr: float = 2e-4,
         weight_decay: float = 1e-3,
@@ -211,6 +217,10 @@ class VAE(nn.Module):
         device: Any = DEVICE,
         extra_loss_cbks: List[Callable] = [],
         clipping_value: int = 1,
+        # early stopping
+        n_iter_min: int = 100,
+        n_iter_print: int = 10,
+        patience: int = 20,
     ) -> None:
         super(VAE, self).__init__()
 
@@ -220,7 +230,6 @@ class VAE(nn.Module):
         self.device = device
         self.batch_size = batch_size
         self.n_iter = n_iter
-        self.n_iter_print = n_iter_print
         self.loss_factor = loss_factor
         self.lr = lr
         self.weight_decay = weight_decay
@@ -233,6 +242,9 @@ class VAE(nn.Module):
         torch.manual_seed(self.random_state)
         self.n_units_conditional = n_units_conditional
         self.clipping_value = clipping_value
+        self.n_iter_print = n_iter_print
+        self.n_iter_min = n_iter_min
+        self.patience = patience
 
         self.encoder = Encoder(
             n_features + n_units_conditional,
@@ -357,6 +369,8 @@ class VAE(nn.Module):
             lr=self.lr,
         )
 
+        prev_loss = np.inf
+        patience = 0
         for epoch in tqdm(range(self.n_iter)):
             for id_, data in enumerate(loader):
                 cond_mb: Optional[torch.Tensor] = None
@@ -377,7 +391,6 @@ class VAE(nn.Module):
                     logvar,
                     cond_mb,
                 )
-
                 optimizer.zero_grad()
                 if self.clipping_value > 0:
                     torch.nn.utils.clip_grad_norm_(
@@ -387,6 +400,14 @@ class VAE(nn.Module):
                 optimizer.step()
             if epoch % self.n_iter_print == 0:
                 log.debug(f"[{epoch}/{self.n_iter}] Loss: {loss.detach()}")
+                if loss >= prev_loss:
+                    patience += 1
+                else:
+                    prev_loss = loss
+                    patience = 0
+
+                if patience > self.patience:
+                    log.debug(f"[{epoch}/{self.n_iter}] Early stopping")
 
     def _check_tensor(self, X: Tensor) -> Tensor:
         if isinstance(X, Tensor):

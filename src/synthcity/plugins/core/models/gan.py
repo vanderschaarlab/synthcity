@@ -548,10 +548,13 @@ class GAN(nn.Module):
         if self.patience_metric is None:
             return X, None, cond, None
 
-        total = np.arange(0, len(X))
-        np.random.shuffle(total)
-        split = int(len(total) * 0.8)
-        train_idx, test_idx = total[:split], total[split:]
+        if self.dataloader_sampler is not None:
+            train_idx, test_idx = self.dataloader_sampler.train_test()
+        else:
+            total = np.arange(0, len(X))
+            np.random.shuffle(total)
+            split = int(len(total) * 0.8)
+            train_idx, test_idx = total[:split], total[split:]
 
         X_train, X_val = X[train_idx], X[test_idx]
         cond_train, cond_test = None, None

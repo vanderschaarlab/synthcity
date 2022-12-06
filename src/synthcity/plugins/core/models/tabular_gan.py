@@ -301,7 +301,11 @@ class TabularGAN(torch.nn.Module):
             X_enc = self.encode(X)
 
         extra_cond = self.dataloader_sampler.get_train_conditionals()
+
         cond = self._merge_conditionals(cond, extra_cond)
+        if cond is not None:
+            assert len(cond) == len(X_enc)
+
         self.model.fit(
             np.asarray(X_enc),
             np.asarray(cond),
