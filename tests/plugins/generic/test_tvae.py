@@ -109,7 +109,7 @@ def test_eval_performance_tvae() -> None:
     X = GenericDataLoader(Xraw)
 
     for retry in range(2):
-        test_plugin = plugin(n_iter=100)
+        test_plugin = plugin(n_iter=1000)
         evaluator = PerformanceEvaluatorXGB()
 
         test_plugin.fit(X)

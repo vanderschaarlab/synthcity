@@ -1,5 +1,5 @@
 # stdlib
-from typing import Any
+from typing import Any, Optional
 
 # third party
 import numpy as np
@@ -27,6 +27,7 @@ from torch.nn import functional as F
 from torch.utils.data import DataLoader, TensorDataset
 
 # synthcity absolute
+from synthcity.metrics.weighted_metrics import WeightedMetrics
 from synthcity.utils.constants import DEVICE
 
 
@@ -90,6 +91,15 @@ class NormalizingFlows(nn.Module):
                     Ref: Durkan et al, "Neural Spline Flows".
                 - rq-autoregressive : Rational Quadratic Autoregressive Transform
                     Ref: Durkan et al, "Neural Spline Flows".
+        # early stopping
+        n_iter_print: int
+            Number of iterations after which to print updates and check the validation loss.
+        n_iter_min: int
+            Minimum number of iterations to go through before starting early stopping
+        patience: int
+            Max number of iterations without any improvement before early stopping is trigged.
+        patience_metric: Optional[WeightedMetrics]
+            If not None, the metric is used for evaluation the criterion for early stopping.
     """
 
     def __init__(
@@ -109,6 +119,11 @@ class NormalizingFlows(nn.Module):
         linear_transform_type: str = "permutation",  # "lu", "permutation", "svd"
         base_transform_type: str = "rq-autoregressive",  # "affine-coupling", "quadratic-coupling", "rq-coupling", "affine-autoregressive", "quadratic-autoregressive", "rq-autoregressive"
         device: Any = DEVICE,
+        # early stopping
+        n_iter_min: int = 100,
+        n_iter_print: int = 10,
+        patience: int = 20,
+        patience_metric: Optional[WeightedMetrics] = None,
     ) -> None:
         super(NormalizingFlows, self).__init__()
         self.device = device
@@ -127,6 +142,11 @@ class NormalizingFlows(nn.Module):
         self.base_distribution = base_distribution
         self.linear_transform_type = linear_transform_type
         self.base_transform_type = base_transform_type
+
+        self.n_iter_print = n_iter_print
+        self.n_iter_min = n_iter_min
+        self.patience = patience
+        self.patience_metric = patience_metric
 
     def dataloader(self, X: torch.Tensor) -> DataLoader:
         dataset = TensorDataset(X)
@@ -162,6 +182,7 @@ class NormalizingFlows(nn.Module):
             for _, data in enumerate(loader):
                 optimizer.zero_grad()
                 loss = -self.flow.log_prob(inputs=data[0]).mean()
+                print(loss)
                 loss.backward()
                 optimizer.step()
 

@@ -401,11 +401,12 @@ class VAE(nn.Module):
                 if loss >= prev_loss:
                     patience += 1
                 else:
-                    prev_loss = loss
+                    prev_loss = loss.detach().item()
                     patience = 0
 
                 if patience > self.patience:
                     log.debug(f"[{epoch}/{self.n_iter}] Early stopping")
+                    break
 
     def _check_tensor(self, X: Tensor) -> Tensor:
         if isinstance(X, Tensor):
