@@ -47,6 +47,9 @@ def test_generic_dataloader_sanity() -> None:
 
     assert loader.compression_protected_features() == ["target"]
 
+    loader = GenericDataLoader(X, target_column="target", train_size=0.5)
+    assert abs(len(loader.train()) - len(loader.test())) < 2
+
 
 def test_generic_dataloader_info() -> None:
     X, y = load_breast_cancer(return_X_y=True, as_frame=True)
@@ -144,6 +147,15 @@ def test_survival_dataloader_sanity() -> None:
         target_column,
         time_to_event_column,
     ]
+    loader = SurvivalAnalysisDataLoader(
+        df,
+        time_to_event_column=time_to_event_column,
+        target_column=target_column,
+        time_horizons=[20],
+        train_size=0.5,
+    )
+
+    assert abs(len(loader.train()) - len(loader.test())) < 2
 
 
 def test_survival_dataloader_info() -> None:
