@@ -117,7 +117,7 @@ def test_eval_performance_dpgan() -> None:
     X = GenericDataLoader(Xraw)
 
     for retry in range(2):
-        test_plugin = plugin(n_iter=5000)
+        test_plugin = plugin(n_iter=300)
         evaluator = PerformanceEvaluatorXGB()
 
         test_plugin.fit(X)

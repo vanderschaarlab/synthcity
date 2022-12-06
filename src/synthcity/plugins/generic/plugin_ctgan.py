@@ -106,7 +106,7 @@ class CTGANPlugin(Plugin):
         encoder: Any = None,
         dataloader_sampler: Optional[sampler.Sampler] = None,
         device: Any = DEVICE,
-        patience: int = 20,
+        patience: int = 5,
         patience_metric: Optional[WeightedMetrics] = WeightedMetrics(
             metrics=[("detection", "detection_mlp")], weights=[1]
         ),

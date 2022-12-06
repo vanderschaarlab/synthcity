@@ -150,7 +150,7 @@ class TabularGAN(torch.nn.Module):
         encoder_whitelist: list = [],
         dataloader_sampler: Optional[BaseSampler] = None,
         device: Any = DEVICE,
-        patience: int = 20,
+        patience: int = 10,
         patience_metric: Optional[WeightedMetrics] = None,
         n_iter_print: int = 50,
         n_iter_min: int = 100,

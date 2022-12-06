@@ -116,7 +116,7 @@ class AdsGANPlugin(Plugin):
         dataloader_sampler: Optional[sampler.Sampler] = None,
         device: Any = DEVICE,
         # early stopping
-        patience: int = 20,
+        patience: int = 5,
         patience_metric: Optional[WeightedMetrics] = WeightedMetrics(
             metrics=[("detection", "detection_mlp")], weights=[1]
         ),

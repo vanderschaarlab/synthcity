@@ -123,7 +123,7 @@ class DPGANPlugin(Plugin):
         dp_max_grad_norm: float = 2,
         dp_secure_mode: bool = False,
         # early stopping
-        patience: int = 20,
+        patience: int = 5,
         patience_metric: Optional[WeightedMetrics] = WeightedMetrics(
             metrics=[("detection", "detection_mlp")], weights=[1]
         ),

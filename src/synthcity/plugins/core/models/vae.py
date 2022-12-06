@@ -180,8 +180,6 @@ class VAE(nn.Module):
             Minimum number of iterations to go through before starting early stopping
         patience: int
             Max number of iterations without any improvement before early stopping is trigged.
-        patience_metric: Optional[WeightedMetrics]
-            If not None, the metric is used for evaluation the criterion for early stopping.
     """
 
     @validate_arguments(config=dict(arbitrary_types_allowed=True))

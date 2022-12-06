@@ -90,6 +90,9 @@ class RTVAEPlugin(Plugin):
         data_encoder_max_clusters: int = 10,
         robust_divergence_beta: int = 2,  # used only for loss_strategy "robust_divergence"
         dataloader_sampler: Optional[sampler.Sampler] = None,
+        n_iter_print: int = 50,
+        n_iter_min: int = 100,
+        patience: int = 5,
         **kwargs: Any
     ) -> None:
         super().__init__(**kwargs)
@@ -112,6 +115,10 @@ class RTVAEPlugin(Plugin):
         self.dataloader_sampler = dataloader_sampler
 
         self.robust_divergence_beta = robust_divergence_beta
+
+        self.n_iter_print = n_iter_print
+        self.n_iter_min = n_iter_min
+        self.patience = patience
 
     @staticmethod
     def name() -> str:
@@ -174,6 +181,9 @@ class RTVAEPlugin(Plugin):
             dataloader_sampler=self.dataloader_sampler,
             loss_strategy="robust_divergence",
             robust_divergence_beta=self.robust_divergence_beta,
+            n_iter_min=self.n_iter_min,
+            n_iter_print=self.n_iter_print,
+            patience=self.patience,
         )
         self.model.fit(X.dataframe(), **kwargs)
 
