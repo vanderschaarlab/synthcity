@@ -829,7 +829,7 @@ class FeatureImportanceRankDistance(MetricEvaluator):
                 n_jobs=2,
                 verbosity=0,
                 depth=3,
-                strategy="debiased_bce",  # "weibull", "debiased_bce"
+                strategy="weibull",  # "weibull", "debiased_bce"
                 random_state=self._random_state,
             )
 
@@ -856,7 +856,6 @@ class FeatureImportanceRankDistance(MetricEvaluator):
             corr, pvalue = self.distance(syn_xai, gt_xai)
             corr = np.mean(np.nan_to_num(corr))
             pvalue = np.mean(np.nan_to_num(pvalue))
-            print(corr, pvalue)
 
             results = {
                 "corr": corr,
