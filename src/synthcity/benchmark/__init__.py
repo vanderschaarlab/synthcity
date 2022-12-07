@@ -22,6 +22,13 @@ from synthcity.utils.reproducibility import enable_reproducible_results
 from synthcity.utils.serialization import load_from_file, save_to_file
 
 
+def print_score(mean: pd.Series, std: pd.Series) -> pd.Series:
+    mean = mean.round(3).astype(str)
+    std = std.round(3).astype(str)
+
+    return mean + " +/- " + std
+
+
 class Benchmarks:
     @staticmethod
     @validate_arguments(config=dict(arbitrary_types_allowed=True))
@@ -172,8 +179,9 @@ class Benchmarks:
 
         means = []
         for plugin in results:
-            data = results[plugin]["mean"]
-            means.append(data)
+            mean = results[plugin]["mean"]
+            stddev = results[plugin]["stddev"]
+            means.append(print_score(mean, stddev))
 
         avg = pd.concat(means, axis=1)
         avg = avg.set_axis(results.keys(), axis=1)
