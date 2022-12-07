@@ -143,12 +143,22 @@ class PrivBayes(Serializable):
         encoders = {}
 
         for col in data.columns:
-            if len(data[col].unique()) < self.n_bins:
-                encoders[col] = np.sort(data[col].unique())
+            if len(data[col].unique()) < self.n_bins or data[col].dtype.name not in [
+                "object",
+                "category",
+            ]:
+                encoders[col] = {
+                    "type": "categorical",
+                    "model": LabelEncoder().fit(data[col]),
+                }
+                data[col] = encoders[col]["model"].transform(data[col])
             else:
                 col_data = pd.cut(data[col], bins=self.n_bins)
-                encoders[col] = LabelEncoder().fit(col_data)
-                data[col] = encoders[col].transform(col_data)
+                encoders[col] = {
+                    "type": "continuous",
+                    "model": LabelEncoder().fit(col_data),
+                }
+                data[col] = encoders[col]["model"].transform(col_data)
 
         return data, encoders
 
@@ -156,16 +166,15 @@ class PrivBayes(Serializable):
         for col in data.columns:
             if col not in self.encoders:
                 continue
-            if isinstance(self.encoders[col], LabelEncoder):
-                inversed = self.encoders[col].inverse_transform(data[col])
+            inversed = self.encoders[col].inverse_transform(data[col])
+            if self.encoders[col]["type"] == "categorical":
+                data[col] = inversed
+            elif self.encoders[col]["type"] == "continuous":
                 output = []
                 for interval in inversed:
                     output.append(np.random.uniform(interval.left, interval.right))
 
                 data[col] = output
-            elif isinstance(self.encoders[col], np.ndarray):
-                assert data[col].max() < len(self.encoders[col])
-                data[col] = self.encoders[col][data[col]]
             else:
                 raise RuntimeError(f"Invalid encoder {self.encoders[col]}")
 

@@ -313,7 +313,7 @@ class JensenShannonDistance(StatisticalEvaluator):
 
             stats_[col] = jensenshannon(stats_gt[col], stats_syn[col])
             if np.isnan(stats_[col]):
-                print(col, stats_syn[col])
+                raise RuntimeError("NaNs in prediction")
 
         return stats_, stats_gt, stats_syn
 
