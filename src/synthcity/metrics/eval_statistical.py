@@ -45,7 +45,7 @@ class StatisticalEvaluator(MetricEvaluator):
             self._workspace
             / f"sc_metric_cache_{self.type()}_{self.name()}_{X_gt.hash()}_{X_syn.hash()}_{self._reduction}.bkp"
         )
-        if cache_file.exists() and self._use_cache:
+        if self.use_cache(cache_file):
             return load_from_file(cache_file)
 
         results = self._evaluate(X_gt, X_syn)
@@ -563,7 +563,7 @@ class PRDCScore(StatisticalEvaluator):
 
 
 class AlphaPrecision(StatisticalEvaluator):
-    """ Evaluates the alpha-precision, beta-recall, and authenticity scores.
+    """Evaluates the alpha-precision, beta-recall, and authenticity scores.
 
     The class evaluates the synthetic data using a tuple of three metrics:
     alpha-precision, beta-recall, and authenticity.
@@ -575,6 +575,7 @@ class AlphaPrecision(StatisticalEvaluator):
     data? sample-level metrics for evaluating and auditing generative models."
     In International Conference on Machine Learning, pp. 290-306. PMLR, 2022.
     """
+
     def __init__(self, **kwargs: Any) -> None:
         super().__init__(**kwargs)
 

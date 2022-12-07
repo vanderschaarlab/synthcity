@@ -16,13 +16,14 @@ from synthcity.utils.serialization import load_from_file, save_to_file
 
 
 class AttackEvaluator(MetricEvaluator):
-    """ Evaluating the risk of attribute inference attack.
+    """Evaluating the risk of attribute inference attack.
 
     This class evaluates the risk of a type of privacy attack, known as attribute inference attack.
     In this setting, the attacker has access to the synthetic dataset as well as partial information about the real data
     (quasi-identifiers). The attacker seeks to uncover the sensitive attributes of the real data using these two pieces
     of information.
     """
+
     def __init__(self, **kwargs: Any) -> None:
         super().__init__(**kwargs)
 
@@ -44,7 +45,7 @@ class AttackEvaluator(MetricEvaluator):
             self._workspace
             / f"sc_metric_cache_{self.type()}_{self.name()}_{X_gt.hash()}_{X_syn.hash()}_{self._reduction}.bkp"
         )
-        if cache_file.exists() and self._use_cache:
+        if self.use_cache(cache_file):
             return load_from_file(cache_file)
 
         if len(X_gt.sensitive_features) == 0:

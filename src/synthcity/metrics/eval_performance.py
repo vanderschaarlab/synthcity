@@ -158,7 +158,7 @@ class PerformanceEvaluator(MetricEvaluator):
             self._workspace
             / f"sc_metric_cache_{self.type()}_{self.name()}_{X_gt.hash()}_{X_syn.hash()}_{self._reduction}.bkp"
         )
-        if cache_file.exists() and self._use_cache:
+        if self.use_cache(cache_file):
             return load_from_file(cache_file)
 
         id_X_gt, id_y_gt = X_gt.train().unpack()
@@ -234,7 +234,7 @@ class PerformanceEvaluator(MetricEvaluator):
             self._workspace
             / f"sc_metric_cache_{self.type()}_{self.name()}_{X_gt.hash()}_{X_syn.hash()}_{self._reduction}.bkp"
         )
-        if cache_file.exists():
+        if self.use_cache(cache_file):
             return load_from_file(cache_file)
 
         info = X_gt.info()
@@ -339,7 +339,7 @@ class PerformanceEvaluator(MetricEvaluator):
             self._workspace
             / f"sc_metric_cache_{self.type()}_{self.name()}_{X_gt.hash()}_{X_syn.hash()}_{self._reduction}.bkp"
         )
-        if cache_file.exists():
+        if self.use_cache(cache_file):
             return load_from_file(cache_file)
 
         (
@@ -467,7 +467,7 @@ class PerformanceEvaluator(MetricEvaluator):
             self._workspace
             / f"sc_metric_cache_{self.type()}_{self.name()}_{X_gt.hash()}_{X_syn.hash()}_{self._reduction}.bkp"
         )
-        if cache_file.exists():
+        if self.use_cache(cache_file):
             return load_from_file(cache_file)
 
         info = X_gt.info()
@@ -821,7 +821,7 @@ class FeatureImportanceRankDistance(MetricEvaluator):
             self._workspace
             / f"sc_metric_cache_{self.type()}_{self.name()}_{X_gt.hash()}_{X_syn.hash()}.bkp"
         )
-        if cache_file.exists():
+        if self.use_cache(cache_file):
             return load_from_file(cache_file)
 
         if self._task_type == "survival_analysis":
@@ -876,10 +876,12 @@ class FeatureImportanceRankDistance(MetricEvaluator):
             syn_xai = np.mean(np.abs(syn_shap), axis=0)  # [n_features]
             gt_xai = np.mean(np.abs(gt_shap), axis=0)  # [n_features]
             assert len(syn_xai) == len(columns)
+            print(syn_xai, gt_xai)
 
             corr, pvalue = self.distance(syn_xai, gt_xai)
             corr = np.mean(np.nan_to_num(corr))
             pvalue = np.mean(np.nan_to_num(pvalue))
+            print(corr, pvalue)
 
             results = {
                 "corr": corr,

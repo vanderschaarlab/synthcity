@@ -45,7 +45,7 @@ def test_evaluate_performance_classifier(
     test_plugin.fit(Xloader)
     X_gen = test_plugin.generate(100)
 
-    evaluator = evaluator_t()
+    evaluator = evaluator_t(use_cache=False)
     good_score = evaluator.evaluate(
         Xloader,
         X_gen,
@@ -93,7 +93,10 @@ def test_evaluate_feature_importance_rank_dist_clf(
     test_plugin.fit(Xloader)
     X_gen = test_plugin.generate(len(X))
 
-    evaluator = FeatureImportanceRankDistance(distance=distance)
+    evaluator = FeatureImportanceRankDistance(
+        distance=distance,
+        use_cache=False,
+    )
     good_score = evaluator.evaluate(
         Xloader,
         X_gen,
@@ -136,6 +139,7 @@ def test_evaluate_performance_regression(
 
     evaluator = evaluator_t(
         task_type="regression",
+        use_cache=False,
     )
     good_score = evaluator.evaluate(
         Xloader,
@@ -181,6 +185,7 @@ def test_evaluate_feature_importance_rank_dist_reg(
     evaluator = FeatureImportanceRankDistance(
         distance=distance,
         task_type="regression",
+        use_cache=False,
     )
     good_score = evaluator.evaluate(
         Xloader,
@@ -230,6 +235,7 @@ def test_evaluate_performance_survival_analysis(
 
     evaluator = evaluator_t(
         task_type="survival_analysis",
+        use_cache=False,
     )
     good_score = evaluator.evaluate(
         Xloader,
@@ -293,6 +299,7 @@ def test_evaluate_feature_importance_rank_dist_surv(
     evaluator = FeatureImportanceRankDistance(
         distance=distance,
         task_type="survival_analysis",
+        use_cache=False,
     )
     good_score = evaluator.evaluate(
         Xloader,
@@ -333,7 +340,7 @@ def test_evaluate_performance_custom_labels(
     test_plugin.fit(Xloader)
     X_gen = test_plugin.generate(100)
 
-    evaluator = evaluator_t()
+    evaluator = evaluator_t(use_cache=False)
 
     good_score = evaluator.evaluate(
         Xloader,
@@ -374,6 +381,7 @@ def test_evaluate_performance_time_series(
 
     evaluator = evaluator_t(
         task_type="time_series",
+        use_cache=False,
     )
     good_score = evaluator.evaluate(
         data,

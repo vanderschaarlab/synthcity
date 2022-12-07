@@ -35,7 +35,9 @@ def test_evaluator(evaluator_t: Type, test_plugin: Plugin) -> None:
     test_plugin.fit(Xloader)
     X_gen = test_plugin.generate(2 * len(X))
 
-    evaluator = evaluator_t()
+    evaluator = evaluator_t(
+        use_cache=False,
+    )
 
     score = evaluator.evaluate(Xloader, X_gen)
 
