@@ -130,6 +130,7 @@ class PrivBayes(Serializable):
         # create the model
         self.model = BayesianModelSampling(self.network)
 
+        log.info("[PrivBayes] done training")
         return self
 
     @validate_arguments(config=dict(arbitrary_types_allowed=True))

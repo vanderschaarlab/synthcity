@@ -33,6 +33,7 @@ def test_plugin_hyperparams(test_plugin: Plugin) -> None:
 @pytest.mark.parametrize("test_plugin", generate_fixtures(plugin_name, plugin))
 def test_plugin_fit(test_plugin: Plugin) -> None:
     X = get_airfoil_dataset()
+    X[3] = X[3].astype(str)
 
     test_plugin.fit(GenericDataLoader(X))
 
