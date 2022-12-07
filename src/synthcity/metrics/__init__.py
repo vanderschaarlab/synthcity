@@ -154,8 +154,8 @@ class Metrics:
                     random_state=random_state,
                     workspace=workspace,
                 ),
-                X_gt.sample(eval_cnt),
-                X_syn.sample(eval_cnt),
+                X_gt.sample(eval_cnt, random_state=random_state),
+                X_syn.sample(eval_cnt, random_state=random_state),
             )
 
         scores.compute()

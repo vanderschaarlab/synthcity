@@ -136,7 +136,7 @@ class DataLoader(metaclass=ABCMeta):
         ...
 
     @abstractmethod
-    def sample(self, count: int) -> "DataLoader":
+    def sample(self, count: int, random_state: int = 0) -> "DataLoader":
         ...
 
     @abstractmethod
@@ -324,8 +324,8 @@ class GenericDataLoader(DataLoader):
     def match(self, constraints: Constraints) -> "DataLoader":
         return self.decorate(constraints.match(self.data))
 
-    def sample(self, count: int) -> "DataLoader":
-        return self.decorate(self.data.sample(count))
+    def sample(self, count: int, random_state: int = 0) -> "DataLoader":
+        return self.decorate(self.data.sample(count, random_state=random_state))
 
     def drop(self, columns: list = []) -> "DataLoader":
         return self.decorate(self.data.drop(columns=columns))
@@ -489,9 +489,9 @@ class SurvivalAnalysisDataLoader(DataLoader):
             constraints.match(self.data),
         )
 
-    def sample(self, count: int) -> "DataLoader":
+    def sample(self, count: int, random_state: int = 0) -> "DataLoader":
         return self.decorate(
-            self.data.sample(count),
+            self.data.sample(count, random_state=random_state),
         )
 
     def drop(self, columns: list = []) -> "DataLoader":
@@ -798,7 +798,7 @@ class TimeSeriesDataLoader(DataLoader):
         )
         return self.unpack_and_decorate(self.filter_ids(test_ids))
 
-    def sample(self, count: int) -> "DataLoader":
+    def sample(self, count: int, random_state: int = 0) -> "DataLoader":
         ids = self.ids()
         count = min(count, len(ids))
         sampled_ids = random.sample(ids, count)
