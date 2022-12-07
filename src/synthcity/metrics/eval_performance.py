@@ -822,7 +822,11 @@ class FeatureImportanceRankDistance(MetricEvaluator):
             / f"sc_metric_cache_{self.type()}_{self.name()}_{X_gt.hash()}_{X_syn.hash()}.bkp"
         )
         if self.use_cache(cache_file):
-            return load_from_file(cache_file)
+            results = load_from_file(cache_file)
+            log.info(
+                f" Feature Importance rank distance df hash = {X_gt.train().hash()} ood hash = {X_gt.test().hash()}. score = {results}"
+            )
+            return results
 
         if self._task_type == "survival_analysis":
             model = XGBSurvivalAnalysis(
@@ -940,4 +944,7 @@ class FeatureImportanceRankDistance(MetricEvaluator):
 
         save_to_file(cache_file, results)
 
+        log.info(
+            f" Feature Importance rank distance df hash = {X_gt.train().hash()} ood hash = {X_gt.test().hash()}. score = {results}"
+        )
         return results
