@@ -91,6 +91,14 @@ class DetectionEvaluator(MetricEvaluator):
 
         return results
 
+    @validate_arguments(config=dict(arbitrary_types_allowed=True))
+    def evaluate_default(
+        self,
+        X_gt: DataLoader,
+        X_syn: DataLoader,
+    ) -> float:
+        return self.evaluate(X_gt, X_syn)[self._reduction]
+
 
 class SyntheticDetectionXGB(DetectionEvaluator):
     """Train a XGBoostclassifier to detect the synthetic data.

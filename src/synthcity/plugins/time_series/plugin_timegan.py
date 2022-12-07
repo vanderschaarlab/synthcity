@@ -17,8 +17,7 @@ from synthcity.plugins.core.distribution import (
     FloatDistribution,
     IntegerDistribution,
 )
-from synthcity.plugins.core.models import BinEncoder
-from synthcity.plugins.core.models.tabular_encoder import TabularEncoder
+from synthcity.plugins.core.models.tabular_encoder import BinEncoder, TabularEncoder
 from synthcity.plugins.core.models.ts_model import TimeSeriesModel, modes
 from synthcity.plugins.core.models.ts_tabular_gan import TimeSeriesTabularGAN
 from synthcity.plugins.core.plugin import Plugin

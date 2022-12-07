@@ -1,11 +1,12 @@
 # stdlib
-from typing import Any, List
+from typing import Any, List, Optional
 
 # third party
 import pandas as pd
 from pydantic import validate_arguments
 
 # synthcity absolute
+from synthcity.metrics.weighted_metrics import WeightedMetrics
 from synthcity.plugins.core.dataloader import DataLoader
 from synthcity.plugins.core.distribution import (
     CategoricalDistribution,
@@ -13,7 +14,8 @@ from synthcity.plugins.core.distribution import (
     FloatDistribution,
     IntegerDistribution,
 )
-from synthcity.plugins.core.models import NormalizingFlows, TabularFlows
+from synthcity.plugins.core.models.flows import NormalizingFlows
+from synthcity.plugins.core.models.tabular_flows import TabularFlows
 from synthcity.plugins.core.plugin import Plugin
 from synthcity.plugins.core.schema import Schema
 
@@ -67,6 +69,15 @@ class NormalizingFlowsPlugin(Plugin):
                     Ref: Durkan et al, "Neural Spline Flows".
                 - rq-autoregressive : Rational Quadratic Autoregressive Transform
                     Ref: Durkan et al, "Neural Spline Flows".
+        # early stopping
+        n_iter_print: int
+            Number of iterations after which to print updates and check the validation loss.
+        n_iter_min: int
+            Minimum number of iterations to go through before starting early stopping
+        patience: int
+            Max number of iterations without any improvement before early stopping is trigged.
+        patience_metric: Optional[WeightedMetrics]
+            If not None, the metric is used for evaluation the criterion for early stopping.
     """
 
     @validate_arguments(config=dict(arbitrary_types_allowed=True))
@@ -88,6 +99,13 @@ class NormalizingFlowsPlugin(Plugin):
         base_transform_type: str = "rq-autoregressive",  # "affine-coupling", "quadratic-coupling", "rq-coupling", "affine-autoregressive", "quadratic-autoregressive", "rq-autoregressive"
         encoder_max_clusters: int = 10,
         tabular: bool = True,
+        # early stopping
+        n_iter_min: int = 100,
+        n_iter_print: int = 50,
+        patience: int = 5,
+        patience_metric: Optional[WeightedMetrics] = WeightedMetrics(
+            metrics=[("detection", "detection_mlp")], weights=[1]
+        ),
         **kwargs: Any,
     ) -> None:
         super().__init__(**kwargs)
@@ -110,6 +128,11 @@ class NormalizingFlowsPlugin(Plugin):
 
         self.encoder_max_clusters = encoder_max_clusters
         self.tabular = tabular
+
+        self.n_iter_min = n_iter_min
+        self.n_iter_print = n_iter_print
+        self.patience = patience
+        self.patience_metric = patience_metric
 
     @staticmethod
     def name() -> str:
@@ -166,6 +189,10 @@ class NormalizingFlowsPlugin(Plugin):
                 linear_transform_type=self.linear_transform_type,
                 base_transform_type=self.base_transform_type,
                 encoder_max_clusters=self.encoder_max_clusters,
+                n_iter_min=self.n_iter_min,
+                n_iter_print=self.n_iter_print,
+                patience=self.patience,
+                patience_metric=self.patience_metric,
             )
         else:
             self.model = NormalizingFlows(
@@ -183,13 +210,17 @@ class NormalizingFlowsPlugin(Plugin):
                 base_distribution=self.base_distribution,
                 linear_transform_type=self.linear_transform_type,
                 base_transform_type=self.base_transform_type,
+                n_iter_min=self.n_iter_min,
+                n_iter_print=self.n_iter_print,
+                patience=self.patience,
+                patience_metric=self.patience_metric,
             )
 
         self.model.fit(X.dataframe())
         return self
 
     def _generate(self, count: int, syn_schema: Schema, **kwargs: Any) -> pd.DataFrame:
-        def _internal_generate(count : int) -> pd.DataFrame:
+        def _internal_generate(count: int) -> pd.DataFrame:
             batch = min(5000, count)
 
             result = self.model.generate(1)
@@ -201,7 +232,9 @@ class NormalizingFlowsPlugin(Plugin):
             while count > 0 and retries < max_retries:
                 batch = min(batch, count)
                 try:
-                    result = pd.concat([result, self.model.generate(batch)], ignore_index = True)
+                    result = pd.concat(
+                        [result, self.model.generate(batch)], ignore_index=True
+                    )
                 except BaseException:
                     pass
 

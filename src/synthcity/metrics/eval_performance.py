@@ -587,6 +587,23 @@ class PerformanceEvaluator(MetricEvaluator):
 
         return results
 
+    @validate_arguments(config=dict(arbitrary_types_allowed=True))
+    def evaluate_default(
+        self,
+        X_gt: DataLoader,
+        X_syn: DataLoader,
+    ) -> float:
+        results = self.evaluate(X_gt, X_syn)
+
+        if self._task_type == "survival_analysis":
+            return results["syn_id.c_index"] - results["syn_id.brier_score"]
+        elif self._task_type == "classification" or self._task_type == "regression":
+            return results["syn_id"]
+        elif self._task_type == "time_series_survival":
+            return results["syn_id.c_index"] - results["syn_id.brier_score"]
+        else:
+            raise RuntimeError(f"Unuspported task type {self._task_type}")
+
 
 class PerformanceEvaluatorXGB(PerformanceEvaluator):
     """Train an XGBoost classifier or regressor on the synthetic data and evaluate the performance on real test data.
@@ -948,3 +965,13 @@ class FeatureImportanceRankDistance(MetricEvaluator):
             f" Feature Importance rank distance df hash = {X_gt.train().hash()} ood hash = {X_gt.test().hash()}. score = {results}"
         )
         return results
+
+    @validate_arguments(config=dict(arbitrary_types_allowed=True))
+    def evaluate_default(
+        self,
+        X_gt: DataLoader,
+        X_syn: DataLoader,
+    ) -> float:
+        results = self.evaluate(X_gt, X_syn)
+
+        return results["corr"]

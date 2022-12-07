@@ -6,7 +6,7 @@ from generic_helpers import generate_fixtures
 from sklearn.datasets import load_iris
 
 # synthcity absolute
-from synthcity.metrics import PerformanceEvaluatorXGB
+from synthcity.metrics.eval import PerformanceEvaluatorXGB
 from synthcity.plugins import Plugin
 from synthcity.plugins.core.constraints import Constraints
 from synthcity.plugins.core.dataloader import GenericDataLoader
@@ -108,7 +108,7 @@ def test_eval_performance_rtvae() -> None:
     X = GenericDataLoader(Xraw)
 
     for retry in range(2):
-        test_plugin = plugin(n_iter=100)
+        test_plugin = plugin(n_iter=1000)
         evaluator = PerformanceEvaluatorXGB()
 
         test_plugin.fit(X)

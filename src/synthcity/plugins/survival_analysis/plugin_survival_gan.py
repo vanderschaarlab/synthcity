@@ -12,7 +12,7 @@ import synthcity.logger as log
 import synthcity.plugins as plugins
 from synthcity.plugins.core.dataloader import DataLoader
 from synthcity.plugins.core.distribution import Distribution
-from synthcity.plugins.core.models import BinEncoder
+from synthcity.plugins.core.models.tabular_encoder import BinEncoder
 from synthcity.plugins.core.plugin import Plugin
 from synthcity.plugins.core.schema import Schema
 from synthcity.plugins.survival_analysis._survival_pipeline import SurvivalPipeline

@@ -1,5 +1,5 @@
 # stdlib
-from typing import Any
+from typing import Any, Optional, Tuple
 
 # third party
 import numpy as np
@@ -25,8 +25,10 @@ from nflows.transforms.svd import SVDLinear
 from torch import nn, optim
 from torch.nn import functional as F
 from torch.utils.data import DataLoader, TensorDataset
+from tqdm import tqdm
 
 # synthcity absolute
+from synthcity.metrics.weighted_metrics import WeightedMetrics
 from synthcity.utils.constants import DEVICE
 
 
@@ -90,6 +92,15 @@ class NormalizingFlows(nn.Module):
                     Ref: Durkan et al, "Neural Spline Flows".
                 - rq-autoregressive : Rational Quadratic Autoregressive Transform
                     Ref: Durkan et al, "Neural Spline Flows".
+        # early stopping
+        n_iter_print: int
+            Number of iterations after which to print updates and check the validation loss.
+        n_iter_min: int
+            Minimum number of iterations to go through before starting early stopping
+        patience: int
+            Max number of iterations without any improvement before early stopping is trigged.
+        patience_metric: Optional[WeightedMetrics]
+            If not None, the metric is used for evaluation the criterion for early stopping.
     """
 
     def __init__(
@@ -109,6 +120,11 @@ class NormalizingFlows(nn.Module):
         linear_transform_type: str = "permutation",  # "lu", "permutation", "svd"
         base_transform_type: str = "rq-autoregressive",  # "affine-coupling", "quadratic-coupling", "rq-coupling", "affine-autoregressive", "quadratic-autoregressive", "rq-autoregressive"
         device: Any = DEVICE,
+        # early stopping
+        n_iter_min: int = 100,
+        n_iter_print: int = 10,
+        patience: int = 20,
+        patience_metric: Optional[WeightedMetrics] = None,
     ) -> None:
         super(NormalizingFlows, self).__init__()
         self.device = device
@@ -128,6 +144,11 @@ class NormalizingFlows(nn.Module):
         self.linear_transform_type = linear_transform_type
         self.base_transform_type = base_transform_type
 
+        self.n_iter_print = n_iter_print
+        self.n_iter_min = n_iter_min
+        self.patience = patience
+        self.patience_metric = patience_metric
+
     def dataloader(self, X: torch.Tensor) -> DataLoader:
         dataset = TensorDataset(X)
         return DataLoader(dataset, batch_size=self.batch_size, pin_memory=False)
@@ -140,9 +161,63 @@ class NormalizingFlows(nn.Module):
         with torch.no_grad():
             return self.flow.sample(count)
 
+    def _train_test_split(self, X: torch.Tensor) -> Tuple:
+        total = np.arange(0, len(X))
+        np.random.shuffle(total)
+        split = int(len(total) * 0.8)
+        train_idx, test_idx = total[:split], total[split:]
+
+        X_train, X_val = X[train_idx], X[test_idx]
+
+        return X_train, X_val
+
+    def _init_patience_score(self) -> float:
+        if self.patience_metric is None:
+            return 0
+
+        if self.patience_metric.direction() == "minimize":
+            return np.inf
+        else:
+            return -np.inf
+
+    def _evaluate_patience_metric(
+        self,
+        X: torch.Tensor,
+        prev_score: float,
+        patience: int,
+    ) -> Tuple[float, int, bool]:
+        save = False
+        if self.patience_metric is None:
+            return prev_score, patience, save
+
+        X_syn = self.generate(len(X))
+        new_score = self.patience_metric.evaluate(
+            pd.DataFrame(X.detach().cpu().numpy()),
+            pd.DataFrame(X_syn),
+        )
+        score = prev_score
+        if self.patience_metric.direction() == "minimize":
+            if new_score >= prev_score:
+                patience += 1
+            else:
+                patience = 0
+                score = new_score
+                save = True
+        else:
+            if new_score <= prev_score:
+                patience += 1
+            else:
+                patience = 0
+                score = new_score
+                save = True
+
+        return score, patience, save
+
     def fit(self, X: pd.DataFrame) -> Any:
         # Load Dataset
         X = self._check_tensor(X).float().to(self.device)
+        X, X_val = self._train_test_split(X)
+
         loader = self.dataloader(X)
 
         # Prepare flow
@@ -157,13 +232,35 @@ class NormalizingFlows(nn.Module):
         optimizer = optim.Adam(self.flow.parameters(), lr=self.lr)
 
         # Train
+        patience_score = self._init_patience_score()
+        patience = 0
+        best_state_dict = None
 
-        for it in range(self.n_iter):
+        for it in tqdm(range(self.n_iter)):
+            self.train()
             for _, data in enumerate(loader):
                 optimizer.zero_grad()
                 loss = -self.flow.log_prob(inputs=data[0]).mean()
+                assert torch.isnan(loss).sum() == 0, data
+
                 loss.backward()
                 optimizer.step()
+
+            if (it + 1) % self.n_iter_print == 0:
+                self.eval()
+
+                if self.patience_metric is not None:
+                    patience_score, patience, save = self._evaluate_patience_metric(
+                        X_val, patience_score, patience
+                    )
+                    if save:
+                        best_state_dict = self.state_dict()
+
+                if patience >= self.patience and it >= self.n_iter_min:
+                    break
+
+        if best_state_dict is not None:
+            self.load_state_dict(best_state_dict)
 
         return self
 

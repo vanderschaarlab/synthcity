@@ -18,8 +18,8 @@ from decaf import DECAF, DataModule
 import synthcity.logger as log
 from synthcity.plugins.core.dataloader import DataLoader
 from synthcity.plugins.core.distribution import CategoricalDistribution, Distribution
-from synthcity.plugins.core.models import TabularGAN
 from synthcity.plugins.core.models.dag.dstruct import get_dstruct_dag
+from synthcity.plugins.core.models.tabular_gan import TabularGAN
 from synthcity.plugins.core.plugin import Plugin
 from synthcity.plugins.core.schema import Schema
 

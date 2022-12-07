@@ -45,3 +45,7 @@ def test_evaluator(evaluator_t: Type, test_plugin: Plugin) -> None:
         assert score[submetric] > 0
 
     assert evaluator.type() == "privacy"
+
+    def_score = evaluator.evaluate_default(Xloader, X_gen)
+
+    assert isinstance(def_score, (float, int))
