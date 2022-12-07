@@ -166,7 +166,7 @@ class PrivBayes(Serializable):
         for col in data.columns:
             if col not in self.encoders:
                 continue
-            inversed = self.encoders[col].inverse_transform(data[col])
+            inversed = self.encoders[col]["model"].inverse_transform(data[col])
             if self.encoders[col]["type"] == "categorical":
                 data[col] = inversed
             elif self.encoders[col]["type"] == "continuous":
