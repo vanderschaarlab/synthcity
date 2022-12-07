@@ -20,6 +20,7 @@ from .eval_detection import (
     SyntheticDetectionXGB,
 )
 from .eval_performance import (
+    FeatureImportanceRankDistance,
     PerformanceEvaluatorLinear,
     PerformanceEvaluatorMLP,
     PerformanceEvaluatorXGB,
@@ -74,6 +75,7 @@ standard_metrics = [
     PerformanceEvaluatorLinear,
     PerformanceEvaluatorMLP,
     PerformanceEvaluatorXGB,
+    FeatureImportanceRankDistance,
     # synthetic detection tests
     SyntheticDetectionXGB,
     SyntheticDetectionMLP,
