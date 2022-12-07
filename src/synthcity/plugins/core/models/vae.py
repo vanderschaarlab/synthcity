@@ -130,8 +130,6 @@ class VAE(nn.Module):
             Training batch size
         n_iter: int
             Number of training iterations
-        n_iter_print: int
-            When to log the training error
         random_state: int
             Random random_state
         lr: float
@@ -167,6 +165,21 @@ class VAE(nn.Module):
             Parameter for the standard loss
         robust_divergence_beta: int
             Parameter for the robust_divergence loss
+        dataloader_sampler:
+            Custom sampler used by the dataloader, useful for conditional sampling.
+        device:
+            CPU/CUDA
+        extra_loss_cbks:
+            Custom loss callbacks. For example, for conditional loss.
+        clipping_value:
+            Gradients clipping value. Zero disables the feature
+        # early stopping
+        n_iter_print: int
+            Number of iterations after which to print updates and check the validation loss.
+        n_iter_min: int
+            Minimum number of iterations to go through before starting early stopping
+        patience: int
+            Max number of iterations without any improvement before early stopping is trigged.
     """
 
     @validate_arguments(config=dict(arbitrary_types_allowed=True))
@@ -177,7 +190,6 @@ class VAE(nn.Module):
         n_units_conditional: int = 0,
         batch_size: int = 100,
         n_iter: int = 500,
-        n_iter_print: int = 10,
         random_state: int = 0,
         lr: float = 2e-4,
         weight_decay: float = 1e-3,
@@ -203,6 +215,10 @@ class VAE(nn.Module):
         device: Any = DEVICE,
         extra_loss_cbks: List[Callable] = [],
         clipping_value: int = 1,
+        # early stopping
+        n_iter_min: int = 100,
+        n_iter_print: int = 10,
+        patience: int = 20,
     ) -> None:
         super(VAE, self).__init__()
 
@@ -212,7 +228,6 @@ class VAE(nn.Module):
         self.device = device
         self.batch_size = batch_size
         self.n_iter = n_iter
-        self.n_iter_print = n_iter_print
         self.loss_factor = loss_factor
         self.lr = lr
         self.weight_decay = weight_decay
@@ -225,6 +240,9 @@ class VAE(nn.Module):
         torch.manual_seed(self.random_state)
         self.n_units_conditional = n_units_conditional
         self.clipping_value = clipping_value
+        self.n_iter_print = n_iter_print
+        self.n_iter_min = n_iter_min
+        self.patience = patience
 
         self.encoder = Encoder(
             n_features + n_units_conditional,
@@ -334,6 +352,22 @@ class VAE(nn.Module):
         eps = torch.randn_like(std)
         return eps * std + mu
 
+    def _train_test_split(self, X: torch.Tensor, cond: Optional[torch.Tensor]) -> Tuple:
+        if self.dataloader_sampler is not None:
+            train_idx, test_idx = self.dataloader_sampler.train_test()
+        else:
+            total = np.arange(0, len(X))
+            np.random.shuffle(total)
+            split = int(len(total) * 0.8)
+            train_idx, test_idx = total[:split], total[split:]
+
+        X_train, X_val = X[train_idx], X[test_idx]
+        cond_train, cond_test = None, None
+        if cond is not None:
+            cond_train, cond_test = cond[train_idx], cond[test_idx]
+
+        return X_train, X_val, cond_train, cond_test
+
     @validate_arguments(config=dict(arbitrary_types_allowed=True))
     def _train(
         self,
@@ -341,6 +375,8 @@ class VAE(nn.Module):
         cond: Optional[torch.Tensor] = None,
     ) -> Any:
         self._original_cond = cond
+
+        X, X_val, cond, cond_val = self._train_test_split(X, cond)
         loader = self._dataloader(X, cond)
 
         optimizer = Adam(
@@ -349,7 +385,11 @@ class VAE(nn.Module):
             lr=self.lr,
         )
 
+        best_loss = np.inf
+        best_state_dict = None
+        patience = 0
         for epoch in tqdm(range(self.n_iter)):
+            self.train()
             for id_, data in enumerate(loader):
                 cond_mb: Optional[torch.Tensor] = None
 
@@ -369,7 +409,6 @@ class VAE(nn.Module):
                     logvar,
                     cond_mb,
                 )
-
                 optimizer.zero_grad()
                 if self.clipping_value > 0:
                     torch.nn.utils.clip_grad_norm_(
@@ -377,8 +416,41 @@ class VAE(nn.Module):
                     )
                 loss.backward()
                 optimizer.step()
+
             if epoch % self.n_iter_print == 0:
-                log.debug(f"[{epoch}/{self.n_iter}] Loss: {loss.detach()}")
+                self.eval()
+                mu, logvar = self.encoder(X_val, cond_val)
+                embedding = self._reparameterize(mu, logvar)
+                reconstructed = self.decoder(embedding, cond_val)
+
+                val_loss = (
+                    self._loss_function(
+                        reconstructed,
+                        X_val,
+                        mu,
+                        logvar,
+                        cond_val,
+                    )
+                    .detach()
+                    .item()
+                )
+
+                log.debug(f"[{epoch}/{self.n_iter}] Loss: {val_loss}")
+                if val_loss >= best_loss:
+                    patience += 1
+                else:
+                    best_loss = val_loss
+                    best_state_dict = self.state_dict()
+                    patience = 0
+
+                if patience >= self.patience and epoch >= self.n_iter_min:
+                    log.debug(f"[{epoch}/{self.n_iter}] Early stopping")
+                    break
+
+        if best_state_dict is not None:
+            self.load_state_dict(best_state_dict)
+
+        return self
 
     def _check_tensor(self, X: Tensor) -> Tensor:
         if isinstance(X, Tensor):

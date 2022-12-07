@@ -6,7 +6,7 @@ from generic_helpers import generate_fixtures, get_airfoil_dataset
 from sklearn.datasets import load_iris
 
 # synthcity absolute
-from synthcity.metrics import PerformanceEvaluatorXGB
+from synthcity.metrics.eval import PerformanceEvaluatorXGB
 from synthcity.plugins import Plugin
 from synthcity.plugins.core.constraints import Constraints
 from synthcity.plugins.core.dataloader import GenericDataLoader
@@ -119,7 +119,7 @@ def test_eval_performance_ctgan(compress_dataset: bool) -> None:
     X = GenericDataLoader(Xraw)
 
     for retry in range(2):
-        test_plugin = plugin(n_iter=200, compress_dataset=compress_dataset)
+        test_plugin = plugin(n_iter=5000, compress_dataset=compress_dataset)
         evaluator = PerformanceEvaluatorXGB()
 
         test_plugin.fit(X)

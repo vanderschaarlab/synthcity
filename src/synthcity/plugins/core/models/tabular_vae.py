@@ -58,14 +58,17 @@ class TabularVAE(nn.Module):
             l2 (ridge) penalty for the weights.
         batch_size: int
             Batch size
-        n_iter_print: int
-            Number of iterations after which to print updates and check the validation loss.
         random_state: int
             random_state used
-        n_iter_min: int
-            Minimum number of iterations to go through before starting early stopping
         encoder_max_clusters: int
             The max number of clusters to create for continuous columns when encoding
+        # early stopping
+        n_iter_print: int
+            Number of iterations after which to print updates and check the validation loss.
+        n_iter_min: int
+            Minimum number of iterations to go through before starting early stopping
+        patience: int
+            Max number of iterations without any improvement before early stopping is trigged.
     """
 
     @validate_arguments(config=dict(arbitrary_types_allowed=True))
@@ -78,7 +81,6 @@ class TabularVAE(nn.Module):
         n_iter: int = 500,
         weight_decay: float = 1e-3,
         batch_size: int = 64,
-        n_iter_print: int = 10,
         random_state: int = 0,
         loss_strategy: str = "standard",
         encoder_max_clusters: int = 20,
@@ -101,6 +103,10 @@ class TabularVAE(nn.Module):
         loss_factor: int = 1,  # used for standar losss
         dataloader_sampler: Optional[BaseSampler] = None,
         clipping_value: int = 1,
+        # early stopping
+        n_iter_min: int = 100,
+        n_iter_print: int = 10,
+        patience: int = 20,
     ) -> None:
         super(TabularVAE, self).__init__()
         self.columns = X.columns
@@ -175,7 +181,6 @@ class TabularVAE(nn.Module):
             lr=lr,
             weight_decay=weight_decay,
             random_state=random_state,
-            n_iter_print=n_iter_print,
             loss_strategy=loss_strategy,
             decoder_n_layers_hidden=decoder_n_layers_hidden,
             decoder_n_units_hidden=decoder_n_units_hidden,
@@ -198,6 +203,9 @@ class TabularVAE(nn.Module):
             robust_divergence_beta=robust_divergence_beta,
             loss_factor=loss_factor,
             clipping_value=clipping_value,
+            n_iter_print=n_iter_print,
+            n_iter_min=n_iter_min,
+            patience=patience,
         )
 
     @validate_arguments(config=dict(arbitrary_types_allowed=True))
@@ -217,7 +225,7 @@ class TabularVAE(nn.Module):
     ) -> Any:
         X_enc = self.encode(X)
 
-        extra_cond = self.dataloader_sampler.get_train_conditionals()
+        extra_cond = self.dataloader_sampler.get_dataset_conditionals()
         cond = self._merge_conditionals(cond, extra_cond)
 
         self.model.fit(X_enc, cond, **kwargs)

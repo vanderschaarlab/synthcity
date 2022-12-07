@@ -7,7 +7,7 @@ import pytest
 from sklearn.datasets import load_diabetes, load_iris
 
 # synthcity absolute
-from synthcity.plugins.core.models import (
+from synthcity.plugins.core.models.tabular_encoder import (
     BinEncoder,
     TabularEncoder,
     TimeSeriesTabularEncoder,

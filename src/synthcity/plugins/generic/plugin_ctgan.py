@@ -11,6 +11,7 @@ from pydantic import validate_arguments
 from torch.utils.data import sampler
 
 # synthcity absolute
+from synthcity.metrics.weighted_metrics import WeightedMetrics
 from synthcity.plugins.core.dataloader import DataLoader
 from synthcity.plugins.core.distribution import (
     CategoricalDistribution,
@@ -18,7 +19,7 @@ from synthcity.plugins.core.distribution import (
     FloatDistribution,
     IntegerDistribution,
 )
-from synthcity.plugins.core.models import TabularGAN
+from synthcity.plugins.core.models.tabular_gan import TabularGAN
 from synthcity.plugins.core.plugin import Plugin
 from synthcity.plugins.core.schema import Schema
 from synthcity.utils.constants import DEVICE
@@ -60,6 +61,15 @@ class CTGANPlugin(Plugin):
             Gradients clipping value. Zero disables the feature
         encoder_max_clusters: int
             The max number of clusters to create for continuous columns when encoding
+        # early stopping
+        n_iter_print: int
+            Number of iterations after which to print updates and check the validation loss.
+        n_iter_min: int
+            Minimum number of iterations to go through before starting early stopping
+        patience: int
+            Max number of iterations without any improvement before early stopping is trigged.
+        patience_metric: Optional[WeightedMetrics]
+            If not None, the metric is used for evaluation the criterion for early stopping.
 
     Example:
         >>> from synthcity.plugins import Plugins
@@ -96,6 +106,12 @@ class CTGANPlugin(Plugin):
         encoder: Any = None,
         dataloader_sampler: Optional[sampler.Sampler] = None,
         device: Any = DEVICE,
+        patience: int = 5,
+        patience_metric: Optional[WeightedMetrics] = WeightedMetrics(
+            metrics=[("detection", "detection_mlp")], weights=[1]
+        ),
+        n_iter_print: int = 50,
+        n_iter_min: int = 100,
         **kwargs: Any
     ) -> None:
         super().__init__(**kwargs)
@@ -125,6 +141,10 @@ class CTGANPlugin(Plugin):
         self.dataloader_sampler = dataloader_sampler
 
         self.device = device
+        self.patience = patience
+        self.patience_metric = patience_metric
+        self.n_iter_min = n_iter_min
+        self.n_iter_print = n_iter_print
 
     @staticmethod
     def name() -> str:
@@ -202,6 +222,10 @@ class CTGANPlugin(Plugin):
             encoder_max_clusters=self.encoder_max_clusters,
             dataloader_sampler=self.dataloader_sampler,
             device=self.device,
+            patience=self.patience,
+            patience_metric=self.patience_metric,
+            n_iter_min=self.n_iter_min,
+            n_iter_print=self.n_iter_print,
         )
         self.model.fit(X.dataframe(), cond=cond)
 

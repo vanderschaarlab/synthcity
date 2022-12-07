@@ -1,3 +1,6 @@
+# stdlib
+from typing import Tuple
+
 # third party
 import numpy as np
 import pytest
@@ -5,6 +8,7 @@ from helpers import get_airfoil_dataset
 from sklearn.datasets import load_iris
 
 # synthcity absolute
+from synthcity.metrics.weighted_metrics import WeightedMetrics
 from synthcity.plugins.core.models.tabular_gan import TabularGAN
 
 
@@ -130,6 +134,33 @@ def test_gan_generation_with_dp() -> None:
         generator_n_iter=10,
         encoder_max_clusters=5,
         dp_enabled=True,
+    )
+    model.fit(X)
+
+    generated = model.generate(10)
+
+    assert (X.columns == generated.columns).all()
+    assert generated.shape == (10, X.shape[1])
+
+
+@pytest.mark.parametrize(
+    "patience_metric",
+    [
+        ("detection", "detection_mlp"),
+        ("performance", "xgb"),
+    ],
+)
+def test_gan_generation_with_early_stopping(patience_metric: Tuple[str, str]) -> None:
+    X, y = load_iris(return_X_y=True, as_frame=True)
+    X["target"] = y
+
+    model = TabularGAN(
+        X,
+        n_units_latent=50,
+        generator_n_iter=1000,
+        encoder_max_clusters=5,
+        patience=2,
+        patience_metric=WeightedMetrics(metrics=[patience_metric], weights=[1]),
     )
     model.fit(X)
 

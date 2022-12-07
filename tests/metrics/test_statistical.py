@@ -47,6 +47,9 @@ def _eval_plugin(
         X_rnd,
     )
 
+    def_score = evaluator.evaluate_default(X, X_rnd)
+    assert isinstance(def_score, float)
+
     return syn_score, rnd_score
 
 

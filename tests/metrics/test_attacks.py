@@ -44,6 +44,10 @@ def test_reduction(reduction: str, evaluator_t: Type) -> None:
 
     assert reduction in score
 
+    def_score = evaluator.evaluate_default(Xloader, X_gen)
+
+    assert def_score == score[reduction]
+
 
 @pytest.mark.parametrize(
     "evaluator_t",
