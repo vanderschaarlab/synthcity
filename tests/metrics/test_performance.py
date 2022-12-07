@@ -115,6 +115,7 @@ def test_evaluate_feature_importance_rank_dist_clf(
     assert "pvalue" in rnd_score
 
     assert good_score["corr"] > rnd_score["corr"]
+    assert good_score["pvalue"] < rnd_score["pvalue"]
 
 
 @pytest.mark.parametrize("test_plugin", [Plugins().get("marginal_distributions")])
@@ -205,6 +206,7 @@ def test_evaluate_feature_importance_rank_dist_reg(
     assert "pvalue" in rnd_score
 
     assert good_score["corr"] > rnd_score["corr"]
+    assert good_score["pvalue"] < rnd_score["pvalue"]
 
 
 @pytest.mark.slow
@@ -319,6 +321,7 @@ def test_evaluate_feature_importance_rank_dist_surv(
     assert "pvalue" in rnd_score
 
     assert good_score["corr"] > rnd_score["corr"]
+    assert good_score["pvalue"] < rnd_score["pvalue"]
 
 
 @pytest.mark.parametrize("test_plugin", [Plugins().get("marginal_distributions")])

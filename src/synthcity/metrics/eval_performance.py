@@ -829,7 +829,7 @@ class FeatureImportanceRankDistance(MetricEvaluator):
                 n_jobs=2,
                 verbosity=0,
                 depth=3,
-                strategy="weibull",  # "weibull", "debiased_bce"
+                strategy="debiased_bce",  # "weibull", "debiased_bce"
                 random_state=self._random_state,
             )
 
@@ -837,46 +837,21 @@ class FeatureImportanceRankDistance(MetricEvaluator):
             ood_X_gt, ood_T_gt, ood_E_gt = X_gt.test().unpack()
             iter_X_syn, iter_T_syn, iter_E_syn = X_syn.unpack()
 
-            time_horizons = X_gt.info()["time_horizons"]
             columns = id_X_gt.columns
 
-            syn_shap = np.random.rand(*ood_X_gt.shape)
-            X_summary = shap.kmeans(id_X_gt, min(100, len(id_X_gt)))
-            sampled = ood_X_gt.sample(50, random_state=0, replace=True)
-
             gt_model = copy.deepcopy(model).fit(id_X_gt, id_T_gt, id_E_gt)
+            gt_shap = gt_model.explain(ood_X_gt)
 
-            def gt_model_fn(X: pd.DataFrame) -> pd.DataFrame:
-                return np.asarray(
-                    gt_model.predict(pd.DataFrame(X, columns=columns), time_horizons)
-                )[:, -1]
-
-            gt_explainer = shap.KernelExplainer(
-                gt_model_fn, X_summary, feature_names=columns
-            )
-            gt_shap = gt_explainer.shap_values(sampled)
-
+            syn_shap = np.random.rand(*ood_X_gt.shape)
             try:
                 syn_model = copy.deepcopy(model).fit(iter_X_syn, iter_T_syn, iter_E_syn)
-
-                def syn_model_fn(X: pd.DataFrame) -> pd.DataFrame:
-                    return np.asarray(
-                        syn_model.predict(
-                            pd.DataFrame(X, columns=columns), time_horizons
-                        )
-                    )[:, -1]
-
-                syn_explainer = shap.KernelExplainer(
-                    syn_model_fn, X_summary, feature_names=columns
-                )
-                syn_shap = syn_explainer.shap_values(sampled)
+                syn_shap = syn_model.explain(ood_X_gt)
             except BaseException:
                 pass
 
             syn_xai = np.mean(np.abs(syn_shap), axis=0)  # [n_features]
             gt_xai = np.mean(np.abs(gt_shap), axis=0)  # [n_features]
             assert len(syn_xai) == len(columns)
-            print(syn_xai, gt_xai)
 
             corr, pvalue = self.distance(syn_xai, gt_xai)
             corr = np.mean(np.nan_to_num(corr))
