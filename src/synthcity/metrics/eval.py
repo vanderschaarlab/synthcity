@@ -139,6 +139,9 @@ class Metrics:
         if metrics is None:
             metrics = Metrics.list()
 
+        X_gt, _ = X_gt.encode()
+        X_syn, _ = X_syn.encode()
+
         scores = ScoreEvaluator()
 
         eval_cnt = min(len(X_gt), len(X_syn))
