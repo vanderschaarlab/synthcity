@@ -55,7 +55,7 @@ class PrivacyEvaluator(MetricEvaluator):
 
 
 class kAnonymization(PrivacyEvaluator):
-    """Returns the k-anon ratio between the real data and the syhnthetic data.
+    """Returns the k-anon ratio between the real data and the synthetic data.
     For each dataset, it is computed the value k which satisfies the k-anonymity rule: each record is similar to at least another k-1 other records on the potentially identifying variables.
     """
 

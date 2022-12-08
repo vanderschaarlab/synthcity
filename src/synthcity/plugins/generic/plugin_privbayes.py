@@ -106,6 +106,7 @@ class PrivBayes(Serializable):
         data, self.encoders = self._encode(data)
 
         # learn the DAG
+        log.debug("[Privbayes] Run greedy Bayes")
         self.dag = self._greedy_bayes(data)
         self.ordered_nodes = []
         for attr, _ in self.dag:
@@ -114,9 +115,11 @@ class PrivBayes(Serializable):
         self.display_network()
 
         # learn the conditional probabilities
+        log.debug("[Privbayes] Compute noisy cond")
         cpds = self._compute_noisy_conditional_distributions(data)
 
         # create the network
+        log.debug("[Privbayes] Create net")
         self.network = BayesianNetwork()
 
         for child, parents in self.dag:
@@ -135,8 +138,10 @@ class PrivBayes(Serializable):
 
     @validate_arguments(config=dict(arbitrary_types_allowed=True))
     def sample(self, count: int) -> pd.DataFrame:
-        samples = self.model.forward_sample(size=count, show_progress=False)
+        log.debug(f"[PrivBayes] sample {count} examples")
+        samples = self.model.forward_sample(size=count, show_progress=True)
 
+        log.debug(f"[PrivBayes] decode {count} examples")
         return self._decode(samples)
 
     def _encode(self, data: pd.DataFrame) -> Any:
@@ -208,6 +213,7 @@ class PrivBayes(Serializable):
             if len(nodes_remaining) == 0:
                 break
 
+            log.debug(f"Search node idx {i}")
             parents_pair_list = []
             mutual_info_list = []
 
