@@ -23,6 +23,11 @@ from synthcity.utils.serialization import load_from_file, save_to_file
 
 
 def print_score(mean: pd.Series, std: pd.Series) -> pd.Series:
+    pd.options.mode.chained_assignment = None
+
+    mean.loc[(mean < 1e-3) & (mean != 0)] = 1e-3
+    std.loc[(std < 1e-3) & (std != 0)] = 1e-3
+
     mean = mean.round(3).astype(str)
     std = std.round(3).astype(str)
 
@@ -75,6 +80,7 @@ class Benchmarks:
         out = {}
 
         experiment_name = X.hash()
+
         workspace.mkdir(parents=True, exist_ok=True)
 
         plugin_cats = ["generic"]
