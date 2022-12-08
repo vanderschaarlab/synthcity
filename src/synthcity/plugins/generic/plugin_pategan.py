@@ -131,7 +131,7 @@ class Teachers(Serializable):
         n0 = np.sum(y_hat == 0, axis=0)  # (batch_size, )
         n1 = np.sum(y_hat == 1, axis=0)  # (batch_size, )
 
-        lap_noise = np.random.laplace(loc=0.0, scale=self.lamda, size=n0.shape)
+        lap_noise = np.random.laplace(loc=0.0, scale=1 / self.lamda, size=n0.shape)
 
         out = (n1 + lap_noise) / (n0 + n1 + 1e-8)  # (batch_size, )
         out = (out > 0.5).astype(int)
@@ -168,7 +168,7 @@ class PATEGAN(Serializable):
         teacher_template: str = "linear",
         epsilon: float = 1.0,
         delta: Optional[float] = None,
-        lamda: float = 1e-4,
+        lamda: float = 1e-3,
         alpha: int = 100,
         encoder: Any = None,
     ) -> None:
@@ -255,7 +255,7 @@ class PATEGAN(Serializable):
             it += 1
 
             log.debug(
-                f"[pategan it {it}] 1. Train teacher models n_teachers = {self.n_teachers} samples_per_teacher = {self.samples_per_teacher}"
+                f"[pategan it {it}] 1. Train teacher models epsilon_hat = {epsilon_hat}. n_teachers = {self.n_teachers} samples_per_teacher = {self.samples_per_teacher}"
             )
 
             # 1. Train teacher models
