@@ -30,14 +30,20 @@ def _safe_evaluate(
     start = time.time()
     log.debug(f" >> Evaluating metric {evaluator.fqdn()}")
     failed = False
+    err = None
     try:
         result = evaluator.evaluate(*args, **kwargs)
-    except BaseException:
+    except BaseException as e:
+        err = str(e)
         result = {}
         failed = True
 
     duration = float(time.time() - start)
     log.debug(f" >> Evaluating metric {evaluator.fqdn()} done. Duration: {duration} s")
+
+    if err is not None:
+        log.error(f" >> Rvaluator {evaluator.fqdn()} failed: {err}")
+
     return evaluator.fqdn(), result, failed, duration, evaluator.direction()
 
 
