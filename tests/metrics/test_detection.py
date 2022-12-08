@@ -10,6 +10,7 @@ from sklearn.datasets import load_iris
 # synthcity absolute
 from synthcity.metrics.eval_detection import (
     SyntheticDetectionGMM,
+    SyntheticDetectionLinear,
     SyntheticDetectionMLP,
     SyntheticDetectionXGB,
 )
@@ -58,6 +59,7 @@ def test_detect_reduction(reduction: str, evaluator_t: Type) -> None:
         SyntheticDetectionXGB,
         SyntheticDetectionGMM,
         SyntheticDetectionMLP,
+        SyntheticDetectionLinear,
     ],
 )
 def test_detect_synth_generic(test_plugin: Plugin, evaluator_t: Type) -> None:

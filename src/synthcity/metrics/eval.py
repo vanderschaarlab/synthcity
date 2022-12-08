@@ -16,6 +16,7 @@ from synthcity.plugins.core.dataloader import (
 # synthcity relative
 from .eval_detection import (
     SyntheticDetectionGMM,
+    SyntheticDetectionLinear,
     SyntheticDetectionMLP,
     SyntheticDetectionXGB,
 )
@@ -80,6 +81,7 @@ standard_metrics = [
     SyntheticDetectionXGB,
     SyntheticDetectionMLP,
     SyntheticDetectionGMM,
+    SyntheticDetectionLinear,
     # privacy tests
     DeltaPresence,
     kAnonymization,
