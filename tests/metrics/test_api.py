@@ -67,6 +67,8 @@ def test_metric_filter(metric_filter: dict) -> None:
 
     X, y = load_iris(return_X_y=True, as_frame=True)
     X["target"] = y
+    X["target"] = X["target"].astype(str)
+
     Xraw = GenericDataLoader(X, target_column="target")
 
     model.fit(Xraw)
@@ -114,6 +116,8 @@ def test_custom_label(target: str) -> None:
 
     X, y = load_iris(return_X_y=True, as_frame=True)
     X["target"] = y
+    X["target"] = X["target"].astype(str)
+
     Xraw = GenericDataLoader(X, target_column="target")
 
     model.fit(Xraw)

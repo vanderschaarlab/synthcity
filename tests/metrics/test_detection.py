@@ -65,6 +65,7 @@ def test_detect_reduction(reduction: str, evaluator_t: Type) -> None:
 def test_detect_synth_generic(test_plugin: Plugin, evaluator_t: Type) -> None:
     X, y = load_iris(return_X_y=True, as_frame=True)
     X["target"] = y
+
     Xloader = GenericDataLoader(X)
 
     test_plugin.fit(Xloader)

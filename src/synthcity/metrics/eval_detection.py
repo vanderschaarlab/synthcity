@@ -216,7 +216,7 @@ class SyntheticDetectionGMM(DetectionEvaluator):
         X_syn: DataLoader,
     ) -> Dict:
         model_args = {
-            "n_components": 500,
+            "n_components": min(100, len(X_gt)),
             "random_state": self._random_state,
         }
         return self._evaluate_detection(
