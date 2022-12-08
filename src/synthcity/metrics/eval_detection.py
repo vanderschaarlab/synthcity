@@ -11,6 +11,7 @@ from sklearn.model_selection import StratifiedKFold
 from xgboost import XGBClassifier
 
 # synthcity absolute
+import synthcity.logger as log
 from synthcity.metrics.core import MetricEvaluator
 from synthcity.plugins.core.dataloader import DataLoader
 from synthcity.plugins.core.models.mlp import MLP
@@ -55,7 +56,9 @@ class DetectionEvaluator(MetricEvaluator):
             / f"sc_metric_cache_{self.type()}_{self.name()}_{X_gt.hash()}_{X_syn.hash()}_{self._reduction}.bkp"
         )
         if self.use_cache(cache_file):
-            return load_from_file(cache_file)
+            results = load_from_file(cache_file)
+            log.info(f" Detection eval for {self.name()} : {results}")
+            return results
 
         arr_gt = X_gt.numpy()
         labels_gt = np.asarray([0] * len(X_gt))
@@ -87,6 +90,7 @@ class DetectionEvaluator(MetricEvaluator):
             res.append(score)
 
         results = {self._reduction: float(self.reduction()(res))}
+        log.info(f" Detection eval for {self.name()} : {results}")
 
         save_to_file(cache_file, results)
 
@@ -212,7 +216,7 @@ class SyntheticDetectionGMM(DetectionEvaluator):
         X_syn: DataLoader,
     ) -> Dict:
         model_args = {
-            "n_components": 10,
+            "n_components": min(100, len(X_gt)),
             "random_state": self._random_state,
         }
         return self._evaluate_detection(

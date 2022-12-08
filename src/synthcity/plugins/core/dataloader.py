@@ -8,6 +8,7 @@ import numpy as np
 import pandas as pd
 from pydantic import validate_arguments
 from sklearn.model_selection import train_test_split
+from sklearn.preprocessing import LabelEncoder
 
 # synthcity absolute
 from synthcity.plugins.core.constraints import Constraints
@@ -195,6 +196,30 @@ class DataLoader(metaclass=ABCMeta):
         decompressed = decompress_dataset(self.data, context)
 
         return self.decorate(decompressed)
+
+    def encode(
+        self,
+        encoders: Optional[Dict[str, Any]] = None,
+    ) -> Tuple["DataLoader", Dict]:
+        encoded = self.data.copy()
+        if encoders is not None:
+            for col in encoders:
+                if col not in encoded.columns:
+                    continue
+                encoded[col] = encoders[col].transform(encoded[col])
+        else:
+            encoders = {}
+
+        for col in encoded.columns:
+            if len(encoded[col].unique()) < 15 or encoded[col].dtype.name in [
+                "object",
+                "category",
+            ]:
+                encoder = LabelEncoder().fit(encoded[col])
+                encoded[col] = encoder.transform(encoded[col])
+                encoders[col] = encoder
+
+        return self.decorate(encoded), encoders
 
 
 class GenericDataLoader(DataLoader):
