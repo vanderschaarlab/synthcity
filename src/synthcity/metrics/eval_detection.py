@@ -4,12 +4,14 @@ from typing import Any, Dict
 # third party
 import numpy as np
 from pydantic import validate_arguments
+from sklearn.linear_model import LogisticRegression
 from sklearn.metrics import roc_auc_score
 from sklearn.mixture import GaussianMixture
 from sklearn.model_selection import StratifiedKFold
 from xgboost import XGBClassifier
 
 # synthcity absolute
+import synthcity.logger as log
 from synthcity.metrics.core import MetricEvaluator
 from synthcity.plugins.core.dataloader import DataLoader
 from synthcity.plugins.core.models.mlp import MLP
@@ -54,7 +56,9 @@ class DetectionEvaluator(MetricEvaluator):
             / f"sc_metric_cache_{self.type()}_{self.name()}_{X_gt.hash()}_{X_syn.hash()}_{self._reduction}.bkp"
         )
         if self.use_cache(cache_file):
-            return load_from_file(cache_file)
+            results = load_from_file(cache_file)
+            log.info(f" Detection eval for {self.name()} : {results}")
+            return results
 
         arr_gt = X_gt.numpy()
         labels_gt = np.asarray([0] * len(X_gt))
@@ -86,6 +90,7 @@ class DetectionEvaluator(MetricEvaluator):
             res.append(score)
 
         results = {self._reduction: float(self.reduction()(res))}
+        log.info(f" Detection eval for {self.name()} : {results}")
 
         save_to_file(cache_file, results)
 
@@ -159,6 +164,36 @@ class SyntheticDetectionMLP(DetectionEvaluator):
         )
 
 
+class SyntheticDetectionLinear(DetectionEvaluator):
+    """Train a LogisticRegression classifier to detect the synthetic data.
+
+    Returns:
+        The average AUCROC score for detecting synthetic data.
+
+    Score:
+        0: The datasets are indistinguishable.
+        1: The datasets are totally distinguishable.
+    """
+
+    @staticmethod
+    def name() -> str:
+        return "detection_linear"
+
+    @validate_arguments(config=dict(arbitrary_types_allowed=True))
+    def evaluate(self, X_gt: DataLoader, X_syn: DataLoader) -> Dict:
+        model_args = {
+            "random_state": self._random_state,
+            "n_jobs": -1,
+            "max_iter": 10000,
+        }
+        return self._evaluate_detection(
+            LogisticRegression,
+            X_gt,
+            X_syn,
+            **model_args,
+        )
+
+
 class SyntheticDetectionGMM(DetectionEvaluator):
     """Train a GaussianMixture model to detect synthetic data.
 
@@ -180,29 +215,13 @@ class SyntheticDetectionGMM(DetectionEvaluator):
         X_gt: DataLoader,
         X_syn: DataLoader,
     ) -> Dict:
-        cache_file = (
-            self._workspace
-            / f"sc_metric_cache_{self.type()}_{self.name()}_{X_gt.hash()}_{X_syn.hash()}_{self._reduction}.bkp"
+        model_args = {
+            "n_components": min(100, len(X_gt)),
+            "random_state": self._random_state,
+        }
+        return self._evaluate_detection(
+            GaussianMixture,
+            X_gt,
+            X_syn,
+            **model_args,
         )
-        if self.use_cache(cache_file):
-            return load_from_file(cache_file)
-
-        scores = []
-
-        for component in [1, 5, 10]:
-            gmm = GaussianMixture(n_components=component, covariance_type="diag")
-            gmm.fit(X_gt.dataframe())
-
-            scores.append(gmm.score(X_syn.dataframe()))  # Higher is better
-
-        scores_np = np.asarray(scores)
-        scores_np = (scores_np - np.min(scores_np)) / (
-            np.max(scores_np) - np.min(scores_np)
-        )  # transform scores to [0, 1]
-        scores_np = 1 - scores_np  # invert scores - lower is better
-
-        results = {self._reduction: self.reduction()(scores_np)}
-
-        save_to_file(cache_file, results)
-
-        return results
