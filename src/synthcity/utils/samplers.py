@@ -7,6 +7,7 @@ import pandas as pd
 import torch
 import torch.utils.data
 from pydantic import validate_arguments
+from sklearn.model_selection import train_test_split
 
 # synthcity absolute
 from synthcity.plugins.core.models.tabular_encoder import ColumnTransformInfo
@@ -16,7 +17,7 @@ from synthcity.utils.constants import DEVICE
 class BaseSampler(torch.utils.data.sampler.Sampler):
     """DataSampler samples the conditional vector and corresponding data."""
 
-    def get_train_conditionals(self) -> np.ndarray:
+    def get_dataset_conditionals(self) -> np.ndarray:
         return None
 
     @validate_arguments(config=dict(arbitrary_types_allowed=True))
@@ -27,22 +28,32 @@ class BaseSampler(torch.utils.data.sampler.Sampler):
         """Return the total number of categories."""
         return 0
 
+    def train_test(self) -> Tuple:
+        raise NotImplementedError()
+
 
 class ImbalancedDatasetSampler(BaseSampler):
     """Samples elements randomly from a given list of indices for imbalanced dataset"""
 
     @validate_arguments(config=dict(arbitrary_types_allowed=True))
-    def __init__(self, labels: List) -> None:
+    def __init__(self, labels: List, train_size: float = 0.8) -> None:
         # if indices is not provided, all elements in the dataset will be considered
-        self.indices = list(range(len(labels)))
+        indices = list(range(len(labels)))
+        self.train_idx, self.test_idx = train_test_split(indices, train_size=train_size)
+        self.train_mapping = {
+            old_idx: new_idx for new_idx, old_idx in enumerate(self.train_idx)
+        }
 
         # if num_samples is not provided, draw `len(indices)` samples in each iteration
-        self.num_samples = len(self.indices)
+        self.num_train_samples = len(self.train_idx)
 
         # distribution of classes in the dataset
         df = pd.DataFrame()
         df["label"] = labels
-        df.index = self.indices
+        df.index = indices
+
+        df = df.loc[self.train_idx]
+
         df = df.sort_index()
 
         label_to_count = df["label"].value_counts()
@@ -53,12 +64,17 @@ class ImbalancedDatasetSampler(BaseSampler):
 
     def __iter__(self) -> Generator:
         return (
-            self.indices[i]
-            for i in torch.multinomial(self.weights, self.num_samples, replacement=True)
+            self.train_mapping[self.train_idx[i]]
+            for i in torch.multinomial(
+                self.weights, self.num_train_samples, replacement=True
+            )
         )
 
     def __len__(self) -> int:
-        return self.num_samples
+        return len(self.train_idx)
+
+    def train_test(self) -> Tuple:
+        return self.train_idx, self.test_idx
 
 
 class ConditionalDatasetSampler(BaseSampler):
@@ -71,22 +87,30 @@ class ConditionalDatasetSampler(BaseSampler):
         output_info: List[ColumnTransformInfo],
         log_frequency: bool = True,
         device: Any = DEVICE,
+        train_size: float = 0.8,
     ) -> None:
         self._device = device
-        self._indices = list(range(len(data)))
-        self._num_samples = len(data)
+
+        indices = np.arange(0, len(data))
+        self._train_idx, self._test_idx = train_test_split(
+            indices, train_size=train_size
+        )
+        self._train_mapping = {
+            old_idx: new_idx for new_idx, old_idx in enumerate(self._train_idx)
+        }
+        self._num_items = len(indices)
 
         self._internal_setup(data, output_info, log_frequency=log_frequency)
 
-        self._prepare_train_conditionals()
+        self._prepare_dataset_conditionals()
 
     def _random_choice_prob_index(self, discrete_column_id: int) -> np.ndarray:
         probs = self._discrete_feat_value_prob[discrete_column_id]
         r = np.expand_dims(np.random.rand(probs.shape[0]), axis=1)
         return (probs.cumsum(axis=1) > r).argmax(axis=1)
 
-    def get_train_conditionals(self) -> np.ndarray:
-        return self._train_conditional
+    def get_dataset_conditionals(self) -> np.ndarray:
+        return self._dataset_conditional
 
     @validate_arguments(config=dict(arbitrary_types_allowed=True))
     def sample_conditional(self, batch: int, with_ids: bool = False) -> Any:
@@ -143,13 +167,13 @@ class ConditionalDatasetSampler(BaseSampler):
         return self._n_conditional_dimension
 
     def __iter__(self) -> Generator:
-        np.random.shuffle(self._indices)
+        np.random.shuffle(self._train_idx)
 
-        for idx in self._indices:
-            yield idx
+        for idx in self._train_idx:
+            yield self._train_mapping[idx]
 
     def __len__(self) -> int:
-        return self._num_samples
+        return len(self._train_idx)
 
     def _internal_setup(
         self,
@@ -229,16 +253,25 @@ class ConditionalDatasetSampler(BaseSampler):
             st += column_info.output_dimensions
         assert st == data.shape[1]
 
-    def _prepare_train_conditionals(self) -> None:
-        self._train_conditional = None
-        self._train_mask = None
+    def _prepare_dataset_conditionals(self) -> None:
+        self._dataset_conditional = None
         if self._n_discrete_columns == 0:
             return
 
         (
-            self._train_conditional,
+            self._dataset_conditional,
             categoricals,
             categoricals_vals,
-        ) = self.sample_conditional(self._num_samples, with_ids=True)
+        ) = self.sample_conditional(self._num_items, with_ids=True)
 
-        self._indices = self.sample_conditional_indices(categoricals, categoricals_vals)
+        sampling_indices = self.sample_conditional_indices(
+            categoricals, categoricals_vals
+        )
+
+        self._train_idx = [idx for idx in sampling_indices if idx in self._train_idx]
+        self._train_mapping = {
+            old_idx: new_idx for new_idx, old_idx in enumerate(self._train_idx)
+        }
+
+    def train_test(self) -> Tuple:
+        return self._train_idx, self._test_idx

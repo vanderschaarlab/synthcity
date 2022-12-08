@@ -95,3 +95,23 @@ def test_vae_classification(loss_strategy: str) -> None:
 
     assert (X.columns == generated.columns).all()
     assert generated.shape == (10, X.shape[1])
+
+
+@pytest.mark.parametrize("loss_strategy", ["standard", "robust_divergence"])
+def test_vae_classification_early_stopping(loss_strategy: str) -> None:
+    X = get_airfoil_dataset()
+
+    model = TabularVAE(
+        X,
+        n_units_embedding=50,
+        n_iter=100,
+        encoder_max_clusters=5,
+        loss_strategy=loss_strategy,
+        patience=1,
+    )
+    model.fit(X)
+
+    generated = model.generate(10)
+
+    assert (X.columns == generated.columns).all()
+    assert generated.shape == (10, X.shape[1])

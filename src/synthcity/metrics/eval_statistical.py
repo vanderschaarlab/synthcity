@@ -52,6 +52,14 @@ class StatisticalEvaluator(MetricEvaluator):
         save_to_file(cache_file, results)
         return results
 
+    @validate_arguments(config=dict(arbitrary_types_allowed=True))
+    def evaluate_default(
+        self,
+        X_gt: DataLoader,
+        X_syn: DataLoader,
+    ) -> float:
+        return self.evaluate(X_gt, X_syn)[self._default_metric]
+
 
 class InverseKLDivergence(StatisticalEvaluator):
     """Returns the average inverse of the Kullback–Leibler Divergence metric.
@@ -62,7 +70,7 @@ class InverseKLDivergence(StatisticalEvaluator):
     """
 
     def __init__(self, **kwargs: Any) -> None:
-        super().__init__(**kwargs)
+        super().__init__(default_metric="marginal", **kwargs)
 
     @staticmethod
     def name() -> str:
@@ -94,7 +102,7 @@ class KolmogorovSmirnovTest(StatisticalEvaluator):
     """
 
     def __init__(self, **kwargs: Any) -> None:
-        super().__init__(**kwargs)
+        super().__init__(default_metric="marginal", **kwargs)
 
     @staticmethod
     def name() -> str:
@@ -126,7 +134,7 @@ class ChiSquaredTest(StatisticalEvaluator):
     """
 
     def __init__(self, **kwargs: Any) -> None:
-        super().__init__(**kwargs)
+        super().__init__(default_metric="marginal", **kwargs)
 
     @staticmethod
     def name() -> str:
@@ -168,7 +176,7 @@ class MaximumMeanDiscrepancy(StatisticalEvaluator):
 
     @validate_arguments(config=dict(arbitrary_types_allowed=True))
     def __init__(self, kernel: str = "rbf", **kwargs: Any) -> None:
-        super().__init__(**kwargs)
+        super().__init__(default_metric="joint", **kwargs)
 
         self.kernel = kernel
 
@@ -231,7 +239,7 @@ class InverseCDFDistance(StatisticalEvaluator):
 
     @validate_arguments(config=dict(arbitrary_types_allowed=True))
     def __init__(self, p: int = 2, **kwargs: Any) -> None:
-        super().__init__(**kwargs)
+        super().__init__(default_metric="marginal", **kwargs)
 
         self.p = p
 
@@ -273,7 +281,7 @@ class JensenShannonDistance(StatisticalEvaluator):
 
     @validate_arguments(config=dict(arbitrary_types_allowed=True))
     def __init__(self, normalize: bool = True, **kwargs: Any) -> None:
-        super().__init__(**kwargs)
+        super().__init__(default_metric="marginal", **kwargs)
 
         self.normalize = normalize
 
@@ -334,7 +342,7 @@ class FeatureCorrelation(StatisticalEvaluator):
     def __init__(
         self, nom_nom_assoc: str = "theil", nominal_columns: str = "auto", **kwargs: Any
     ) -> None:
-        super().__init__(**kwargs)
+        super().__init__(default_metric="joint", **kwargs)
 
         self.nom_nom_assoc = nom_nom_assoc
         self.nominal_columns = nominal_columns
@@ -393,7 +401,7 @@ class WassersteinDistance(StatisticalEvaluator):
     """
 
     def __init__(self, **kwargs: Any) -> None:
-        super().__init__(**kwargs)
+        super().__init__(default_metric="joint", **kwargs)
 
     @staticmethod
     def name() -> str:
@@ -425,7 +433,7 @@ class WassersteinDistance(StatisticalEvaluator):
         Xsyn_ten = torch.from_numpy(X_syn_)
         OT_solver = SamplesLoss(loss="sinkhorn")
 
-        return {"joint": OT_solver(X_ten, Xsyn_ten).cpu().numpy()}
+        return {"joint": OT_solver(X_ten, Xsyn_ten).cpu().numpy().item()}
 
 
 class PRDCScore(StatisticalEvaluator):
@@ -437,7 +445,7 @@ class PRDCScore(StatisticalEvaluator):
     """
 
     def __init__(self, nearest_k: int = 5, **kwargs: Any) -> None:
-        super().__init__(**kwargs)
+        super().__init__(default_metric="precision", **kwargs)
 
         self.nearest_k = nearest_k
 
@@ -577,7 +585,7 @@ class AlphaPrecision(StatisticalEvaluator):
     """
 
     def __init__(self, **kwargs: Any) -> None:
-        super().__init__(**kwargs)
+        super().__init__(default_metric="authenticity_OC", **kwargs)
 
     @staticmethod
     def name() -> str:
@@ -710,7 +718,7 @@ class AlphaPrecision(StatisticalEvaluator):
 
 class SurvivalKMDistance(StatisticalEvaluator):
     def __init__(self, **kwargs: Any) -> None:
-        super().__init__(**kwargs)
+        super().__init__(default_metric="optimism", **kwargs)
 
     @staticmethod
     def name() -> str:

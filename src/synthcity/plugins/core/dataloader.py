@@ -255,6 +255,7 @@ class GenericDataLoader(DataLoader):
             important_features=important_features,
             outcome_features=[self.target_column],
             random_state=random_state,
+            train_size=train_size,
             **kwargs,
         )
 
@@ -302,6 +303,7 @@ class GenericDataLoader(DataLoader):
             "outcome_features": self.outcome_features,
             "target_column": self.target_column,
             "domain_column": self.domain_column,
+            "train_size": self.train_size,
         }
 
     def __len__(self) -> int:
@@ -340,6 +342,7 @@ class GenericDataLoader(DataLoader):
             important_features=info["important_features"],
             target_column=info["target_column"],
             domain_column=info["domain_column"],
+            train_size=info["train_size"],
         )
 
     def __getitem__(self, feature: Union[str, list]) -> Any:
@@ -417,6 +420,7 @@ class SurvivalAnalysisDataLoader(DataLoader):
             important_features=important_features,
             outcome_features=[self.target_column],
             random_state=random_state,
+            train_size=train_size,
             **kwargs,
         )
 
@@ -464,6 +468,7 @@ class SurvivalAnalysisDataLoader(DataLoader):
             "target_column": self.target_column,
             "time_to_event_column": self.time_to_event_column,
             "time_horizons": self.time_horizons,
+            "train_size": self.train_size,
         }
 
     def __len__(self) -> int:
@@ -618,6 +623,7 @@ class TimeSeriesDataLoader(DataLoader):
             sensitive_features=sensitive_features,
             important_features=important_features,
             random_state=random_state,
+            train_size=train_size,
             **kwargs,
         )
 

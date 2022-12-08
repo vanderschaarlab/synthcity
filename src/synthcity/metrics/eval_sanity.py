@@ -29,6 +29,14 @@ class BasicMetricEvaluator(MetricEvaluator):
     def type() -> str:
         return "sanity"
 
+    @validate_arguments(config=dict(arbitrary_types_allowed=True))
+    def evaluate_default(
+        self,
+        X_gt: DataLoader,
+        X_syn: DataLoader,
+    ) -> float:
+        return self.evaluate(X_gt, X_syn)[self._default_metric]
+
 
 class DataMismatchScore(BasicMetricEvaluator):
     """Basic sanity score. Compares the data types between the column of the ground truth and the synthetic data.
@@ -37,6 +45,9 @@ class DataMismatchScore(BasicMetricEvaluator):
         0: no datatype mismatch.
         1: complete data type mismatch between the datasets.
     """
+
+    def __init__(self, **kwargs: Any) -> None:
+        super().__init__(default_metric="score", **kwargs)
 
     @staticmethod
     def name() -> str:
@@ -68,6 +79,9 @@ class CommonRowsProportion(BasicMetricEvaluator):
         0: there are no common rows between the real and synthetic datasets.
         1: all the rows in the real dataset are leaked in the synthetic dataset.
     """
+
+    def __init__(self, **kwargs: Any) -> None:
+        super().__init__(default_metric="score", **kwargs)
 
     @staticmethod
     def name() -> str:
@@ -120,6 +134,9 @@ class CloseValuesProbability(BasicMetricEvaluator):
         1 means that all the synthetic rows are similar to some real rows.
     """
 
+    def __init__(self, **kwargs: Any) -> None:
+        super().__init__(default_metric="score", **kwargs)
+
     @staticmethod
     def name() -> str:
         return "close_values_probability"
@@ -148,6 +165,9 @@ class DistantValuesProbability(BasicMetricEvaluator):
         0 means there is no chance to have rows in the synthetic far away from the real data.
         1 means all the synthetic datapoints are far away from the real data.
     """
+
+    def __init__(self, **kwargs: Any) -> None:
+        super().__init__(default_metric="score", **kwargs)
 
     @staticmethod
     def name() -> str:

@@ -46,6 +46,10 @@ def test_detect_reduction(reduction: str, evaluator_t: Type) -> None:
 
     assert reduction in score
 
+    def_score = evaluator.evaluate_default(Xloader, X_gen)
+
+    assert def_score == score[reduction]
+
 
 @pytest.mark.parametrize("test_plugin", [Plugins().get("marginal_distributions")])
 @pytest.mark.parametrize(

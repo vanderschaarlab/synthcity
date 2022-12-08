@@ -19,7 +19,7 @@ from synthcity.plugins.core.distribution import (
     FloatDistribution,
     IntegerDistribution,
 )
-from synthcity.plugins.core.models import TabularVAE
+from synthcity.plugins.core.models.tabular_vae import TabularVAE
 from synthcity.plugins.core.plugin import Plugin
 from synthcity.plugins.core.schema import Schema
 
@@ -56,6 +56,13 @@ class TVAEPlugin(Plugin):
             random_state used
         encoder_max_clusters: int
             The max number of clusters to create for continuous columns when encoding
+        # early stopping
+        n_iter_print: int
+            Number of iterations after which to print updates and check the validation loss.
+        n_iter_min: int
+            Minimum number of iterations to go through before starting early stopping
+        patience: int
+            Max number of iterations without any improvement before early stopping is trigged.
 
     Example:
         >>> from synthcity.plugins import Plugins
@@ -88,6 +95,9 @@ class TVAEPlugin(Plugin):
         data_encoder_max_clusters: int = 10,
         dataloader_sampler: Optional[sampler.Sampler] = None,
         clipping_value: int = 1,
+        n_iter_print: int = 50,
+        n_iter_min: int = 100,
+        patience: int = 5,
         **kwargs: Any
     ) -> None:
         super().__init__(**kwargs)
@@ -110,6 +120,10 @@ class TVAEPlugin(Plugin):
         self.dataloader_sampler = dataloader_sampler
         self.loss_factor = loss_factor
         self.clipping_value = clipping_value
+
+        self.n_iter_print = n_iter_print
+        self.n_iter_min = n_iter_min
+        self.patience = patience
 
     @staticmethod
     def name() -> str:
@@ -172,6 +186,9 @@ class TVAEPlugin(Plugin):
             dataloader_sampler=self.dataloader_sampler,
             loss_factor=self.loss_factor,
             clipping_value=self.clipping_value,
+            n_iter_min=self.n_iter_min,
+            n_iter_print=self.n_iter_print,
+            patience=self.patience,
         )
         self.model.fit(X.dataframe(), **kwargs)
 
