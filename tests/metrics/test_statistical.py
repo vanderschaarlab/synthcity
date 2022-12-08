@@ -34,7 +34,10 @@ from synthcity.plugins.core.dataloader import (
 def _eval_plugin(
     evaluator_t: Type, X: DataLoader, X_syn: DataLoader, **kwargs: Any
 ) -> Tuple:
-    evaluator = evaluator_t(**kwargs)
+    evaluator = evaluator_t(
+        **kwargs,
+        use_cache=False,
+    )
 
     syn_score = evaluator.evaluate(X, X_syn)
 

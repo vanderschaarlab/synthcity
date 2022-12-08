@@ -53,7 +53,7 @@ class DetectionEvaluator(MetricEvaluator):
             self._workspace
             / f"sc_metric_cache_{self.type()}_{self.name()}_{X_gt.hash()}_{X_syn.hash()}_{self._reduction}.bkp"
         )
-        if cache_file.exists() and self._use_cache:
+        if self.use_cache(cache_file):
             return load_from_file(cache_file)
 
         arr_gt = X_gt.numpy()
@@ -180,6 +180,13 @@ class SyntheticDetectionGMM(DetectionEvaluator):
         X_gt: DataLoader,
         X_syn: DataLoader,
     ) -> Dict:
+        cache_file = (
+            self._workspace
+            / f"sc_metric_cache_{self.type()}_{self.name()}_{X_gt.hash()}_{X_syn.hash()}_{self._reduction}.bkp"
+        )
+        if self.use_cache(cache_file):
+            return load_from_file(cache_file)
+
         scores = []
 
         for component in [1, 5, 10]:
@@ -194,4 +201,8 @@ class SyntheticDetectionGMM(DetectionEvaluator):
         )  # transform scores to [0, 1]
         scores_np = 1 - scores_np  # invert scores - lower is better
 
-        return {self._reduction: self.reduction()(scores_np)}
+        results = {self._reduction: self.reduction()(scores_np)}
+
+        save_to_file(cache_file, results)
+
+        return results

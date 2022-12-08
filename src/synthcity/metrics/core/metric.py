@@ -128,3 +128,6 @@ class MetricEvaluator(metaclass=ABCMeta):
     def _oneclass_predict(self, model: OneClassLayer, X: np.ndarray) -> np.ndarray:
         with torch.no_grad():
             return model(torch.from_numpy(X).float().to(DEVICE)).cpu().detach().numpy()
+
+    def use_cache(self, path: Path) -> bool:
+        return path.exists() and self._use_cache

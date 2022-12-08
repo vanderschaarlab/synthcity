@@ -4,6 +4,7 @@ from typing import Any, List
 # third party
 import numpy as np
 import pandas as pd
+import shap
 from pydantic import validate_arguments
 from xgbse import XGBSEDebiasedBCE, XGBSEKaplanNeighbors, XGBSEStackedWeibull
 from xgbse.converters import convert_to_structured
@@ -134,6 +135,12 @@ class XGBSurvivalAnalysis(SurvivalAnalysisPlugin):
         return pd.DataFrame(
             np.concatenate(preds_, axis=0), columns=time_horizons, index=X.index
         )
+
+    @validate_arguments(config=dict(arbitrary_types_allowed=True))
+    def explain(self, X: pd.DataFrame) -> np.ndarray:
+        explainer = shap.TreeExplainer(self.model.bst)
+
+        return explainer.shap_values(X)
 
     @staticmethod
     def name() -> str:

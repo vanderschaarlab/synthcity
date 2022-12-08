@@ -38,7 +38,7 @@ class PrivacyEvaluator(MetricEvaluator):
             self._workspace
             / f"sc_metric_cache_{self.type()}_{self.name()}_{X_gt.hash()}_{X_syn.hash()}_{self._reduction}.bkp"
         )
-        if cache_file.exists() and self._use_cache:
+        if self.use_cache(cache_file):
             return load_from_file(cache_file)
 
         results = self._evaluate(X_gt, X_syn)
@@ -55,7 +55,7 @@ class PrivacyEvaluator(MetricEvaluator):
 
 
 class kAnonymization(PrivacyEvaluator):
-    """Returns the k-anon ratio between the real data and the syhnthetic data.
+    """Returns the k-anon ratio between the real data and the synthetic data.
     For each dataset, it is computed the value k which satisfies the k-anonymity rule: each record is similar to at least another k-1 other records on the potentially identifying variables.
     """
 

@@ -46,7 +46,9 @@ def test_evaluate_data_mismatch_score(test_plugin: Plugin) -> None:
     test_plugin.fit(Xloader)
     X_gen = test_plugin.generate(100)
 
-    evaluator = DataMismatchScore()
+    evaluator = DataMismatchScore(
+        use_cache=False,
+    )
 
     score = evaluator.evaluate(
         Xloader,
@@ -88,7 +90,9 @@ def test_common_rows(test_plugin: Plugin) -> None:
     test_plugin.fit(Xloader)
     X_gen = test_plugin.generate(100)
 
-    evaluator = CommonRowsProportion()
+    evaluator = CommonRowsProportion(
+        use_cache=False,
+    )
     syn_score, rnd_score = _eval_plugin(evaluator.evaluate, Xloader, X_gen)
 
     for key in syn_score:
@@ -142,7 +146,9 @@ def test_evaluate_close_values(test_plugin: Plugin) -> None:
     test_plugin.fit(Xloader)
     X_gen = test_plugin.generate(100)
 
-    evaluator = CloseValuesProbability()
+    evaluator = CloseValuesProbability(
+        use_cache=False,
+    )
     syn_score, rnd_score = _eval_plugin(evaluator.evaluate, Xloader, X_gen)
 
     for key in syn_score:

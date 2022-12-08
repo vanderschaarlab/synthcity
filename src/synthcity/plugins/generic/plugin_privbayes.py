@@ -106,6 +106,7 @@ class PrivBayes(Serializable):
         data, self.encoders = self._encode(data)
 
         # learn the DAG
+        log.debug("[Privbayes] Run greedy Bayes")
         self.dag = self._greedy_bayes(data)
         self.ordered_nodes = []
         for attr, _ in self.dag:
@@ -114,9 +115,11 @@ class PrivBayes(Serializable):
         self.display_network()
 
         # learn the conditional probabilities
+        log.debug("[Privbayes] Compute noisy cond")
         cpds = self._compute_noisy_conditional_distributions(data)
 
         # create the network
+        log.debug("[Privbayes] Create net")
         self.network = BayesianNetwork()
 
         for child, parents in self.dag:
@@ -130,12 +133,15 @@ class PrivBayes(Serializable):
         # create the model
         self.model = BayesianModelSampling(self.network)
 
+        log.info("[PrivBayes] done training")
         return self
 
     @validate_arguments(config=dict(arbitrary_types_allowed=True))
     def sample(self, count: int) -> pd.DataFrame:
-        samples = self.model.forward_sample(size=count, show_progress=False)
+        log.debug(f"[PrivBayes] sample {count} examples")
+        samples = self.model.forward_sample(size=count, show_progress=True)
 
+        log.debug(f"[PrivBayes] decode {count} examples")
         return self._decode(samples)
 
     def _encode(self, data: pd.DataFrame) -> Any:
@@ -143,12 +149,22 @@ class PrivBayes(Serializable):
         encoders = {}
 
         for col in data.columns:
-            if len(data[col].unique()) < self.n_bins:
-                encoders[col] = np.sort(data[col].unique())
+            if len(data[col].unique()) < self.n_bins or data[col].dtype.name not in [
+                "object",
+                "category",
+            ]:
+                encoders[col] = {
+                    "type": "categorical",
+                    "model": LabelEncoder().fit(data[col]),
+                }
+                data[col] = encoders[col]["model"].transform(data[col])
             else:
                 col_data = pd.cut(data[col], bins=self.n_bins)
-                encoders[col] = LabelEncoder().fit(col_data)
-                data[col] = encoders[col].transform(col_data)
+                encoders[col] = {
+                    "type": "continuous",
+                    "model": LabelEncoder().fit(col_data),
+                }
+                data[col] = encoders[col]["model"].transform(col_data)
 
         return data, encoders
 
@@ -156,16 +172,15 @@ class PrivBayes(Serializable):
         for col in data.columns:
             if col not in self.encoders:
                 continue
-            if isinstance(self.encoders[col], LabelEncoder):
-                inversed = self.encoders[col].inverse_transform(data[col])
+            inversed = self.encoders[col]["model"].inverse_transform(data[col])
+            if self.encoders[col]["type"] == "categorical":
+                data[col] = inversed
+            elif self.encoders[col]["type"] == "continuous":
                 output = []
                 for interval in inversed:
                     output.append(np.random.uniform(interval.left, interval.right))
 
                 data[col] = output
-            elif isinstance(self.encoders[col], np.ndarray):
-                assert data[col].max() < len(self.encoders[col])
-                data[col] = self.encoders[col][data[col]]
             else:
                 raise RuntimeError(f"Invalid encoder {self.encoders[col]}")
 
@@ -198,6 +213,7 @@ class PrivBayes(Serializable):
             if len(nodes_remaining) == 0:
                 break
 
+            log.debug(f"Search node idx {i}")
             parents_pair_list = []
             mutual_info_list = []
 

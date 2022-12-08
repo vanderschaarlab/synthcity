@@ -45,7 +45,7 @@ class StatisticalEvaluator(MetricEvaluator):
             self._workspace
             / f"sc_metric_cache_{self.type()}_{self.name()}_{X_gt.hash()}_{X_syn.hash()}_{self._reduction}.bkp"
         )
-        if cache_file.exists() and self._use_cache:
+        if self.use_cache(cache_file):
             return load_from_file(cache_file)
 
         results = self._evaluate(X_gt, X_syn)
@@ -321,7 +321,7 @@ class JensenShannonDistance(StatisticalEvaluator):
 
             stats_[col] = jensenshannon(stats_gt[col], stats_syn[col])
             if np.isnan(stats_[col]):
-                print(col, stats_syn[col])
+                raise RuntimeError("NaNs in prediction")
 
         return stats_, stats_gt, stats_syn
 

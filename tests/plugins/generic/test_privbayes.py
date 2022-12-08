@@ -1,6 +1,7 @@
 # third party
 import pytest
 from generic_helpers import generate_fixtures, get_airfoil_dataset
+from sklearn.datasets import load_iris
 
 # synthcity absolute
 from synthcity.plugins import Plugin
@@ -33,12 +34,14 @@ def test_plugin_hyperparams(test_plugin: Plugin) -> None:
 @pytest.mark.parametrize("test_plugin", generate_fixtures(plugin_name, plugin))
 def test_plugin_fit(test_plugin: Plugin) -> None:
     X = get_airfoil_dataset()
+    X[3] = X[3].astype(str)
+
     test_plugin.fit(GenericDataLoader(X))
 
 
 def test_plugin_generate_privbayes() -> None:
-    X = get_airfoil_dataset()
-    test_plugin = plugin()
+    X, _ = load_iris(as_frame=True, return_X_y=True)
+    test_plugin = plugin(K=2)
     test_plugin.fit(GenericDataLoader(X))
 
     X_gen = test_plugin.generate(50)

@@ -34,7 +34,10 @@ def test_detect_reduction(reduction: str, evaluator_t: Type) -> None:
     test_plugin.fit(Xloader)
     X_gen = test_plugin.generate(100)
 
-    evaluator = evaluator_t(reduction=reduction)
+    evaluator = evaluator_t(
+        reduction=reduction,
+        use_cache=False,
+    )
 
     score = evaluator.evaluate(
         Xloader,
