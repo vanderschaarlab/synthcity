@@ -61,6 +61,8 @@ class CTGANPlugin(Plugin):
             Gradients clipping value. Zero disables the feature
         encoder_max_clusters: int
             The max number of clusters to create for continuous columns when encoding
+        adjust_inference_sampling: bool
+            Adjust the conditional probabilities to the ones in the training set. Active only with the ConditionalSampler
         # early stopping
         n_iter_print: int
             Number of iterations after which to print updates and check the validation loss.
@@ -112,6 +114,7 @@ class CTGANPlugin(Plugin):
         ),
         n_iter_print: int = 50,
         n_iter_min: int = 100,
+        adjust_inference_sampling: bool = False,
         **kwargs: Any
     ) -> None:
         super().__init__(**kwargs)
@@ -145,6 +148,7 @@ class CTGANPlugin(Plugin):
         self.patience_metric = patience_metric
         self.n_iter_min = n_iter_min
         self.n_iter_print = n_iter_print
+        self.adjust_inference_sampling = adjust_inference_sampling
 
     @staticmethod
     def name() -> str:
@@ -226,6 +230,7 @@ class CTGANPlugin(Plugin):
             patience_metric=self.patience_metric,
             n_iter_min=self.n_iter_min,
             n_iter_print=self.n_iter_print,
+            adjust_inference_sampling=self.adjust_inference_sampling,
         )
         self.model.fit(X.dataframe(), cond=cond)
 
