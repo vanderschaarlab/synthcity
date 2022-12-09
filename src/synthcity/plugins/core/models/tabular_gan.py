@@ -158,7 +158,7 @@ class TabularGAN(torch.nn.Module):
         patience_metric: Optional[WeightedMetrics] = None,
         n_iter_print: int = 50,
         n_iter_min: int = 100,
-        adjust_inference_sampling: bool = True,
+        adjust_inference_sampling: bool = False,
         # privacy settings
         dp_enabled: bool = False,
         dp_epsilon: float = 3,
@@ -170,7 +170,7 @@ class TabularGAN(torch.nn.Module):
         self.columns = X.columns
         self.batch_size = batch_size
         self.sample_prob: Optional[np.ndarray] = None
-        self.adjust_inference_sampling = adjust_inference_sampling
+        self._adjust_inference_sampling = adjust_inference_sampling
 
         if encoder is not None:
             self.encoder = encoder
@@ -329,16 +329,23 @@ class TabularGAN(torch.nn.Module):
         )
 
         # post processing
-        if self.predefined_conditional or self.dataloader_sampler is None:
-            return self
+        self.adjust_inference_sampling(self._adjust_inference_sampling)
 
-        if self.adjust_inference_sampling:
+        return self
+
+    def adjust_inference_sampling(self, enabled: bool) -> None:
+        if self.predefined_conditional or self.dataloader_sampler is None:
+            return
+
+        self._adjust_inference_sampling = enabled
+
+        if enabled:
             real_prob = self.dataloader_sampler.conditional_probs()
             sample_prob = self._extract_sample_prob()
 
             self.sample_prob = self._find_sample_p(real_prob, sample_prob)
-
-        return self
+        else:
+            self.sample_prob = None
 
     @validate_arguments(config=dict(arbitrary_types_allowed=True))
     def generate(
