@@ -170,12 +170,16 @@ class TabularGAN(torch.nn.Module):
                 max_clusters=encoder_max_clusters, whitelist=encoder_whitelist
             ).fit(X)
 
-        if dataloader_sampler is None:
+        self.predefined_conditional = n_units_conditional != 0
+
+        if (
+            dataloader_sampler is None and not self.predefined_conditional
+        ):  # don't mix conditionals
             dataloader_sampler = ConditionalDatasetSampler(
                 self.encoder.transform(X),
                 self.encoder.layout(),
             )
-            n_units_conditional += dataloader_sampler.conditional_dimension()
+            n_units_conditional = dataloader_sampler.conditional_dimension()
 
         self.dataloader_sampler = dataloader_sampler
 
@@ -184,7 +188,7 @@ class TabularGAN(torch.nn.Module):
             fake_samples: torch.Tensor,
             cond: Optional[torch.Tensor],
         ) -> torch.Tensor:
-            if cond is None:
+            if cond is None or self.predefined_conditional:
                 return 0
 
             losses = []
@@ -300,9 +304,9 @@ class TabularGAN(torch.nn.Module):
         else:
             X_enc = self.encode(X)
 
-        extra_cond = self.dataloader_sampler.get_dataset_conditionals()
+        if not self.predefined_conditional and self.dataloader_sampler is not None:
+            cond = self.dataloader_sampler.get_dataset_conditionals()
 
-        cond = self._merge_conditionals(cond, extra_cond)
         if cond is not None:
             assert len(cond) == len(X_enc)
 
@@ -326,26 +330,7 @@ class TabularGAN(torch.nn.Module):
     def forward(
         self, count: int, cond: Optional[Union[pd.DataFrame, np.ndarray]] = None
     ) -> torch.Tensor:
-        extra_cond = self.dataloader_sampler.sample_conditional(count)
-        cond = self._merge_conditionals(cond, extra_cond)
+        if not self.predefined_conditional and self.dataloader_sampler is not None:
+            cond = self.dataloader_sampler.sample_conditional(count)
 
         return self.model.generate(count, cond=cond)
-
-    @validate_arguments(config=dict(arbitrary_types_allowed=True))
-    def _merge_conditionals(
-        self,
-        cond: Optional[Union[pd.DataFrame, pd.Series, np.ndarray]],
-        extra_cond: Optional[np.ndarray],
-    ) -> Optional[np.ndarray]:
-        if extra_cond is None and cond is None:
-            return None
-
-        if extra_cond is None:
-            return cond
-
-        if cond is None:
-            cond = extra_cond
-        else:
-            cond = np.concatenate([extra_cond, np.asarray(cond)], axis=1)
-
-        return cond
