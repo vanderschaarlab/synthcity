@@ -6,6 +6,8 @@ import numpy as np
 import pandas as pd
 import torch
 from pydantic import validate_arguments
+from scipy.optimize import minimize
+from scipy.special import logsumexp
 
 # synthcity absolute
 from synthcity.metrics.weighted_metrics import WeightedMetrics
@@ -92,6 +94,8 @@ class TabularGAN(torch.nn.Module):
             Optional sampler for the dataloader, useful for conditional sampling
         device: Any = DEVICE
             CUDA/CPU
+        adjust_inference_sampling: bool
+            Adjust the conditional probabilities to the ones in the training set. Active only with the ConditionalSampler
         # privacy settings
         dp_enabled: bool
             Train the discriminator with Differential Privacy guarantees
@@ -154,6 +158,7 @@ class TabularGAN(torch.nn.Module):
         patience_metric: Optional[WeightedMetrics] = None,
         n_iter_print: int = 50,
         n_iter_min: int = 100,
+        adjust_inference_sampling: bool = False,
         # privacy settings
         dp_enabled: bool = False,
         dp_epsilon: float = 3,
@@ -163,6 +168,10 @@ class TabularGAN(torch.nn.Module):
     ) -> None:
         super(TabularGAN, self).__init__()
         self.columns = X.columns
+        self.batch_size = batch_size
+        self.sample_prob: Optional[np.ndarray] = None
+        self._adjust_inference_sampling = adjust_inference_sampling
+
         if encoder is not None:
             self.encoder = encoder
         else:
@@ -170,12 +179,16 @@ class TabularGAN(torch.nn.Module):
                 max_clusters=encoder_max_clusters, whitelist=encoder_whitelist
             ).fit(X)
 
-        if dataloader_sampler is None:
+        self.predefined_conditional = n_units_conditional != 0
+
+        if (
+            dataloader_sampler is None and not self.predefined_conditional
+        ):  # don't mix conditionals
             dataloader_sampler = ConditionalDatasetSampler(
                 self.encoder.transform(X),
                 self.encoder.layout(),
             )
-            n_units_conditional += dataloader_sampler.conditional_dimension()
+            n_units_conditional = dataloader_sampler.conditional_dimension()
 
         self.dataloader_sampler = dataloader_sampler
 
@@ -184,7 +197,7 @@ class TabularGAN(torch.nn.Module):
             fake_samples: torch.Tensor,
             cond: Optional[torch.Tensor],
         ) -> torch.Tensor:
-            if cond is None:
+            if cond is None or self.predefined_conditional:
                 return 0
 
             losses = []
@@ -295,24 +308,44 @@ class TabularGAN(torch.nn.Module):
         true_labels_generator: Optional[Callable] = None,
         encoded: bool = False,
     ) -> Any:
+        # preprocessing
         if encoded:
             X_enc = X
         else:
             X_enc = self.encode(X)
 
-        extra_cond = self.dataloader_sampler.get_dataset_conditionals()
+        if not self.predefined_conditional and self.dataloader_sampler is not None:
+            cond = self.dataloader_sampler.get_dataset_conditionals()
 
-        cond = self._merge_conditionals(cond, extra_cond)
         if cond is not None:
             assert len(cond) == len(X_enc)
 
+        # training
         self.model.fit(
             np.asarray(X_enc),
             np.asarray(cond),
             fake_labels_generator=fake_labels_generator,
             true_labels_generator=true_labels_generator,
         )
+
+        # post processing
+        self.adjust_inference_sampling(self._adjust_inference_sampling)
+
         return self
+
+    def adjust_inference_sampling(self, enabled: bool) -> None:
+        if self.predefined_conditional or self.dataloader_sampler is None:
+            return
+
+        self._adjust_inference_sampling = enabled
+
+        if enabled:
+            real_prob = self.dataloader_sampler.conditional_probs()
+            sample_prob = self._extract_sample_prob()
+
+            self.sample_prob = self._find_sample_p(real_prob, sample_prob)
+        else:
+            self.sample_prob = None
 
     @validate_arguments(config=dict(arbitrary_types_allowed=True))
     def generate(
@@ -326,26 +359,61 @@ class TabularGAN(torch.nn.Module):
     def forward(
         self, count: int, cond: Optional[Union[pd.DataFrame, np.ndarray]] = None
     ) -> torch.Tensor:
-        extra_cond = self.dataloader_sampler.sample_conditional(count)
-        cond = self._merge_conditionals(cond, extra_cond)
+        if not self.predefined_conditional and self.dataloader_sampler is not None:
+            cond = self.dataloader_sampler.sample_conditional(count, p=self.sample_prob)
 
         return self.model.generate(count, cond=cond)
 
-    @validate_arguments(config=dict(arbitrary_types_allowed=True))
-    def _merge_conditionals(
-        self,
-        cond: Optional[Union[pd.DataFrame, pd.Series, np.ndarray]],
-        extra_cond: Optional[np.ndarray],
-    ) -> Optional[np.ndarray]:
-        if extra_cond is None and cond is None:
+    def _extract_sample_prob(self) -> Optional[np.ndarray]:
+        if self.predefined_conditional or self.dataloader_sampler is None:
             return None
 
-        if extra_cond is None:
-            return cond
+        if self.dataloader_sampler.conditional_dimension() == 0:
+            return None
 
-        if cond is None:
-            cond = extra_cond
-        else:
-            cond = np.concatenate([extra_cond, np.asarray(cond)], axis=1)
+        prob_list = list()
+        batch_size = 10000
 
-        return cond
+        for c in range(self.dataloader_sampler.conditional_dimension()):
+            cond = self.dataloader_sampler.sample_conditional_for_class(batch_size, c)
+            if cond is None:
+                continue
+
+            data_cond = self.model.generate(batch_size, cond=cond)
+
+            syn_dataloader_sampler = ConditionalDatasetSampler(
+                pd.DataFrame(data_cond),
+                self.encoder.layout(),
+            )
+
+            prob = syn_dataloader_sampler.conditional_probs()
+            prob_list.append(prob)
+
+        prob_mat = np.stack(prob_list, axis=-1)
+
+        return prob_mat
+
+    def _find_sample_p(
+        self, prob_real: Optional[np.ndarray], prob_mat: Optional[np.ndarray]
+    ) -> Optional[np.ndarray]:
+        if prob_real is None or prob_mat is None:
+            return None
+
+        def kl(
+            alpha: np.ndarray, prob_real: np.ndarray, prob_mat: np.ndarray
+        ) -> np.ndarray:
+            # alpha: _n_categories
+
+            # f1: same as prob_real
+            alpha_tensor = alpha[None, None, :]
+            f1 = logsumexp(alpha_tensor, axis=-1, b=prob_mat)
+            f2 = logsumexp(alpha)
+            ce = -np.sum(prob_real * f1, axis=1) + f2
+            return np.mean(ce)
+
+        try:
+            res = minimize(kl, np.ones(prob_mat.shape[-1]), (prob_real, prob_mat))
+        except Exception:
+            return np.ones(prob_mat.shape[-1]) / prob_mat.shape[-1]
+
+        return np.exp(res.x) / np.sum(np.exp(res.x))

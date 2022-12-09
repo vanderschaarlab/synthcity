@@ -119,7 +119,10 @@ def test_eval_performance_ctgan(compress_dataset: bool) -> None:
     X = GenericDataLoader(Xraw)
 
     for retry in range(2):
-        test_plugin = plugin(n_iter=5000, compress_dataset=compress_dataset)
+        test_plugin = plugin(
+            n_iter=5000,
+            compress_dataset=compress_dataset,
+        )
         evaluator = PerformanceEvaluatorXGB()
 
         test_plugin.fit(X)
@@ -127,5 +130,5 @@ def test_eval_performance_ctgan(compress_dataset: bool) -> None:
 
         results.append(evaluator.evaluate(X, X_syn)["syn_id"])
 
-    print(plugin.name(), results)
+    print(plugin.name(), compress_dataset, results)
     assert np.mean(results) > 0.7

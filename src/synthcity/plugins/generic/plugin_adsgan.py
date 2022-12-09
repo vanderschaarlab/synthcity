@@ -68,6 +68,8 @@ class AdsGANPlugin(Plugin):
             Gradients clipping value. Zero disables the feature
         encoder_max_clusters: int
             The max number of clusters to create for continuous columns when encoding
+        adjust_inference_sampling: bool
+            Adjust the conditional probabilities to the ones in the training set. Active only with the ConditionalSampler
         # early stopping
         n_iter_print: int
             Number of iterations after which to print updates and check the validation loss.
@@ -115,6 +117,7 @@ class AdsGANPlugin(Plugin):
         encoder: Any = None,
         dataloader_sampler: Optional[sampler.Sampler] = None,
         device: Any = DEVICE,
+        adjust_inference_sampling: bool = False,
         # early stopping
         patience: int = 5,
         patience_metric: Optional[WeightedMetrics] = WeightedMetrics(
@@ -157,6 +160,7 @@ class AdsGANPlugin(Plugin):
         self.patience_metric = patience_metric
         self.n_iter_min = n_iter_min
         self.n_iter_print = n_iter_print
+        self.adjust_inference_sampling = adjust_inference_sampling
 
     @staticmethod
     def name() -> str:
@@ -236,6 +240,7 @@ class AdsGANPlugin(Plugin):
             patience_metric=self.patience_metric,
             n_iter_min=self.n_iter_min,
             n_iter_print=self.n_iter_print,
+            adjust_inference_sampling=self.adjust_inference_sampling,
         )
         self.model.fit(X.dataframe(), cond=cond)
 
