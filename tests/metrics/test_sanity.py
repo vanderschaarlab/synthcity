@@ -46,7 +46,9 @@ def test_evaluate_data_mismatch_score(test_plugin: Plugin) -> None:
     test_plugin.fit(Xloader)
     X_gen = test_plugin.generate(100)
 
-    evaluator = DataMismatchScore()
+    evaluator = DataMismatchScore(
+        use_cache=False,
+    )
 
     score = evaluator.evaluate(
         Xloader,
@@ -72,6 +74,12 @@ def test_evaluate_data_mismatch_score(test_plugin: Plugin) -> None:
     assert evaluator.name() == "data_mismatch"
     assert evaluator.direction() == "minimize"
 
+    def_score = evaluator.evaluate_default(
+        GenericDataLoader(X),
+        GenericDataLoader(X_fail),
+    )
+    assert isinstance(def_score, float)
+
 
 @pytest.mark.parametrize("test_plugin", [Plugins().get("dummy_sampler")])
 def test_common_rows(test_plugin: Plugin) -> None:
@@ -82,7 +90,9 @@ def test_common_rows(test_plugin: Plugin) -> None:
     test_plugin.fit(Xloader)
     X_gen = test_plugin.generate(100)
 
-    evaluator = CommonRowsProportion()
+    evaluator = CommonRowsProportion(
+        use_cache=False,
+    )
     syn_score, rnd_score = _eval_plugin(evaluator.evaluate, Xloader, X_gen)
 
     for key in syn_score:
@@ -93,6 +103,9 @@ def test_common_rows(test_plugin: Plugin) -> None:
     assert evaluator.type() == "sanity"
     assert evaluator.name() == "common_rows_proportion"
     assert evaluator.direction() == "minimize"
+
+    def_score = evaluator.evaluate_default(Xloader, X_gen)
+    assert isinstance(def_score, float)
 
 
 @pytest.mark.parametrize("test_plugin", [Plugins().get("dummy_sampler")])
@@ -120,6 +133,9 @@ def test_evaluate_avg_distance_nearest_synth_neighbor(test_plugin: Plugin) -> No
     assert evaluator.name() == "nearest_syn_neighbor_distance"
     assert evaluator.direction() == "minimize"
 
+    def_score = evaluator.evaluate_default(Xloader, X_gen)
+    assert isinstance(def_score, float)
+
 
 @pytest.mark.parametrize("test_plugin", [Plugins().get("dummy_sampler")])
 def test_evaluate_close_values(test_plugin: Plugin) -> None:
@@ -130,7 +146,9 @@ def test_evaluate_close_values(test_plugin: Plugin) -> None:
     test_plugin.fit(Xloader)
     X_gen = test_plugin.generate(100)
 
-    evaluator = CloseValuesProbability()
+    evaluator = CloseValuesProbability(
+        use_cache=False,
+    )
     syn_score, rnd_score = _eval_plugin(evaluator.evaluate, Xloader, X_gen)
 
     for key in syn_score:
@@ -141,6 +159,9 @@ def test_evaluate_close_values(test_plugin: Plugin) -> None:
     assert evaluator.type() == "sanity"
     assert evaluator.name() == "close_values_probability"
     assert evaluator.direction() == "maximize"
+
+    def_score = evaluator.evaluate_default(Xloader, X_gen)
+    assert isinstance(def_score, float)
 
 
 @pytest.mark.parametrize("test_plugin", [Plugins().get("dummy_sampler")])
@@ -163,3 +184,6 @@ def test_evaluate_distant_values(test_plugin: Plugin) -> None:
     assert evaluator.type() == "sanity"
     assert evaluator.name() == "distant_values_probability"
     assert evaluator.direction() == "minimize"
+
+    def_score = evaluator.evaluate_default(Xloader, X_gen)
+    assert isinstance(def_score, float)

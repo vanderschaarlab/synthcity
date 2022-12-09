@@ -35,7 +35,10 @@ def test_reduction(reduction: str, evaluator_t: Type) -> None:
     test_plugin.fit(Xloader)
     X_gen = test_plugin.generate(10)
 
-    evaluator = evaluator_t(reduction=reduction)
+    evaluator = evaluator_t(
+        reduction=reduction,
+        use_cache=False,
+    )
 
     score = evaluator.evaluate(
         Xloader,
@@ -43,6 +46,10 @@ def test_reduction(reduction: str, evaluator_t: Type) -> None:
     )
 
     assert reduction in score
+
+    def_score = evaluator.evaluate_default(Xloader, X_gen)
+
+    assert def_score == score[reduction]
 
 
 @pytest.mark.parametrize(

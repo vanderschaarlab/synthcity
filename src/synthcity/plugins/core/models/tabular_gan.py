@@ -8,6 +8,7 @@ import torch
 from pydantic import validate_arguments
 
 # synthcity absolute
+from synthcity.metrics.weighted_metrics import WeightedMetrics
 from synthcity.utils.constants import DEVICE
 from synthcity.utils.samplers import BaseSampler, ConditionalDatasetSampler
 
@@ -23,8 +24,12 @@ class TabularGAN(torch.nn.Module):
     This class combines GAN and tabular encoder to form a generative model for tabular data.
 
     Args:
-        n_units_in: int
-            Number of features
+        X: pd.DataFrame
+            Reference dataset, used for training the tabular encoder
+        n_units_latent: int
+            Number of latent units
+        n_units_conditional: int
+            Number of conditional units
         generator_n_layers_hidden: int
             Number of hidden layers in the generator
         generator_n_units_hidden: int
@@ -39,6 +44,18 @@ class TabularGAN(torch.nn.Module):
             Dropout value. If 0, the dropout is not used.
         generator_residual: bool
             Use residuals for the generator
+        generator_nonlin_out: Optional[List[Tuple[str, int]]]
+            List of activations. Useful with the TabularEncoder
+        generator_lr: float = 2e-4
+            Generator learning rate, used by the Adam optimizer
+        generator_weight_decay: float = 1e-3
+            Generator weight decay, used by the Adam optimizer
+        generator_opt_betas: tuple = (0.9, 0.999)
+            Generator initial decay rates, used by the Adam Optimizer
+        generator_extra_penalties: list
+            Additional penalties for the generator. Values: "identifiability_penalty"
+        generator_extra_penalty_cbks: List[Callable]
+            Additional loss callabacks for the generator. Used by the TabularGAN for the conditional loss
         discriminator_n_layers_hidden: int
             Number of hidden layers in the discriminator
         discriminator_n_units_hidden: int
@@ -51,10 +68,12 @@ class TabularGAN(torch.nn.Module):
             Enable/disable batch norm for the discriminator
         discriminator_dropout: float
             Dropout value for the discriminator. If 0, the dropout is not used.
-        lr: float
-            learning rate for optimizer. step_size equivalent in the JAX version.
-        weight_decay: float
-            l2 (ridge) penalty for the weights.
+        discriminator_lr: float
+            Discriminator learning rate, used by the Adam optimizer
+        discriminator_weight_decay: float
+            Discriminator weight decay, used by the Adam optimizer
+        discriminator_opt_betas: tuple
+            Initial weight decays for the Adam optimizer
         batch_size: int
             Batch size
         n_iter_print: int
@@ -64,11 +83,27 @@ class TabularGAN(torch.nn.Module):
         n_iter_min: int
             Minimum number of iterations to go through before starting early stopping
         clipping_value: int, default 0
-            Gradients clipping value
-        lambda_gradient_penalty: float
-            Lambda weight for the gradient penalty
-        lambda_identifiability_penalty: float
-            Lambda weight for the identifiability loss
+            Gradients clipping value. Zero disables the feature
+        lambda_gradient_penalty: float = 10
+            Weight for the gradient penalty
+        lambda_identifiability_penalty: float = 0.1
+            Weight for the identifiability penalty, if enabled
+        dataloader_sampler: Optional[sampler.Sampler]
+            Optional sampler for the dataloader, useful for conditional sampling
+        device: Any = DEVICE
+            CUDA/CPU
+        # privacy settings
+        dp_enabled: bool
+            Train the discriminator with Differential Privacy guarantees
+        dp_delta: Optional[float]
+            Optional DP delta: the probability of information accidentally being leaked. Usually 1 / len(dataset)
+        dp_epsilon: float = 3
+            DP epsilon: privacy budget, which is a measure of the amount of privacy that is preserved by a given algorithm. Epsilon is a number that represents the maximum amount of information that an adversary can learn about an individual from the output of a differentially private algorithm. The smaller the value of epsilon, the more private the algorithm is. For example, an algorithm with an epsilon of 0.1 preserves more privacy than an algorithm with an epsilon of 1.0.
+        dp_max_grad_norm: float
+            max grad norm used for gradient clipping
+        dp_secure_mode: bool = False,
+             if True uses noise generation approach robust to floating point arithmetic attacks.
+
         encoder_max_clusters: int
             The max number of clusters to create for continuous columns when encoding
         encoder:
@@ -91,7 +126,6 @@ class TabularGAN(torch.nn.Module):
         generator_n_iter: int = 1000,
         generator_batch_norm: bool = False,
         generator_dropout: float = 0.01,
-        generator_loss: Optional[Callable] = None,
         generator_lr: float = 1e-3,
         generator_weight_decay: float = 1e-3,
         generator_opt_betas: tuple = (0.9, 0.999),
@@ -103,14 +137,11 @@ class TabularGAN(torch.nn.Module):
         discriminator_n_iter: int = 1,
         discriminator_batch_norm: bool = False,
         discriminator_dropout: float = 0.1,
-        discriminator_loss: Optional[Callable] = None,
         discriminator_lr: float = 1e-3,
         discriminator_weight_decay: float = 1e-3,
         discriminator_opt_betas: tuple = (0.9, 0.999),
         batch_size: int = 64,
-        n_iter_print: int = 100,
         random_state: int = 0,
-        n_iter_min: int = 100,
         clipping_value: int = 0,
         lambda_gradient_penalty: float = 10,
         lambda_identifiability_penalty: float = 0.1,
@@ -119,11 +150,16 @@ class TabularGAN(torch.nn.Module):
         encoder_whitelist: list = [],
         dataloader_sampler: Optional[BaseSampler] = None,
         device: Any = DEVICE,
+        patience: int = 10,
+        patience_metric: Optional[WeightedMetrics] = None,
+        n_iter_print: int = 50,
+        n_iter_min: int = 100,
         # privacy settings
         dp_enabled: bool = False,
         dp_epsilon: float = 3,
         dp_delta: Optional[float] = None,
         dp_max_grad_norm: float = 2,
+        dp_secure_mode: bool = False,
     ) -> None:
         super(TabularGAN, self).__init__()
         self.columns = X.columns
@@ -208,7 +244,6 @@ class TabularGAN(torch.nn.Module):
             generator_n_iter=generator_n_iter,
             generator_batch_norm=generator_batch_norm,
             generator_dropout=generator_dropout,
-            generator_loss=generator_loss,
             generator_lr=generator_lr,
             generator_residual=generator_residual,
             generator_weight_decay=generator_weight_decay,
@@ -221,7 +256,6 @@ class TabularGAN(torch.nn.Module):
             discriminator_nonlin=discriminator_nonlin,
             discriminator_batch_norm=discriminator_batch_norm,
             discriminator_dropout=discriminator_dropout,
-            discriminator_loss=discriminator_loss,
             discriminator_lr=discriminator_lr,
             discriminator_weight_decay=discriminator_weight_decay,
             discriminator_opt_betas=discriminator_opt_betas,
@@ -230,14 +264,18 @@ class TabularGAN(torch.nn.Module):
             clipping_value=clipping_value,
             n_iter_print=n_iter_print,
             random_state=random_state,
+            # early stopping
             n_iter_min=n_iter_min,
             dataloader_sampler=dataloader_sampler,
             device=device,
+            patience=patience,
+            patience_metric=patience_metric,
             # privacy
             dp_enabled=dp_enabled,
             dp_epsilon=dp_epsilon,
             dp_delta=dp_delta,
             dp_max_grad_norm=dp_max_grad_norm,
+            dp_secure_mode=dp_secure_mode,
         )
 
     @validate_arguments(config=dict(arbitrary_types_allowed=True))
@@ -262,8 +300,12 @@ class TabularGAN(torch.nn.Module):
         else:
             X_enc = self.encode(X)
 
-        extra_cond = self.dataloader_sampler.get_train_conditionals()
+        extra_cond = self.dataloader_sampler.get_dataset_conditionals()
+
         cond = self._merge_conditionals(cond, extra_cond)
+        if cond is not None:
+            assert len(cond) == len(X_enc)
+
         self.model.fit(
             np.asarray(X_enc),
             np.asarray(cond),

@@ -10,6 +10,7 @@ from sklearn.datasets import load_diabetes, load_iris
 
 # synthcity absolute
 from synthcity.metrics.eval_performance import (
+    FeatureImportanceRankDistance,
     PerformanceEvaluatorLinear,
     PerformanceEvaluatorMLP,
     PerformanceEvaluatorXGB,
@@ -44,7 +45,7 @@ def test_evaluate_performance_classifier(
     test_plugin.fit(Xloader)
     X_gen = test_plugin.generate(100)
 
-    evaluator = evaluator_t()
+    evaluator = evaluator_t(use_cache=False)
     good_score = evaluator.evaluate(
         Xloader,
         X_gen,
@@ -75,6 +76,51 @@ def test_evaluate_performance_classifier(
     assert evaluator.type() == "performance"
     assert evaluator.direction() == "maximize"
 
+    def_score = evaluator.evaluate_default(Xloader, GenericDataLoader(X_rnd))
+
+    assert def_score == score["syn_id"]
+
+
+@pytest.mark.parametrize("distance", ["kendall", "spearman"])
+@pytest.mark.parametrize(
+    "test_plugin",
+    [
+        Plugins().get("bayesian_network"),
+    ],
+)
+def test_evaluate_feature_importance_rank_dist_clf(
+    distance: str, test_plugin: Plugin
+) -> None:
+    X, y = load_iris(return_X_y=True, as_frame=True)
+    X["target"] = y
+    Xloader = GenericDataLoader(X, target_column="target")
+    test_plugin.fit(Xloader)
+    X_gen = test_plugin.generate(len(X))
+
+    evaluator = FeatureImportanceRankDistance(
+        distance=distance,
+        use_cache=False,
+    )
+    good_score = evaluator.evaluate(
+        Xloader,
+        X_gen,
+    )
+
+    sz = len(X)
+    X_rnd = pd.DataFrame(np.random.randn(sz, len(X.columns)), columns=X.columns)
+    rnd_score = evaluator.evaluate(
+        Xloader,
+        GenericDataLoader(X_rnd),
+    )
+
+    assert "corr" in good_score
+    assert "pvalue" in good_score
+    assert "corr" in rnd_score
+    assert "pvalue" in rnd_score
+
+    assert good_score["corr"] > rnd_score["corr"]
+    assert good_score["pvalue"] < rnd_score["pvalue"]
+
 
 @pytest.mark.parametrize("test_plugin", [Plugins().get("marginal_distributions")])
 @pytest.mark.parametrize(
@@ -94,9 +140,12 @@ def test_evaluate_performance_regression(
     Xloader = GenericDataLoader(X, target_column="target")
 
     test_plugin.fit(Xloader)
-    X_gen = test_plugin.generate(100)
+    X_gen = test_plugin.generate(1000)
 
-    evaluator = evaluator_t()
+    evaluator = evaluator_t(
+        task_type="regression",
+        use_cache=False,
+    )
     good_score = evaluator.evaluate(
         Xloader,
         X_gen,
@@ -119,6 +168,53 @@ def test_evaluate_performance_regression(
 
     assert score["syn_id"] <= good_score["syn_id"]
     assert score["syn_ood"] <= good_score["syn_ood"]
+
+    def_score = evaluator.evaluate_default(Xloader, GenericDataLoader(X_rnd))
+
+    assert def_score == score["syn_id"]
+
+
+@pytest.mark.parametrize("distance", ["kendall", "spearman"])
+@pytest.mark.parametrize(
+    "test_plugin",
+    [
+        Plugins().get("bayesian_network"),
+    ],
+)
+def test_evaluate_feature_importance_rank_dist_reg(
+    distance: str, test_plugin: Plugin
+) -> None:
+    X, y = load_diabetes(return_X_y=True, as_frame=True)
+    X["target"] = y
+    Xloader = GenericDataLoader(X, target_column="target")
+
+    test_plugin.fit(Xloader)
+    X_gen = test_plugin.generate(len(X))
+
+    evaluator = FeatureImportanceRankDistance(
+        distance=distance,
+        task_type="regression",
+        use_cache=False,
+    )
+    good_score = evaluator.evaluate(
+        Xloader,
+        X_gen,
+    )
+
+    sz = len(X)
+    X_rnd = pd.DataFrame(np.random.randn(sz, len(X.columns)), columns=X.columns)
+    rnd_score = evaluator.evaluate(
+        Xloader,
+        GenericDataLoader(X_rnd),
+    )
+
+    assert "corr" in good_score
+    assert "pvalue" in good_score
+    assert "corr" in rnd_score
+    assert "pvalue" in rnd_score
+
+    assert good_score["corr"] > rnd_score["corr"]
+    assert good_score["pvalue"] < rnd_score["pvalue"]
 
 
 @pytest.mark.slow
@@ -149,6 +245,7 @@ def test_evaluate_performance_survival_analysis(
 
     evaluator = evaluator_t(
         task_type="survival_analysis",
+        use_cache=False,
     )
     good_score = evaluator.evaluate(
         Xloader,
@@ -184,6 +281,62 @@ def test_evaluate_performance_survival_analysis(
     assert good_score["gt.c_index"] < 1
     assert good_score["gt.brier_score"] < 1
 
+    def_score = evaluator.evaluate_default(
+        Xloader, create_from_info(X_rnd, Xloader.info())
+    )
+
+    assert def_score == score["syn_id.c_index"] - score["syn_id.brier_score"]
+
+
+@pytest.mark.parametrize("distance", ["kendall", "spearman"])
+@pytest.mark.parametrize(
+    "test_plugin",
+    [
+        Plugins().get("bayesian_network"),
+    ],
+)
+def test_evaluate_feature_importance_rank_dist_surv(
+    distance: str, test_plugin: Plugin
+) -> None:
+    X = load_rossi()
+    T = X["week"]
+    time_horizons = np.linspace(T.min(), T.max(), num=4).tolist()
+
+    Xloader = SurvivalAnalysisDataLoader(
+        X,
+        target_column="arrest",
+        time_to_event_column="week",
+        time_horizons=time_horizons,
+    )
+
+    test_plugin.fit(Xloader)
+    X_gen = test_plugin.generate(len(X))
+
+    evaluator = FeatureImportanceRankDistance(
+        distance=distance,
+        task_type="survival_analysis",
+        use_cache=False,
+    )
+    good_score = evaluator.evaluate(
+        Xloader,
+        X_gen,
+    )
+
+    sz = len(X)
+    X_rnd = pd.DataFrame(np.random.randn(sz, len(X.columns)), columns=X.columns)
+    rnd_score = evaluator.evaluate(
+        Xloader,
+        create_from_info(X_rnd, Xloader.info()),
+    )
+
+    assert "corr" in good_score
+    assert "pvalue" in good_score
+    assert "corr" in rnd_score
+    assert "pvalue" in rnd_score
+
+    assert good_score["corr"] > rnd_score["corr"]
+    assert good_score["pvalue"] < rnd_score["pvalue"]
+
 
 @pytest.mark.parametrize("test_plugin", [Plugins().get("marginal_distributions")])
 @pytest.mark.parametrize(
@@ -204,7 +357,7 @@ def test_evaluate_performance_custom_labels(
     test_plugin.fit(Xloader)
     X_gen = test_plugin.generate(100)
 
-    evaluator = evaluator_t()
+    evaluator = evaluator_t(use_cache=False)
 
     good_score = evaluator.evaluate(
         Xloader,
@@ -245,6 +398,7 @@ def test_evaluate_performance_time_series(
 
     evaluator = evaluator_t(
         task_type="time_series",
+        use_cache=False,
     )
     good_score = evaluator.evaluate(
         data,
@@ -319,3 +473,7 @@ def test_evaluate_performance_time_series_survival(
 
     assert good_score["syn_id.c_index"] < 1
     assert good_score["syn_ood.c_index"] < 1
+
+    def_score = evaluator.evaluate_default(data, data_gen)
+
+    assert def_score == good_score["syn_id.c_index"] - good_score["syn_id.brier_score"]

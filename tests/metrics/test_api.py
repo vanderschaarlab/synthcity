@@ -4,7 +4,7 @@ import pytest
 from sklearn.datasets import load_iris
 
 # synthcity absolute
-from synthcity.metrics import Metrics
+from synthcity.metrics import Metrics, WeightedMetrics
 from synthcity.plugins import Plugins
 from synthcity.plugins.core.dataloader import GenericDataLoader
 
@@ -67,6 +67,8 @@ def test_metric_filter(metric_filter: dict) -> None:
 
     X, y = load_iris(return_X_y=True, as_frame=True)
     X["target"] = y
+    X["target"] = X["target"].astype(str)
+
     Xraw = GenericDataLoader(X, target_column="target")
 
     model.fit(Xraw)
@@ -114,6 +116,8 @@ def test_custom_label(target: str) -> None:
 
     X, y = load_iris(return_X_y=True, as_frame=True)
     X["target"] = y
+    X["target"] = X["target"].astype(str)
+
     Xraw = GenericDataLoader(X, target_column="target")
 
     model.fit(Xraw)
@@ -123,3 +127,43 @@ def test_custom_label(target: str) -> None:
 
     assert "performance.linear_model.syn_id" in out.index
     assert "performance.linear_model.syn_ood" in out.index
+
+
+@pytest.mark.parametrize("test_plugin", ["dummy_sampler"])
+def test_weighted_metric(test_plugin: str) -> None:
+    model = Plugins().get(test_plugin)
+
+    X, y = load_iris(return_X_y=True, as_frame=True)
+    X["target"] = y
+
+    Xraw = GenericDataLoader(X, target_column="target")
+
+    model.fit(Xraw)
+    X_gen = model.generate(100)
+
+    score = WeightedMetrics(
+        [
+            ("sanity", "common_rows_proportion"),
+            ("sanity", "data_mismatch"),
+        ],
+        weights=[0.5, 0.5],
+    ).evaluate(
+        Xraw,
+        X_gen,
+    )
+
+    assert isinstance(score, (float, int))
+
+    # invalid metric
+    with pytest.raises(ValueError):
+        WeightedMetrics([("sanity", "fake")], [1])
+
+    # invalid weights
+    with pytest.raises(ValueError):
+        WeightedMetrics([("sanity", "common_rows_proportion")], [0.5, 0.5])
+
+    # different direction
+    with pytest.raises(ValueError):
+        WeightedMetrics(
+            [("sanity", "common_rows_proportion"), ("performance", "xgb")], [0.5, 0.5]
+        )

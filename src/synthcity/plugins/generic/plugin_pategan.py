@@ -29,7 +29,7 @@ from synthcity.plugins.core.distribution import (
     FloatDistribution,
     IntegerDistribution,
 )
-from synthcity.plugins.core.models import TabularGAN
+from synthcity.plugins.core.models.tabular_gan import TabularGAN
 from synthcity.plugins.core.plugin import Plugin
 from synthcity.plugins.core.schema import Schema
 from synthcity.plugins.core.serializable import Serializable
@@ -54,7 +54,8 @@ class Teachers(Serializable):
             self.model_template = XGBClassifier
             self.model_args = {
                 "verbosity": 0,
-                "depth": 4,
+                "depth": 3,
+                "nthread": 2,
             }
         else:
             self.model_template = LogisticRegression
@@ -130,7 +131,7 @@ class Teachers(Serializable):
         n0 = np.sum(y_hat == 0, axis=0)  # (batch_size, )
         n1 = np.sum(y_hat == 1, axis=0)  # (batch_size, )
 
-        lap_noise = np.random.laplace(loc=0.0, scale=self.lamda, size=n0.shape)
+        lap_noise = np.random.laplace(loc=0.0, scale=1 / self.lamda, size=n0.shape)
 
         out = (n1 + lap_noise) / (n0 + n1 + 1e-8)  # (batch_size, )
         out = (out > 0.5).astype(int)
@@ -158,16 +159,16 @@ class PATEGAN(Serializable):
         discriminator_dropout: float = 0.1,
         lr: float = 1e-4,
         weight_decay: float = 1e-3,
-        batch_size: int = 500,
+        batch_size: int = 200,
         random_state: int = 0,
         clipping_value: int = 1,
-        encoder_max_clusters: int = 20,
+        encoder_max_clusters: int = 5,
         # Privacy
         n_teachers: int = 10,
         teacher_template: str = "linear",
         epsilon: float = 1.0,
         delta: Optional[float] = None,
-        lamda: float = 1e-4,
+        lamda: float = 1e-3,
         alpha: int = 100,
         encoder: Any = None,
     ) -> None:
@@ -237,7 +238,7 @@ class PATEGAN(Serializable):
             clipping_value=self.clipping_value,
             encoder_max_clusters=self.encoder_max_clusters,
             encoder=self.encoder,
-            n_iter_print=self.generator_n_iter - 2,
+            n_iter_print=self.generator_n_iter - 1,
         )
         X_train_enc = self.model.encode(X_train)
         self.samples_per_teacher = int(len(X_train_enc) / self.n_teachers)
@@ -252,12 +253,9 @@ class PATEGAN(Serializable):
         it = 0
         while epsilon_hat < self.epsilon and it < self.max_iter:
             it += 1
-            log.info(
-                f"[pategan it {it}] epsilon_hat = {epsilon_hat}. self.epsilon = {self.epsilon}"
-            )
 
             log.debug(
-                f"[pategan it {it}] 1. Train teacher models n_teachers = {self.n_teachers} samples_per_teacher = {self.samples_per_teacher}"
+                f"[pategan it {it}] 1. Train teacher models epsilon_hat = {epsilon_hat}. n_teachers = {self.n_teachers} samples_per_teacher = {self.samples_per_teacher}"
             )
 
             # 1. Train teacher models
@@ -280,9 +278,6 @@ class PATEGAN(Serializable):
 
                 n0_mb, n1_mb, Y_mb = teachers.pate_lamda(np.asarray(X_batch))
                 if np.sum(Y_mb) >= len(X) / 2:
-                    log.debug(
-                        f"[pategan it {it}] Teachers high error-rate: n0 = {len(X) - np.sum(Y_mb)}, n1 = {np.sum(Y_mb)}"
-                    )
                     return torch.zeros((len(X),))
 
                 # Compute alpha
@@ -306,6 +301,9 @@ class PATEGAN(Serializable):
                 curr_list.append(local_alpha)
 
             epsilon_hat = np.min(curr_list)
+            log.info(
+                f"[pategan it {it}] epsilon_hat = {epsilon_hat}. self.epsilon = {self.epsilon}"
+            )
 
         log.debug("pategan training done")
         return self
@@ -393,13 +391,13 @@ class PATEGANPlugin(Plugin):
     def __init__(
         self,
         # GAN
-        n_iter: int = 1000,
-        generator_n_iter: int = 100,
-        generator_n_layers_hidden: int = 3,
+        n_iter: int = 200,
+        generator_n_iter: int = 10,
+        generator_n_layers_hidden: int = 2,
         generator_n_units_hidden: int = 500,
         generator_nonlin: str = "relu",
         generator_dropout: float = 0,
-        discriminator_n_layers_hidden: int = 3,
+        discriminator_n_layers_hidden: int = 2,
         discriminator_n_units_hidden: int = 500,
         discriminator_nonlin: str = "leaky_relu",
         discriminator_n_iter: int = 1,
@@ -415,7 +413,7 @@ class PATEGANPlugin(Plugin):
         teacher_template: str = "xgboost",
         epsilon: float = 1.0,
         delta: Optional[float] = None,
-        lamda: float = 1e-4,
+        lamda: float = 1e-3,
         alpha: int = 100,
         encoder: Any = None,
         **kwargs: Any,
@@ -460,19 +458,19 @@ class PATEGANPlugin(Plugin):
     @staticmethod
     def hyperparameter_space(**kwargs: Any) -> List[Distribution]:
         return [
-            IntegerDistribution(name="n_iter", low=1, high=15),
+            IntegerDistribution(name="n_iter", low=1, high=500),
             IntegerDistribution(name="generator_n_layers_hidden", low=1, high=4),
             IntegerDistribution(
-                name="generator_n_units_hidden", low=50, high=150, step=50
+                name="generator_n_units_hidden", low=50, high=500, step=50
             ),
             CategoricalDistribution(
                 name="generator_nonlin", choices=["relu", "leaky_relu", "tanh", "elu"]
             ),
-            IntegerDistribution(name="generator_n_iter", low=1, high=10),
+            IntegerDistribution(name="generator_n_iter", low=1, high=100),
             FloatDistribution(name="generator_dropout", low=0, high=0.2),
             IntegerDistribution(name="discriminator_n_layers_hidden", low=1, high=4),
             IntegerDistribution(
-                name="discriminator_n_units_hidden", low=50, high=150, step=50
+                name="discriminator_n_units_hidden", low=50, high=550, step=50
             ),
             CategoricalDistribution(
                 name="discriminator_nonlin",

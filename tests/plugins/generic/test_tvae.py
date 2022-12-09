@@ -6,7 +6,7 @@ from generic_helpers import generate_fixtures, get_airfoil_dataset
 from sklearn.datasets import load_iris
 
 # synthcity absolute
-from synthcity.metrics import PerformanceEvaluatorXGB
+from synthcity.metrics.eval import PerformanceEvaluatorXGB
 from synthcity.plugins import Plugin
 from synthcity.plugins.core.constraints import Constraints
 from synthcity.plugins.core.dataloader import GenericDataLoader
@@ -53,6 +53,7 @@ def test_plugin_generate(test_plugin: Plugin) -> None:
 
     X_gen = test_plugin.generate()
     assert len(X_gen) == len(X)
+    assert X_gen.shape[1] == X.shape[1]
     assert test_plugin.schema_includes(X_gen)
 
     X_gen = test_plugin.generate(50)
@@ -108,7 +109,7 @@ def test_eval_performance_tvae() -> None:
     X = GenericDataLoader(Xraw)
 
     for retry in range(2):
-        test_plugin = plugin(n_iter=100)
+        test_plugin = plugin(n_iter=1000)
         evaluator = PerformanceEvaluatorXGB()
 
         test_plugin.fit(X)

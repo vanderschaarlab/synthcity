@@ -34,7 +34,10 @@ from synthcity.plugins.core.dataloader import (
 def _eval_plugin(
     evaluator_t: Type, X: DataLoader, X_syn: DataLoader, **kwargs: Any
 ) -> Tuple:
-    evaluator = evaluator_t(**kwargs)
+    evaluator = evaluator_t(
+        **kwargs,
+        use_cache=False,
+    )
 
     syn_score = evaluator.evaluate(X, X_syn)
 
@@ -46,6 +49,9 @@ def _eval_plugin(
         X,
         X_rnd,
     )
+
+    def_score = evaluator.evaluate_default(X, X_rnd)
+    assert isinstance(def_score, float)
 
     return syn_score, rnd_score
 
@@ -240,7 +246,7 @@ def test_evaluate_prdc(test_plugin: Plugin) -> None:
     for key in syn_score:
         assert syn_score[key] >= 0
         assert rnd_score[key] >= 0
-        assert syn_score[key] > rnd_score[key]
+        assert syn_score[key] >= rnd_score[key]
 
     assert PRDCScore.name() == "prdc"
     assert PRDCScore.type() == "stats"

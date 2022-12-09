@@ -1,7 +1,7 @@
 # stdlib
 from abc import ABCMeta, abstractmethod
 from pathlib import Path
-from typing import Callable, Dict
+from typing import Callable, Dict, Optional
 
 # third party
 import numpy as np
@@ -52,6 +52,7 @@ class MetricEvaluator(metaclass=ABCMeta):
         random_state: int = 0,
         workspace: Path = Path("workspace"),
         use_cache: bool = True,
+        default_metric: Optional[str] = None,
     ) -> None:
         self._reduction = reduction
         self._n_histogram_bins = n_histogram_bins
@@ -61,12 +62,20 @@ class MetricEvaluator(metaclass=ABCMeta):
         self._random_state = random_state
         self._workspace = workspace
         self._use_cache = use_cache
+        if default_metric is None:
+            default_metric = reduction
+        self._default_metric = default_metric
 
         workspace.mkdir(parents=True, exist_ok=True)
 
     @validate_arguments(config=dict(arbitrary_types_allowed=True))
     @abstractmethod
     def evaluate(self, X_gt: DataLoader, X_syn: DataLoader) -> Dict:
+        ...
+
+    @validate_arguments(config=dict(arbitrary_types_allowed=True))
+    @abstractmethod
+    def evaluate_default(self, X_gt: DataLoader, X_syn: DataLoader) -> float:
         ...
 
     @staticmethod
@@ -119,3 +128,6 @@ class MetricEvaluator(metaclass=ABCMeta):
     def _oneclass_predict(self, model: OneClassLayer, X: np.ndarray) -> np.ndarray:
         with torch.no_grad():
             return model(torch.from_numpy(X).float().to(DEVICE)).cpu().detach().numpy()
+
+    def use_cache(self, path: Path) -> bool:
+        return path.exists() and self._use_cache

@@ -1,16 +1,18 @@
 # stdlib
 import random
 from abc import ABCMeta, abstractmethod
-from typing import Any, List, Optional, Tuple, Union
+from typing import Any, Dict, List, Optional, Tuple, Union
 
 # third party
 import numpy as np
 import pandas as pd
 from pydantic import validate_arguments
 from sklearn.model_selection import train_test_split
+from sklearn.preprocessing import LabelEncoder
 
 # synthcity absolute
 from synthcity.plugins.core.constraints import Constraints
+from synthcity.utils.compression import compress_dataset, decompress_dataset
 from synthcity.utils.serialization import dataframe_hash
 
 
@@ -135,7 +137,7 @@ class DataLoader(metaclass=ABCMeta):
         ...
 
     @abstractmethod
-    def sample(self, count: int) -> "DataLoader":
+    def sample(self, count: int, random_state: int = 0) -> "DataLoader":
         ...
 
     @abstractmethod
@@ -171,8 +173,53 @@ class DataLoader(metaclass=ABCMeta):
     def fillna(self, value: Any) -> "DataLoader":
         ...
 
+    @abstractmethod
+    def compression_protected_features(self) -> list:
+        ...
+
     def domain(self) -> Optional[str]:
         return None
+
+    def compress(
+        self,
+    ) -> Tuple["DataLoader", Dict]:
+        to_compress = self.data.copy().drop(
+            columns=self.compression_protected_features()
+        )
+        compressed, context = compress_dataset(to_compress)
+        for protected_col in self.compression_protected_features():
+            compressed[protected_col] = self.data[protected_col]
+
+        return self.decorate(compressed), context
+
+    def decompress(self, context: Dict) -> "DataLoader":
+        decompressed = decompress_dataset(self.data, context)
+
+        return self.decorate(decompressed)
+
+    def encode(
+        self,
+        encoders: Optional[Dict[str, Any]] = None,
+    ) -> Tuple["DataLoader", Dict]:
+        encoded = self.data.copy()
+        if encoders is not None:
+            for col in encoders:
+                if col not in encoded.columns:
+                    continue
+                encoded[col] = encoders[col].transform(encoded[col])
+        else:
+            encoders = {}
+
+        for col in encoded.columns:
+            if len(encoded[col].unique()) < 15 or encoded[col].dtype.name in [
+                "object",
+                "category",
+            ]:
+                encoder = LabelEncoder().fit(encoded[col])
+                encoded[col] = encoder.transform(encoded[col])
+                encoders[col] = encoder
+
+        return self.decorate(encoded), encoders
 
 
 class GenericDataLoader(DataLoader):
@@ -233,6 +280,7 @@ class GenericDataLoader(DataLoader):
             important_features=important_features,
             outcome_features=[self.target_column],
             random_state=random_state,
+            train_size=train_size,
             **kwargs,
         )
 
@@ -246,6 +294,15 @@ class GenericDataLoader(DataLoader):
     @property
     def columns(self) -> list:
         return list(self.data.columns)
+
+    def compression_protected_features(self) -> list:
+        out = [self.target_column]
+        domain = self.domain()
+
+        if domain is not None:
+            out.append(domain)
+
+        return out
 
     def unpack(self, as_numpy: bool = False, pad: bool = False) -> Any:
         X = self.data.drop(columns=[self.target_column])
@@ -271,6 +328,7 @@ class GenericDataLoader(DataLoader):
             "outcome_features": self.outcome_features,
             "target_column": self.target_column,
             "domain_column": self.domain_column,
+            "train_size": self.train_size,
         }
 
     def __len__(self) -> int:
@@ -293,8 +351,8 @@ class GenericDataLoader(DataLoader):
     def match(self, constraints: Constraints) -> "DataLoader":
         return self.decorate(constraints.match(self.data))
 
-    def sample(self, count: int) -> "DataLoader":
-        return self.decorate(self.data.sample(count))
+    def sample(self, count: int, random_state: int = 0) -> "DataLoader":
+        return self.decorate(self.data.sample(count, random_state=random_state))
 
     def drop(self, columns: list = []) -> "DataLoader":
         return self.decorate(self.data.drop(columns=columns))
@@ -309,6 +367,7 @@ class GenericDataLoader(DataLoader):
             important_features=info["important_features"],
             target_column=info["target_column"],
             domain_column=info["domain_column"],
+            train_size=info["train_size"],
         )
 
     def __getitem__(self, feature: Union[str, list]) -> Any:
@@ -386,6 +445,7 @@ class SurvivalAnalysisDataLoader(DataLoader):
             important_features=important_features,
             outcome_features=[self.target_column],
             random_state=random_state,
+            train_size=train_size,
             **kwargs,
         )
 
@@ -396,6 +456,15 @@ class SurvivalAnalysisDataLoader(DataLoader):
     @property
     def columns(self) -> list:
         return list(self.data.columns)
+
+    def compression_protected_features(self) -> list:
+        out = [self.target_column, self.time_to_event_column]
+        domain = self.domain()
+
+        if domain is not None:
+            out.append(domain)
+
+        return out
 
     def unpack(self, as_numpy: bool = False, pad: bool = False) -> Any:
         X = self.data.drop(columns=[self.target_column, self.time_to_event_column])
@@ -424,6 +493,7 @@ class SurvivalAnalysisDataLoader(DataLoader):
             "target_column": self.target_column,
             "time_to_event_column": self.time_to_event_column,
             "time_horizons": self.time_horizons,
+            "train_size": self.train_size,
         }
 
     def __len__(self) -> int:
@@ -449,9 +519,9 @@ class SurvivalAnalysisDataLoader(DataLoader):
             constraints.match(self.data),
         )
 
-    def sample(self, count: int) -> "DataLoader":
+    def sample(self, count: int, random_state: int = 0) -> "DataLoader":
         return self.decorate(
-            self.data.sample(count),
+            self.data.sample(count, random_state=random_state),
         )
 
     def drop(self, columns: list = []) -> "DataLoader":
@@ -578,6 +648,7 @@ class TimeSeriesDataLoader(DataLoader):
             sensitive_features=sensitive_features,
             important_features=important_features,
             random_state=random_state,
+            train_size=train_size,
             **kwargs,
         )
 
@@ -588,6 +659,9 @@ class TimeSeriesDataLoader(DataLoader):
     @property
     def columns(self) -> list:
         return self.data["seq_data"].columns
+
+    def compression_protected_features(self) -> list:
+        return self.outcome_features
 
     @property
     def raw_columns(self) -> list:
@@ -755,7 +829,7 @@ class TimeSeriesDataLoader(DataLoader):
         )
         return self.unpack_and_decorate(self.filter_ids(test_ids))
 
-    def sample(self, count: int) -> "DataLoader":
+    def sample(self, count: int, random_state: int = 0) -> "DataLoader":
         ids = self.ids()
         count = min(count, len(ids))
         sampled_ids = random.sample(ids, count)

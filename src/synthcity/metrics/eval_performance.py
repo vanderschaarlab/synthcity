@@ -1,11 +1,13 @@
 # stdlib
 import copy
-from typing import Any, Dict
+from typing import Any, Dict, Tuple
 
 # third party
 import numpy as np
 import pandas as pd
+import shap
 from pydantic import validate_arguments
+from scipy.stats import kendalltau, spearmanr
 from sklearn.linear_model import LinearRegression, LogisticRegression
 from sklearn.metrics import r2_score
 from sklearn.model_selection import KFold, StratifiedKFold
@@ -156,7 +158,7 @@ class PerformanceEvaluator(MetricEvaluator):
             self._workspace
             / f"sc_metric_cache_{self.type()}_{self.name()}_{X_gt.hash()}_{X_syn.hash()}_{self._reduction}.bkp"
         )
-        if cache_file.exists() and self._use_cache:
+        if self.use_cache(cache_file):
             return load_from_file(cache_file)
 
         id_X_gt, id_y_gt = X_gt.train().unpack()
@@ -232,7 +234,7 @@ class PerformanceEvaluator(MetricEvaluator):
             self._workspace
             / f"sc_metric_cache_{self.type()}_{self.name()}_{X_gt.hash()}_{X_syn.hash()}_{self._reduction}.bkp"
         )
-        if cache_file.exists():
+        if self.use_cache(cache_file):
             return load_from_file(cache_file)
 
         info = X_gt.info()
@@ -337,7 +339,7 @@ class PerformanceEvaluator(MetricEvaluator):
             self._workspace
             / f"sc_metric_cache_{self.type()}_{self.name()}_{X_gt.hash()}_{X_syn.hash()}_{self._reduction}.bkp"
         )
-        if cache_file.exists():
+        if self.use_cache(cache_file):
             return load_from_file(cache_file)
 
         (
@@ -465,7 +467,7 @@ class PerformanceEvaluator(MetricEvaluator):
             self._workspace
             / f"sc_metric_cache_{self.type()}_{self.name()}_{X_gt.hash()}_{X_syn.hash()}_{self._reduction}.bkp"
         )
-        if cache_file.exists():
+        if self.use_cache(cache_file):
             return load_from_file(cache_file)
 
         info = X_gt.info()
@@ -585,6 +587,23 @@ class PerformanceEvaluator(MetricEvaluator):
 
         return results
 
+    @validate_arguments(config=dict(arbitrary_types_allowed=True))
+    def evaluate_default(
+        self,
+        X_gt: DataLoader,
+        X_syn: DataLoader,
+    ) -> float:
+        results = self.evaluate(X_gt, X_syn)
+
+        if self._task_type == "survival_analysis":
+            return results["syn_id.c_index"] - results["syn_id.brier_score"]
+        elif self._task_type == "classification" or self._task_type == "regression":
+            return results["syn_id"]
+        elif self._task_type == "time_series_survival":
+            return results["syn_id.c_index"] - results["syn_id.brier_score"]
+        else:
+            raise RuntimeError(f"Unuspported task type {self._task_type}")
+
 
 class PerformanceEvaluatorXGB(PerformanceEvaluator):
     """Train an XGBoost classifier or regressor on the synthetic data and evaluate the performance on real test data.
@@ -592,8 +611,8 @@ class PerformanceEvaluatorXGB(PerformanceEvaluator):
     Returns the average performance discrepancy between training on real data vs on synthetic data.
 
     Score:
-        close to 0: similar performance
-        1: massive performance degradation
+        close to 1: similar performance
+        close to 0: massive performance degradation
     """
 
     @staticmethod
@@ -660,8 +679,8 @@ class PerformanceEvaluatorLinear(PerformanceEvaluator):
     Returns the average performance discrepancy between training on real data vs on synthetic data.
 
     Score:
-        close to 0: similar performance
-        1: massive performance degradation
+        close to 1: similar performance
+        close to 0: massive performance degradation
     """
 
     @staticmethod
@@ -703,8 +722,8 @@ class PerformanceEvaluatorMLP(PerformanceEvaluator):
     Returns the average performance discrepancy between training on real data vs on synthetic data.
 
     Score:
-        close to 0: similar performance
-        1: massive performance degradation
+        close to 1: similar performance
+        close to 1: massive performance degradation
     """
 
     @staticmethod
@@ -768,3 +787,191 @@ class PerformanceEvaluatorMLP(PerformanceEvaluator):
 
         else:
             raise RuntimeError(f"Unuspported task type {self._task_type}")
+
+
+class FeatureImportanceRankDistance(MetricEvaluator):
+    """Train an XGBoost classifier or regressor on the synthetic data and evaluate the feature importance.
+    Train an XGBoost model on the real data and evaluate the feature importance.
+
+    Returns the rank distance between the feature importance
+    Returns the average performance discrepancy between training on real data vs on synthetic data.
+
+    Score:
+        close to 1: similar performance
+        close to 0: unrelated
+        close to -1: the ranks have different monotony.
+    """
+
+    def __init__(self, distance: str = "kendall", **kwargs: Any) -> None:
+        super().__init__(**kwargs)
+
+        assert distance in ["kendall", "spearman"]
+        self._distance = distance
+
+    @staticmethod
+    def type() -> str:
+        return "performance"
+
+    @staticmethod
+    def direction() -> str:
+        return "minimize"
+
+    @staticmethod
+    def name() -> str:
+        return "feat_rank_distance"
+
+    def distance(self, lhs: np.ndarray, rhs: np.ndarray) -> Tuple[float, float]:
+        if self._distance == "spearman":
+            return spearmanr(lhs, rhs, nan_policy="omit")
+        elif self._distance == "kendall":
+            return kendalltau(lhs, rhs, nan_policy="omit")
+        else:
+            raise RuntimeError(f"unknown distance {self.distance}")
+
+    @validate_arguments(config=dict(arbitrary_types_allowed=True))
+    def evaluate(
+        self,
+        X_gt: DataLoader,
+        X_syn: DataLoader,
+    ) -> Dict:
+        cache_file = (
+            self._workspace
+            / f"sc_metric_cache_{self.type()}_{self.name()}_{X_gt.hash()}_{X_syn.hash()}.bkp"
+        )
+        if self.use_cache(cache_file):
+            results = load_from_file(cache_file)
+            log.info(
+                f" Feature Importance rank distance df hash = {X_gt.train().hash()} ood hash = {X_gt.test().hash()}. score = {results}"
+            )
+            return results
+
+        if self._task_type == "survival_analysis":
+            model = XGBSurvivalAnalysis(
+                n_jobs=2,
+                verbosity=0,
+                depth=3,
+                strategy="weibull",  # "weibull", "debiased_bce"
+                random_state=self._random_state,
+            )
+
+            id_X_gt, id_T_gt, id_E_gt = X_gt.train().unpack()
+            ood_X_gt, ood_T_gt, ood_E_gt = X_gt.test().unpack()
+            iter_X_syn, iter_T_syn, iter_E_syn = X_syn.unpack()
+
+            columns = id_X_gt.columns
+
+            gt_model = copy.deepcopy(model).fit(id_X_gt, id_T_gt, id_E_gt)
+            gt_shap = gt_model.explain(ood_X_gt)
+
+            syn_shap = np.random.rand(*ood_X_gt.shape)
+            try:
+                syn_model = copy.deepcopy(model).fit(iter_X_syn, iter_T_syn, iter_E_syn)
+                syn_shap = syn_model.explain(ood_X_gt)
+            except BaseException:
+                pass
+
+            syn_xai = np.mean(np.abs(syn_shap), axis=0)  # [n_features]
+            gt_xai = np.mean(np.abs(gt_shap), axis=0)  # [n_features]
+            assert len(syn_xai) == len(columns)
+
+            corr, pvalue = self.distance(syn_xai, gt_xai)
+            corr = np.mean(np.nan_to_num(corr))
+            pvalue = np.mean(np.nan_to_num(pvalue))
+
+            results = {
+                "corr": corr,
+                "pvalue": pvalue,
+            }
+
+        elif self._task_type == "classification":
+            model = XGBClassifier(
+                n_jobs=2,
+                verbosity=0,
+                depth=3,
+                random_state=self._random_state,
+            )
+
+            id_X_gt, id_y_gt = X_gt.train().unpack()
+            ood_X_gt, ood_y_gt = X_gt.test().unpack()
+            iter_X_syn, iter_y_syn = X_syn.unpack()
+
+            syn_shap = np.random.rand(
+                len(np.unique(id_y_gt)), ood_X_gt.shape[0], ood_X_gt.shape[1]
+            )
+            try:
+                syn_model = copy.deepcopy(model).fit(iter_X_syn, iter_y_syn)
+                syn_explainer = shap.TreeExplainer(syn_model)
+                syn_shap = syn_explainer.shap_values(ood_X_gt)
+            except BaseException:
+                pass
+
+            gt_model = copy.deepcopy(model).fit(id_X_gt, id_y_gt)
+            gt_explainer = shap.TreeExplainer(gt_model)
+            gt_shap = gt_explainer.shap_values(ood_X_gt)
+
+            # evaluate absolute influence for each class
+            syn_xai = np.mean(np.abs(syn_shap), axis=1)  # classes x n_features
+            gt_xai = np.mean(np.abs(gt_shap), axis=1)  # classes x n_features
+
+            corr, pvalue = self.distance(syn_xai, gt_xai)
+            corr = np.mean(np.nan_to_num(corr))
+            pvalue = np.mean(np.nan_to_num(pvalue))
+
+            results = {
+                "corr": corr,
+                "pvalue": pvalue,
+            }
+
+        elif self._task_type == "regression":
+            model = XGBRegressor(
+                n_jobs=2,
+                verbosity=0,
+                depth=3,
+                random_state=self._random_state,
+            )
+            id_X_gt, id_y_gt = X_gt.train().unpack()
+            ood_X_gt, ood_y_gt = X_gt.test().unpack()
+            iter_X_syn, iter_y_syn = X_syn.unpack()
+
+            syn_shap = np.random.rand(*ood_X_gt.shape)
+            try:
+                syn_model = copy.deepcopy(model).fit(iter_X_syn, iter_y_syn)
+                syn_explainer = shap.TreeExplainer(syn_model)
+                syn_shap = syn_explainer.shap_values(ood_X_gt)
+            except BaseException:
+                pass
+
+            gt_model = copy.deepcopy(model).fit(id_X_gt, id_y_gt)
+            gt_explainer = shap.TreeExplainer(gt_model)
+            gt_shap = gt_explainer.shap_values(ood_X_gt)
+
+            syn_xai = np.mean(np.abs(syn_shap), axis=0)  # [n_features]
+            gt_xai = np.mean(np.abs(gt_shap), axis=0)  # [n_features]
+
+            corr, pvalue = self.distance(syn_xai, gt_xai)
+            corr = np.mean(np.nan_to_num(corr))
+            pvalue = np.mean(np.nan_to_num(pvalue))
+
+            results = {
+                "corr": corr,
+                "pvalue": pvalue,
+            }
+        else:
+            raise RuntimeError(f"Unuspported task type {self._task_type}")
+
+        save_to_file(cache_file, results)
+
+        log.info(
+            f" Feature Importance rank distance df hash = {X_gt.train().hash()} ood hash = {X_gt.test().hash()}. score = {results}"
+        )
+        return results
+
+    @validate_arguments(config=dict(arbitrary_types_allowed=True))
+    def evaluate_default(
+        self,
+        X_gt: DataLoader,
+        X_syn: DataLoader,
+    ) -> float:
+        results = self.evaluate(X_gt, X_syn)
+
+        return results["corr"]

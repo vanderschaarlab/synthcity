@@ -1,6 +1,7 @@
 # stdlib
 import hashlib
 import json
+import random
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
 
@@ -19,6 +20,18 @@ from synthcity.plugins.core.constraints import Constraints
 from synthcity.plugins.core.dataloader import DataLoader
 from synthcity.utils.reproducibility import enable_reproducible_results
 from synthcity.utils.serialization import load_from_file, save_to_file
+
+
+def print_score(mean: pd.Series, std: pd.Series) -> pd.Series:
+    pd.options.mode.chained_assignment = None
+
+    mean.loc[(mean < 1e-3) & (mean != 0)] = 1e-3
+    std.loc[(std < 1e-3) & (std != 0)] = 1e-3
+
+    mean = mean.round(3).astype(str)
+    std = std.round(3).astype(str)
+
+    return mean + " +/- " + std
 
 
 class Benchmarks:
@@ -67,6 +80,7 @@ class Benchmarks:
         out = {}
 
         experiment_name = X.hash()
+
         workspace.mkdir(parents=True, exist_ok=True)
 
         plugin_cats = ["generic"]
@@ -85,7 +99,10 @@ class Benchmarks:
                 hash_object = hashlib.md5(kwargs_hash_raw)
                 kwargs_hash = hash_object.hexdigest()
 
-            for repeat in range(repeats):
+            repeats_list = list(range(repeats))
+            random.shuffle(repeats_list)
+
+            for repeat in repeats_list:
                 enable_reproducible_results(repeat)
                 torch.cuda.empty_cache()
 
@@ -168,11 +185,12 @@ class Benchmarks:
 
         means = []
         for plugin in results:
-            data = results[plugin]["mean"]
-            means.append(data)
+            mean = results[plugin]["mean"]
+            stddev = results[plugin]["stddev"]
+            means.append(print_score(mean, stddev))
 
         avg = pd.concat(means, axis=1)
-        avg.set_axis(results.keys(), axis=1, inplace=True)
+        avg = avg.set_axis(results.keys(), axis=1)
 
         if len(means) > 1:
             print()

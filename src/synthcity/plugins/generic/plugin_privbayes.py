@@ -12,7 +12,6 @@ from typing import Any, List, Optional, Tuple
 # third party
 import numpy as np
 import pandas as pd
-from joblib import Parallel, delayed
 from pgmpy.factors.discrete.CPD import TabularCPD
 from pgmpy.models import BayesianNetwork
 from pgmpy.sampling import BayesianModelSampling
@@ -21,6 +20,7 @@ from scipy.optimize import fsolve
 from sklearn.cluster import KMeans
 from sklearn.metrics import normalized_mutual_info_score
 from sklearn.preprocessing import LabelEncoder
+from tqdm import tqdm
 
 # synthcity absolute
 import synthcity.logger as log
@@ -32,7 +32,6 @@ from synthcity.plugins.core.serializable import Serializable
 from synthcity.utils.reproducibility import enable_reproducible_results
 
 network_edge = namedtuple("network_edge", ["feature", "parents"])
-dispatcher = Parallel(max_nbytes=None, backend="loky", n_jobs=8)
 
 
 def usefulness_minus_target(
@@ -94,17 +93,20 @@ class PrivBayes(Serializable):
         self.n_bins = n_bins
         self.target_usefulness = target_usefulness
         self.mi_thresh = mi_thresh
-        self.default_k = 2
+        self.default_k = 3
+        self.mi_cache: dict = {}
 
     @validate_arguments(config=dict(arbitrary_types_allowed=True))
     def fit(self, data: pd.DataFrame) -> Any:
         self.n_columns = len(data.columns)
         self.n_records_fit = len(data)
+        self.mi_cache = {}
 
         # encode dataset
         data, self.encoders = self._encode(data)
 
         # learn the DAG
+        log.debug("[Privbayes] Run greedy Bayes")
         self.dag = self._greedy_bayes(data)
         self.ordered_nodes = []
         for attr, _ in self.dag:
@@ -113,9 +115,11 @@ class PrivBayes(Serializable):
         self.display_network()
 
         # learn the conditional probabilities
+        log.debug("[Privbayes] Compute noisy cond")
         cpds = self._compute_noisy_conditional_distributions(data)
 
         # create the network
+        log.debug("[Privbayes] Create net")
         self.network = BayesianNetwork()
 
         for child, parents in self.dag:
@@ -129,12 +133,15 @@ class PrivBayes(Serializable):
         # create the model
         self.model = BayesianModelSampling(self.network)
 
+        log.info("[PrivBayes] done training")
         return self
 
     @validate_arguments(config=dict(arbitrary_types_allowed=True))
     def sample(self, count: int) -> pd.DataFrame:
-        samples = self.model.forward_sample(size=count, show_progress=False)
+        log.debug(f"[PrivBayes] sample {count} examples")
+        samples = self.model.forward_sample(size=count, show_progress=True)
 
+        log.debug(f"[PrivBayes] decode {count} examples")
         return self._decode(samples)
 
     def _encode(self, data: pd.DataFrame) -> Any:
@@ -142,12 +149,22 @@ class PrivBayes(Serializable):
         encoders = {}
 
         for col in data.columns:
-            if len(data[col].unique()) < self.n_bins:
-                encoders[col] = np.sort(data[col].unique())
+            if len(data[col].unique()) < self.n_bins or data[col].dtype.name not in [
+                "object",
+                "category",
+            ]:
+                encoders[col] = {
+                    "type": "categorical",
+                    "model": LabelEncoder().fit(data[col]),
+                }
+                data[col] = encoders[col]["model"].transform(data[col])
             else:
                 col_data = pd.cut(data[col], bins=self.n_bins)
-                encoders[col] = LabelEncoder().fit(col_data)
-                data[col] = encoders[col].transform(col_data)
+                encoders[col] = {
+                    "type": "continuous",
+                    "model": LabelEncoder().fit(col_data),
+                }
+                data[col] = encoders[col]["model"].transform(col_data)
 
         return data, encoders
 
@@ -155,16 +172,15 @@ class PrivBayes(Serializable):
         for col in data.columns:
             if col not in self.encoders:
                 continue
-            if isinstance(self.encoders[col], LabelEncoder):
-                inversed = self.encoders[col].inverse_transform(data[col])
+            inversed = self.encoders[col]["model"].inverse_transform(data[col])
+            if self.encoders[col]["type"] == "categorical":
+                data[col] = inversed
+            elif self.encoders[col]["type"] == "continuous":
                 output = []
                 for interval in inversed:
                     output.append(np.random.uniform(interval.left, interval.right))
 
                 data[col] = output
-            elif isinstance(self.encoders[col], np.ndarray):
-                assert data[col].max() < len(self.encoders[col])
-                data[col] = self.encoders[col][data[col]]
             else:
                 raise RuntimeError(f"Invalid encoder {self.encoders[col]}")
 
@@ -193,26 +209,29 @@ class PrivBayes(Serializable):
 
         nodes_remaining = nodes - nodes_selected
 
-        while len(nodes_remaining) > 0:
+        for i in tqdm(range(len(nodes_remaining))):
+            if len(nodes_remaining) == 0:
+                break
+
+            log.debug(f"Search node idx {i}")
             parents_pair_list = []
             mutual_info_list = []
 
             num_parents = min(len(nodes_selected), self.K)
 
-            search_results = dispatcher(
-                delayed(self._evaluate_parent_mutual_information)(
+            for candidate, split in product(
+                nodes_remaining, range(len(nodes_selected) - num_parents + 1)
+            ):
+                (
+                    candidate_pairs,
+                    candidate_mi,
+                ) = self._evaluate_parent_mutual_information(
                     data,
                     candidate=candidate,
                     parent_candidates=nodes_selected,
                     parent_limit=num_parents,
                     split=split,
                 )
-                for candidate, split in product(
-                    nodes_remaining, range(len(nodes_selected) - num_parents + 1)
-                )
-            )
-
-            for candidate_pairs, candidate_mi in search_results:
                 parents_pair_list.extend(candidate_pairs)
                 mutual_info_list.extend(candidate_mi)
 
@@ -413,10 +432,21 @@ class PrivBayes(Serializable):
 
         parents_pair_list = []
         mutual_info_list = []
+
+        if candidate not in self.mi_cache:
+            self.mi_cache[candidate] = {}
+
         for other_parents in combinations(parent_candidates[split:], parent_limit):
             parents = list(other_parents)
+            parents_key = "_".join(sorted(parents))
+
+            if parents_key in self.mi_cache[candidate]:
+                score = self.mi_cache[candidate][parents_key]
+            else:
+                score = self.mutual_info_score(data, parents, candidate)
+                self.mi_cache[candidate][parents_key] = score
+
             parents_pair_list.append(network_edge(candidate, parents=parents))
-            score = self.mutual_info_score(data, parents, candidate)
             mutual_info_list.append(score)
 
         return parents_pair_list, mutual_info_list

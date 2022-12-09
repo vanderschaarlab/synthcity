@@ -5,6 +5,7 @@ Adapted from https://github.com/sdv-dev/CTGAN
 
 # stdlib
 from collections import namedtuple
+from pathlib import Path
 from typing import Any, List, Optional, Sequence, Tuple
 
 # third party
@@ -14,6 +15,10 @@ from pydantic import validate_arguments
 from rdt.transformers import ClusterBasedNormalizer
 from sklearn.base import BaseEstimator, TransformerMixin
 from sklearn.preprocessing import MinMaxScaler, OneHotEncoder
+
+# synthcity absolute
+import synthcity.logger as log
+from synthcity.utils.serialization import dataframe_hash, load_from_file, save_to_file
 
 ColumnTransformInfo = namedtuple(
     "ColumnTransformInfo",
@@ -136,6 +141,7 @@ class TabularEncoder(TransformerMixin, BaseEstimator):
         max_clusters: int = 10,
         categorical_limit: int = 10,
         whitelist: list = [],
+        workspace: Path = Path("workspace"),
     ) -> None:
         """Create a data transformer.
 
@@ -146,6 +152,8 @@ class TabularEncoder(TransformerMixin, BaseEstimator):
         self.max_clusters = max_clusters
         self.categorical_limit = categorical_limit
         self.whitelist = whitelist
+        self.workspace = workspace
+        self.workspace.mkdir(parents=True, exist_ok=True)
 
     @validate_arguments(config=dict(arbitrary_types_allowed=True))
     def _fit_continuous(self, data: pd.Series) -> ColumnTransformInfo:
@@ -224,10 +232,22 @@ class TabularEncoder(TransformerMixin, BaseEstimator):
         for column_name in raw_data.columns:
             if column_name in self.whitelist:
                 continue
-            if column_name in discrete_columns:
-                column_transform_info = self._fit_discrete(raw_data[column_name])
+            column_hash = dataframe_hash(raw_data[[column_name]])
+            bkp_file = (
+                self.workspace
+                / f"encoder_cache_{column_hash}_{column_name[:50]}_{self.max_clusters}_{self.categorical_limit}.bkp"
+            )
+
+            log.info(f"Encoding {column_name} {column_hash}")
+
+            if bkp_file.exists():
+                column_transform_info = load_from_file(bkp_file)
             else:
-                column_transform_info = self._fit_continuous(raw_data[column_name])
+                if column_name in discrete_columns:
+                    column_transform_info = self._fit_discrete(raw_data[column_name])
+                else:
+                    column_transform_info = self._fit_continuous(raw_data[column_name])
+                save_to_file(bkp_file, column_transform_info)
 
             self.output_dimensions += column_transform_info.output_dimensions
             self._column_transform_info_list.append(column_transform_info)

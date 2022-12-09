@@ -45,6 +45,11 @@ def test_generic_dataloader_sanity() -> None:
     assert (loader["target"].values == y.values).all()
     assert "target" not in loader.drop(columns=["target"]).columns
 
+    assert loader.compression_protected_features() == ["target"]
+
+    loader = GenericDataLoader(X, target_column="target", train_size=0.5)
+    assert abs(len(loader.train()) - len(loader.test())) < 2
+
 
 def test_generic_dataloader_info() -> None:
     X, y = load_breast_cancer(return_X_y=True, as_frame=True)
@@ -87,6 +92,24 @@ def test_generic_dataloader_domain() -> None:
     assert loader.info()["domain_column"] == "domain"
 
 
+def test_generic_dataloader_compression() -> None:
+    X, y = load_breast_cancer(return_X_y=True, as_frame=True)
+    X["domain"] = y
+
+    loader = GenericDataLoader(X, domain_column="domain")
+
+    compressed, context = loader.compress()
+
+    assert len(compressed) == len(loader)
+    assert compressed.shape[1] <= loader.shape[1]
+    assert "domain" in compressed.columns
+
+    decompressed = compressed.decompress(context)
+
+    assert len(decompressed) == len(loader)
+    assert decompressed.shape[1] == loader.shape[1]
+
+
 def test_survival_dataloader_sanity() -> None:
     df = load_rossi()
 
@@ -120,6 +143,19 @@ def test_survival_dataloader_sanity() -> None:
 
     assert (loader["arrest"].values == E.values).all()
     assert X.columns[0] not in loader.drop(columns=[X.columns[0]]).columns
+    assert loader.compression_protected_features() == [
+        target_column,
+        time_to_event_column,
+    ]
+    loader = SurvivalAnalysisDataLoader(
+        df,
+        time_to_event_column=time_to_event_column,
+        target_column=target_column,
+        time_horizons=[20],
+        train_size=0.5,
+    )
+
+    assert abs(len(loader.train()) - len(loader.test())) < 2
 
 
 def test_survival_dataloader_info() -> None:
@@ -192,6 +228,33 @@ def test_survival_dataloader_pack_unpack() -> None:
     assert loader.hash() != ""
 
 
+def test_survival_dataloader_compression() -> None:
+    df = load_rossi()
+
+    target_column = "arrest"
+    time_to_event_column = "week"
+
+    loader = SurvivalAnalysisDataLoader(
+        df,
+        time_to_event_column=time_to_event_column,
+        target_column=target_column,
+        time_horizons=[20],
+    )
+
+    compressed, context = loader.compress()
+
+    assert len(compressed) == len(loader)
+    assert compressed.shape[1] <= loader.shape[1]
+    assert target_column in compressed.columns
+    assert time_to_event_column in compressed.columns
+
+    decompressed = compressed.decompress(context)
+
+    assert len(decompressed) == len(loader)
+    assert decompressed.shape[1] == loader.shape[1]
+    assert sorted(decompressed.columns) == sorted(loader.columns)
+
+
 @pytest.mark.parametrize("source", [SineDataloader, GoogleStocksDataloader])
 def test_time_series_dataloader_sanity(source: Any) -> None:
     static_data, temporal_data, temporal_horizons, outcome = source().load()
@@ -230,6 +293,7 @@ def test_time_series_dataloader_sanity(source: Any) -> None:
     assert len(rnd_sample) == 10
 
     assert loader.hash() != ""
+    assert loader.compression_protected_features() == outcome.columns
 
 
 @pytest.mark.parametrize("source", [SineDataloader, GoogleStocksDataloader])

@@ -6,7 +6,7 @@ from generic_helpers import generate_fixtures, get_airfoil_dataset
 from sklearn.datasets import load_iris
 
 # synthcity absolute
-from synthcity.metrics import PerformanceEvaluatorXGB
+from synthcity.metrics.eval import PerformanceEvaluatorXGB
 from synthcity.plugins import Plugin
 from synthcity.plugins.core.constraints import Constraints
 from synthcity.plugins.core.dataloader import GenericDataLoader
@@ -57,6 +57,7 @@ def test_plugin_generate_pategan() -> None:
     X_gen = test_plugin.generate()
     assert len(X_gen) == len(X)
     assert test_plugin.schema_includes(X_gen)
+    assert X_gen.shape[1] == X.shape[1]
 
     X_gen = test_plugin.generate(50)
     assert len(X_gen) == 50

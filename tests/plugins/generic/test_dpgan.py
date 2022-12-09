@@ -6,7 +6,7 @@ from generic_helpers import generate_fixtures
 from sklearn.datasets import load_iris
 
 # synthcity absolute
-from synthcity.metrics import PerformanceEvaluatorXGB
+from synthcity.metrics.eval import PerformanceEvaluatorXGB
 from synthcity.plugins import Plugin
 from synthcity.plugins.core.constraints import Constraints
 from synthcity.plugins.core.dataloader import GenericDataLoader
@@ -125,4 +125,5 @@ def test_eval_performance_dpgan() -> None:
 
         results.append(evaluator.evaluate(X, X_syn)["syn_id"])
 
-    assert np.max(results) > 0.7
+    print(results)
+    assert np.mean(results) > 0.5
