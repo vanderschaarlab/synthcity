@@ -24,9 +24,17 @@ class BaseSampler(torch.utils.data.sampler.Sampler):
     def sample_conditional(self, batch: int) -> Optional[Tuple]:
         return None
 
+    @validate_arguments(config=dict(arbitrary_types_allowed=True))
+    def sample_conditional_for_class(self, batch: int, c: int) -> Optional[np.ndarray]:
+        return None
+
     def conditional_dimension(self) -> int:
         """Return the total number of categories."""
         return 0
+
+    def conditional_probs(self) -> Optional[np.ndarray]:
+        """Return the total number of categories."""
+        return None
 
     def train_test(self) -> Tuple:
         raise NotImplementedError()
@@ -85,7 +93,6 @@ class ConditionalDatasetSampler(BaseSampler):
         self,
         data: pd.DataFrame,
         output_info: List[ColumnTransformInfo],
-        log_frequency: bool = True,
         device: Any = DEVICE,
         train_size: float = 0.8,
     ) -> None:
@@ -100,7 +107,7 @@ class ConditionalDatasetSampler(BaseSampler):
         }
         self._num_items = len(indices)
 
-        self._internal_setup(data, output_info, log_frequency=log_frequency)
+        self._internal_setup(data, output_info)
 
         self._prepare_dataset_conditionals()
 
@@ -113,7 +120,9 @@ class ConditionalDatasetSampler(BaseSampler):
         return self._dataset_conditional
 
     @validate_arguments(config=dict(arbitrary_types_allowed=True))
-    def sample_conditional(self, batch: int, with_ids: bool = False) -> Any:
+    def sample_conditional(
+        self, batch: int, with_ids: bool = False, p: Optional[np.ndarray] = None
+    ) -> Any:
         """Generate the conditional vector for training.
 
         Returns:
@@ -123,9 +132,22 @@ class ConditionalDatasetSampler(BaseSampler):
                 Integer representation of mask.
             category_id_in_col (batch):
                 Selected category in the selected discrete column.
+            p: Optional np.ndarray
+                Optional probability for each discrete column
         """
         if self._n_discrete_columns == 0:
             return None
+
+        if p is not None:
+            assert p.shape[-1] == self._n_conditional_dimension
+
+            cond_res = np.zeros((batch, self._n_conditional_dimension), dtype="float32")
+
+            ind = np.random.choice(self._n_conditional_dimension, batch, p=p)
+
+            cond_res[np.arange(batch), ind] = 1
+
+            return cond_res
 
         discrete_column_id = np.random.choice(
             np.arange(self._n_discrete_columns), batch
@@ -140,6 +162,13 @@ class ConditionalDatasetSampler(BaseSampler):
 
         if with_ids:
             return cond, discrete_column_id, category_id_in_col
+
+        return cond
+
+    @validate_arguments(config=dict(arbitrary_types_allowed=True))
+    def sample_conditional_for_class(self, batch: int, c: int) -> Optional[np.ndarray]:
+        cond = np.zeros((batch, self._n_conditional_dimension)).astype(float)
+        cond[..., c] = 1
 
         return cond
 
@@ -166,6 +195,9 @@ class ConditionalDatasetSampler(BaseSampler):
         """Return the total number of categories."""
         return self._n_conditional_dimension
 
+    def conditional_probs(self) -> Optional[np.ndarray]:
+        return self._conditional_probs
+
     def __iter__(self) -> Generator:
         np.random.shuffle(self._train_idx)
 
@@ -179,7 +211,6 @@ class ConditionalDatasetSampler(BaseSampler):
         self,
         data: pd.DataFrame,
         output_info: List[ColumnTransformInfo],
-        log_frequency: bool,
     ) -> None:
         assert data.shape[1] == sum([item.output_dimensions for item in output_info])
 
@@ -230,15 +261,18 @@ class ConditionalDatasetSampler(BaseSampler):
                 if is_discrete_column(column_info)
             ]
         )
+        self._conditional_probs = np.zeros(self._n_conditional_dimension)
+
         st = 0
         current_id = 0
         current_cond_st = 0
         for column_info in output_info:
             if is_discrete_column(column_info):
                 ed = st + column_info.output_dimensions
+                cond_ed = current_cond_st + column_info.output_dimensions
+
                 category_freq = np.sum(data[:, st:ed], axis=0)
-                if log_frequency:
-                    category_freq = np.log(category_freq + 1)
+                self._conditional_probs[current_cond_st:cond_ed] = category_freq
                 category_prob = category_freq / np.sum(category_freq)
                 self._discrete_feat_value_prob[
                     current_id, : column_info.output_dimensions
@@ -247,11 +281,16 @@ class ConditionalDatasetSampler(BaseSampler):
                 self._categorical_feat_dimension[
                     current_id
                 ] = column_info.output_dimensions
+
                 current_cond_st += column_info.output_dimensions
                 current_id += 1
 
             st += column_info.output_dimensions
         assert st == data.shape[1]
+
+        self._conditional_probs = self._conditional_probs / (
+            np.sum(self._conditional_probs) + 1e-8
+        )
 
     def _prepare_dataset_conditionals(self) -> None:
         self._dataset_conditional = None
