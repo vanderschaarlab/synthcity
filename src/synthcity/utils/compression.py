@@ -118,18 +118,22 @@ def compress_dataset(
 def decompress_dataset(
     df: pd.DataFrame, context: Dict, cat_limit: int = 10
 ) -> pd.DataFrame:
-    assert "encoders" in context, "Invalid context. missing encoders"
-    assert "compressers" in context, "Invalid context. missing compressers"
-    assert (
-        "compressers_categoricals" in context
-    ), "Invalid context. missing compressers_categoricals"
+    if "encoders" not in context:
+        raise ValueError("Invalid context. missing encoders")
+
+    if "compressers" not in context:
+        raise ValueError("Invalid context. missing compressers")
+
+    if "compressers_categoricals" not in context:
+        raise ValueError("Invalid context. missing compressers_categoricals")
 
     df = df.copy()
     df.columns = df.columns.astype(str)
 
     # decompress categoricals
     for cat_group in context["compressers_categoricals"]:
-        assert cat_group in df.columns
+        if cat_group not in df.columns:
+            raise ValueError(f"Invalid categories {cat_group}")
 
         encoder = context["compressers_categoricals"][cat_group]["model"]
         src_cols = context["compressers_categoricals"][cat_group]["cols"]
@@ -138,7 +142,10 @@ def decompress_dataset(
         df[cat_group] = encoder.inverse_transform(df[cat_group])
         decoded = df[cat_group].str.split(" ", n=-1, expand=True)
 
-        assert decoded.shape[1] == len(src_cols)
+        if decoded.shape[1] != len(src_cols):
+            raise ValueError(
+                f"Invalid decoding shape {decoded.shape} expected {len(src_cols)}"
+            )
 
         df[src_cols] = decoded.astype(dtypes.reset_index(drop=True))
         df = df.drop(columns=[cat_group])
@@ -170,7 +177,8 @@ def decompress_dataset(
 
     # decode categoricals
     for col in context["encoders"]:
-        assert col in df, f"Missing {col}"
+        if col not in df:
+            raise ValueError(f"Missing {col} for decoding")
         df[col] = context["encoders"][col].inverse_transform(df[col])
 
     original_dtypes = context["original_dtypes"]

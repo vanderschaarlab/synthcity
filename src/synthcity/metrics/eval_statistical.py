@@ -602,9 +602,8 @@ class AlphaPrecision(StatisticalEvaluator):
         X_syn: np.ndarray,
         emb_center: Optional[np.ndarray] = None,
     ) -> Tuple:
-        assert len(X) == len(
-            X_syn
-        ), "The real and synthetic data mush have the same length"
+        if len(X) != len(X_syn):
+            raise RuntimeError("The real and synthetic data mush have the same length")
 
         if emb_center is None:
             emb_center = np.mean(X.numpy(), axis=0)
