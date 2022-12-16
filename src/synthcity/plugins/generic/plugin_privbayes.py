@@ -536,7 +536,6 @@ class PrivBayes(Serializable):
 class PrivBayesPlugin(Plugin):
     """PrivBayes algorithm.
 
-        Paper: PrivBayes: Private Data Release via Bayesian Networks. (2017), Zhang J, Cormode G, Procopiuc CM, Srivastava D, Xiao X.
 
         Args:
             epsilon: float
@@ -552,6 +551,21 @@ class PrivBayesPlugin(Plugin):
     information to average scale of noise is no less than θ. 5-useful is the recommended value.
             random_state: int
                 Random seed
+
+    Example:
+        >>> from sklearn.datasets import load_iris
+        >>> from synthcity.plugins import Plugins
+        >>>
+        >>> X, y = load_iris(as_frame = True, return_X_y = True)
+        >>> X["target"] = y
+        >>>
+        >>> plugin = Plugins().get("privbayes")
+        >>> plugin.fit(X)
+        >>>
+        >>> plugin.generate(50)
+
+
+        Reference: PrivBayes: Private Data Release via Bayesian Networks. (2017), Zhang J, Cormode G, Procopiuc CM, Srivastava D, Xiao X.
     """
 
     def __init__(

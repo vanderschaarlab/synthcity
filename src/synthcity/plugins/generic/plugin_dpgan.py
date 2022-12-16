@@ -1,5 +1,3 @@
-"""DP GAN implementation
-"""
 # stdlib
 from typing import Any, List, Optional, Union
 
@@ -26,7 +24,7 @@ from synthcity.utils.constants import DEVICE
 
 
 class DPGANPlugin(Plugin):
-    """DPGAN plugin.
+    """Differentially Private Generative Adversarial Network implementation. The discriminator is trained using DP-SGD.
 
     Args:
         generator_n_layers_hidden: int
@@ -83,12 +81,18 @@ class DPGANPlugin(Plugin):
              if True uses noise generation approach robust to floating point arithmetic attacks.
 
     Example:
-        >>> from synthcity.plugins import Plugins
-        >>> plugin = Plugins().get("dpgan")
         >>> from sklearn.datasets import load_iris
-        >>> X = load_iris()
+        >>> from synthcity.plugins import Plugins
+        >>>
+        >>> X, y = load_iris(as_frame = True, return_X_y = True)
+        >>> X["target"] = y
+        >>>
+        >>> plugin = Plugins().get("dpgan", n_iter = 100)
         >>> plugin.fit(X)
-        >>> plugin.generate()
+        >>>
+        >>> plugin.generate(50)
+
+    Reference: "Differentially Private Generative Adversarial Network", Xie, Liyang  et all.
     """
 
     @validate_arguments(config=dict(arbitrary_types_allowed=True))

@@ -19,7 +19,7 @@ pd.options.mode.chained_assignment = None
 
 
 class OriginalTVAEPlugin(Plugin):
-    """TVAE plugin based on the VAE-based Deep Learning data synthesizer which was presented at the NeurIPS 2020 conference by the paper titled Modeling Tabular data using Conditional GAN.
+    """Tabular VAE implementation from the SDV package.
 
     Args:
         embedding_n_units: int = 128
@@ -42,12 +42,20 @@ class OriginalTVAEPlugin(Plugin):
             Multiplier for the reconstruction error.
 
     Example:
-        >>> from synthcity.plugins import Plugins
-        >>> plugin = Plugins().get("sdv_tvae")
         >>> from sklearn.datasets import load_iris
-        >>> X = load_iris()
+        >>> from synthcity.plugins import Plugins
+        >>>
+        >>> X, y = load_iris(as_frame = True, return_X_y = True)
+        >>> X["target"] = y
+        >>>
+        >>> plugin = Plugins().get("sdv_tvae", n_iter = 100)
         >>> plugin.fit(X)
-        >>> plugin.generate()
+        >>>
+        >>> plugin.generate(50)
+
+
+    Reference: Xu, Lei, Maria Skoularidou, Alfredo Cuesta-Infante, and Kalyan Veeramachaneni. "Modeling tabular data using conditional gan." Advances in Neural Information Processing Systems 32 (2019).
+
     """
 
     def __init__(

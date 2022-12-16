@@ -1,5 +1,3 @@
-"""TVAE re-implementation
-"""
 # stdlib
 from typing import Any, List, Optional, Union
 
@@ -25,7 +23,7 @@ from synthcity.plugins.core.schema import Schema
 
 
 class TVAEPlugin(Plugin):
-    """RTVAE plugin.
+    """Tabular VAE implementation.
 
     Args:
         decoder_n_layers_hidden: int
@@ -65,12 +63,17 @@ class TVAEPlugin(Plugin):
             Max number of iterations without any improvement before early stopping is trigged.
 
     Example:
-        >>> from synthcity.plugins import Plugins
-        >>> plugin = Plugins().get("tvae")
         >>> from sklearn.datasets import load_iris
-        >>> X = load_iris()
+        >>> from synthcity.plugins import Plugins
+        >>>
+        >>> X, y = load_iris(as_frame = True, return_X_y = True)
+        >>> X["target"] = y
+        >>>
+        >>> plugin = Plugins().get("tvae", n_iter = 100)
         >>> plugin.fit(X)
-        >>> plugin.generate()
+        >>>
+        >>> plugin.generate(50)
+
     """
 
     @validate_arguments(config=dict(arbitrary_types_allowed=True))

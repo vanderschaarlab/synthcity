@@ -1,9 +1,3 @@
-"""CTGAN Implementation.
-
-Reference: Xu, Lei, Maria Skoularidou, Alfredo Cuesta-Infante, and Kalyan Veeramachaneni.
-"Modeling tabular data using conditional gan." Advances in Neural Information Processing Systems 32 (2019).
-"""
-
 # stdlib
 from typing import Any, List
 
@@ -25,7 +19,7 @@ pd.options.mode.chained_assignment = None
 
 
 class OriginalCTGANPlugin(Plugin):
-    """CTGAN plugin.
+    """Conditional tabular GAN implementation from the SDV package.
 
     CTGAN model is based on the GAN-based Deep Learning data synthesizer which was presented at the NeurIPS 2020 conference by the paper titled Modeling Tabular data using Conditional GAN.
 
@@ -58,16 +52,24 @@ class OriginalCTGANPlugin(Plugin):
             Number of samples to group together when applying the discriminator.
 
     Example:
-        >>> from synthcity.plugins import Plugins
-        >>> plugin = Plugins().get("sdv_ctgan")
         >>> from sklearn.datasets import load_iris
-        >>> X = load_iris()
+        >>> from synthcity.plugins import Plugins
+        >>>
+        >>> X, y = load_iris(as_frame = True, return_X_y = True)
+        >>> X["target"] = y
+        >>>
+        >>> plugin = Plugins().get("sdv_ctgan", n_iter = 100)
         >>> plugin.fit(X)
-        >>> plugin.generate()
+        >>>
+        >>> plugin.generate(50)
+
+
+    Reference: Xu, Lei, Maria Skoularidou, Alfredo Cuesta-Infante, and Kalyan Veeramachaneni. "Modeling tabular data using conditional gan." Advances in Neural Information Processing Systems 32 (2019).
     """
 
     def __init__(
         self,
+        n_iter: int = 2000,
         embedding_n_units: int = 128,
         generator_n_units: int = 500,
         generator_n_layers: int = 3,
@@ -79,7 +81,6 @@ class OriginalCTGANPlugin(Plugin):
         discriminator_decay: float = 1e-6,
         batch_size: int = 500,
         discriminator_steps: int = 1,
-        n_iter: int = 2000,
         pac: int = 10,
         cat_limit: int = 15,
         **kwargs: Any
