@@ -1,5 +1,6 @@
 autodoc
 cloudpickle
+lifelines
 loguru
 loguru
 m2r2==0.3.1
@@ -16,6 +17,7 @@ Pillow==9.3.0
 pydantic
 pydantic
 pyod
+rdt
 scikit-learn
 scipy
 seaborn
@@ -25,3 +27,5 @@ sphinx_gallery==0.10.1
 sphinx_rtd_theme==1.0.0
 sphinxcontrib-napoleon
 sphinxemoji
+torch
+xgboost
