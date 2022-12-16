@@ -1,5 +1,6 @@
 # stdlib
 from pathlib import Path
+from time import time
 
 # third party
 import click
@@ -22,6 +23,8 @@ def run_notebook(notebook_path: Path) -> None:
 ignored_strings = [
     "checkpoint",
     "tutorial1_add_a_new_plugin",
+    "plugin_decaf",
+    "plugin_radialgan",
 ]
 
 
@@ -44,12 +47,15 @@ def main(nb_dir: Path) -> None:
             continue
 
         print("Testing ", p.name)
+        start = time()
         try:
             run_notebook(p)
         except BaseException as e:
             print("FAIL", p.name, e)
 
             raise e
+        finally:
+            print(f"Tutorial {p.name} tool {time() - start}")
 
 
 if __name__ == "__main__":
