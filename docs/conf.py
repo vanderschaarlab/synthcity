@@ -157,6 +157,7 @@ autodoc_mock_imports = [
     "torchtuples",
     "copulas",
     "geomloss",
+    "joblib",
     "sdv",
     "shap",
     "torch",
