@@ -26,12 +26,6 @@ from synthcity.utils.constants import DEVICE
 class AdsGANPlugin(Plugin):
     """AdsGAN plugin - Anonymization through Data Synthesis using Generative Adversarial Networks.
 
-    Reference: Jinsung Yoon, Lydia N. Drumright, Mihaela van der Schaar,
-        "Anonymization through Data Synthesis using Generative Adversarial Networks (ADS-GAN):
-        A harmonizing advancement for AI in medicine,"
-        IEEE Journal of Biomedical and Health Informatics (JBHI), 2019.
-    Paper link: https://ieeexplore.ieee.org/document/9034117
-
 
     Args:
         generator_n_layers_hidden: int
@@ -79,12 +73,23 @@ class AdsGANPlugin(Plugin):
             If not None, the metric is used for evaluation the criterion for early stopping.
 
     Example:
-        >>> from synthcity.plugins import Plugins
-        >>> plugin = Plugins().get("adsgan", n_iter = 100)
         >>> from sklearn.datasets import load_iris
-        >>> X, _ = load_iris(as_frame = True, return_X_y = True)
+        >>> from synthcity.plugins import Plugins
+        >>>
+        >>> X, y = load_iris(as_frame = True, return_X_y = True)
+        >>> X["target"] = y
+        >>>
+        >>> plugin = Plugins().get("adsgan", n_iter = 100)
         >>> plugin.fit(X)
+        >>>
         >>> plugin.generate(50)
+
+    Reference: Jinsung Yoon, Lydia N. Drumright, Mihaela van der Schaar,
+        "Anonymization through Data Synthesis using Generative Adversarial Networks (ADS-GAN):
+        A harmonizing advancement for AI in medicine,"
+        IEEE Journal of Biomedical and Health Informatics (JBHI), 2019.
+    Paper link: https://ieeexplore.ieee.org/document/9034117
+
     """
 
     @validate_arguments(config=dict(arbitrary_types_allowed=True))
