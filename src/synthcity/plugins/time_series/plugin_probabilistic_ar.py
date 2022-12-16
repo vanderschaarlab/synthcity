@@ -1,6 +1,3 @@
-"""
-Probabilistic autoregressive model
-"""
 # stdlib
 from typing import Any, List, Tuple
 
@@ -23,21 +20,31 @@ class ProbabilisticAutoregressivePlugin(Plugin):
     Args:
         n_iter: int
             Maximum number of iterations in the Generator.
+        sample_size: int
+            The number of times to sample (before choosing and returning the sample which maximizes the likelihood). Defaults to 1.
+        device: DEVICE
+            torch device to use for training(cpu/cuda)
+        encoder_max_clusters: int
+            Number of clusters used for tabular encoding
 
     Example:
         >>> from synthcity.plugins import Plugins
         >>> from synthcity.utils.datasets.time_series.google_stocks import GoogleStocksDataloader
         >>> from synthcity.plugins.core.dataloader import TimeSeriesDataLoader
-        >>>
-        >>> plugin = Plugins().get("probabilistic_ar")
-        >>> static, temporal, outcome = GoogleStocksDataloader(as_numpy=True).load()
+        >>> static, temporal, horizons, outcome = GoogleStocksDataloader().load()
         >>> loader = TimeSeriesDataLoader(
-        >>>             temporal_data=temporal_data,
-        >>>             static_data=static_data,
+        >>>             temporal_data=temporal,
+        >>>             temporal_horizons=horizons,
+        >>>             static_data=static,
         >>>             outcome=outcome,
         >>> )
+        >>>
+        >>> plugin = Plugins().get("probabilistic_ar", n_iter = 50)
         >>> plugin.fit(loader)
-        >>> plugin.generate()
+        >>>
+        >>> plugin.generate(count = 10)
+
+    Reference: https://github.com/sdv-dev/DeepEcho
     """
 
     def __init__(

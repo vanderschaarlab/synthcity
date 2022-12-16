@@ -92,7 +92,7 @@ class DPGANPlugin(Plugin):
         >>>
         >>> plugin.generate(50)
 
-    Reference: "Differentially Private Generative Adversarial Network", Xie, Liyang  et all.
+    Reference: "Differentially Private Generative Adversarial Network", Xie, Liyang  et al.
     """
 
     @validate_arguments(config=dict(arbitrary_types_allowed=True))

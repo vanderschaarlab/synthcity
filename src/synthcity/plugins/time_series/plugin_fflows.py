@@ -1,6 +1,3 @@
-"""
-Fourier-Flows method based on " Generative Time-series Modeling with Fourier Flows", Ahmed Alaa, Alex Chan, and Mihaela van der Schaar.
-"""
 # stdlib
 from typing import Any, List, Tuple
 
@@ -31,21 +28,50 @@ class FourierFlowsPlugin(Plugin):
     """Synthetic time series generation using FourierFlows.
 
     Args:
+        n_iter: int
+            Number of training iterations
+        batch_size: int
+            Batch size
+        lr: float
+            Learning rate
+        n_iter_print: int
+            Number of iterations to print the validation loss
+        n_units_hidden: int
+            Number of hidden nodes
+        n_flows: int
+            Number of flows to use(default = 10)
+        FFT: bool
+            Use Fourier transform(default = True)
+        flip: bool
+            Flip the data in the SpectralFilter
+        normalize: bool
+            Scale the data(default = False)
+        static_model: str = "ctgan",
+            The model to use for generating the static data.
+        device: Any = DEVICE
+            torch device to use for training(cpu/cuda)
+        encoder_max_clusters: int = 10
+            Number of clusters used for tabular encoding
 
     Example:
         >>> from synthcity.plugins import Plugins
         >>> from synthcity.utils.datasets.time_series.google_stocks import GoogleStocksDataloader
         >>> from synthcity.plugins.core.dataloader import TimeSeriesDataLoader
-        >>>
-        >>> plugin = Plugins().get("fflows")
-        >>> static, temporal, outcome = GoogleStocksDataloader(as_numpy=True).load()
+        >>> static, temporal, horizons, outcome = GoogleStocksDataloader().load()
         >>> loader = TimeSeriesDataLoader(
-        >>>             temporal_data=temporal_data,
-        >>>             static_data=static_data,
+        >>>             temporal_data=temporal,
+        >>>             temporal_horizons=horizons,
+        >>>             static_data=static,
         >>>             outcome=outcome,
         >>> )
+        >>>
+        >>> plugin = Plugins().get("fflows", n_iter = 50)
         >>> plugin.fit(loader)
-        >>> plugin.generate()
+        >>>
+        >>> plugin.generate(count = 10)
+
+
+    Reference: "Generative Time-series Modeling with Fourier Flows", Ahmed Alaa, Alex Chan, and Mihaela van der Schaar.
     """
 
     def __init__(

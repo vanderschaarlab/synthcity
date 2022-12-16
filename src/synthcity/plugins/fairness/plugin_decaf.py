@@ -1,9 +1,3 @@
-"""DECAF (DEbiasing CAusal Fairness)
-
-Reference: Boris van Breugel, Trent Kyono, Jeroen Berrevoets, Mihaela van der Schaar
-"DECAF: Generating Fair Synthetic Data Using Causally-Aware Generative Networks"(2021).
-"""
-
 # stdlib
 from typing import Any, List, Tuple
 
@@ -28,15 +22,88 @@ DEVICE = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
 
 class DECAFPlugin(Plugin):
-    """DECAF plugin.
+    """DECAF (DEbiasing CAusal Fairness) plugin.
+
+    Args:
+        n_iter: int
+            Number of training iterations.
+        generator_n_layers_hidden: int
+            Number of hidden layers in the generator.
+        generator_n_units_hidden
+            Number of neurons in the hidden layers of the generator.
+        generator_nonlin: str
+            Nonlinearity used by the generator for the hidden layers: leaky_relu, relu, gelu etc.
+        generator_dropout: float
+            Generator dropout.
+        generator_opt_betas: tuple
+            Generator  initial decay rates for the Adam optimizer
+        discriminator_n_layers_hidden: int
+            Number of hidden layers in the discriminator.
+        discriminator_n_units_hidden: int
+            Number of neurons in the hidden layers of the discriminator.
+        discriminator_nonlin: str
+            Nonlinearity used by the discriminator for the hidden layers: leaky_relu, relu, gelu etc.
+        discriminator_n_iter: int
+            Discriminator number of iterations(default = 1)
+        discriminator_dropout: float
+            Discriminator dropout
+        discriminator_opt_betas: tuple
+            Discriminator  initial decay rates for the Adam optimizer
+        lr: float
+            Learning rate
+        weight_decay: float
+            Optimizer weight decay
+        batch_size: int
+            Batch size
+        random_state: int
+            Random seed
+        clipping_value: int
+            Gradient clipping value
+        lambda_gradient_penalty: float
+            Gradient penalty factor used for training the GAN.
+        lambda_privacy: float
+            Privacy factor used the AdsGAN loss.
+        eps: float = 1e-8,
+            Noise added to the privacy loss
+        alpha: float
+            Gradient penalty weight for real samples.
+        rho: float
+            DAG loss factor
+        l1_g: float = 0
+            l1 regularization loss for the generator
+        l1_W: float = 1
+            l1 regularization factor for l1_g
+        struct_learning_enabled: bool
+            Enable DAG learning outside DECAF.
+        struct_learning_n_iter: int
+            Number of iterations for the DAG search.
+        struct_learning_search_method: str
+            DAG search strategy: hillclimb, pc, tree_search, mmhc, exhaustive, d-struct
+        struct_learning_score: str
+            DAG search scoring strategy: k2, bdeu, bic, bds
+        struct_max_indegree: int
+            Max parents in the DAG.
+        encoder_max_clusters: int
+            Number of clusters used for tabular encoding
+        device: Any = DEVICE
+            torch device used for training.
+
 
     Example:
-        >>> from synthcity.plugins import Plugins
-        >>> plugin = Plugins().get("decaf")
         >>> from sklearn.datasets import load_iris
-        >>> X = load_iris()
+        >>> from synthcity.plugins import Plugins
+        >>>
+        >>> X, y = load_iris(as_frame = True, return_X_y = True)
+        >>> X["target"] = y
+        >>>
+        >>> plugin = Plugins().get("decaf", n_iter = 100)
         >>> plugin.fit(X)
-        >>> plugin.generate()
+        >>>
+        >>> plugin.generate(50)
+
+
+
+    Reference: Boris van Breugel, Trent Kyono, Jeroen Berrevoets, Mihaela van der Schaar "DECAF: Generating Fair Synthetic Data Using Causally-Aware Generative Networks"(2021).
     """
 
     def __init__(
@@ -63,10 +130,10 @@ class DECAFPlugin(Plugin):
         alpha: float = 1,
         rho: float = 1,
         weight_decay: float = 1e-2,
-        grad_dag_loss: bool = False,
         l1_g: float = 0,
         l1_W: float = 1,
-        struct_learning_enabled: bool = False,
+        grad_dag_loss: bool = False,
+        struct_learning_enabled: bool = True,
         struct_learning_n_iter: int = 1000,
         struct_learning_search_method: str = "tree_search",  # hillclimb, pc, tree_search, mmhc, exhaustive, d-struct
         struct_learning_score: str = "k2",  # k2, bdeu, bic, bds
@@ -97,6 +164,7 @@ class DECAFPlugin(Plugin):
         self.clipping_value = clipping_value
         self.lambda_gradient_penalty = lambda_gradient_penalty
         self.lambda_privacy = lambda_privacy
+        self.grad_dag_loss = grad_dag_loss
 
         self.device = device
 
@@ -104,7 +172,6 @@ class DECAFPlugin(Plugin):
         self.alpha = alpha
         self.rho = rho
         self.weight_decay = weight_decay
-        self.grad_dag_loss = grad_dag_loss
         self.l1_g = l1_g
         self.l1_W = l1_W
 

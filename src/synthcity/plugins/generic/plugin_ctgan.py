@@ -83,7 +83,7 @@ class CTGANPlugin(Plugin):
         >>>
         >>> plugin.generate(50)
 
-    Reference: "Modeling Tabular Data using Conditional GAN", Xu, Lei et all.
+    Reference: "Modeling Tabular Data using Conditional GAN", Xu, Lei et al.
     Original implementation: https://github.com/sdv-dev/CTGAN
     """
 
