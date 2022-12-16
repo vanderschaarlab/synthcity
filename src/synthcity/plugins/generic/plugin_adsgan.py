@@ -1,12 +1,3 @@
-"""Anonymization through Data Synthesis using Generative Adversarial Networks:
-A harmonizing advancement for AI in medicine (ADS-GAN) Codebase.
-
-Reference: Jinsung Yoon, Lydia N. Drumright, Mihaela van der Schaar,
-"Anonymization through Data Synthesis using Generative Adversarial Networks (ADS-GAN):
-A harmonizing advancement for AI in medicine,"
-IEEE Journal of Biomedical and Health Informatics (JBHI), 2019.
-Paper link: https://ieeexplore.ieee.org/document/9034117
-"""
 # stdlib
 from typing import Any, List, Optional, Union
 
@@ -33,7 +24,14 @@ from synthcity.utils.constants import DEVICE
 
 
 class AdsGANPlugin(Plugin):
-    """AdsGAN plugin.
+    """AdsGAN plugin - Anonymization through Data Synthesis using Generative Adversarial Networks.
+
+    Reference: Jinsung Yoon, Lydia N. Drumright, Mihaela van der Schaar,
+        "Anonymization through Data Synthesis using Generative Adversarial Networks (ADS-GAN):
+        A harmonizing advancement for AI in medicine,"
+        IEEE Journal of Biomedical and Health Informatics (JBHI), 2019.
+    Paper link: https://ieeexplore.ieee.org/document/9034117
+
 
     Args:
         generator_n_layers_hidden: int
@@ -82,11 +80,11 @@ class AdsGANPlugin(Plugin):
 
     Example:
         >>> from synthcity.plugins import Plugins
-        >>> plugin = Plugins().get("adsgan")
+        >>> plugin = Plugins().get("adsgan", n_iter = 100)
         >>> from sklearn.datasets import load_iris
-        >>> X = load_iris()
+        >>> X, _ = load_iris(as_frame = True, return_X_y = True)
         >>> plugin.fit(X)
-        >>> plugin.generate()
+        >>> plugin.generate(50)
     """
 
     @validate_arguments(config=dict(arbitrary_types_allowed=True))
