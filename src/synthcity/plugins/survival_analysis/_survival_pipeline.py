@@ -62,7 +62,8 @@ class SurvivalPipeline(Plugin):
         return []
 
     def _fit(self, X: DataLoader, *args: Any, **kwargs: Any) -> "SurvivalPipeline":
-        assert X.type() == "survival_analysis"
+        if X.type() != "survival_analysis":
+            raise ValueError(f"Invalid data type {X.type()}")
 
         Xcov, T, E = X.unpack()
 

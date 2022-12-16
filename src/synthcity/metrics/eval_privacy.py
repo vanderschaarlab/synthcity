@@ -286,7 +286,8 @@ class IdentifiabilityScore(PrivacyEvaluator):
             X_gt_ = self._oneclass_predict(oneclass_model, X_gt_)
             X_syn_ = self._oneclass_predict(oneclass_model, X_syn_)
         else:
-            assert emb == "", emb
+            if emb != "":
+                raise RuntimeError(f" Invalid emb {emb}")
 
         # Entropy computation
         def compute_entropy(labels: np.ndarray) -> np.ndarray:
