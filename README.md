@@ -9,6 +9,8 @@
 
 <div align="center">
 
+[![Tests Python](https://github.com/vanderschaarlab/synthcity/actions/workflows/test.yml/badge.svg)](https://github.com/vanderschaarlab/synthcity/actions/workflows/test.yml)
+[![Tutorials](https://github.com/vanderschaarlab/synthcity/actions/workflows/test_tutorials.yml/badge.svg)](https://github.com/vanderschaarlab/synthcity/actions/workflows/test_tutorials.yml)
 </div>
 
 
