@@ -113,7 +113,8 @@ class RadialGAN(nn.Module):
         super(RadialGAN, self).__init__()
 
         self.domains = list(np.unique(domains))
-        assert len(self.domains) > 0
+        if len(self.domains) == 0:
+            raise ValueError("Expected a positive number of domains")
 
         log.info(f"Training RadialGAN on device {device}. features = {n_features}")
         self.device = device
@@ -247,7 +248,8 @@ class RadialGAN(nn.Module):
         if domains is None:
             domains = self.domains
 
-        assert self.domain_weights is not None
+        if self.domain_weights is None:
+            raise ValueError("Invalid domain weights")
 
         batch_per_domain = count // len(domains) + 1
         out = torch.tensor([]).to(self.device)
@@ -319,7 +321,8 @@ class RadialGAN(nn.Module):
             )
         self.mappers[domain].optimizer.step()
 
-        assert not torch.isnan(errM)
+        if torch.isnan(errM):
+            raise RuntimeError("NaNs detected in the mapper loss")
 
         # Return loss
         return errM.item()
@@ -362,7 +365,8 @@ class RadialGAN(nn.Module):
             )
         self.generators[domain].optimizer.step()
 
-        assert not torch.isnan(errG)
+        if torch.isnan(errG):
+            raise RuntimeError("NaNs detected in the generator loss")
 
         # Return loss
         return errG.item()
@@ -447,7 +451,8 @@ class RadialGAN(nn.Module):
 
             errors.append(errD.item())
 
-        assert not np.isnan(np.mean(errors))
+        if np.isnan(np.mean(errors)):
+            raise RuntimeError("NaNs detected in the discriminator loss")
 
         return np.mean(errors)
 
