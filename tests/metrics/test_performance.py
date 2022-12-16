@@ -81,7 +81,7 @@ def test_evaluate_performance_classifier(
     assert def_score == score["syn_id"]
 
 
-@pytest.mark.parametrize("distance", ["kendall", "spearman"])
+@pytest.mark.parametrize("distance", ["spearman"])
 @pytest.mark.parametrize(
     "test_plugin",
     [
@@ -174,7 +174,7 @@ def test_evaluate_performance_regression(
     assert def_score == score["syn_id"]
 
 
-@pytest.mark.parametrize("distance", ["kendall", "spearman"])
+@pytest.mark.parametrize("distance", ["spearman"])
 @pytest.mark.parametrize(
     "test_plugin",
     [
@@ -288,7 +288,7 @@ def test_evaluate_performance_survival_analysis(
     assert def_score == score["syn_id.c_index"] - score["syn_id.brier_score"]
 
 
-@pytest.mark.parametrize("distance", ["kendall", "spearman"])
+@pytest.mark.parametrize("distance", ["spearman"])
 @pytest.mark.parametrize(
     "test_plugin",
     [

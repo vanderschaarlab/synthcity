@@ -716,6 +716,8 @@ class AlphaPrecision(StatisticalEvaluator):
 
 
 class SurvivalKMDistance(StatisticalEvaluator):
+    """The distance between two Kaplan-Meier plots. Used for survival analysis"""
+
     def __init__(self, **kwargs: Any) -> None:
         super().__init__(default_metric="optimism", **kwargs)
 
