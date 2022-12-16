@@ -85,7 +85,7 @@ def test_evaluate_performance_classifier(
 @pytest.mark.parametrize(
     "test_plugin",
     [
-        Plugins().get("ctgan", n_iter=100),
+        Plugins().get("ctgan"),
     ],
 )
 def test_evaluate_feature_importance_rank_dist_clf(
@@ -178,7 +178,7 @@ def test_evaluate_performance_regression(
 @pytest.mark.parametrize(
     "test_plugin",
     [
-        Plugins().get("ctgan", n_iter=100),
+        Plugins().get("ctgan"),
     ],
 )
 def test_evaluate_feature_importance_rank_dist_reg(
@@ -292,7 +292,7 @@ def test_evaluate_performance_survival_analysis(
 @pytest.mark.parametrize(
     "test_plugin",
     [
-        Plugins().get("ctgan", n_iter=100),
+        Plugins().get("ctgan"),
     ],
 )
 def test_evaluate_feature_importance_rank_dist_surv(

@@ -326,7 +326,7 @@ class PATEGAN(Serializable):
 
 
 class PATEGANPlugin(Plugin):
-    """PATE-GAN: Generating Synthetic Data with Differential Privacy Guarantees Codebase.
+    """PATE-GAN: Generating Synthetic Data with Differential Privacy Guarantees.
 
     Args:
         generator_n_layers_hidden: int

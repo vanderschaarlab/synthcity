@@ -20,11 +20,13 @@ def run_notebook(notebook_path: Path) -> None:
     proc.preprocess(nb, {"metadata": {"path": workspace}})
 
 
-ignored_strings = [
-    "checkpoint",
-    "tutorial1_add_a_new_plugin",
-    "plugin_decaf",
-    "plugin_radialgan",
+enabled_tests = [
+    "basic_examples",
+    "adsgan",
+    "ctgan",
+    "nflow",
+    "tvae",
+    "timegan",
 ]
 
 
@@ -37,10 +39,10 @@ def main(nb_dir: Path) -> None:
         if p.suffix != ".ipynb":
             continue
 
-        ignore = False
-        for val in ignored_strings:
+        ignore = True
+        for val in enabled_tests:
             if val in p.name:
-                ignore = True
+                ignore = False
                 break
 
         if ignore:
