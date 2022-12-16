@@ -141,6 +141,7 @@ autodoc_mock_imports = [
     "opacus",
     "optuna",
     "loguru",
+    "deepecho",
     "pgmpy",
     "pycox",
     "pydantic",
