@@ -156,6 +156,7 @@ autodoc_mock_imports = [
     "scipy",
     "torchtuples",
     "copulas",
+    "geomloss",
     "sdv",
     "shap",
     "torch",
