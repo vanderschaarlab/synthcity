@@ -1,10 +1,3 @@
-"""RadialGAN  PyTorch implementation
-
-Reference: Yoon, Jinsung and Jordon, James and van der Schaar, Mihaela
-    "RadialGAN: Leveraging multiple datasets to improve target-specific predictive models using Generative Adversarial Networks"
-
-Original implementation: https://github.com/vanderschaarlab/mlforhealthlabpub/blob/main/alg/RadialGAN/RadialGAN.py
-"""
 # stdlib
 from typing import Any, Dict, List, Optional, Tuple
 
@@ -720,7 +713,7 @@ class TabularRadialGAN(torch.nn.Module):
 
 
 class RadialGANPlugin(Plugin):
-    """RadialGAN plugin.
+    """RadialGAN  PyTorch implementation
 
     Args:
         generator_n_layers_hidden: int
@@ -757,12 +750,27 @@ class RadialGANPlugin(Plugin):
             The max number of clusters to create for continuous columns when encoding
 
     Example:
-        >>> from synthcity.plugins import Plugins
-        >>> plugin = Plugins().get("radialgan")
+        >>> import numpy as np
         >>> from sklearn.datasets import load_iris
-        >>> X = load_iris()
-        >>> plugin.fit(X)
-        >>> plugin.generate()
+        >>> from synthcity.plugins import Plugins
+        >>> from synthcity.plugins.core.dataloader import GenericDataLoader
+        >>>
+        >>> X, y = load_iris(as_frame = True, return_X_y = True)
+        >>> X["target"] = y
+        >>> X["domain"] = np.random.choice([0, 1], len(X)) # simulate domains
+        >>> dataloader = GenericDataLoader(X, domain_column="domain")
+        >>>
+        >>> plugin = Plugins().get("radialgan", n_iter = 100)
+        >>> plugin.fit(dataloader)
+        >>>
+        >>> plugin.generate(50)
+
+
+    Reference: Yoon, Jinsung and Jordon, James and van der Schaar, Mihaela
+        "RadialGAN: Leveraging multiple datasets to improve target-specific predictive models using Generative Adversarial Networks"
+
+    Original implementation: https://github.com/vanderschaarlab/mlforhealthlabpub/blob/main/alg/RadialGAN/RadialGAN.py
+
     """
 
     @validate_arguments(config=dict(arbitrary_types_allowed=True))
