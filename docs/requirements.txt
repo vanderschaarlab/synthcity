@@ -10,6 +10,7 @@ myst-parser
 nbconvert==6.5.3
 nbsphinx
 numpy
+optuna
 pandas
 Pillow==9.3.0
 pydantic
