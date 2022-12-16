@@ -22,11 +22,11 @@ def run_notebook(notebook_path: Path) -> None:
 
 enabled_tests = [
     "basic_examples",
-    "adsgan",
-    "ctgan",
-    "nflow",
-    "tvae",
-    "timegan",
+    "plugin_adsgan",
+    "plugin_ctgan",
+    "plugin_nflow",
+    "plugin_tvae",
+    "plugin_timegan",
 ]
 
 
@@ -37,6 +37,9 @@ def main(nb_dir: Path) -> None:
 
     for p in nb_dir.rglob("*"):
         if p.suffix != ".ipynb":
+            continue
+
+        if "checkpoint" in p.name:
             continue
 
         ignore = True
