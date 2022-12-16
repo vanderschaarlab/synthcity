@@ -54,6 +54,8 @@ class DummySamplerPlugin(Plugin):
             constraints = syn_schema.as_constraints()
 
             baseline = constraints.match(baseline)
+            if len(baseline) <= count:
+                return baseline.sample(frac=1)
 
             return baseline.sample(count, replace=True).reset_index(drop=True)
 
