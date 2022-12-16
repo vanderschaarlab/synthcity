@@ -151,6 +151,8 @@ autodoc_mock_imports = [
     "rdt",
     "redis",
     "scikit-learn",
+    "sklearn",
+    "pytorch_lightning",
     "scipy",
     "sdv",
     "shap",
