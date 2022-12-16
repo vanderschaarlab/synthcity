@@ -154,6 +154,7 @@ autodoc_mock_imports = [
     "sklearn",
     "pytorch_lightning",
     "scipy",
+    "torchtuples",
     "sdv",
     "shap",
     "torch",
