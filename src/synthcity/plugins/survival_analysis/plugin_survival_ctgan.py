@@ -84,7 +84,8 @@ class SurvivalCTGANPlugin(Plugin):
         return plugins.Plugins().get_type("ctgan").hyperparameter_space()
 
     def _fit(self, X: DataLoader, *args: Any, **kwargs: Any) -> "SurvivalCTGANPlugin":
-        assert X.type() == "survival_analysis"
+        if X.type() != "survival_analysis":
+            raise ValueError(f"Invalid data type = {X.type()}")
 
         self.model = SurvivalPipeline(
             "ctgan",

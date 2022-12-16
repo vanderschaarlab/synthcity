@@ -224,7 +224,8 @@ class TimeGANPlugin(Plugin):
         ]
 
     def _fit(self, X: DataLoader, *args: Any, **kwargs: Any) -> "TimeGANPlugin":
-        assert X.type() in ["time_series", "time_series_survival"]
+        if X.type() not in ["time_series", "time_series_survival"]:
+            raise ValueError(f"Invalid data type = {X.type()}")
 
         cond: Optional[Union[pd.DataFrame, pd.Series]] = None
         sampler: Optional[ImbalancedDatasetSampler] = None

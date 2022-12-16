@@ -50,10 +50,11 @@ class SurvivalGANPlugin(Plugin):
     ) -> None:
         super().__init__()
 
-        assert censoring_strategy in [
+        if censoring_strategy not in [
             "random",
             "covariate_dependent",
-        ], f"Invalid censoring strategy {censoring_strategy}"
+        ]:
+            raise ValueError(f"Invalid censoring strategy {censoring_strategy}")
         valid_sampling_strategies = [
             "none",
             "imbalanced_censoring",
@@ -95,7 +96,8 @@ class SurvivalGANPlugin(Plugin):
         return plugins.Plugins().get_type("adsgan").hyperparameter_space()
 
     def _fit(self, X: DataLoader, *args: Any, **kwargs: Any) -> "SurvivalGANPlugin":
-        assert X.type() == "survival_analysis"
+        if X.type() != "survival_analysis":
+            raise ValueError(f"Invalid data type = {X.type()}")
 
         sampler: Optional[ImbalancedDatasetSampler] = None
         sampling_labels: Optional[list] = None

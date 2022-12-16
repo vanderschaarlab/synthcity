@@ -116,7 +116,7 @@ class TimeVAEPlugin(Plugin):
         gamma_penalty: float = 1,
         moments_penalty: float = 100,
         embedding_penalty: float = 10,
-        **kwargs: Any
+        **kwargs: Any,
     ) -> None:
         super().__init__()
 
@@ -188,7 +188,8 @@ class TimeVAEPlugin(Plugin):
         ]
 
     def _fit(self, X: DataLoader, *args: Any, **kwargs: Any) -> "TimeVAEPlugin":
-        assert X.type() in ["time_series", "time_series_survival"]
+        if X.type() not in ["time_series", "time_series_survival"]:
+            raise ValueError(f"Invalid data type = {X.type()}")
 
         # Static and temporal generation
         if X.type() == "time_series":

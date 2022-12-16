@@ -84,7 +84,8 @@ class SurVAEPlugin(Plugin):
         return plugins.Plugins().get_type("tvae").hyperparameter_space()
 
     def _fit(self, X: DataLoader, *args: Any, **kwargs: Any) -> "SurVAEPlugin":
-        assert X.type() == "survival_analysis"
+        if X.type() != "survival_analysis":
+            raise ValueError(f"Invalid data type = {X.type()}")
 
         self.model = SurvivalPipeline(
             "tvae",

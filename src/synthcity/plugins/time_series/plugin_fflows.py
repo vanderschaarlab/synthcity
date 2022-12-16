@@ -62,7 +62,7 @@ class FourierFlowsPlugin(Plugin):
         static_model: str = "ctgan",
         device: Any = DEVICE,
         encoder_max_clusters: int = 10,
-        **kwargs: Any
+        **kwargs: Any,
     ) -> None:
         super().__init__()
         self.static_model_name = static_model
@@ -117,7 +117,8 @@ class FourierFlowsPlugin(Plugin):
         ]
 
     def _fit(self, X: DataLoader, *args: Any, **kwargs: Any) -> "FourierFlowsPlugin":
-        assert X.type() in ["time_series", "time_series_survival"]
+        if X.type() not in ["time_series", "time_series_survival"]:
+            raise ValueError(f"Invalid data type = {X.type()}")
 
         if X.type() == "time_series":
             static, temporal, temporal_horizons, outcome = X.unpack(pad=True)

@@ -73,7 +73,8 @@ class ProbabilisticAutoregressivePlugin(Plugin):
     def _fit(
         self, X: DataLoader, *args: Any, **kwargs: Any
     ) -> "ProbabilisticAutoregressivePlugin":
-        assert X.type() in ["time_series", "time_series_survival"]
+        if X.type() not in ["time_series", "time_series_survival"]:
+            raise ValueError("Invalid data type = {X.type()}")
 
         if X.type() == "time_series":
             static, temporal, temporal_horizons, outcome = X.unpack(pad=True)

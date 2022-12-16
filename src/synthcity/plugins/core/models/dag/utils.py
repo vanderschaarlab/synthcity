@@ -76,7 +76,8 @@ class LBFGSBScipy(torch.optim.Optimizer):
             # view as to avoid deprecated pointwise semantics
             p.data = params[offset : offset + numel].view_as(p.data)
             offset += numel
-        assert offset == self._numel
+        if offset != self._numel:
+            raise RuntimeError(f"Invalid offset = {offset}")
 
     def step(self, closure: Callable) -> None:
         """Performs a single optimization step.
@@ -84,7 +85,8 @@ class LBFGSBScipy(torch.optim.Optimizer):
             closure (callable): A closure that reevaluates the model
                 and returns the loss.
         """
-        assert len(self.param_groups) == 1
+        if len(self.param_groups) != 1:
+            raise RuntimeError(f"Invalid param groups {self.param_groups}")
 
         def wrapped_closure(flat_params: torch.Tensor) -> tuple:
             """closure must call zero_grad() and backward()"""

@@ -299,8 +299,10 @@ class Plugin(Serializable, metaclass=ABCMeta):
     def _safe_generate_time_series(
         self, gen_cbk: Callable, count: int, syn_schema: Schema, **kwargs: Any
     ) -> DataLoader:
-        assert self.data_info["data_type"] in ["time_series", "time_series_survival"]
-
+        if self.data_info["data_type"] not in ["time_series", "time_series_survival"]:
+            raise ValueError(
+                f"Invalid data type for time series = {self.data_info['data_type']}"
+            )
         constraints = syn_schema.as_constraints()
 
         data_synth = pd.DataFrame([], columns=self.training_schema().features())

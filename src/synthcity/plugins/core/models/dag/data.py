@@ -29,7 +29,8 @@ class BetaP(P):
         self.rand_sort = rand_sort
 
     def _get_betas(self, K: int) -> list:
-        assert K > 0, f"Cannot have K of {K}"
+        if K == 0:
+            raise RuntimeError(f"Cannot have K of {K}")
 
         first_half = [(i, K) for i in np.linspace(1, K - 1, int((K - K % 2) / 2))]
         second_half = [(K, i) for i in np.linspace(K - 1, 1, int((K - K % 2) / 2))]

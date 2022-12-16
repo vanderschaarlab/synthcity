@@ -96,7 +96,7 @@ class Benchmarks:
             kwargs_hash = ""
             if len(kwargs) > 0:
                 kwargs_hash_raw = json.dumps(kwargs, sort_keys=True).encode()
-                hash_object = hashlib.md5(kwargs_hash_raw)
+                hash_object = hashlib.sha256(kwargs_hash_raw)
                 kwargs_hash = hash_object.hexdigest()
 
             repeats_list = list(range(repeats))

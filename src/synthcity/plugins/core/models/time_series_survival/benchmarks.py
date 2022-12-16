@@ -101,7 +101,7 @@ def search_hyperparams(
     for item in temporal:
         temporal_total += item.sum()
     data = str((static.sum(), temporal_total, T.sum(), Y.sum())).encode("utf-8")
-    data_str = hashlib.md5(data).hexdigest()
+    data_str = hashlib.sha256(data).hexdigest()
     study, pruner = create_study(
         study_name=f"ts_survival_eval_{data_str}_{estimator.name()}",
         direction="maximize",

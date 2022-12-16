@@ -66,9 +66,12 @@ class Constraints(BaseModel):
                     f"Invalid operation {op}. Supported ops: {supported_ops}"
                 )
             if op in ["in"]:
-                assert isinstance(thresh, list)
+                if not isinstance(thresh, list):
+                    raise ValueError("Invalid type for threshold = {type(thresh)}")
             elif op in ["dtype"]:
-                assert isinstance(thresh, str)
+                if not isinstance(thresh, str):
+                    raise ValueError("Invalid type for threshold = {type(thresh)}")
+
         return rules
 
     @validate_arguments(config=dict(arbitrary_types_allowed=True))
@@ -240,7 +243,7 @@ class Constraints(BaseModel):
         return results
 
     def feature_params(self, feature: str) -> Tuple:
-        """ Provide the parameters of Distribution from the Constraint
+        """Provide the parameters of Distribution from the Constraint
 
         This is to be used with the constraint_to_distribution function in distribution module.
 

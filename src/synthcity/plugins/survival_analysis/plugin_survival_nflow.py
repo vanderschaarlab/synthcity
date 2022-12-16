@@ -1,4 +1,4 @@
-
+# stdlib
 from typing import Any, List
 
 # third party
@@ -84,7 +84,8 @@ class SurvivalNFlowPlugin(Plugin):
         return plugins.Plugins().get_type("nflow").hyperparameter_space()
 
     def _fit(self, X: DataLoader, *args: Any, **kwargs: Any) -> "SurvivalNFlowPlugin":
-        assert X.type() == "survival_analysis"
+        if X.type() != "survival_analysis":
+            raise ValueError(f"Invalid data type = {X.type()}")
 
         self.model = SurvivalPipeline(
             "nflow",

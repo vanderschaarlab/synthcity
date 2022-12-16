@@ -545,7 +545,8 @@ class TimeSeriesGAN(nn.Module):
         for model in train_models:
             model.optimizer.zero_grad()
 
-        assert len(static_data) == len(temporal_data)
+        if len(static_data) != len(temporal_data):
+            raise ValueError("Static and temporal lengths should be the same")
 
         (
             temporal_embeddings,
@@ -601,7 +602,8 @@ class TimeSeriesGAN(nn.Module):
         for model in train_models:
             model.optimizer.zero_grad()
 
-        assert len(static_data) == len(temporal_data)
+        if len(static_data) != len(temporal_data):
+            raise ValueError("Static and temporal lengths should be the same")
 
         (
             temporal_embeddings,
