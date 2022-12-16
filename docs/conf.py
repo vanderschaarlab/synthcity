@@ -146,6 +146,7 @@ autodoc_mock_imports = [
     "pycox",
     "pykeops",
     "pyod",
+    "pydantic",
     "rdt",
     "redis",
     "scikit-learn",
