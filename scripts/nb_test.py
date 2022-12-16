@@ -19,6 +19,12 @@ def run_notebook(notebook_path: Path) -> None:
     proc.preprocess(nb, {"metadata": {"path": workspace}})
 
 
+ignored_strings = [
+    "checkpoint",
+    "tutorial1_add_a_new_plugin",
+]
+
+
 @click.command()
 @click.option("--nb_dir", type=str, default=".")
 def main(nb_dir: Path) -> None:
@@ -27,7 +33,14 @@ def main(nb_dir: Path) -> None:
     for p in nb_dir.rglob("*"):
         if p.suffix != ".ipynb":
             continue
-        if "checkpoint" in p.name or "tutorial1_add_a_new_plugin" in p.name:
+
+        ignore = False
+        for val in ignored_strings:
+            if val in p.name:
+                ignore = True
+                break
+
+        if ignore:
             continue
 
         print("Testing ", p.name)
