@@ -201,7 +201,7 @@ class DataLoader(metaclass=ABCMeta):
         self,
         encoders: Optional[Dict[str, Any]] = None,
     ) -> Tuple["DataLoader", Dict]:
-        encoded = self.data.copy()
+        encoded = self.dataframe().copy()
         if encoders is not None:
             for col in encoders:
                 if col not in encoded.columns:
@@ -219,7 +219,7 @@ class DataLoader(metaclass=ABCMeta):
                 encoded[col] = encoder.transform(encoded[col])
                 encoders[col] = encoder
 
-        return self.decorate(encoded), encoders
+        return self.from_info(encoded, self.info()), encoders
 
 
 class GenericDataLoader(DataLoader):
