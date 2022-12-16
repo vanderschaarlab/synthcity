@@ -7,6 +7,8 @@ myst-parser
 nbconvert==6.5.3
 nbsphinx
 notebook
+numpy
+pandas
 Pillow==9.3.0
 seaborn
 sphinx==4.3.1
