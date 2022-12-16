@@ -19,3 +19,19 @@ Examples
     :maxdepth: 3
 
     examples.rst
+
+Generators
+==========
+.. toctree::
+    :glob:
+    :maxdepth: 3
+
+    generators.rst
+
+Metrics
+==========
+.. toctree::
+    :glob:
+    :maxdepth: 3
+
+    metrics.rst

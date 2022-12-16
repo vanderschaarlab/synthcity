@@ -21,14 +21,24 @@
 </div>
 
 
-Features:
+## Features:
 - :key: Easy to extend pluginable architecture.
 - :cyclone: Several evaluation metrics for correctness and privacy.
-- :fire: Several reference models
+- :fire: Several reference models, by type:
+    - General purpose: GAN-based (AdsGAN, CTGAN, PATEGAN, DP-GAN),VAE-based(TVAE, RTVAE), Normalizing flows, Bayesian Networks(PrivBayes, BN).
+    - Time Series generators: TimeGAN, FourierFlows, Probabilistic autoregressive.
+    - Survival Analysis: SurvivalGAN, SurVAE.
+    - Privacy-focused: DECAF, DP-GAN, AdsGAN, PATEGAN, PrivBayes.
+    - Domain adaptation: RadialGAN.
+
 
 ## :rocket: Installation
 
-The library can be installed using
+The library can be installed from PyPI using
+```bash
+$ pip install synthcity
+```
+or from source, using
 ```bash
 $ pip install .
 ```
