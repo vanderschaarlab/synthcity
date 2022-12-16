@@ -7,33 +7,19 @@
 </h4>
 
 
-<div align="center">
-
-[![Tests Python](https://github.com/vanderschaarlab/synthcity/actions/workflows/test.yml/badge.svg)](https://github.com/vanderschaarlab/synthcity/actions/workflows/test.yml)
-[![Tutorials](https://github.com/vanderschaarlab/synthcity/actions/workflows/test_tutorials.yml/badge.svg)](https://github.com/vanderschaarlab/synthcity/actions/workflows/test_tutorials.yml)
-[![Documentation Status](https://readthedocs.org/projects/synthcity/badge/?version=latest)](https://synthcity.readthedocs.io/en/latest/?badge=latest)
-
-
-[![about](https://img.shields.io/badge/about-The%20van%20der%20Schaar%20Lab-blue)](https://www.vanderschaar-lab.com/)
-[![License](https://img.shields.io/badge/License-Apache_2.0-blue.svg)](https://github.com/vanderschaarlab/autoprognosis/blob/main/LICENSE)
-[![Python 3.7+](https://img.shields.io/badge/python-3.7+-blue.svg)](https://www.python.org/downloads/release/python-370/)
-
-</div>
-
-
 Features:
-- :key: Easy to extend pluginable architecture.
-- :cyclone: Several evaluation metrics for correctness and privacy.
-- :fire: Several reference models
+- |:key:| Easy to extend pluginable architecture.
+- |:cyclone:| Several evaluation metrics for correctness and privacy.
+- |:fire:| Several reference models
 
-## :rocket: Installation
+## |:rocket:| Installation
 
 The library can be installed using
 ```bash
 $ pip install .
 ```
 
-## :boom: Sample Usage
+## |:boom:| Sample Usage
 
 ### Generic data
 * List the available generators
@@ -271,7 +257,7 @@ assert syn_model.name() == reloaded.name()
 
 
 
-## :zap: Evaluation metrics
+## |:zap:| Evaluation metrics
 The following table contains the available evaluation metrics:
 
 - __Sanity checks__
@@ -330,7 +316,7 @@ _Quasi-identifiers_ : pieces of information that are not of themselves unique id
 |**sensitive_data_reidentification_xgb**|Sensitive data prediction from the quasi-identifiers using an XGBoost.|0 for no risk.|
 |**sensitive_data_reidentification_mlp**|Sensitive data prediction from the quasi-identifiers using a Neural Net.|0 for no risk.|
 
-## :hammer: Tests
+## |:hammer:| Tests
 
 Install the testing dependencies using
 ```bash
