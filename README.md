@@ -3,7 +3,7 @@
 </h2>
 
 <h4 align="center">
-    A library for synthetic data quality assurance.
+    A library for generating and evaluating synthetic tabular data..
 </h4>
 
 
@@ -11,6 +11,13 @@
 
 [![Tests Python](https://github.com/vanderschaarlab/synthcity/actions/workflows/test.yml/badge.svg)](https://github.com/vanderschaarlab/synthcity/actions/workflows/test.yml)
 [![Tutorials](https://github.com/vanderschaarlab/synthcity/actions/workflows/test_tutorials.yml/badge.svg)](https://github.com/vanderschaarlab/synthcity/actions/workflows/test_tutorials.yml)
+[![Documentation Status](https://readthedocs.org/projects/synthcity/badge/?version=latest)](https://synthcity.readthedocs.io/en/latest/?badge=latest)
+
+
+[![about](https://img.shields.io/badge/about-The%20van%20der%20Schaar%20Lab-blue)](https://www.vanderschaar-lab.com/)
+[![License](https://img.shields.io/badge/License-Apache_2.0-blue.svg)](https://github.com/vanderschaarlab/autoprognosis/blob/main/LICENSE)
+[![Python 3.7+](https://img.shields.io/badge/python-3.7+-blue.svg)](https://www.python.org/downloads/release/python-370/)
+
 </div>
 
 
