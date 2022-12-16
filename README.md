@@ -1,5 +1,5 @@
 <h2 align="center">
-  synthcity
+  synthcity BETA
 </h2>
 
 <h4 align="center">
