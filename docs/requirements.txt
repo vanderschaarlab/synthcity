@@ -10,6 +10,7 @@ notebook
 numpy
 pandas
 Pillow==9.3.0
+pydantic
 seaborn
 sphinx==4.3.1
 sphinx-autopackagesummary

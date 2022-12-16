@@ -144,7 +144,6 @@ autodoc_mock_imports = [
     "deepecho",
     "pgmpy",
     "pycox",
-    "pydantic",
     "pykeops",
     "pyod",
     "rdt",
