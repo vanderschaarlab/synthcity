@@ -255,7 +255,8 @@ class TimeEventGAN(nn.Module):
         # Calculate G's loss based on this output
         errG = errG_noncen + errG_cen + errG_discr
 
-        assert errG.isnan().sum() == 0
+        if errG.isnan().sum() != 0:
+            raise RuntimeError("NaNs detected in the generator loss")
 
         # Calculate gradients for G
         errG.backward()
@@ -295,7 +296,8 @@ class TimeEventGAN(nn.Module):
             if fake_output.dim() > 0 and len(fake_output) > 0:
                 errD -= torch.mean(torch.log(1 - act(fake_output)))
 
-            assert errD.isnan().sum() == 0
+            if errD.isnan().sum() != 0:
+                raise RuntimeError("NaNs detected in the discriminator loss")
             errD.backward()
 
             # Update D

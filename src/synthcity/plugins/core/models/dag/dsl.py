@@ -34,8 +34,11 @@ trace_expm = TraceExpm.apply
 class NotearsMLP(nn.Module):
     def __init__(self, dims: list, bias: bool = True, priors: np.ndarray = []):
         super(NotearsMLP, self).__init__()
-        assert len(dims) >= 2
-        assert dims[-1] == 1
+        if len(dims) < 2:
+            raise ValueError(f"Invalid dims = {dims}")
+        if dims[-1] != 1:
+            raise ValueError(f"Invalid dims[-1] = {dims[-1]}")
+
         d = dims[0]
         self.dims = dims
         self.priors = priors

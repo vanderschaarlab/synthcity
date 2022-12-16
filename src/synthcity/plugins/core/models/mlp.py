@@ -228,8 +228,10 @@ class MLP(nn.Module):
     ) -> None:
         super(MLP, self).__init__()
 
-        assert n_units_in >= 0
-        assert n_units_out >= 0
+        if n_units_in == 0:
+            raise ValueError("n_units_in must be > 0")
+        if n_units_out == 0:
+            raise ValueError("n_units_out must be > 0")
 
         enable_reproducible_results(random_state)
         self.device = device

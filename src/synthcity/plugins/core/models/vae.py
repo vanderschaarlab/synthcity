@@ -527,8 +527,10 @@ class VAE(nn.Module):
             0
         ]
 
-        assert not torch.isnan(reconstruction_loss)
-        assert not torch.isnan(KLD_loss)
+        if torch.isnan(reconstruction_loss):
+            raise RuntimeError("NaNs detected in the reconstruction_loss")
+        if torch.isnan(KLD_loss):
+            raise RuntimeError("NaNs detected in the KLD_loss")
 
         return reconstruction_loss * self.loss_factor + KLD_loss
 
