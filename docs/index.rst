@@ -35,3 +35,11 @@ Metrics
     :maxdepth: 3
 
     metrics.rst
+
+Advanced Topics
+=================
+.. toctree::
+    :glob:
+    :maxdepth: 3
+
+    advanced.rst

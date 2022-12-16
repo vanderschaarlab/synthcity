@@ -37,7 +37,7 @@ Time-series generators
     FourierFlows <tutorials/plugins/time_series/plugin_fourier_flows.ipynb>
 
 Privacy-related generators
----------------------------
+-----------------------------
 .. toctree::
     :glob:
     :maxdepth: 2
@@ -49,7 +49,7 @@ Privacy-related generators
     PrivBayes <tutorials/plugins/generic/plugin_privbayes.ipynb>
 
 Domain adaptation generators
----------------------------
+------------------------------
 .. toctree::
     :glob:
     :maxdepth: 2
