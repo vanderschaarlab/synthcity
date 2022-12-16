@@ -27,7 +27,7 @@ def main(nb_dir: Path) -> None:
     for p in nb_dir.rglob("*"):
         if p.suffix != ".ipynb":
             continue
-        if "checkpoint" in p.name:
+        if "checkpoint" in p.name or "tutorial1_add_a_new_plugin" in p.name:
             continue
 
         print("Testing ", p.name)
