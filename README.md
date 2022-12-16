@@ -37,6 +37,7 @@ $ pip install .
 
 ### Generic data
 * List the available generators
+
 ```python
 from synthcity.plugins import Plugins
 
@@ -44,6 +45,7 @@ Plugins(categories=["generic"]).list()
 ```
 
 * Load and train a generator
+
 ```python
 from sklearn.datasets import load_diabetes
 from synthcity.plugins import Plugins
@@ -57,11 +59,13 @@ syn_model.fit(X)
 ```
 
 * Generate new synthetic data
+
 ```python
 syn_model.generate(count = 10)
 ```
 
 * Generate new synthetic data under some constraints
+
 ```python
 # Constraint: target <= 100
 from synthcity.plugins.core.constraints import Constraints
@@ -74,6 +78,7 @@ assert (generated["target"] <= 100).any()
 ```
 
 * Benchmark the quality of the plugins
+
 ```python
 from synthcity.benchmark import Benchmarks
 from synthcity.plugins.core.dataloader import GenericDataLoader
@@ -94,13 +99,17 @@ Benchmarks.print(score)
 ```
 
 ### Survival analysis
+
 * List the available generators
+
 ```python
 from synthcity.plugins import Plugins
 
 Plugins(categories=["survival_analysis"]).list()
 ```
+
 * Generate new data
+
 ```python
 from lifelines.datasets import load_rossi
 from synthcity.plugins.core.dataloader import SurvivalAnalysisDataLoader
@@ -121,7 +130,9 @@ syn_model.generate(count=10)
 ```
 
 ### Time series
+
 * List the available generators
+
 ```python
 from synthcity.plugins import Plugins
 
@@ -129,6 +140,7 @@ Plugins(categories=["time_series"]).list()
 ```
 
 * Generate new data
+
 ```python
 from synthcity.utils.datasets.time_series.google_stocks import GoogleStocksDataloader
 from synthcity.plugins.core.dataloader import TimeSeriesDataLoader
@@ -147,8 +159,11 @@ syn_model.fit(data)
 
 syn_model.generate(count=10)
 ```
+
 ### Serialization
+
 * Using save/load methods
+
 ```python
 from synthcity.utils.serialization import save, load
 from synthcity.plugins import Plugins
@@ -162,6 +177,7 @@ assert syn_model.name() == reloaded.name()
 ```
 
 * Using the Serializable interface
+
 ```python
 from synthcity.plugins import Plugins
 
@@ -174,6 +190,7 @@ assert syn_model.name() == reloaded.name()
 ```
 
 ## 📓 Tutorials
+
  - [Tutorial 0: Basics](tutorials/tutorial0_basic_examples.ipynb)
  - [Tutorial 1: Write a new plugin](tutorials/tutorial1_add_a_new_plugin.ipynb)
  - [Tutorial 1: Benchmarks](tutorials/tutorial2_benchmarks.ipynb)
@@ -188,6 +205,7 @@ assert syn_model.name() == reloaded.name()
 |**privbayes**|  A differentially private method for releasing high-dimensional data. | [PrivBayes: Private Data Release via Bayesian Networks](https://dl.acm.org/doi/10.1145/3134428)|
 
 ### Generative adversarial networks(GANs)
+
 | Method | Description | Reference |
 |--- | --- | --- |
 |**adsgan**| A conditional GAN framework that generates synthetic data while minimize patient identifiability that is defined based on the probability of re-identification given the combination of all data on any individual patient|  [Anonymization Through Data Synthesis Using Generative Adversarial Networks (ADS-GAN)](https://pubmed.ncbi.nlm.nih.gov/32167919/) |
@@ -202,13 +220,6 @@ assert syn_model.name() == reloaded.name()
 |**rtvae**| A robust variational autoencoder with β divergence for tabular data (RTVAE) with mixed categorical and continuous features.|  [Robust Variational Autoencoder for Tabular Data with β Divergence](https://arxiv.org/abs/2006.08204) |
 
 
-### Sampling methods
-| Method | Description | Reference |
-|--- | --- | --- |
-|**marginal_distributions**| A differentially private method that samples from the marginal distributions of the training set|  --- |
-|**uniform_sampler**| A differentially private method that uniformly samples from the [min, max] ranges of each column.|  --- |
-|**dummy_sampler**| Resample data points from the training set|  --- |
-
 ### Normalizing Flows
 
 | Method | Description | Reference |
@@ -216,6 +227,7 @@ assert syn_model.name() == reloaded.name()
 |**nflow**| Normalizing Flows are generative models which produce tractable distributions where both sampling and density evaluation can be efficient and exact.| [Neural Spline Flows](https://arxiv.org/abs/1906.04032) |
 
 ### Survival analysis methods
+
 | Method | Description | Reference |
 |--- | --- | --- |
 |**survival_gan** | SurvivalGAN is a generative model that can handle survival data by addressing the imbalance in the censoring and time horizons, using a dedicated mechanism for approximating time to event/censoring from the input and survival function. | --- |
@@ -224,6 +236,7 @@ assert syn_model.name() == reloaded.name()
 |**survival_nflow** | SurvivalGAN version using normalizing flows | --- |
 
 ### Time Series methods
+
 | Method | Description | Reference |
 |--- | --- | --- |
 | **timegan** | TimeGAN is a framework for generating realistic time-series data that combines the flexibility of the unsupervised paradigm with the control afforded by supervised training. Through a learned embedding space jointly optimized with both supervised and adversarial objectives, the network adheres to the dynamics of the training data during sampling.  | [Time-series Generative Adversarial Networks](https://proceedings.neurips.cc/paper/2019/file/c9efe5f26cd17ba6216bbe2a7d26d490-Paper.pdf) |
@@ -232,6 +245,7 @@ assert syn_model.name() == reloaded.name()
 
 
 ### Privacy & Fairness
+
 | Method | Description | Reference |
 |--- | --- | --- |
 |**decaf** | Machine learning models have been criticized for reflecting unfair biases in the training data. Instead of solving this by introducing fair learning algorithms directly, DEACF focuses on generating fair synthetic data, such that any downstream learner is fair. Generating fair synthetic data from unfair data - while remaining truthful to the underlying data-generating process (DGP) - is non-trivial. DECAF is a GAN-based fair synthetic data generator for tabular data. With DECAF, we embed the DGP explicitly as a structural causal model in the input layers of the generator, allowing each variable to be reconstructed conditioned on its causal parents. This procedure enables inference time debiasing, where biased edges can be strategically removed to satisfy user-defined fairness requirements.   | [DECAF: Generating Fair Synthetic Data Using Causally-Aware Generative Networks](https://arxiv.org/abs/2110.12884) |
@@ -242,39 +256,55 @@ assert syn_model.name() == reloaded.name()
 
 
 ### Domain adaptation
+
 | Method | Description | Reference |
 |--- | --- | --- |
 |**radialgan** | Training complex machine learning models for prediction often requires a large amount of data that is not always readily available. Leveraging these external datasets from related but different sources is, therefore, an essential task if good predictive models are to be built for deployment in settings where data can be rare. RadialGAN is an approach to the problem in which multiple GAN architectures are used to learn to translate from one dataset to another, thereby allowing to augment the target dataset effectively and learning better predictive models than just the target dataset. | [RadialGAN: Leveraging multiple datasets to improve target-specific predictive models using Generative Adversarial Networks](https://arxiv.org/abs/1802.06403) |
 
 
+### Debug methods
+
+| Method | Description | Reference |
+|--- | --- | --- |
+|**marginal_distributions**| A differentially private method that samples from the marginal distributions of the training set|  --- |
+|**uniform_sampler**| A differentially private method that uniformly samples from the [min, max] ranges of each column.|  --- |
+|**dummy_sampler**| Resample data points from the training set|  --- |
+
+
+
 ## :zap: Evaluation metrics
 The following table contains the available evaluation metrics:
 
-#### Sanity checks
+- __Sanity checks__
+
 | Metric | Description| Values |
 |--- | --- | --- |
-|**data_mismatch_score**| Average number of columns with datatype(object, real, int) mismatch between the real and synthetic data|0: no datatype mismatch. <br/>1: complete data type mismatch between the datasets.|
+|**data_mismatch**| Average number of columns with datatype(object, real, int) mismatch between the real and synthetic data|0: no datatype mismatch. <br/>1: complete data type mismatch between the datasets.|
 |**common_rows_proportion**| The proportion of rows in the real dataset leaked in the synthetic dataset.| 0: there are no common rows between the real and synthetic datasets. <br/> 1: all the rows in the real dataset are leaked in the synthetic dataset. |
-|**avg_distance_nearest_neighbor**| Average distance from the real data to the closest neighbor in the synthetic data|0: all the real rows are leaked in the synthetic dataset. <br/> 1: all the synthetic rows are far away from the real dataset. |
-|**inlier_probability**| The probability of close values between the real and synthetic data.| 0: there is no chance to have synthetic rows similar to the real.<br/>1 means that all the synthetic rows are similar to some real rows. |
-|**outlier_probability**| Average distance from the real data to the closest neighbor in the synthetic data|0: no chance to have rows in the synthetic far away from the real data. <br/> 1: all the synthetic datapoints are far away from the real data. |
+|**nearest_syn_neighbor_distance**| Average distance from the real data to the closest neighbor in the synthetic data|0: all the real rows are leaked in the synthetic dataset. <br/> 1: all the synthetic rows are far away from the real dataset. |
+|**close_values_probability**| The probability of close values between the real and synthetic data.| 0: there is no chance to have synthetic rows similar to the real.<br/>1 means that all the synthetic rows are similar to some real rows. |
+|**distant_values_probability**| Average distance from the real data to the closest neighbor in the synthetic data|0: no chance to have rows in the synthetic far away from the real data. <br/> 1: all the synthetic datapoints are far away from the real data. |
 
-#### Statistical tests
+- __Statistical tests__
+
 | Metric | Description| Values |
 |--- | --- | --- |
 |**inverse_kl_divergence**|The average inverse of the Kullback–Leibler Divergence| 0: the datasets are from different distributions. <br/> 1: the datasets are from the same distribution.|
-|**kolmogorov_smirnov_test**|The Kolmogorov-Smirnov test|0: the distributions are totally different. <br/>1: the distributions are identical.|
+|**ks_test**|The Kolmogorov-Smirnov test|0: the distributions are totally different. <br/>1: the distributions are identical.|
 |**chi_squared_test**|The p-value. A small value indicates that we can reject the null hypothesis and that the distributions are different.|0: the distributions are different<br/>1: the distributions are identical.|
-|**maximum_mean_discrepancy**|Empirical maximum mean discrepancy.|0: The distributions are the same. <br/>1: The distributions are totally different.|
-|**inverse_cdf_distance**|The total distance between continuous features, |0: The distributions are the same. <br/>1: The distributions are totally different.|
-|**avg_jensenshannon_distance**|The Jensen-Shannon distance (metric) between two probability arrays. This is the square root of the Jensen-Shannon divergence. |0: The distributions are the same. <br/>1: The distributions are totally different.|
-|**feature_correlation**| The correlation/strength-of-association of features in data-set with both categorical and continuous features using: * Pearson's R for continuous-continuous cases * Cramer's V or Theil's U for categorical-categorical cases |0: The distributions are the same. <br/>1: The distributions are totally different.|
-|**wasserstein_distance**| Wasserstein Distance is a measure of the distance between two probability distributions. |0: The distributions are the same.|
+|**max_mean_discrepancy**|Empirical maximum mean discrepancy.|0: The distributions are the same. <br/>1: The distributions are totally different.|
+|**inv_cdf_distance**|The total distance between continuous features, |0: The distributions are the same. <br/>1: The distributions are totally different.|
+|**jensenshannon_dist**|The Jensen-Shannon distance (metric) between two probability arrays. This is the square root of the Jensen-Shannon divergence. |0: The distributions are the same. <br/>1: The distributions are totally different.|
+|**feature_corr**| The correlation/strength-of-association of features in data-set with both categorical and continuous features using: * Pearson's R for continuous-continuous cases * Cramer's V or Theil's U for categorical-categorical cases |0: The distributions are the same. <br/>1: The distributions are totally different.|
+|**wasserstein_dist**| Wasserstein Distance is a measure of the distance between two probability distributions. |0: The distributions are the same.|
+|**prdc**| Computes precision, recall, density, and coverage given two manifolds. ||
+|**alpha_precision**|Evaluate the alpha-precision, beta-recall, and authenticity scores. ||
+|**survival_km_distance**|The distance between two Kaplan-Meier plots(survival analysis). ||
 
 
 
+- __Synthetic Data quality__
 
-#### Synthetic Data quality
 | Metric | Description| Values |
 |--- | --- | --- |
 |**train_synth_test_real_data_xbg**|Train an XGBoost classifier or regressor on the synthetic data and evaluate the performance on real test data.|close to 0: similar performance <br/>1: massive performance degradation|
@@ -285,7 +315,8 @@ The following table contains the available evaluation metrics:
 |**mlp_detection**|Train an Neural net to differentiate the synthetic data from the real data.|0: The datasets are indistinguishable. <br/>1: The datasets are totally distinguishable.|
 
 
-#### Privacy metrics
+- __Privacy metrics__
+
 _Quasi-identifiers_ : pieces of information that are not of themselves unique identifiers, but are sufficiently well correlated with an entity that they can be combined with other quasi-identifiers to create a unique identifier.
 
 | Metric | Description| Values |
