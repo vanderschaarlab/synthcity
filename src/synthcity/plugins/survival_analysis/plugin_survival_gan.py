@@ -21,20 +21,39 @@ from synthcity.utils.samplers import ImbalancedDatasetSampler
 
 
 class SurvivalGANPlugin(Plugin):
-    """Survival GAN plugin.
+    """Survival Analysis Pipeline based on AdsGAN.
+
+    Args:
+       uncensoring_model: str
+            The time-to-event model: "survival_function_regression".
+        dataloader_sampling_strategy: str, default = imbalanced_time_censoring
+            Training sampling strategy: none, imbalanced_censoring, imbalanced_time_censoring
+        tte_strategy: str
+            The time-to-event generation strategy: survival_function, uncensoring.
+         censoring_strategy: str
+            For the generated data, how to censor subjects: "random" or "covariate_dependent"
+        kwargs: Any
+            "adsgan" additional args, like n_iter = 100 etc.
+        device:
+            torch device to use for training(cpu/cuda)
 
     Example:
+        >>> from lifelines.datasets import load_rossi
         >>> from synthcity.plugins import Plugins
         >>> from synthcity.plugins.core.dataloader import SurvivalAnalysisDataLoader
+        >>>
         >>> X = load_rossi()
         >>> data = SurvivalAnalysisDataLoader(
         >>>        X,
         >>>        target_column="arrest",
         >>>        time_to_event_column="week",
         >>> )
+        >>>
         >>> plugin = Plugins().get("survival_gan")
         >>> plugin.fit(data)
-        >>> plugin.generate()
+        >>>
+        >>> plugin.generate(count = 50)
+
     """
 
     @validate_arguments(config=dict(arbitrary_types_allowed=True))

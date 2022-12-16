@@ -23,7 +23,20 @@ from synthcity.utils.constants import DEVICE
 
 
 class SurvivalPipeline(Plugin):
-    """Survival uncensoring plugin pipeline."""
+    """Survival uncensoring plugin pipeline.
+
+    Args:
+        method: str
+            Baseline generator to use, e.g.: adsgan, ctgan etc.
+        strategy: str
+            The time-to-event generation strategy: survival_function, uncensoring.
+        uncensoring_model: str
+            The time-to-event model: "survival_function_regression".
+        censoring_strategy: str
+            For the generated data, how to censor subjects: "random" or "covariate_dependent"
+        kwargs: Any
+            The "method" additional args, like n_iter = 100 etc.
+    """
 
     @validate_arguments(config=dict(arbitrary_types_allowed=True))
     def __init__(
