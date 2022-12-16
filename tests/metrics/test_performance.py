@@ -88,6 +88,7 @@ def test_evaluate_performance_classifier(
         Plugins().get("ctgan"),
     ],
 )
+@pytest.mark.xfail
 def test_evaluate_feature_importance_rank_dist_clf(
     distance: str, test_plugin: Plugin
 ) -> None:
@@ -172,6 +173,7 @@ def test_evaluate_performance_regression(
         Plugins().get("ctgan"),
     ],
 )
+@pytest.mark.xfail
 def test_evaluate_feature_importance_rank_dist_reg(
     distance: str, test_plugin: Plugin
 ) -> None:
@@ -277,6 +279,7 @@ def test_evaluate_performance_survival_analysis(
         Plugins().get("ctgan"),
     ],
 )
+@pytest.mark.xfail
 def test_evaluate_feature_importance_rank_dist_surv(
     distance: str, test_plugin: Plugin
 ) -> None:
