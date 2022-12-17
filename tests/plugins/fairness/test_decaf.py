@@ -77,7 +77,7 @@ def test_get_dag(struct_learning_search_method: str) -> None:
     test_plugin = plugin(
         struct_learning_enabled=True,
         struct_learning_search_method=struct_learning_search_method,
-        **plugin_args
+        n_iter=50,
     )
 
     X = pd.DataFrame(load_iris()["data"])
@@ -94,7 +94,7 @@ def test_plugin_generate_and_learn_dag(struct_learning_search_method: str) -> No
     test_plugin = plugin(
         struct_learning_enabled=True,
         struct_learning_search_method=struct_learning_search_method,
-        **plugin_args
+        n_iter=50,
     )
 
     X = pd.DataFrame(load_iris()["data"])

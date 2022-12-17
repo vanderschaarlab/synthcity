@@ -30,7 +30,7 @@ jobs:
             pip install -r prereq.txt
             pip install .[testing]
       - name: pre-commit validation
-        run: pre-commit run --files src/*
+        run: pre-commit run --all
       - name: Security checks
         run: |
             bandit -r src/synthcity/*

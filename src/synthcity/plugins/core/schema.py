@@ -171,7 +171,7 @@ class Schema(BaseModel):
         return samples
 
     def adapt_dtypes(self, X: pd.DataFrame) -> pd.DataFrame:
-        """ Applying the data type to a new data frame
+        """Applying the data type to a new data frame
 
         Args:
             X: pd.DataFrame
