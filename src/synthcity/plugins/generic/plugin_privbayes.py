@@ -288,9 +288,13 @@ class PrivBayes(Serializable):
         self, stats: pd.DataFrame, attribute: str, parents: list
     ) -> pd.DataFrame:
         if len(parents) > 0:
+            plist = []
+            for pkey in parents:
+                plist.append(stats[pkey].T)
+
             output = pd.crosstab(
                 stats[attribute],
-                stats[parents].T.values,
+                plist,
                 values=stats["count"],
                 aggfunc="sum",
                 dropna=False,
