@@ -162,6 +162,9 @@ class Constraints(BaseModel):
                 log.error(
                     f"[{feature}] quality loss for constraints {op} = {thresh}. Remaining {res.sum()}. prev length {prev}. Original dtype {X[feature].dtype}.",
                 )
+                print(
+                    f"[{feature}] quality loss for constraints {op} = {thresh}. Remaining {res.sum()}. prev length {prev}. Original dtype {X[feature].dtype}.",
+                )
         return res
 
     @validate_arguments(config=dict(arbitrary_types_allowed=True))

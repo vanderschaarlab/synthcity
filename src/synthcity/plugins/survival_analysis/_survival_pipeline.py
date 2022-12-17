@@ -127,18 +127,10 @@ class SurvivalPipeline(Plugin):
 
             generated = self.generator.generate(count, **kwargs).dataframe()
             if self.censoring_strategy == "covariate_dependent":
-                print(
-                    "generated[self.target_column] from GANs",
-                    generated[self.target_column].value_counts().to_dict(),
-                )
                 generated[self.target_column] = self.censoring_predictor.predict(
                     generated.drop(
                         columns=[self.target_column, self.time_to_event_column]
                     )
-                )
-                print(
-                    "generated[self.target_column] from censoring clf",
-                    generated[self.target_column].value_counts().to_dict(),
                 )
 
             if self.strategy == "uncensoring":
