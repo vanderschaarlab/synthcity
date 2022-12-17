@@ -216,7 +216,7 @@ assert syn_model.name() == reloaded.name()
 
  - [Tutorial 0: Basics](tutorials/tutorial0_basic_examples.ipynb)
  - [Tutorial 1: Write a new plugin](tutorials/tutorial1_add_a_new_plugin.ipynb)
- - [Tutorial 1: Benchmarks](tutorials/tutorial2_benchmarks.ipynb)
+ - [Tutorial 2: Benchmarks](tutorials/tutorial2_benchmarks.ipynb)
 
 
 ## 🔑 Methods
