@@ -290,7 +290,6 @@ def test_evaluate_survival_km_distance(test_plugin: Plugin) -> None:
         time_horizons=[25],
     )
 
-    print(X["week"].unique())
     test_plugin.fit(Xloader)
     X_gen = test_plugin.generate(len(X))
 
