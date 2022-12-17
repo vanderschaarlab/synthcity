@@ -1,4 +1,5 @@
 # stdlib
+import platform
 from abc import abstractmethod
 from collections import Counter
 from typing import Any, Dict
@@ -36,7 +37,7 @@ class PrivacyEvaluator(MetricEvaluator):
     def evaluate(self, X_gt: DataLoader, X_syn: DataLoader) -> Dict:
         cache_file = (
             self._workspace
-            / f"sc_metric_cache_{self.type()}_{self.name()}_{X_gt.hash()}_{X_syn.hash()}_{self._reduction}.bkp"
+            / f"sc_metric_cache_{self.type()}_{self.name()}_{X_gt.hash()}_{X_syn.hash()}_{self._reduction}_{platform.python_version()}.bkp"
         )
         if self.use_cache(cache_file):
             return load_from_file(cache_file)
@@ -286,7 +287,8 @@ class IdentifiabilityScore(PrivacyEvaluator):
             X_gt_ = self._oneclass_predict(oneclass_model, X_gt_)
             X_syn_ = self._oneclass_predict(oneclass_model, X_syn_)
         else:
-            assert emb == "", emb
+            if emb != "":
+                raise RuntimeError(f" Invalid emb {emb}")
 
         # Entropy computation
         def compute_entropy(labels: np.ndarray) -> np.ndarray:

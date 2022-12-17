@@ -131,7 +131,8 @@ class DeepCoxPHTimeSeriesSurvival(TimeSeriesSurvivalPlugin):
             offset += len(item)
             out.append(raw[offset])
 
-        assert len(raw) == offset + 1
+        if len(raw) != offset + 1:
+            raise RuntimeError(f"Invalid prediction offset {len(raw)} {offset}")
 
         return pd.DataFrame(out, columns=time_horizons)
 

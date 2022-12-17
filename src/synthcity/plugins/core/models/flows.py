@@ -241,7 +241,8 @@ class NormalizingFlows(nn.Module):
             for _, data in enumerate(loader):
                 optimizer.zero_grad()
                 loss = -self.flow.log_prob(inputs=data[0]).mean()
-                assert torch.isnan(loss).sum() == 0, data
+                if torch.isnan(loss).sum() != 0:
+                    raise RuntimeError("The loss contains NaNs")
 
                 loss.backward()
                 optimizer.step()

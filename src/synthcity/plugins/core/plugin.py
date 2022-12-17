@@ -1,5 +1,6 @@
 # stdlib
 import importlib.util
+import platform
 import sys
 from abc import ABCMeta, abstractmethod
 from importlib.abc import Loader
@@ -167,7 +168,10 @@ class Plugin(Serializable, metaclass=ABCMeta):
 
         if self.compress_dataset:
             X_hash = X.hash()
-            bkp_file = self.workspace / f"compressed_df_{X_hash}.bkp"
+            bkp_file = (
+                self.workspace
+                / f"compressed_df_{X_hash}_{platform.python_version()}.bkp"
+            )
             if not bkp_file.exists():
                 X_compressed_context = X.compress()
                 save_to_file(bkp_file, X_compressed_context)
@@ -299,8 +303,10 @@ class Plugin(Serializable, metaclass=ABCMeta):
     def _safe_generate_time_series(
         self, gen_cbk: Callable, count: int, syn_schema: Schema, **kwargs: Any
     ) -> DataLoader:
-        assert self.data_info["data_type"] in ["time_series", "time_series_survival"]
-
+        if self.data_info["data_type"] not in ["time_series", "time_series_survival"]:
+            raise ValueError(
+                f"Invalid data type for time series = {self.data_info['data_type']}"
+            )
         constraints = syn_schema.as_constraints()
 
         data_synth = pd.DataFrame([], columns=self.training_schema().features())

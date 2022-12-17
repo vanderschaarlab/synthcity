@@ -1,3 +1,6 @@
+# stdlib
+import sys
+
 # third party
 import pandas as pd
 import pytest
@@ -55,6 +58,7 @@ def test_plugin_fit(
 @pytest.mark.parametrize(
     "test_plugin", generate_fixtures(plugin_name, plugin, plugin_args)
 )
+@pytest.mark.skipif(sys.platform != "linux", reason="Linux only for faster results")
 def test_plugin_generate(test_plugin: Plugin) -> None:
     X = pd.DataFrame(load_iris()["data"])
     test_plugin.fit(GenericDataLoader(X))
@@ -77,7 +81,7 @@ def test_get_dag(struct_learning_search_method: str) -> None:
     test_plugin = plugin(
         struct_learning_enabled=True,
         struct_learning_search_method=struct_learning_search_method,
-        **plugin_args
+        n_iter=50,
     )
 
     X = pd.DataFrame(load_iris()["data"])
@@ -90,11 +94,12 @@ def test_get_dag(struct_learning_search_method: str) -> None:
     "struct_learning_search_method",
     ["hillclimb", "d-struct"],
 )
+@pytest.mark.skipif(sys.platform != "linux", reason="Linux only for faster results")
 def test_plugin_generate_and_learn_dag(struct_learning_search_method: str) -> None:
     test_plugin = plugin(
         struct_learning_enabled=True,
         struct_learning_search_method=struct_learning_search_method,
-        **plugin_args
+        n_iter=50,
     )
 
     X = pd.DataFrame(load_iris()["data"])

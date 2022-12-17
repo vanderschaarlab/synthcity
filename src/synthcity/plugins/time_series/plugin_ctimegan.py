@@ -77,16 +77,18 @@ class ConditionalTimeGANPlugin(Plugin):
         >>> from synthcity.plugins import Plugins
         >>> from synthcity.utils.datasets.time_series.google_stocks import GoogleStocksDataloader
         >>> from synthcity.plugins.core.dataloader import TimeSeriesDataLoader
-        >>>
-        >>> plugin = Plugins().get("ctimegan")
-        >>> static, temporal, outcome = GoogleStocksDataloader(as_numpy=True).load()
+        >>> static, temporal, horizons, outcome = GoogleStocksDataloader().load()
         >>> loader = TimeSeriesDataLoader(
-        >>>             temporal_data=temporal_data,
-        >>>             static_data=static_data,
+        >>>             temporal_data=temporal,
+        >>>             temporal_horizons=horizons,
+        >>>             static_data=static,
         >>>             outcome=outcome,
         >>> )
+        >>>
+        >>> plugin = Plugins().get("ctimegan", n_iter = 50)
         >>> plugin.fit(loader)
-        >>> plugin.generate()
+        >>>
+        >>> plugin.generate(count = 10)
     """
 
     def __init__(
@@ -175,7 +177,8 @@ class ConditionalTimeGANPlugin(Plugin):
     def _fit(
         self, X: DataLoader, *args: Any, **kwargs: Any
     ) -> "ConditionalTimeGANPlugin":
-        assert X.type() in ["time_series", "time_series_survival"]
+        if X.type() not in ["time_series", "time_series_survival"]:
+            raise ValueError("Invalid data type = {X.type()}")
 
         if X.type() == "time_series":
             static, temporal, temporal_horizons, outcome = X.unpack(pad=True)

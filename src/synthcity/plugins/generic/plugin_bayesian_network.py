@@ -1,10 +1,3 @@
-"""Bayesian Network for generative modeling. Implemented using pgmpy backend.
-
-Reference: JAnkan, Ankur and Panda, Abinash,
-"pgmpy: Probabilistic graphical models using python,"
-Proceedings of the 14th Python in Science Conference (SCIPY 2015), 2015.
-"""
-
 # stdlib
 from typing import Any, List
 
@@ -24,15 +17,37 @@ from synthcity.plugins.core.schema import Schema
 
 
 class BayesianNetworkPlugin(Plugin):
-    """BayesianNetwork plugin.
+    """Bayesian Network for generative modeling. Implemented using pgmpy backend.
+
+    Args:
+        struct_learning_n_iter: int
+            Number of iterations for the DAG learning
+        struct_learning_search_method: str = "tree_search"
+             Search method for learning the DAG: hillclimb, pc, tree_search, mmhc, exhaustive
+        struct_learning_score: str = "k2",
+            Scoring for the DAG search: k2, bdeu, bic, bds
+        struct_max_indegree: int = 4
+            The maximum number of parents for each node.
+        encoder_max_clusters: int = 10
+            Data encoding clusters.
+        encoder_noise_scale: float
+            Small noise to add to the final data, to prevent data leakage.
+
 
     Example:
-        >>> from synthcity.plugins import Plugins
-        >>> plugin = Plugins().get("bayesian_network")
         >>> from sklearn.datasets import load_iris
-        >>> X = load_iris()
+        >>> from synthcity.plugins import Plugins
+        >>>
+        >>> X, y = load_iris(as_frame = True, return_X_y = True)
+        >>> X["target"] = y
+        >>>
+        >>> plugin = Plugins().get("bayesian_network")
         >>> plugin.fit(X)
-        >>> plugin.generate()
+        >>>
+        >>> plugin.generate(50)
+
+    Reference: JAnkan, Ankur and Panda, Abinash, "pgmpy: Probabilistic graphical models using python,"
+        Proceedings of the 14th Python in Science Conference (SCIPY 2015), 2015.
     """
 
     def __init__(

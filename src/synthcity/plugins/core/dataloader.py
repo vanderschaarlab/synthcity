@@ -201,7 +201,7 @@ class DataLoader(metaclass=ABCMeta):
         self,
         encoders: Optional[Dict[str, Any]] = None,
     ) -> Tuple["DataLoader", Dict]:
-        encoded = self.data.copy()
+        encoded = self.dataframe().copy()
         if encoders is not None:
             for col in encoders:
                 if col not in encoded.columns:
@@ -219,7 +219,7 @@ class DataLoader(metaclass=ABCMeta):
                 encoded[col] = encoder.transform(encoded[col])
                 encoders[col] = encoder
 
-        return self.decorate(encoded), encoders
+        return self.from_info(encoded, self.info()), encoders
 
 
 class GenericDataLoader(DataLoader):
@@ -359,7 +359,8 @@ class GenericDataLoader(DataLoader):
 
     @staticmethod
     def from_info(data: pd.DataFrame, info: dict) -> "GenericDataLoader":
-        assert isinstance(data, pd.DataFrame)
+        if not isinstance(data, pd.DataFrame):
+            raise ValueError(f"Invalid data type {type(data)}")
 
         return GenericDataLoader(
             data,
@@ -531,7 +532,8 @@ class SurvivalAnalysisDataLoader(DataLoader):
 
     @staticmethod
     def from_info(data: pd.DataFrame, info: dict) -> "DataLoader":
-        assert isinstance(data, pd.DataFrame)
+        if not isinstance(data, pd.DataFrame):
+            raise ValueError(f"Invalid data type {type(data)}")
 
         return SurvivalAnalysisDataLoader(
             data,
@@ -875,7 +877,9 @@ class TimeSeriesDataLoader(DataLoader):
                     item[col] = fill
             item = item[temporal_features]
 
-            assert list(item.columns) == list(temporal_features)
+            if list(item.columns) != list(temporal_features):
+                raise RuntimeError("Invalid features for packing")
+
             temporal_data[idx] = item.fillna(fill)
 
         return static_data, temporal_data, temporal_horizons, outcome
@@ -917,8 +921,12 @@ class TimeSeriesDataLoader(DataLoader):
                 item = pd.concat([item, pads_df])
 
             # handle missing time points
-            assert list(item.columns) == list(temporal_features)
-            assert len(item) == max_window_len
+            if list(item.columns) != list(temporal_features):
+                raise RuntimeError(
+                    f"Invalid features {item.columns}. Expected {temporal_features}"
+                )
+            if len(item) != max_window_len:
+                raise RuntimeError("Invalid window len")
 
             temporal_data[idx] = item
 

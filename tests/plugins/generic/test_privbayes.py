@@ -1,6 +1,6 @@
 # third party
 import pytest
-from generic_helpers import generate_fixtures, get_airfoil_dataset
+from generic_helpers import generate_fixtures
 from sklearn.datasets import load_iris
 
 # synthcity absolute
@@ -33,8 +33,8 @@ def test_plugin_hyperparams(test_plugin: Plugin) -> None:
 
 @pytest.mark.parametrize("test_plugin", generate_fixtures(plugin_name, plugin))
 def test_plugin_fit(test_plugin: Plugin) -> None:
-    X = get_airfoil_dataset()
-    X[3] = X[3].astype(str)
+    X, _ = load_iris(as_frame=True, return_X_y=True)
+    X["sepal length (cm)"] = X["sepal length (cm)"].astype(str)  # test categoricals
 
     test_plugin.fit(GenericDataLoader(X))
 

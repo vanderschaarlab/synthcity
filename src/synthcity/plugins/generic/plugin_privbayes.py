@@ -288,9 +288,13 @@ class PrivBayes(Serializable):
         self, stats: pd.DataFrame, attribute: str, parents: list
     ) -> pd.DataFrame:
         if len(parents) > 0:
+            plist = []
+            for pkey in parents:
+                plist.append(stats[pkey].T)
+
             output = pd.crosstab(
                 stats[attribute],
-                stats[parents].T.values,
+                plist,
                 values=stats["count"],
                 aggfunc="sum",
                 dropna=False,
@@ -327,9 +331,10 @@ class PrivBayes(Serializable):
 
         output = self._get_noisy_distribution_from_counts(counts, attribute, parents)
 
-        assert len(output) == data[attribute].nunique()
-        assert output.shape[1] == data[parents].nunique().prod()
-
+        if len(output) != data[attribute].nunique():
+            raise RuntimeError(f"Invalid output len {len(output)}")
+        if output.shape[1] != data[parents].nunique().prod():
+            raise RuntimeError(f"Invalid output shape {output.shape}")
         return output
 
     @validate_arguments(config=dict(arbitrary_types_allowed=True))
@@ -361,10 +366,13 @@ class PrivBayes(Serializable):
                 )  # P*(Xi | Πi)
 
             if len(parents) == 0:
-                assert np.allclose(node_values.sum().sum(), 1), node_values
+                if not np.allclose(node_values.sum().sum(), 1):
+                    raise RuntimeError(f"Invalid node_values = {node_values}")
             else:
-                assert np.allclose(node_values.sum(axis=0), 1), node_values
-            assert np.isnan(node_values).sum() == 0, node_values
+                if not np.allclose(node_values.sum(axis=0), 1):
+                    raise RuntimeError(f"Invalid node_values = {node_values}")
+            if not np.isnan(node_values).sum() == 0:
+                raise RuntimeError(f"Invalid node_values = {node_values}")
 
             node_cpd = TabularCPD(
                 variable=attribute,
@@ -426,7 +434,8 @@ class PrivBayes(Serializable):
         split: int,
     ) -> Tuple[List[network_edge], List[float]]:
 
-        assert candidate not in parent_candidates
+        if candidate in parent_candidates:
+            raise RuntimeError(f"Candidate {candidate} already in {parent_candidates}")
         if split + parent_limit > len(parent_candidates):
             return [], []
 
@@ -531,7 +540,6 @@ class PrivBayes(Serializable):
 class PrivBayesPlugin(Plugin):
     """PrivBayes algorithm.
 
-        Paper: PrivBayes: Private Data Release via Bayesian Networks. (2017), Zhang J, Cormode G, Procopiuc CM, Srivastava D, Xiao X.
 
         Args:
             epsilon: float
@@ -547,6 +555,21 @@ class PrivBayesPlugin(Plugin):
     information to average scale of noise is no less than θ. 5-useful is the recommended value.
             random_state: int
                 Random seed
+
+    Example:
+        >>> from sklearn.datasets import load_iris
+        >>> from synthcity.plugins import Plugins
+        >>>
+        >>> X, y = load_iris(as_frame = True, return_X_y = True)
+        >>> X["target"] = y
+        >>>
+        >>> plugin = Plugins().get("privbayes")
+        >>> plugin.fit(X)
+        >>>
+        >>> plugin.generate(50)
+
+
+        Reference: PrivBayes: Private Data Release via Bayesian Networks. (2017), Zhang J, Cormode G, Procopiuc CM, Srivastava D, Xiao X.
     """
 
     def __init__(

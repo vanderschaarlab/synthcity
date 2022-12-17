@@ -413,7 +413,8 @@ class TimeSeriesAutoEncoder(nn.Module):
 
         loss = static_loss + temporal_loss + horizons_loss
 
-        assert not torch.isnan(loss)
+        if torch.isnan(loss):
+            raise RuntimeError("The loss contains NaNs")
 
         loss.backward()
 

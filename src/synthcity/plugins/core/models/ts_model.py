@@ -92,9 +92,12 @@ class TimeSeriesModel(nn.Module):
 
         enable_reproducible_results(random_state)
 
-        assert task_type in ["classification", "regression"]
-        assert mode in modes, f"Unsupported mode {mode}. Available: {modes}"
-        assert len(output_shape) > 0
+        if task_type not in ["classification", "regression"]:
+            raise ValueError(f"Invalid task type {task_type}")
+        if mode not in modes:
+            raise ValueError(f"Unsupported mode {mode}. Available: {modes}")
+        if len(output_shape) == 0:
+            raise ValueError("Invalid output shape")
 
         self.task_type = task_type
 
@@ -185,9 +188,12 @@ class TimeSeriesModel(nn.Module):
         # x shape (batch, time_step, input_size)
         # r_out shape (batch, time_step, output_size)
 
-        assert torch.isnan(static_data).sum() == 0
-        assert torch.isnan(temporal_data).sum() == 0
-        assert torch.isnan(temporal_horizons).sum() == 0
+        if torch.isnan(static_data).sum() != 0:
+            raise ValueError("NaNs detected in the static data")
+        if torch.isnan(temporal_data).sum() != 0:
+            raise ValueError("NaNs detected in the temporal data")
+        if torch.isnan(temporal_horizons).sum() != 0:
+            raise ValueError("NaNs detected in the temporal horizons")
 
         if self.use_horizon_condition:
             temporal_data_merged = torch.cat(
@@ -196,7 +202,8 @@ class TimeSeriesModel(nn.Module):
         else:
             temporal_data_merged = temporal_data
 
-        assert torch.isnan(temporal_data_merged).sum() == 0
+        if torch.isnan(temporal_data_merged).sum() != 0:
+            raise ValueError("NaNs detected in the temporal merged data")
 
         pred = self.temporal_layer(static_data, temporal_data_merged)
 
@@ -577,13 +584,15 @@ class TimeSeriesLayer(nn.Module):
         if self.mode in ["RNN", "LSTM", "GRU"]:
             X_interm, _ = self.temporal_layer(temporal_data)
 
-            assert torch.isnan(X_interm).sum() == 0
+            if torch.isnan(X_interm).sum() != 0:
+                raise RuntimeError("NaNs detected in the temporal embeddings")
 
             return self.out(static_data, X_interm)
         else:
             X_interm = self.temporal_layer(torch.swapaxes(temporal_data, 1, 2))
 
-            assert torch.isnan(X_interm).sum() == 0
+            if torch.isnan(X_interm).sum() != 0:
+                raise RuntimeError("NaNs detected in the temporal embeddings")
 
             return self.out(torch.cat([static_data, X_interm], dim=1))
 
@@ -621,7 +630,9 @@ class WindowLinearLayer(nn.Module):
     def forward(
         self, static_data: torch.Tensor, temporal_data: torch.Tensor
     ) -> torch.Tensor:
-        assert len(static_data) == len(temporal_data)
+        if len(static_data) != len(temporal_data):
+            raise ValueError("Length mismatch between static and temporal data")
+
         batch_size, seq_len, n_feats = temporal_data.shape
         temporal_batch = temporal_data[:, seq_len - self.window_size :, :].reshape(
             batch_size, n_feats * self.window_size

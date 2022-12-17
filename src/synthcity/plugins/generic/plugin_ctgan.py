@@ -1,5 +1,3 @@
-"""Conditional GAN implementation
-"""
 # stdlib
 from typing import Any, List, Optional, Union
 
@@ -26,7 +24,7 @@ from synthcity.utils.constants import DEVICE
 
 
 class CTGANPlugin(Plugin):
-    """CTGAN plugin.
+    """Conditional Tabular GAN implementation.
 
     Args:
         generator_n_layers_hidden: int
@@ -74,12 +72,19 @@ class CTGANPlugin(Plugin):
             If not None, the metric is used for evaluation the criterion for early stopping.
 
     Example:
-        >>> from synthcity.plugins import Plugins
-        >>> plugin = Plugins().get("ctgan")
         >>> from sklearn.datasets import load_iris
-        >>> X = load_iris()
+        >>> from synthcity.plugins import Plugins
+        >>>
+        >>> X, y = load_iris(as_frame = True, return_X_y = True)
+        >>> X["target"] = y
+        >>>
+        >>> plugin = Plugins().get("ctgan", n_iter = 100)
         >>> plugin.fit(X)
-        >>> plugin.generate()
+        >>>
+        >>> plugin.generate(50)
+
+    Reference: "Modeling Tabular Data using Conditional GAN", Xu, Lei et al.
+    Original implementation: https://github.com/sdv-dev/CTGAN
     """
 
     @validate_arguments(config=dict(arbitrary_types_allowed=True))

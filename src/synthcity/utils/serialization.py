@@ -36,4 +36,4 @@ def dataframe_cols_hash(df: pd.DataFrame) -> str:
     df.columns = df.columns.map(str)
     cols = "--".join(list(sorted(df.columns)))
 
-    return hashlib.md5(cols.encode()).hexdigest()
+    return hashlib.sha256(cols.encode()).hexdigest()

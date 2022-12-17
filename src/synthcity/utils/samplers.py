@@ -139,7 +139,8 @@ class ConditionalDatasetSampler(BaseSampler):
             return None
 
         if p is not None:
-            assert p.shape[-1] == self._n_conditional_dimension
+            if p.shape[-1] != self._n_conditional_dimension:
+                raise ValueError(f"Invalid probability shape {p.shape}")
 
             cond_res = np.zeros((batch, self._n_conditional_dimension), dtype="float32")
 
@@ -183,7 +184,8 @@ class ConditionalDatasetSampler(BaseSampler):
         Returns:
             n rows of matrix data.
         """
-        assert len(cat_values) == len(cat_feats)
+        if len(cat_values) != len(cat_feats):
+            raise ValueError(f"Invalid categorical features {cat_values}")
 
         idx = []
         for c, o in zip(cat_feats, cat_values):
@@ -212,7 +214,8 @@ class ConditionalDatasetSampler(BaseSampler):
         data: pd.DataFrame,
         output_info: List[ColumnTransformInfo],
     ) -> None:
-        assert data.shape[1] == sum([item.output_dimensions for item in output_info])
+        if data.shape[1] != sum([item.output_dimensions for item in output_info]):
+            raise ValueError("Invalid data shape {data.shape}")
 
         def is_discrete_column(column_info: ColumnTransformInfo) -> bool:
             return column_info.column_type == "discrete"
@@ -238,7 +241,8 @@ class ConditionalDatasetSampler(BaseSampler):
 
             st += column_info.output_dimensions
 
-        assert st == data.shape[1]
+        if st != data.shape[1]:
+            raise RuntimeError(f"Invalid offset {st} {data.shape}")
 
         # Prepare an interval matrix for efficiently sample conditional vector
         max_category = max(
@@ -286,7 +290,8 @@ class ConditionalDatasetSampler(BaseSampler):
                 current_id += 1
 
             st += column_info.output_dimensions
-        assert st == data.shape[1]
+        if st != data.shape[1]:
+            raise ValueError(f"Invalid offset {st} {data.shape}")
 
         self._conditional_probs = self._conditional_probs / (
             np.sum(self._conditional_probs) + 1e-8

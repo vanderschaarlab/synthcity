@@ -1,10 +1,3 @@
-"""PATE-GAN: Generating Synthetic Data with Differential Privacy Guarantees Codebase.
-
-Reference: James Jordon, Jinsung Yoon, Mihaela van der Schaar,
-"PATE-GAN: Generating Synthetic Data with Differential Privacy Guarantees,"
-International Conference on Learning Representations (ICLR), 2019.
-Paper link: https://openreview.net/forum?id=S1zk9iRqF7
-"""
 # stdlib
 from typing import Any, Dict, List, Optional, Tuple
 
@@ -333,7 +326,7 @@ class PATEGAN(Serializable):
 
 
 class PATEGANPlugin(Plugin):
-    """PATEGAN plugin.
+    """PATE-GAN: Generating Synthetic Data with Differential Privacy Guarantees.
 
     Args:
         generator_n_layers_hidden: int
@@ -377,14 +370,21 @@ class PATEGANPlugin(Plugin):
         encoder_max_clusters: int
             The max number of clusters to create for continuous columns when encoding
 
-
     Example:
-        >>> from synthcity.plugins import Plugins
-        >>> plugin = Plugins().get("pategan")
         >>> from sklearn.datasets import load_iris
-        >>> X = load_iris()
+        >>> from synthcity.plugins import Plugins
+        >>>
+        >>> X, y = load_iris(as_frame = True, return_X_y = True)
+        >>> X["target"] = y
+        >>>
+        >>> plugin = Plugins().get("pategan", n_iter = 100)
         >>> plugin.fit(X)
-        >>> plugin.generate()
+        >>>
+        >>> plugin.generate(50)
+
+
+    Reference: James Jordon, Jinsung Yoon, Mihaela van der Schaar, "PATE-GAN: Generating Synthetic Data with Differential Privacy Guarantees," International Conference on Learning Representations (ICLR), 2019.
+    Paper link: https://openreview.net/forum?id=S1zk9iRqF7
     """
 
     @validate_arguments(config=dict(arbitrary_types_allowed=True))

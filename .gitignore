@@ -64,3 +64,4 @@ data
 *.pkl
 checkpoints
 lightning_logs
+generated

@@ -67,8 +67,10 @@ class DynamicDeephitTimeSeriesSurvival(TimeSeriesSurvivalPlugin):
     ) -> None:
         super().__init__()
         enable_reproducible_results(random_state)
-        assert rnn_type in rnn_modes, f"Supported modes: {rnn_modes}"
-        assert output_type in output_modes, f"Supported output modes: {output_modes}"
+        if rnn_type not in rnn_modes:
+            raise ValueError(f"Supported modes: {rnn_modes}")
+        if output_type not in output_modes:
+            raise ValueError(f"Supported output modes: {output_modes}")
 
         self.model = DynamicDeepHitModel(
             split=split,
@@ -323,7 +325,9 @@ class DynamicDeepHitModel:
 
                 valid_loss += self.total_loss(xb, tb, eb)
 
-            assert not torch.isnan(valid_loss)
+            if torch.isnan(valid_loss):
+                raise RuntimeError("NaNs detected in the total loss")
+
             valid_loss = valid_loss.item()
 
             if valid_loss < old_loss:
@@ -557,7 +561,8 @@ class DynamicDeepHitModel:
             raise RuntimeError("Invalid model for loss")
 
         longitudinal_prediction, outcomes = self.model(x.float())
-        assert torch.isnan(longitudinal_prediction).sum() == 0
+        if torch.isnan(longitudinal_prediction).sum() != 0:
+            raise RuntimeError("NaNs detected in the longitudinal_prediction")
 
         t, e = t.long(), e.int()
 
@@ -721,18 +726,21 @@ class DynamicDeepHitLayers(nn.Module):
         inputmask = torch.isnan(x[:, :, 0])
         x[torch.isnan(x)] = -1
 
-        assert torch.isnan(x).sum() == 0
+        if torch.isnan(x).sum() != 0:
+            raise RuntimeError("NaNs detected in the input")
 
         if self.rnn_type in ["GRU", "LSTM", "RNN"]:
             hidden, _ = self.embedding(x)
         else:
             hidden = self.embedding(x)
 
-        assert torch.isnan(hidden).sum() == 0
+        if torch.isnan(hidden).sum() != 0:
+            raise RuntimeError("NaNs detected in the embeddings")
 
         # Longitudinal modelling
         longitudinal_prediction = self.longitudinal(hidden)
-        assert torch.isnan(longitudinal_prediction).sum() == 0
+        if torch.isnan(longitudinal_prediction).sum() != 0:
+            raise RuntimeError("NaNs detected in the longitudinal_prediction")
 
         hidden_attentive = self.forward_attention(x, inputmask, hidden)
 
@@ -752,7 +760,8 @@ class DynamicDeepHitLayers(nn.Module):
         # Soft max for probability distribution
         outcomes_t = torch.cat(outcomes, dim=1)
         outcomes_t = self.soft(outcomes_t)
-        assert torch.isnan(outcomes_t).sum() == 0
+        if torch.isnan(outcomes_t).sum() != 0:
+            raise RuntimeError("NaNs detected in the outcome")
 
         outcomes = [
             outcomes_t[:, i * self.output_dim : (i + 1) * self.output_dim]

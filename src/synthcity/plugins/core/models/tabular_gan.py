@@ -219,9 +219,10 @@ class TabularGAN(torch.nn.Module):
                     idx += length
                     continue
 
-                assert (
-                    fake_samples[mask, idx : idx + length] >= 0
-                ).all(), fake_samples[mask, idx : idx + length]
+                if not (fake_samples[mask, idx : idx + length] >= 0).all():
+                    raise RuntimeError(
+                        f"Invalid samples after softmax = {fake_samples[mask, idx : idx + length]}"
+                    )
                 # fake_samples are after the Softmax activation
                 # we filter active features in the mask
                 item_loss = torch.nn.NLLLoss()(
@@ -233,7 +234,10 @@ class TabularGAN(torch.nn.Module):
                 cond_idx += length
                 idx += length
 
-            assert idx == real_samples.shape[1]
+            if idx != real_samples.shape[1]:
+                raise ValueError(
+                    f"Invalid offset idx = {idx}; real_samples.shape = {real_samples.shape}"
+                )
 
             if len(losses) == 0:
                 return 0
@@ -318,7 +322,10 @@ class TabularGAN(torch.nn.Module):
             cond = self.dataloader_sampler.get_dataset_conditionals()
 
         if cond is not None:
-            assert len(cond) == len(X_enc)
+            if len(cond) != len(X_enc):
+                raise ValueError(
+                    f"Invalid conditional shape. {cond.shape} expected {len(X_enc)}"
+                )
 
         # training
         self.model.fit(

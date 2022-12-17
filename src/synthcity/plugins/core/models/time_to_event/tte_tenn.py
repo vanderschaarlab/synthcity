@@ -295,7 +295,8 @@ class TimeEventNN(nn.Module):
 
         err = self.lambda_calibration * nn.MSELoss()(inner_T_dist, inner_pred_T_dist)
 
-        assert not torch.isnan(err), "Calibration loss fail"
+        if torch.isnan(err):
+            raise RuntimeError("Calibration loss contains NaNs")
 
         return err
 
@@ -346,7 +347,8 @@ class TimeEventNN(nn.Module):
 
             err += nn.MSELoss()(fails, pred_T[idx])
 
-        assert not torch.isnan(err), "Ranking loss fail"
+        if torch.isnan(err):
+            raise RuntimeError("Ranking loss contains NaNs")
 
         return self.lambda_ordering * err
 
@@ -365,7 +367,8 @@ class TimeEventNN(nn.Module):
             nn.ReLU()(T - fake_T)
         )  # fake_T should be >= T for censored data
 
-        assert not torch.isnan(errG_cen), "Censored regression loss fail"
+        if torch.isnan(errG_cen):
+            raise RuntimeError("Censored regression loss contains NaNs")
         # Calculate G's loss based on this output
         return self.lambda_regression_c * errG_cen
 
@@ -384,7 +387,8 @@ class TimeEventNN(nn.Module):
             fake_T, T
         )  # fake_T should be == T for noncensored data
 
-        assert not torch.isnan(errG_noncen), "Observed regression loss fail"
+        if torch.isnan(errG_noncen):
+            raise RuntimeError("Observed regression loss contains NaNs")
         return self.lambda_regression_nc * errG_noncen
 
 

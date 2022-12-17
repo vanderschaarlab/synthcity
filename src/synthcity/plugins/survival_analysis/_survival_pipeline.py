@@ -23,7 +23,20 @@ from synthcity.utils.constants import DEVICE
 
 
 class SurvivalPipeline(Plugin):
-    """Survival uncensoring plugin pipeline."""
+    """Survival uncensoring plugin pipeline.
+
+    Args:
+        method: str
+            Baseline generator to use, e.g.: adsgan, ctgan etc.
+        strategy: str
+            The time-to-event generation strategy: survival_function, uncensoring.
+        uncensoring_model: str
+            The time-to-event model: "survival_function_regression".
+        censoring_strategy: str
+            For the generated data, how to censor subjects: "random" or "covariate_dependent"
+        kwargs: Any
+            The "method" additional args, like n_iter = 100 etc.
+    """
 
     @validate_arguments(config=dict(arbitrary_types_allowed=True))
     def __init__(
@@ -62,7 +75,8 @@ class SurvivalPipeline(Plugin):
         return []
 
     def _fit(self, X: DataLoader, *args: Any, **kwargs: Any) -> "SurvivalPipeline":
-        assert X.type() == "survival_analysis"
+        if X.type() != "survival_analysis":
+            raise ValueError(f"Invalid data type {X.type()}")
 
         Xcov, T, E = X.unpack()
 
@@ -113,18 +127,10 @@ class SurvivalPipeline(Plugin):
 
             generated = self.generator.generate(count, **kwargs).dataframe()
             if self.censoring_strategy == "covariate_dependent":
-                print(
-                    "generated[self.target_column] from GANs",
-                    generated[self.target_column].value_counts().to_dict(),
-                )
                 generated[self.target_column] = self.censoring_predictor.predict(
                     generated.drop(
                         columns=[self.target_column, self.time_to_event_column]
                     )
-                )
-                print(
-                    "generated[self.target_column] from censoring clf",
-                    generated[self.target_column].value_counts().to_dict(),
                 )
 
             if self.strategy == "uncensoring":

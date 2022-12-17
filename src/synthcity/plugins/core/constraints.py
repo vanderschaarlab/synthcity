@@ -66,9 +66,12 @@ class Constraints(BaseModel):
                     f"Invalid operation {op}. Supported ops: {supported_ops}"
                 )
             if op in ["in"]:
-                assert isinstance(thresh, list)
+                if not isinstance(thresh, list):
+                    raise ValueError("Invalid type for threshold = {type(thresh)}")
             elif op in ["dtype"]:
-                assert isinstance(thresh, str)
+                if not isinstance(thresh, str):
+                    raise ValueError("Invalid type for threshold = {type(thresh)}")
+
         return rules
 
     @validate_arguments(config=dict(arbitrary_types_allowed=True))
@@ -97,7 +100,7 @@ class Constraints(BaseModel):
         elif op == "in":
             return (X[feature].isin(operand)) | X[feature].isna()
         elif op == "dtype":
-            return X[feature].dtype == operand
+            return operand in str(X[feature])
         else:
             raise RuntimeError("unsupported operation", op)
 
@@ -240,7 +243,7 @@ class Constraints(BaseModel):
         return results
 
     def feature_params(self, feature: str) -> Tuple:
-        """ Provide the parameters of Distribution from the Constraint
+        """Provide the parameters of Distribution from the Constraint
 
         This is to be used with the constraint_to_distribution function in distribution module.
 
@@ -268,7 +271,7 @@ class Constraints(BaseModel):
                     continue
                 dist_args["choices"] = [v for v in value if v in dist_args["choices"]]
 
-            elif op == "dtype" and value == "int":
+            elif op == "dtype" and value in ["int", "int32", "int64", "integer"]:
                 dist_template = "integer"
             elif (op == "le" or op == "<=") and value < dist_args["high"]:
                 dist_args["high"] = value

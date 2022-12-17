@@ -1,5 +1,6 @@
 # stdlib
 import copy
+import platform
 from typing import Any, Dict, Tuple
 
 # third party
@@ -156,7 +157,7 @@ class PerformanceEvaluator(MetricEvaluator):
         """
         cache_file = (
             self._workspace
-            / f"sc_metric_cache_{self.type()}_{self.name()}_{X_gt.hash()}_{X_syn.hash()}_{self._reduction}.bkp"
+            / f"sc_metric_cache_{self.type()}_{self.name()}_{X_gt.hash()}_{X_syn.hash()}_{self._reduction}_{platform.python_version()}_{platform.python_version()}.bkp"
         )
         if self.use_cache(cache_file):
             return load_from_file(cache_file)
@@ -227,12 +228,14 @@ class PerformanceEvaluator(MetricEvaluator):
         Returns:
             gt and syn performance scores
         """
-        assert X_gt.type() == "survival_analysis"
-        assert X_syn.type() == "survival_analysis"
+        if X_gt.type() != "survival_analysis" or X_syn.type() != "survival_analysis":
+            raise ValueError(
+                f"Invalid data types. gt = {X_gt.type()} syn = {X_syn.type()}"
+            )
 
         cache_file = (
             self._workspace
-            / f"sc_metric_cache_{self.type()}_{self.name()}_{X_gt.hash()}_{X_syn.hash()}_{self._reduction}.bkp"
+            / f"sc_metric_cache_{self.type()}_{self.name()}_{X_gt.hash()}_{X_syn.hash()}_{self._reduction}_{platform.python_version()}_{platform.python_version()}.bkp"
         )
         if self.use_cache(cache_file):
             return load_from_file(cache_file)
@@ -332,12 +335,14 @@ class PerformanceEvaluator(MetricEvaluator):
         Returns:
             gt and syn performance scores
         """
-        assert X_gt.type() == "time_series"
-        assert X_syn.type() == "time_series"
+        if X_gt.type() != "time_series" or X_syn.type() != "time_series":
+            raise ValueError(
+                f"Invalid data type gt = {X_gt.type()} syn = {X_syn.type()}"
+            )
 
         cache_file = (
             self._workspace
-            / f"sc_metric_cache_{self.type()}_{self.name()}_{X_gt.hash()}_{X_syn.hash()}_{self._reduction}.bkp"
+            / f"sc_metric_cache_{self.type()}_{self.name()}_{X_gt.hash()}_{X_syn.hash()}_{self._reduction}_{platform.python_version()}_{platform.python_version()}.bkp"
         )
         if self.use_cache(cache_file):
             return load_from_file(cache_file)
@@ -460,12 +465,17 @@ class PerformanceEvaluator(MetricEvaluator):
         Returns:
             gt and syn performance scores
         """
-        assert X_gt.type() == "time_series_survival"
-        assert X_syn.type() == "time_series_survival"
+        if (
+            X_gt.type() != "time_series_survival"
+            or X_syn.type() != "time_series_survival"
+        ):
+            raise ValueError(
+                f"Invalid data type gt = {X_gt.type()} syn = {X_syn.type()}"
+            )
 
         cache_file = (
             self._workspace
-            / f"sc_metric_cache_{self.type()}_{self.name()}_{X_gt.hash()}_{X_syn.hash()}_{self._reduction}.bkp"
+            / f"sc_metric_cache_{self.type()}_{self.name()}_{X_gt.hash()}_{X_syn.hash()}_{self._reduction}_{platform.python_version()}_{platform.python_version()}.bkp"
         )
         if self.use_cache(cache_file):
             return load_from_file(cache_file)
@@ -632,7 +642,7 @@ class PerformanceEvaluatorXGB(PerformanceEvaluator):
                     "n_jobs": 2,
                     "verbosity": 0,
                     "depth": 3,
-                    "strategy": "debiased_bce",  # "weibull", "debiased_bce"
+                    "strategy": "weibull",  # "weibull", "debiased_bce"
                     "random_state": self._random_state,
                 },
                 X_gt,
@@ -663,7 +673,7 @@ class PerformanceEvaluatorXGB(PerformanceEvaluator):
                     "n_jobs": 2,
                     "verbosity": 0,
                     "depth": 3,
-                    "strategy": "debiased_bce",  # "weibull", "debiased_bce"
+                    "strategy": "weibull",  # "weibull", "debiased_bce"
                     "random_state": self._random_state,
                 },
                 X_gt,
@@ -805,7 +815,9 @@ class FeatureImportanceRankDistance(MetricEvaluator):
     def __init__(self, distance: str = "kendall", **kwargs: Any) -> None:
         super().__init__(**kwargs)
 
-        assert distance in ["kendall", "spearman"]
+        if distance not in ["kendall", "spearman"]:
+            raise ValueError(f"Invalid feature distance {distance}")
+
         self._distance = distance
 
     @staticmethod
@@ -836,7 +848,7 @@ class FeatureImportanceRankDistance(MetricEvaluator):
     ) -> Dict:
         cache_file = (
             self._workspace
-            / f"sc_metric_cache_{self.type()}_{self.name()}_{X_gt.hash()}_{X_syn.hash()}.bkp"
+            / f"sc_metric_cache_{self.type()}_{self.name()}_{X_gt.hash()}_{X_syn.hash()}_{platform.python_version()}.bkp"
         )
         if self.use_cache(cache_file):
             results = load_from_file(cache_file)
@@ -872,7 +884,8 @@ class FeatureImportanceRankDistance(MetricEvaluator):
 
             syn_xai = np.mean(np.abs(syn_shap), axis=0)  # [n_features]
             gt_xai = np.mean(np.abs(gt_shap), axis=0)  # [n_features]
-            assert len(syn_xai) == len(columns)
+            if len(syn_xai) != len(columns):
+                raise RuntimeError("Invalid xai features")
 
             corr, pvalue = self.distance(syn_xai, gt_xai)
             corr = np.mean(np.nan_to_num(corr))

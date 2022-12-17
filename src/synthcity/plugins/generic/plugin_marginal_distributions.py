@@ -16,20 +16,20 @@ class MarginalDistributionPlugin(Plugin):
     """Synthetic data generation via marginal distributions.
 
     Example:
-        >>> from synthcity.plugins import Plugins
-        >>> plugin = Plugins().get("marginal_distributions")
         >>> from sklearn.datasets import load_iris
-        >>> X = load_iris()
+        >>> from synthcity.plugins import Plugins
+        >>>
+        >>> X, y = load_iris(as_frame = True, return_X_y = True)
+        >>> X["target"] = y
+        >>>
+        >>> plugin = Plugins().get("marginal_distributions")
         >>> plugin.fit(X)
-        >>> plugin.generate()
+        >>>
+        >>> plugin.generate(50)
+
     """
 
     def __init__(self, **kwargs: Any) -> None:
-        """
-        Args:
-            epsilon: float
-                Privacy parameter epsilon in differential privacy. >= 0.
-        """
         super().__init__(
             sampling_strategy="marginal",
         )

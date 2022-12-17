@@ -150,9 +150,10 @@ class TabularVAE(nn.Module):
                     idx += length
                     continue
 
-                assert (
-                    fake_samples[mask, idx : idx + length] >= 0
-                ).all(), fake_samples[mask, idx : idx + length]
+                if not (fake_samples[mask, idx : idx + length] >= 0).all():
+                    raise RuntimeError(
+                        f"Values should be positive after softmax = {fake_samples[mask, idx : idx + length]}"
+                    )
                 # fake_samples are after the Softmax activation
                 # we filter active features in the mask
                 item_loss = torch.nn.NLLLoss()(
@@ -164,7 +165,8 @@ class TabularVAE(nn.Module):
                 cond_idx += length
                 idx += length
 
-            assert idx == real_samples.shape[1]
+            if idx != real_samples.shape[1]:
+                raise RuntimeError(f"Invalid offset {idx} {real_samples.shape}")
 
             if len(losses) == 0:
                 return 0

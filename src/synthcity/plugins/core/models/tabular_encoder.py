@@ -4,6 +4,7 @@ Adapted from https://github.com/sdv-dev/CTGAN
 """
 
 # stdlib
+import platform
 from collections import namedtuple
 from pathlib import Path
 from typing import Any, List, Optional, Sequence, Tuple
@@ -229,13 +230,16 @@ class TabularEncoder(TransformerMixin, BaseEstimator):
 
         self._column_raw_dtypes = raw_data.infer_objects().dtypes
         self._column_transform_info_list = []
+
+        self.workspace.mkdir(parents=True, exist_ok=True)
+
         for column_name in raw_data.columns:
             if column_name in self.whitelist:
                 continue
             column_hash = dataframe_hash(raw_data[[column_name]])
             bkp_file = (
                 self.workspace
-                / f"encoder_cache_{column_hash}_{column_name[:50]}_{self.max_clusters}_{self.categorical_limit}.bkp"
+                / f"encoder_cache_{column_hash}_{column_name[:50]}_{self.max_clusters}_{self.categorical_limit}_{platform.python_version()}.bkp"
             )
 
             log.info(f"Encoding {column_name} {column_hash}")

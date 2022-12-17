@@ -1,6 +1,7 @@
 # stdlib
 import hashlib
 import json
+import platform
 import random
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
@@ -96,7 +97,7 @@ class Benchmarks:
             kwargs_hash = ""
             if len(kwargs) > 0:
                 kwargs_hash_raw = json.dumps(kwargs, sort_keys=True).encode()
-                hash_object = hashlib.md5(kwargs_hash_raw)
+                hash_object = hashlib.sha256(kwargs_hash_raw)
                 kwargs_hash = hash_object.hexdigest()
 
             repeats_list = list(range(repeats))
@@ -108,11 +109,11 @@ class Benchmarks:
 
                 cache_file = (
                     workspace
-                    / f"{experiment_name}_{testcase}_{plugin}_{kwargs_hash}_{repeat}.bkp"
+                    / f"{experiment_name}_{testcase}_{plugin}_{kwargs_hash}_{platform.python_version()}_{repeat}.bkp"
                 )
                 generator_file = (
                     workspace
-                    / f"{experiment_name}_{testcase}_{plugin}_{kwargs_hash}_generator_{repeat}.bkp"
+                    / f"{experiment_name}_{testcase}_{plugin}_{kwargs_hash}_{platform.python_version()}_generator_{repeat}.bkp"
                 )
 
                 log.info(

@@ -78,6 +78,20 @@ class NormalizingFlowsPlugin(Plugin):
             Max number of iterations without any improvement before early stopping is trigged.
         patience_metric: Optional[WeightedMetrics]
             If not None, the metric is used for evaluation the criterion for early stopping.
+
+    Example:
+        >>> from sklearn.datasets import load_iris
+        >>> from synthcity.plugins import Plugins
+        >>>
+        >>> X, y = load_iris(as_frame = True, return_X_y = True)
+        >>> X["target"] = y
+        >>>
+        >>> plugin = Plugins().get("nflow", n_iter = 100)
+        >>> plugin.fit(X)
+        >>>
+        >>> plugin.generate(50)
+
+    Reference: https://github.com/bayesiains/nflows
     """
 
     @validate_arguments(config=dict(arbitrary_types_allowed=True))

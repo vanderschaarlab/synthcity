@@ -12,7 +12,7 @@ from synthcity.plugins.core.constraints import Constraints
 
 
 class Distribution(BaseModel, metaclass=ABCMeta):
-    """ Base class of all Distributions.
+    """Base class of all Distributions.
 
     The Distribution class characterizes the **empirical** marginal distribution of the feature.
     Each derived class must implement the following methods:
@@ -28,6 +28,7 @@ class Distribution(BaseModel, metaclass=ABCMeta):
 
     Examples of derived classes include CategoricalDistribution, FloatDistribution, and IntegerDistribution.
     """
+
     name: str
     data: Optional[pd.Series] = None
     random_state: int = 0
@@ -324,7 +325,7 @@ class IntegerDistribution(Distribution):
 
 
 def constraint_to_distribution(constraints: Constraints, feature: str) -> Distribution:
-    """ Infer Distribution from Constraints.
+    """Infer Distribution from Constraints.
 
     Args:
         constraints: Constraints

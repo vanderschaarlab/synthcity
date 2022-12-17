@@ -224,8 +224,10 @@ class BreslowEstimator:
             k += d
             divisor[i] = value
 
-        assert k == n_at_risk[0] - n_at_risk[-1]
-
+        if k != n_at_risk[0] - n_at_risk[-1]:
+            raise RuntimeError(
+                f"Invalid k = {k}, n_at_risk[0] - n_at_risk[-1] = {n_at_risk[0] - n_at_risk[-1]}"
+            )
         y = np.cumsum(n_events / divisor)
         self.cum_baseline_hazard_ = StepFunction(uniq_times, y)
         self.baseline_survival_ = StepFunction(uniq_times, np.exp(-y))

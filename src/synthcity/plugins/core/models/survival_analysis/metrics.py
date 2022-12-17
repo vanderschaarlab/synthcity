@@ -114,6 +114,9 @@ def nonparametric_distance(
     real_kmf, real_surv, real_hazards, real_constant_hazard = km_survival_function(
         real_T, real_E
     )
+    if len(syn) == 0 or len(real) == 0:
+        raise ValueError("Empty evaluation sets")
+
     syn_kmf, syn_surv, syn_hazards, syn_constant_hazard = km_survival_function(
         syn_T, syn_E
     )
@@ -124,8 +127,10 @@ def nonparametric_distance(
         syn_local_pred = syn_kmf.predict(t)
         real_local_pred = real_kmf.predict(t)
 
-        assert not np.isnan(syn_local_pred), t
-        assert not np.isnan(real_local_pred), t
+        if np.isnan(syn_local_pred):
+            raise RuntimeError("syn_local_pred contains NaNs")
+        if np.isnan(real_local_pred):
+            raise RuntimeError("real_local_pred contains NaNs")
 
         abs_opt.append(abs(syn_local_pred - real_local_pred))
         opt.append(syn_local_pred - real_local_pred)

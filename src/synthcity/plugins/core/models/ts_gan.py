@@ -7,6 +7,7 @@ import torch
 from pydantic import validate_arguments
 from torch import nn
 from torch.utils.data import DataLoader, TensorDataset, sampler
+from tqdm import tqdm
 
 # synthcity absolute
 import synthcity.logger as log
@@ -545,7 +546,8 @@ class TimeSeriesGAN(nn.Module):
         for model in train_models:
             model.optimizer.zero_grad()
 
-        assert len(static_data) == len(temporal_data)
+        if len(static_data) != len(temporal_data):
+            raise ValueError("Static and temporal lengths should be the same")
 
         (
             temporal_embeddings,
@@ -601,7 +603,8 @@ class TimeSeriesGAN(nn.Module):
         for model in train_models:
             model.optimizer.zero_grad()
 
-        assert len(static_data) == len(temporal_data)
+        if len(static_data) != len(temporal_data):
+            raise ValueError("Static and temporal lengths should be the same")
 
         (
             temporal_embeddings,
@@ -782,7 +785,7 @@ class TimeSeriesGAN(nn.Module):
         loader = self.dataloader(static_data, temporal_data, temporal_horizons, cond)
 
         # Train loop
-        for i in range(self.generator_n_iter):
+        for i in tqdm(range(self.generator_n_iter)):
             e_loss, g_loss, d_loss = self._train_epoch(
                 loader,
             )
