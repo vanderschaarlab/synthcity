@@ -32,6 +32,8 @@
     - Domain adaptation: RadialGAN.
 
 
+__NOTE__: Python 3.10 is __NOT__ supported yet.
+
 ## :rocket: Installation
 
 The library can be installed from PyPI using

@@ -90,7 +90,7 @@ def test_evaluate_performance_classifier(
     ],
 )
 @pytest.mark.xfail
-@pytest.mark.skipif(sys.platform != "linux", reason="Ubuntu only for faster results")
+@pytest.mark.skipif(sys.platform != "linux", reason="Linux only for faster results")
 def test_evaluate_feature_importance_rank_dist_clf(
     distance: str, test_plugin: Plugin
 ) -> None:
@@ -125,7 +125,7 @@ def test_evaluate_feature_importance_rank_dist_clf(
         PerformanceEvaluatorXGB,
     ],
 )
-@pytest.mark.skipif(sys.platform != "linux", reason="Ubuntu only for faster results")
+@pytest.mark.skipif(sys.platform != "linux", reason="Linux only for faster results")
 def test_evaluate_performance_regression(
     test_plugin: Plugin, evaluator_t: Type
 ) -> None:
@@ -177,7 +177,7 @@ def test_evaluate_performance_regression(
     ],
 )
 @pytest.mark.xfail
-@pytest.mark.skipif(sys.platform != "linux", reason="Ubuntu only for faster results")
+@pytest.mark.skipif(sys.platform != "linux", reason="Linux only for faster results")
 def test_evaluate_feature_importance_rank_dist_reg(
     distance: str, test_plugin: Plugin
 ) -> None:
@@ -284,7 +284,7 @@ def test_evaluate_performance_survival_analysis(
     ],
 )
 @pytest.mark.xfail
-@pytest.mark.skipif(sys.platform != "linux", reason="Ubuntu only for faster results")
+@pytest.mark.skipif(sys.platform != "linux", reason="Linux only for faster results")
 def test_evaluate_feature_importance_rank_dist_surv(
     distance: str, test_plugin: Plugin
 ) -> None:

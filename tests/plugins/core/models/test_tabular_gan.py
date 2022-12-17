@@ -128,7 +128,7 @@ def test_gan_conditional() -> None:
     assert generated.shape == (5, X.shape[1])
 
 
-@pytest.mark.skipif(sys.version_info < (3, 8), reason="test with python3.8 or higher")
+@pytest.mark.skipif(sys.platform != "linux", reason="Linux only for faster results")
 def test_gan_generation_with_dp() -> None:
     X = get_airfoil_dataset()
 
@@ -174,7 +174,7 @@ def test_gan_generation_with_early_stopping(patience_metric: Tuple[str, str]) ->
     assert generated.shape == (10, X.shape[1])
 
 
-@pytest.mark.slow
+@pytest.mark.skipif(sys.platform != "linux", reason="Linux only for faster results")
 def test_gan_sampling_adjustment() -> None:
     X = get_airfoil_dataset()
 
