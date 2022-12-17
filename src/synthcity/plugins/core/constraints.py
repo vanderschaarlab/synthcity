@@ -100,7 +100,7 @@ class Constraints(BaseModel):
         elif op == "in":
             return (X[feature].isin(operand)) | X[feature].isna()
         elif op == "dtype":
-            return X[feature].dtype == operand
+            return operand in str(X[feature])
         else:
             raise RuntimeError("unsupported operation", op)
 
@@ -160,9 +160,6 @@ class Constraints(BaseModel):
             )
             if res.sum() < prev:
                 log.error(
-                    f"[{feature}] quality loss for constraints {op} = {thresh}. Remaining {res.sum()}. prev length {prev}. Original dtype {X[feature].dtype}.",
-                )
-                print(
                     f"[{feature}] quality loss for constraints {op} = {thresh}. Remaining {res.sum()}. prev length {prev}. Original dtype {X[feature].dtype}.",
                 )
         return res
@@ -274,7 +271,7 @@ class Constraints(BaseModel):
                     continue
                 dist_args["choices"] = [v for v in value if v in dist_args["choices"]]
 
-            elif op == "dtype" and value == "int":
+            elif op == "dtype" and value in ["int", "int32", "int64", "integer"]:
                 dist_template = "integer"
             elif (op == "le" or op == "<=") and value < dist_args["high"]:
                 dist_args["high"] = value
