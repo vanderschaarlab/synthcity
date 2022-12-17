@@ -93,15 +93,23 @@ assert (generated["target"] <= 100).any()
 * Benchmark the quality of the plugins
 
 ```python
+# third party
+from sklearn.datasets import load_diabetes
+
+# synthcity absolute
 from synthcity.benchmark import Benchmarks
+from synthcity.plugins.core.constraints import Constraints
 from synthcity.plugins.core.dataloader import GenericDataLoader
+
+X, y = load_diabetes(return_X_y=True, as_frame=True)
+X["target"] = y
 
 loader = GenericDataLoader(X, target_column="target", sensitive_columns=["sex"])
 
 constraints = Constraints(rules=[("target", "ge", 150)])
 
 score = Benchmarks.evaluate(
-    ["marginal_distributions"],
+    [("example", "marginal_distributions", {})],  # testname, plugin name, pplugin args
     loader,
     synthetic_size=1000,
     synthetic_constraints=constraints,
@@ -155,13 +163,15 @@ Plugins(categories=["time_series"]).list()
 * Generate new data
 
 ```python
-from synthcity.utils.datasets.time_series.google_stocks import GoogleStocksDataloader
-from synthcity.plugins.core.dataloader import TimeSeriesDataLoader
+# synthcity absolute
 from synthcity.plugins import Plugins
+from synthcity.plugins.core.dataloader import TimeSeriesDataLoader
+from synthcity.utils.datasets.time_series.google_stocks import GoogleStocksDataloader
 
-static_data, temporal_data, outcome = GoogleStocksDataloader().load()
+static_data, temporal_data, horizons, outcome = GoogleStocksDataloader().load()
 data = TimeSeriesDataLoader(
     temporal_data=temporal_data,
+    temporal_horizons=horizons,
     static_data=static_data,
     outcome=outcome,
 )
