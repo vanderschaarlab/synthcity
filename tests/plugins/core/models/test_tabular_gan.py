@@ -1,4 +1,5 @@
 # stdlib
+import sys
 from typing import Tuple
 
 # third party
@@ -127,6 +128,7 @@ def test_gan_conditional() -> None:
     assert generated.shape == (5, X.shape[1])
 
 
+@pytest.mark.skipif(sys.version_info < (3, 8), reason="test with python3.8 or higher")
 def test_gan_generation_with_dp() -> None:
     X = get_airfoil_dataset()
 
@@ -172,13 +174,13 @@ def test_gan_generation_with_early_stopping(patience_metric: Tuple[str, str]) ->
     assert generated.shape == (10, X.shape[1])
 
 
+@pytest.mark.slow
 def test_gan_sampling_adjustment() -> None:
     X = get_airfoil_dataset()
 
     model = TabularGAN(
         X,
         n_units_latent=50,
-        generator_n_iter=50,
         encoder_max_clusters=5,
         adjust_inference_sampling=False,
     )

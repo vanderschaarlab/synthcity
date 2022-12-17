@@ -89,6 +89,7 @@ def test_evaluate_performance_classifier(
     ],
 )
 @pytest.mark.xfail
+@pytest.mark.slow
 def test_evaluate_feature_importance_rank_dist_clf(
     distance: str, test_plugin: Plugin
 ) -> None:
@@ -280,6 +281,7 @@ def test_evaluate_performance_survival_analysis(
     ],
 )
 @pytest.mark.xfail
+@pytest.mark.slow
 def test_evaluate_feature_importance_rank_dist_surv(
     distance: str, test_plugin: Plugin
 ) -> None:

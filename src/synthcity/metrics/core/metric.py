@@ -1,4 +1,5 @@
 # stdlib
+import platform
 from abc import ABCMeta, abstractmethod
 from pathlib import Path
 from typing import Callable, Dict, Optional
@@ -110,7 +111,10 @@ class MetricEvaluator(metaclass=ABCMeta):
     def _get_oneclass_model(self, X_gt: np.ndarray) -> OneClassLayer:
         X_hash = dataframe_hash(pd.DataFrame(X_gt))
 
-        cache_file = self._workspace / f"sc_metric_cache_model_oneclass_{X_hash}.bkp"
+        cache_file = (
+            self._workspace
+            / f"sc_metric_cache_model_oneclass_{X_hash}_{platform.python_version()}.bkp"
+        )
         if cache_file.exists() and self._use_cache:
             return load_from_file(cache_file)
 

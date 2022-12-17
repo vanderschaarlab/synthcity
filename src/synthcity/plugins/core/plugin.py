@@ -1,5 +1,6 @@
 # stdlib
 import importlib.util
+import platform
 import sys
 from abc import ABCMeta, abstractmethod
 from importlib.abc import Loader
@@ -167,7 +168,10 @@ class Plugin(Serializable, metaclass=ABCMeta):
 
         if self.compress_dataset:
             X_hash = X.hash()
-            bkp_file = self.workspace / f"compressed_df_{X_hash}.bkp"
+            bkp_file = (
+                self.workspace
+                / f"compressed_df_{X_hash}_{platform.python_version()}.bkp"
+            )
             if not bkp_file.exists():
                 X_compressed_context = X.compress()
                 save_to_file(bkp_file, X_compressed_context)

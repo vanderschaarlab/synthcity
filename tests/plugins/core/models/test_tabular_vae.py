@@ -1,3 +1,6 @@
+# stdlib
+import sys
+
 # third party
 import pytest
 from helpers import get_airfoil_dataset
@@ -98,6 +101,7 @@ def test_vae_classification(loss_strategy: str) -> None:
 
 
 @pytest.mark.parametrize("loss_strategy", ["standard", "robust_divergence"])
+@pytest.mark.skipif(sys.version_info < (3, 8), reason="test with python3.8 or higher")
 def test_vae_classification_early_stopping(loss_strategy: str) -> None:
     X = get_airfoil_dataset()
 

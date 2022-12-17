@@ -1,4 +1,5 @@
 # stdlib
+import platform
 from typing import Any, Dict
 
 # third party
@@ -53,7 +54,7 @@ class DetectionEvaluator(MetricEvaluator):
     ) -> Dict:
         cache_file = (
             self._workspace
-            / f"sc_metric_cache_{self.type()}_{self.name()}_{X_gt.hash()}_{X_syn.hash()}_{self._reduction}.bkp"
+            / f"sc_metric_cache_{self.type()}_{self.name()}_{X_gt.hash()}_{X_syn.hash()}_{self._reduction}_{platform.python_version()}.bkp"
         )
         if self.use_cache(cache_file):
             results = load_from_file(cache_file)
