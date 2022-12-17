@@ -418,6 +418,7 @@ def test_evaluate_performance_time_series(
         PerformanceEvaluatorXGB,
     ],
 )
+@pytest.mark.skipif(sys.platform != "linux", reason="Linux only for faster results")
 def test_evaluate_performance_time_series_survival(
     test_plugin: Plugin, evaluator_t: Type
 ) -> None:

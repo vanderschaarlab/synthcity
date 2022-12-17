@@ -1,3 +1,6 @@
+# stdlib
+import sys
+
 # third party
 import pytest
 from lifelines.datasets import load_rossi
@@ -80,6 +83,7 @@ def test_plugin_fit(dataloader_sampling_strategy: str, tte_strategy: str) -> Non
 
 
 @pytest.mark.parametrize("strategy", ["uncensoring", "survival_function"])
+@pytest.mark.skipif(sys.platform != "linux", reason="Linux only for faster results")
 def test_plugin_generate(strategy: str) -> None:
     test_plugin = plugin(tte_strategy=strategy, **plugins_args)
 
