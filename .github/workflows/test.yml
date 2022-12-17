@@ -27,8 +27,7 @@ jobs:
           cache: 'pip' # caching pip dependencies
       - name: Install dependencies
         run: |
-            pip install -r prereq.txt
-            pip install .[testing]
+            pip install bandit pre-commit
       - name: pre-commit validation
         run: pre-commit run --all
       - name: Security checks
