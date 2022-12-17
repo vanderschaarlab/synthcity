@@ -114,7 +114,9 @@ def nonparametric_distance(
     real_kmf, real_surv, real_hazards, real_constant_hazard = km_survival_function(
         real_T, real_E
     )
-    print(syn_T.unique(), real_T.unique())
+    if len(syn) == 0 or len(real) == 0:
+        raise ValueError("Empty evaluation sets")
+
     syn_kmf, syn_surv, syn_hazards, syn_constant_hazard = km_survival_function(
         syn_T, syn_E
     )

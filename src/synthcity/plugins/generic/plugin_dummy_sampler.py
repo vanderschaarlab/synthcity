@@ -54,6 +54,9 @@ class DummySamplerPlugin(Plugin):
             constraints = syn_schema.as_constraints()
 
             baseline = constraints.match(baseline)
+            if len(baseline) == 0:
+                raise ValueError("Cannot generate data")
+
             if len(baseline) <= count:
                 return baseline.sample(frac=1)
 
