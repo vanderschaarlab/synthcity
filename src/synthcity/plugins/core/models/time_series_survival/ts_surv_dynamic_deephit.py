@@ -29,10 +29,7 @@ from ._base import TimeSeriesSurvivalPlugin
 rnn_modes = ["GRU", "LSTM", "RNN", "Transformer"]
 output_modes = [
     "MLP",
-    "MiniRocket",
-    "mWDNPlus",
     "Transformer",
-    "TSiTPlus",
     "LSTM",
     "GRU",
     "RNN",
@@ -40,7 +37,6 @@ output_modes = [
     "InceptionTime",
     "InceptionTimePlus",
     "ResCNN",
-    "TST",
     "XCM",
 ]
 
