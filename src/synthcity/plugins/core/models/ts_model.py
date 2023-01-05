@@ -262,9 +262,6 @@ class TimeSeriesModel(nn.Module):
             _,
         ) = self._prepare_input(static_data, temporal_data, temporal_horizons, outcome)
 
-        if self.task_type == "classification":
-            outcome_t = outcome_t.long()
-
         return self._train(
             static_data_t, temporal_data_t, temporal_horizons_t, outcome_t
         )
