@@ -1,5 +1,5 @@
 # stdlib
-from typing import Any, Callable, List, Optional, Tuple
+from typing import Any, Callable, Dict, List, Optional, Tuple, Union
 
 # third party
 import numpy as np
@@ -8,20 +8,13 @@ from pydantic import validate_arguments
 from sklearn.model_selection import train_test_split
 from torch import nn
 from torch.utils.data import DataLoader, TensorDataset, sampler
-from tsai.models.gMLP import gMLP
 from tsai.models.InceptionTime import InceptionTime
 from tsai.models.InceptionTimePlus import InceptionTimePlus
-from tsai.models.MINIROCKET_Pytorch import MiniRocket
-from tsai.models.MINIROCKETPlus_Pytorch import MiniRocketPlus
-from tsai.models.mWDN import mWDNPlus
 from tsai.models.OmniScaleCNN import OmniScaleCNN
 from tsai.models.ResCNN import ResCNN
 from tsai.models.RNN_FCN import MLSTM_FCN
 from tsai.models.TCN import TCN
 from tsai.models.TransformerModel import TransformerModel
-from tsai.models.TSiTPlus import TSiTPlus
-from tsai.models.TST import TST
-from tsai.models.TSTPlus import TSTPlus
 from tsai.models.XceptionTime import XceptionTime
 from tsai.models.XCM import XCM
 
@@ -44,15 +37,8 @@ modes = [
     "XceptionTime",
     "ResCNN",
     "OmniScaleCNN",
-    "TST",
-    "TSTPlus",
     "XCM",
-    "gMLP",
-    "MiniRocket",
-    "MiniRocketPlus",
     "Transformer",
-    "TSiTPlus",
-    "mWDNPlus",
 ]
 
 
@@ -218,17 +204,29 @@ class TimeSeriesModel(nn.Module):
     @validate_arguments(config=dict(arbitrary_types_allowed=True))
     def predict(
         self,
-        static_data: np.ndarray,
-        temporal_data: np.ndarray,
-        temporal_horizons: np.ndarray,
+        static_data: Union[List, np.ndarray],
+        temporal_data: Union[List, np.ndarray],
+        temporal_horizons: Union[List, np.ndarray],
     ) -> np.ndarray:
         self.eval()
         with torch.no_grad():
-            temporal_data_t = self._check_tensor(temporal_data).float()
-            temporal_horizons_t = self._check_tensor(temporal_horizons).float()
-            static_data_t = self._check_tensor(static_data).float()
+            (
+                static_data_t,
+                temporal_data_t,
+                temporal_horizons_t,
+                _,
+                window_batches,
+            ) = self._prepare_input(static_data, temporal_data, temporal_horizons)
 
-            yt = self(static_data_t, temporal_data_t, temporal_horizons_t)
+            yt = torch.zeros(len(temporal_data), *self.output_shape).to(self.device)
+            for widx in range(len(temporal_data_t)):
+                window_size = len(temporal_horizons_t[widx][0])
+                local_yt = self(
+                    static_data_t[widx],
+                    temporal_data_t[widx],
+                    temporal_horizons_t[widx],
+                )
+                yt[window_batches[window_size]] = local_yt
 
             if self.task_type == "classification":
                 return np.argmax(yt.cpu().numpy(), -1)
@@ -237,9 +235,9 @@ class TimeSeriesModel(nn.Module):
 
     def score(
         self,
-        static_data: np.ndarray,
-        temporal_data: np.ndarray,
-        temporal_horizons: np.ndarray,
+        static_data: Union[List, np.ndarray],
+        temporal_data: Union[List, np.ndarray],
+        temporal_horizons: Union[List, np.ndarray],
         outcome: np.ndarray,
     ) -> float:
         y_pred = self.predict(static_data, temporal_data, temporal_horizons)
@@ -251,15 +249,19 @@ class TimeSeriesModel(nn.Module):
     @validate_arguments(config=dict(arbitrary_types_allowed=True))
     def fit(
         self,
-        static_data: np.ndarray,
-        temporal_data: np.ndarray,
-        temporal_horizons: np.ndarray,
-        outcome: np.ndarray,
+        static_data: Union[List, np.ndarray],
+        temporal_data: Union[List, np.ndarray],
+        temporal_horizons: Union[List, np.ndarray],
+        outcome: Union[List, np.ndarray],
     ) -> Any:
-        temporal_data_t = self._check_tensor(temporal_data).float()
-        temporal_horizons_t = self._check_tensor(temporal_horizons).float()
-        static_data_t = self._check_tensor(static_data).float()
-        outcome_t = self._check_tensor(outcome).float()
+        (
+            static_data_t,
+            temporal_data_t,
+            temporal_horizons_t,
+            outcome_t,
+            _,
+        ) = self._prepare_input(static_data, temporal_data, temporal_horizons, outcome)
+
         if self.task_type == "classification":
             outcome_t = outcome_t.long()
 
@@ -270,22 +272,31 @@ class TimeSeriesModel(nn.Module):
     @validate_arguments(config=dict(arbitrary_types_allowed=True))
     def _train(
         self,
-        static_data: Optional[torch.Tensor],
-        temporal_data: torch.Tensor,
-        temporal_horizons: torch.Tensor,
-        outcome: torch.Tensor,
+        static_data: List[torch.Tensor],
+        temporal_data: List[torch.Tensor],
+        temporal_horizons: List[torch.Tensor],
+        outcome: List[torch.Tensor],
     ) -> Any:
         patience = 0
         prev_error = np.inf
 
-        train_loader, test_dataloader = self.dataloader(
-            static_data, temporal_data, temporal_horizons, outcome
-        )
+        train_dataloaders = []
+        test_dataloaders = []
+        for widx in range(len(temporal_data)):
+            train_dl, test_dl = self.dataloader(
+                static_data[widx],
+                temporal_data[widx],
+                temporal_horizons[widx],
+                outcome[widx],
+            )
+            train_dataloaders.append(train_dl)
+            test_dataloaders.append(test_dl)
+
         # training and testing
         for it in range(self.n_iter):
-            train_loss = self._train_epoch(train_loader)
+            train_loss = self._train_epoch(train_dataloaders)
             if it % self.n_iter_print == 0:
-                val_loss = self._test_epoch(test_dataloader)
+                val_loss = self._test_epoch(test_dataloaders)
                 log.info(
                     f"Epoch:{it}| train loss: {train_loss}, validation loss: {val_loss}"
                 )
@@ -299,34 +310,38 @@ class TimeSeriesModel(nn.Module):
 
         return self
 
-    def _train_epoch(self, loader: DataLoader) -> float:
+    def _train_epoch(self, loaders: List[DataLoader]) -> float:
         self.train()
 
         losses = []
-        for step, (static_mb, temporal_mb, horizons_mb, y_mb) in enumerate(loader):
-            self.optimizer.zero_grad()  # clear gradients for this training step
+        for loader in loaders:
+            for step, (static_mb, temporal_mb, horizons_mb, y_mb) in enumerate(loader):
+                self.optimizer.zero_grad()  # clear gradients for this training step
 
-            pred = self(static_mb, temporal_mb, horizons_mb)  # rnn output
-            loss = self.loss(pred, y_mb)
+                pred = self(static_mb, temporal_mb, horizons_mb)  # rnn output
+                loss = self.loss(pred, y_mb)
 
-            loss.backward()  # backpropagation, compute gradients
-            if self.clipping_value > 0:
-                torch.nn.utils.clip_grad_norm_(self.parameters(), self.clipping_value)
-            self.optimizer.step()  # apply gradients
+                loss.backward()  # backpropagation, compute gradients
+                if self.clipping_value > 0:
+                    torch.nn.utils.clip_grad_norm_(
+                        self.parameters(), self.clipping_value
+                    )
+                self.optimizer.step()  # apply gradients
 
-            losses.append(loss.detach().cpu())
+                losses.append(loss.detach().cpu())
 
         return np.mean(losses)
 
-    def _test_epoch(self, loader: DataLoader) -> float:
+    def _test_epoch(self, loaders: List[DataLoader]) -> float:
         self.eval()
 
         losses = []
-        for step, (static_mb, temporal_mb, horizons_mb, y_mb) in enumerate(loader):
-            pred = self(static_mb, temporal_mb, horizons_mb)  # rnn output
-            loss = self.loss(pred.squeeze(), y_mb.squeeze())
+        for loader in loaders:
+            for step, (static_mb, temporal_mb, horizons_mb, y_mb) in enumerate(loader):
+                pred = self(static_mb, temporal_mb, horizons_mb)  # rnn output
+                loss = self.loss(pred.squeeze(), y_mb.squeeze())
 
-            losses.append(loss.detach().cpu())
+                losses.append(loss.detach().cpu())
 
         return np.mean(losses)
 
@@ -398,6 +413,64 @@ class TimeSeriesModel(nn.Module):
             return X.to(self.device)
         else:
             return torch.from_numpy(np.asarray(X)).to(self.device)
+
+    def _prepare_input(
+        self,
+        static_data: Union[List, np.ndarray],
+        temporal_data: Union[List, np.ndarray],
+        temporal_horizons: Union[List, np.ndarray],
+        outcome: Optional[Union[List, np.ndarray]] = None,
+    ) -> Tuple:
+        static_data = np.asarray(static_data)
+        temporal_data = np.asarray(temporal_data)
+        temporal_horizons = np.asarray(temporal_horizons)
+        if outcome is not None:
+            outcome = np.asarray(outcome)
+
+        window_batches: Dict[int, List[int]] = {}
+        for idx, item in enumerate(temporal_horizons):
+            window_len = len(item)
+            if window_len not in window_batches:
+                window_batches[window_len] = []
+            window_batches[window_len].append(idx)
+
+        static_data_mb = []
+        temporal_data_mb = []
+        temporal_horizons_mb = []
+        outcome_mb = []
+
+        for widx in window_batches:
+            indices = window_batches[widx]
+
+            static_data_t = self._check_tensor(static_data[indices]).float()
+
+            local_temporal_data = np.array(temporal_data[indices].tolist()).astype(
+                float
+            )
+            temporal_data_t = self._check_tensor(local_temporal_data).float()
+            local_temporal_horizons = np.array(
+                temporal_horizons[indices].tolist()
+            ).astype(float)
+            temporal_horizons_t = self._check_tensor(local_temporal_horizons).float()
+
+            static_data_mb.append(static_data_t)
+            temporal_data_mb.append(temporal_data_t)
+            temporal_horizons_mb.append(temporal_horizons_t)
+
+            if outcome is not None:
+                outcome_t = self._check_tensor(outcome[indices]).float()
+
+                if self.task_type == "classification":
+                    outcome_t = outcome_t.long()
+                outcome_mb.append(outcome_t)
+
+        return (
+            static_data_mb,
+            temporal_data_mb,
+            temporal_horizons_mb,
+            outcome_mb,
+            window_batches,
+        )
 
 
 class TimeSeriesLayer(nn.Module):
@@ -480,38 +553,8 @@ class TimeSeriesLayer(nn.Module):
                 c_out=n_temporal_units_hidden,
                 seq_len=max(n_temporal_window, 10),
             )
-        elif mode == "TST":
-            self.temporal_layer = TST(
-                c_in=n_temporal_units_in,
-                c_out=n_temporal_units_hidden,
-                seq_len=n_temporal_window,
-                max_seq_len=n_temporal_window,
-                n_layers=n_temporal_layers_hidden,
-            )
         elif mode == "XCM":
             self.temporal_layer = XCM(
-                c_in=n_temporal_units_in,
-                c_out=n_temporal_units_hidden,
-                seq_len=n_temporal_window,
-                fc_dropout=dropout,
-            )
-        elif mode == "gMLP":
-            self.temporal_layer = gMLP(
-                c_in=n_temporal_units_in,
-                c_out=n_temporal_units_hidden,
-                seq_len=n_temporal_window,
-                depth=n_temporal_layers_hidden,
-            )
-        elif mode == "MiniRocket":
-            self.temporal_layer = MiniRocket(
-                c_in=n_temporal_units_in,
-                c_out=n_temporal_units_hidden,
-                seq_len=n_temporal_window,
-                random_state=random_state,
-                fc_dropout=dropout,
-            )
-        elif mode == "MiniRocketPlus":
-            self.temporal_layer = MiniRocketPlus(
                 c_in=n_temporal_units_in,
                 c_out=n_temporal_units_hidden,
                 seq_len=n_temporal_window,
@@ -523,28 +566,6 @@ class TimeSeriesLayer(nn.Module):
                 c_out=n_temporal_units_hidden,
                 dropout=dropout,
                 n_layers=n_temporal_layers_hidden,
-            )
-        elif mode == "TSiTPlus":
-            self.temporal_layer = TSiTPlus(
-                c_in=n_temporal_units_in,
-                c_out=n_temporal_units_hidden,
-                seq_len=n_temporal_window,
-                depth=n_temporal_layers_hidden,
-                dropout=dropout,
-            )
-        elif mode == "TSTPlus":
-            self.temporal_layer = TSTPlus(
-                c_in=n_temporal_units_in,
-                c_out=n_temporal_units_hidden,
-                seq_len=n_temporal_window,
-                n_layers=n_temporal_layers_hidden,
-                dropout=dropout,
-            )
-        elif mode == "mWDNPlus":
-            self.temporal_layer = mWDNPlus(
-                c_in=n_temporal_units_in,
-                c_out=n_temporal_units_hidden,
-                seq_len=n_temporal_window,
             )
         else:
             raise RuntimeError(f"Unknown TS mode {mode}")
