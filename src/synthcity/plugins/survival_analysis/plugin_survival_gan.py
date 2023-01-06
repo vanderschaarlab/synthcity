@@ -1,7 +1,8 @@
 # stdlib
-from typing import Any, List, Optional
+from typing import Any, List, Optional, Union
 
 # third party
+import numpy as np
 import pandas as pd
 
 # Necessary packages
@@ -64,7 +65,7 @@ class SurvivalGANPlugin(Plugin):
         tte_strategy: str = "survival_function",
         censoring_strategy: str = "random",  # "covariate_dependent"
         device: Any = DEVICE,
-        use_conditional: bool = True,
+        use_survival_conditional: bool = True,
         **kwargs: Any,
     ) -> None:
         super().__init__()
@@ -88,7 +89,7 @@ class SurvivalGANPlugin(Plugin):
         self.censoring_strategy = censoring_strategy
         self.uncensoring_model = uncensoring_model
         self.device = device
-        self.use_conditional = use_conditional
+        self.use_survival_conditional = use_survival_conditional
         self.kwargs = kwargs
 
         log.info(
@@ -114,7 +115,30 @@ class SurvivalGANPlugin(Plugin):
     def hyperparameter_space(**kwargs: Any) -> List[Distribution]:
         return plugins.Plugins().get_type("adsgan").hyperparameter_space()
 
-    def _fit(self, X: DataLoader, *args: Any, **kwargs: Any) -> "SurvivalGANPlugin":
+    @validate_arguments(config=dict(arbitrary_types_allowed=True))
+    def _merge_conditionals(
+        self,
+        cond: Optional[Union[pd.DataFrame, pd.Series]],
+        extra_cond: Optional[Union[pd.DataFrame, pd.Series]],
+    ) -> Optional[Union[pd.DataFrame, pd.Series]]:
+        if extra_cond is None and cond is None:
+            return None
+
+        if extra_cond is None:
+            return cond
+
+        if cond is None:
+            return extra_cond
+
+        return pd.concat([extra_cond, cond], axis=1, ignore_index=True)
+
+    def _fit(
+        self,
+        X: DataLoader,
+        *args: Any,
+        cond: Optional[Union[pd.DataFrame, pd.Series, np.ndarray, list]] = None,
+        **kwargs: Any,
+    ) -> "SurvivalGANPlugin":
         if X.type() != "survival_analysis":
             raise ValueError(f"Invalid data type = {X.type()}")
 
@@ -133,16 +157,26 @@ class SurvivalGANPlugin(Plugin):
         if sampling_labels is not None:
             sampler = ImbalancedDatasetSampler(sampling_labels)
 
-        if self.use_conditional:
+        if cond is not None:
+            cond = pd.DataFrame(cond)
+
+        self.user_conditional = cond
+        if self.use_survival_conditional:
             important_feats = X.important_features
             precond = pd.concat(
                 [T.to_frame(), E.to_frame(), X[important_feats]], axis=1
             )
-            self.conditional = BinEncoder().fit_transform(precond)
-            n_units_conditional = self.conditional.shape[1]
+            self.surv_conditional = BinEncoder().fit_transform(precond)
         else:
-            self.conditional = None
+            self.surv_conditional = None
+
+        train_conditional = self._merge_conditionals(cond, self.surv_conditional)
+        if train_conditional is None:
             n_units_conditional = 0
+        elif len(train_conditional.shape) == 1:
+            n_units_conditional = 1
+        else:
+            n_units_conditional = train_conditional.shape[-1]
 
         self.model = SurvivalPipeline(
             "adsgan",
@@ -154,22 +188,42 @@ class SurvivalGANPlugin(Plugin):
             device=self.device,
             **self.kwargs,
         )
-        self.model.fit(X, cond=self.conditional, *args, **kwargs)
+        self.model.fit(X, cond=train_conditional, *args, **kwargs)
 
         return self
 
-    def _generate(self, count: int, syn_schema: Schema, **kwargs: Any) -> pd.DataFrame:
-        cond = None
-        if self.use_conditional:
-            cond = self.conditional
-            while len(cond) < count:
-                cond = pd.concat([cond, self.conditional])
-            cond = cond.head(count)
+    def _generate(
+        self,
+        count: int,
+        syn_schema: Schema,
+        cond: Optional[Union[pd.DataFrame, pd.Series, np.ndarray, list]] = None,
+        **kwargs: Any,
+    ) -> pd.DataFrame:
+        user_cond: Optional[Union[pd.DataFrame, pd.Series]] = None
+        if cond is not None:
+            user_cond = pd.DataFrame(cond)
+        elif self.user_conditional is not None:
+            user_cond = self.user_conditional
+            while len(user_cond) < count:
+                user_cond = pd.concat(
+                    [user_cond, self.user_conditional], ignore_index=True
+                )
+            user_cond = user_cond.head(count)
 
+        surv_cond = None
+        if self.use_survival_conditional:
+            surv_cond = self.surv_conditional
+            while len(surv_cond) < count:
+                surv_cond = pd.concat(
+                    [surv_cond, self.surv_conditional], ignore_index=True
+                )
+            surv_cond = surv_cond.head(count)
+
+        gen_conditional = self._merge_conditionals(user_cond, surv_cond)
         return self.model._generate(
             count,
             syn_schema=syn_schema,
-            cond=cond,
+            cond=gen_conditional,
             **kwargs,
         )
 

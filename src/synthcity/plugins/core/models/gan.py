@@ -263,7 +263,7 @@ class GAN(nn.Module):
                 cond = cond.reshape(-1, 1)
             if cond.shape[1] != self.n_units_conditional:
                 raise ValueError(
-                    "Expecting conditional with n_units = {self.n_units_conditional}"
+                    f"Expecting conditional with n_units = {self.n_units_conditional}, got {cond.shape}"
                 )
             if cond.shape[0] != X.shape[0]:
                 raise ValueError(
