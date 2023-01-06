@@ -55,7 +55,7 @@ def test_plugin_hyperparams(test_plugin: Plugin) -> None:
 
 
 @pytest.mark.parametrize(
-    "use_conditional",
+    "use_survival_conditional",
     [True, False],
 )
 @pytest.mark.parametrize(
@@ -74,13 +74,13 @@ def test_plugin_hyperparams(test_plugin: Plugin) -> None:
     ],
 )
 def test_plugin_fit(
-    use_conditional: bool, dataloader_sampling_strategy: str, tte_strategy: str
+    use_survival_conditional: bool, dataloader_sampling_strategy: str, tte_strategy: str
 ) -> None:
     test_plugin = plugin(
         tte_strategy=tte_strategy,
         dataloader_sampling_strategy=dataloader_sampling_strategy,
         device="cpu",
-        use_conditional=use_conditional,
+        use_survival_conditional=use_survival_conditional,
         **plugins_args
     )
 
@@ -133,16 +133,20 @@ def test_sample_hyperparams() -> None:
         assert plugin(**args) is not None
 
 
-@pytest.mark.parametrize("strategy", ["random", "covariate_dependent"])
-def test_plugin_generate_with_censoring_strategy(strategy: str) -> None:
-    test_plugin = plugin(censoring_strategy=strategy, **plugins_args)
+def test_plugin_generate_with_conditional() -> None:
+    bin_conditional = X["wexp"]
 
-    test_plugin.fit(data)
+    test_plugin = plugin()
 
-    X_gen = test_plugin.generate()
-    assert len(X_gen) == len(X)
+    test_plugin.fit(data, cond=bin_conditional)
+
+    # generate using training conditional
+    X_gen = test_plugin.generate(2 * len(X))
+    assert len(X_gen) == 2 * len(X)
     assert test_plugin.schema_includes(X_gen)
 
-    X_gen = test_plugin.generate(50)
-    assert len(X_gen) == 50
-    assert test_plugin.schema_includes(X_gen)
+    # generate using custom conditional
+    count = 100
+    gen_cond = [1] * count
+    X_gen = test_plugin.generate(count, cond=gen_cond)
+    assert X_gen["wexp"].sum() > 95  # at least 95% samples respect the conditional
