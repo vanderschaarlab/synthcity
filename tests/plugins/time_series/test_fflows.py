@@ -96,7 +96,6 @@ def test_sample_hyperparams() -> None:
         assert plugin(**args) is not None
 
 
-@pytest.mark.slow
 def test_plugin_generate_survival() -> None:
     (
         static_surv,

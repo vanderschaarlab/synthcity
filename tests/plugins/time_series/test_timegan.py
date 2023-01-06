@@ -197,7 +197,6 @@ def test_timegan_plugin_generate_survival() -> None:
 @pytest.mark.parametrize(
     "sampling_strategy", ["none", "imbalanced_censoring", "imbalanced_time_censoring"]
 )
-@pytest.mark.slow
 def test_plugin_generate_survival_sampler(sampling_strategy: str) -> None:
     (
         static_surv,
