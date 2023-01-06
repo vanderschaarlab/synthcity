@@ -98,6 +98,7 @@ def test_sample_hyperparams() -> None:
 @pytest.mark.skipif(
     sys.version_info < (3, 9), reason="test only with python3.9 or higher"
 )
+@pytest.mark.skipif(sys.platform != "linux", reason="Linux only for faster results")
 def test_plugin_generate_survival() -> None:
     (
         static_surv,
