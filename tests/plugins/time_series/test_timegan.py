@@ -1,4 +1,5 @@
 # stdlib
+import sys
 from typing import Any
 
 # third party
@@ -197,7 +198,10 @@ def test_timegan_plugin_generate_survival() -> None:
 @pytest.mark.parametrize(
     "sampling_strategy", ["none", "imbalanced_censoring", "imbalanced_time_censoring"]
 )
-@pytest.mark.slow
+@pytest.mark.skipif(
+    sys.version_info < (3, 9), reason="test only with python3.9 or higher"
+)
+@pytest.mark.skipif(sys.platform != "linux", reason="Linux only for faster results")
 def test_plugin_generate_survival_sampler(sampling_strategy: str) -> None:
     (
         static_surv,
