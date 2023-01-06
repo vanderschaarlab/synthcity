@@ -175,6 +175,7 @@ def test_gan_generation_with_early_stopping(patience_metric: Tuple[str, str]) ->
 
 
 @pytest.mark.skipif(sys.platform != "linux", reason="Linux only for faster results")
+@pytest.mark.skipif(sys.version_info < (3, 9), reason="requires python3.9 or higher")
 def test_gan_sampling_adjustment() -> None:
     X = get_airfoil_dataset()
 
