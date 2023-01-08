@@ -208,7 +208,7 @@ class TimeSeriesGAN(nn.Module):
             output_shape=[n_temporal_window, n_temporal_units],
             nonlin_out=generator_temporal_nonlin_out,
             **rnn_generator_extra_args,
-        )
+        ).to(self.device)
 
         # Temporal generator from the latent space: Z_temporal -> E_temporal
         self.temporal_generator = TimeSeriesModel(
@@ -218,7 +218,7 @@ class TimeSeriesGAN(nn.Module):
             n_temporal_window=n_temporal_window,
             output_shape=[n_temporal_window, n_temporal_units_latent],
             **rnn_generator_extra_args,
-        )
+        ).to(self.device)
 
         # Temporal supervisor: Generate the next sequence: E_temporal -> fake_next_temporal_embeddings_temporal
         self.temporal_supervisor = TimeSeriesModel(
@@ -228,7 +228,7 @@ class TimeSeriesGAN(nn.Module):
             n_temporal_window=n_temporal_window,
             output_shape=[n_temporal_window, n_temporal_units_latent],
             **rnn_generator_extra_args,
-        )
+        ).to(self.device)
 
         # Discriminate the original and synthetic time-series data.
         self.discriminator = TimeSeriesModel(
