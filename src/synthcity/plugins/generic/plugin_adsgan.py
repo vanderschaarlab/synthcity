@@ -96,7 +96,6 @@ class AdsGANPlugin(Plugin):
     def __init__(
         self,
         n_iter: int = 10000,
-        n_units_conditional: int = 0,
         generator_n_layers_hidden: int = 2,
         generator_n_units_hidden: int = 500,
         generator_nonlin: str = "relu",
@@ -153,7 +152,6 @@ class AdsGANPlugin(Plugin):
         self.lambda_gradient_penalty = lambda_gradient_penalty
         self.lambda_identifiability_penalty = lambda_identifiability_penalty
 
-        self.n_units_conditional = n_units_conditional
         self.encoder_max_clusters = encoder_max_clusters
         self.encoder = encoder
         self.dataloader_sampler = dataloader_sampler
@@ -200,15 +198,13 @@ class AdsGANPlugin(Plugin):
 
     def _fit(self, X: DataLoader, *args: Any, **kwargs: Any) -> "AdsGANPlugin":
         cond: Optional[Union[pd.DataFrame, pd.Series]] = None
-        if self.n_units_conditional > 0:
-            if "cond" not in kwargs:
-                raise ValueError("expecting 'cond' for training")
+        if "cond" in kwargs:
             cond = kwargs["cond"]
 
         self.model = TabularGAN(
             X.dataframe(),
+            cond=cond,
             n_units_latent=self.generator_n_units_hidden,
-            n_units_conditional=self.n_units_conditional,
             batch_size=self.batch_size,
             generator_n_layers_hidden=self.generator_n_layers_hidden,
             generator_n_units_hidden=self.generator_n_units_hidden,

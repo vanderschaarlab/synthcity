@@ -115,8 +115,8 @@ def test_gan_conditional() -> None:
 
     model = TabularGAN(
         X,
+        cond=y,
         n_units_latent=50,
-        n_units_conditional=1,
         generator_n_iter=10,
     )
     model.fit(X, cond=y)

@@ -127,3 +127,22 @@ def test_eval_performance_dpgan() -> None:
 
     print(results)
     assert np.mean(results) > 0.5
+
+
+def test_plugin_conditional_dpgan() -> None:
+    test_plugin = plugin(generator_n_units_hidden=5)
+    Xraw, y = load_iris(as_frame=True, return_X_y=True)
+    Xraw["target"] = y
+
+    X = GenericDataLoader(Xraw)
+    test_plugin.fit(X, cond=y)
+
+    X_gen = test_plugin.generate(2 * len(X))
+    assert len(X_gen) == 2 * len(X)
+    assert test_plugin.schema_includes(X_gen)
+
+    count = 10
+    X_gen = test_plugin.generate(count, cond=np.ones(count))
+    assert len(X_gen) == count
+
+    assert (X_gen["target"] == 1).all()

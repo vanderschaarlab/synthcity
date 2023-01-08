@@ -127,7 +127,7 @@ def test_ts_tabular_gan_conditional(source: Any) -> None:
         static,
         temporal,
         temporal_horizons,
-        n_units_conditional=1,
+        cond=outcome,
         generator_n_iter=10,
     )
     model.fit(static, temporal, temporal_horizons, cond=outcome)

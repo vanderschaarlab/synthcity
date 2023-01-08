@@ -119,3 +119,21 @@ def test_eval_performance_tvae() -> None:
 
     print(plugin.name(), np.mean(results))
     assert np.mean(results) > 0.7
+
+
+def test_plugin_conditional() -> None:
+    test_plugin = plugin()
+    Xraw, y = load_iris(as_frame=True, return_X_y=True)
+    X = GenericDataLoader(Xraw)
+    test_plugin.fit(X, cond=y)
+
+    X_gen = test_plugin.generate()
+    assert len(X_gen) == len(X)
+    assert test_plugin.schema_includes(X_gen)
+
+    count = 50
+    X_gen = test_plugin.generate(count, cond=np.ones(count))
+    assert len(X_gen) == count
+    assert test_plugin.schema_includes(X_gen)
+
+    assert (X_gen["target"] == 1).all()

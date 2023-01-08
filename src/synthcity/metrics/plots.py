@@ -99,7 +99,6 @@ def plot_associations_comparison(
 
     cmap = sns.diverging_palette(220, 10, as_cmap=True)
 
-    print(stats_gt, stats_syn)
     heatmap_original = sns.heatmap(
         stats_gt.values.astype(float),
         ax=ax[0],

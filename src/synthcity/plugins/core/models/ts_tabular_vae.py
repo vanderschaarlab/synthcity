@@ -1,5 +1,5 @@
 # stdlib
-from typing import Any, List, Optional, Tuple
+from typing import Any, List, Tuple
 
 # third party
 import numpy as np
@@ -20,16 +20,12 @@ class TimeSeriesTabularAutoEncoder(torch.nn.Module):
     TimeSeries Tabular AutoEncoder implementation.
 
     Args:
-        n_static_units: int,
-            Number of units for the static features
-        n_temporal_units: int,
-            Number of units for the temporal features
-        n_temporal_window: int,
-            Number of temporal sequences for each subject
-        n_units_conditional: int = 0,
-            Number of conditional units
-        n_units_in: int
-            Number of features
+        static_data: pd.DataFrame
+            Reference static data
+        temporal_data: List[pd.DataFrame]
+            Reference temporal data
+        temporal_horizons: List
+            Reference temporal horizons
         decoder_n_layers_hidden: int
             Number of hidden layers in the decoder
         decoder_n_units_hidden: int
@@ -246,5 +242,5 @@ class TimeSeriesTabularAutoEncoder(torch.nn.Module):
         return self.decode(static_data, temporal_data, temporal_horizons.tolist())
 
     @validate_arguments(config=dict(arbitrary_types_allowed=True))
-    def forward(self, count: int, cond: Optional[pd.DataFrame] = None) -> torch.Tensor:
-        return self.model.forward(count, cond)
+    def forward(self, count: int) -> torch.Tensor:
+        return self.model.forward(count)

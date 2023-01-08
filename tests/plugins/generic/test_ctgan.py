@@ -132,3 +132,23 @@ def test_eval_performance_ctgan(compress_dataset: bool) -> None:
 
     print(plugin.name(), compress_dataset, results)
     assert np.mean(results) > 0.7
+
+
+def test_plugin_conditional_ctgan() -> None:
+    test_plugin = plugin(generator_n_units_hidden=5)
+    Xraw, y = load_iris(as_frame=True, return_X_y=True)
+    Xraw["target"] = y
+
+    X = GenericDataLoader(Xraw)
+    test_plugin.fit(X, cond=y)
+
+    X_gen = test_plugin.generate(2 * len(X))
+    assert len(X_gen) == 2 * len(X)
+    assert test_plugin.schema_includes(X_gen)
+
+    count = 10
+    X_gen = test_plugin.generate(count, cond=np.ones(count))
+    assert len(X_gen) == count
+
+    print(X_gen["target"])
+    assert (X_gen["target"] == 1).all()
