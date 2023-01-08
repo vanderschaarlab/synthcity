@@ -124,6 +124,8 @@ def test_eval_performance_tvae() -> None:
 def test_plugin_conditional() -> None:
     test_plugin = plugin()
     Xraw, y = load_iris(as_frame=True, return_X_y=True)
+    Xraw["target"] = y
+
     X = GenericDataLoader(Xraw)
     test_plugin.fit(X, cond=y)
 

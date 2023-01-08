@@ -289,6 +289,6 @@ class TabularVAE(nn.Module):
             cond = self.cond_encoder.transform(cond).toarray()
 
         if not self.predefined_conditional and self.dataloader_sampler is not None:
-            cond = self.dataloader_sampler.sample_conditional(count, p=self.sample_prob)
+            cond = self.dataloader_sampler.sample_conditional(count)
 
         return self.model.generate(count, cond=cond)
