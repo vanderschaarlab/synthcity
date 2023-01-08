@@ -20,16 +20,14 @@ class TimeSeriesTabularGAN(torch.nn.Module):
     TimeSeries Tabular GAN implementation.
 
     Args:
-        n_static_units: int,
-            Number of units for the static features
-        n_temporal_units: int,
-            Number of units for the temporal features
-        n_temporal_window: int,
-            Number of temporal sequences for each subject
-        n_units_conditional: int = 0,
-            Number of conditional units
-        n_units_in: int
-            Number of features
+        static_data: pd.DataFrame,
+            Reference static data
+        temporal_data: List[pd.DataFrame],
+            Reference temporal data
+        temporal_horizons: List
+            Reference temporal horizons
+        cond: Optional
+            Optional conditional
         generator_n_layers_hidden: int
             Number of hidden layers in the generator
         generator_n_units_hidden: int
@@ -88,7 +86,7 @@ class TimeSeriesTabularGAN(torch.nn.Module):
         static_data: pd.DataFrame,
         temporal_data: List[pd.DataFrame],
         temporal_horizons: List,
-        n_units_conditional: int = 0,
+        cond: Optional[Union[pd.DataFrame, pd.Series, np.ndarray]] = None,
         generator_n_layers_hidden: int = 2,
         generator_n_units_hidden: int = 150,
         generator_nonlin: str = "leaky_relu",
@@ -134,6 +132,7 @@ class TimeSeriesTabularGAN(torch.nn.Module):
 
         self.static_columns = static_data.columns
         self.temporal_columns = temporal_data[0].columns
+        n_units_conditional = 0 if cond is None else cond.shape[-1]
 
         n_static_units, n_temporal_units = self.encoder.n_features()
         static_act, temporal_act = self.encoder.activation_layout(

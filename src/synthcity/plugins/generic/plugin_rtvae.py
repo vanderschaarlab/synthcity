@@ -78,7 +78,6 @@ class RTVAEPlugin(Plugin):
     def __init__(
         self,
         n_iter: int = 1000,
-        n_units_conditional: int = 0,
         n_units_embedding: int = 500,
         lr: float = 1e-3,
         weight_decay: float = 1e-5,
@@ -101,7 +100,6 @@ class RTVAEPlugin(Plugin):
         **kwargs: Any
     ) -> None:
         super().__init__(**kwargs)
-        self.n_units_conditional = n_units_conditional
         self.n_units_embedding = n_units_embedding
         self.decoder_n_layers_hidden = decoder_n_layers_hidden
         self.decoder_n_units_hidden = decoder_n_units_hidden
@@ -161,10 +159,14 @@ class RTVAEPlugin(Plugin):
         ]
 
     def _fit(self, X: DataLoader, *args: Any, **kwargs: Any) -> "RTVAEPlugin":
+        cond: Optional[Union[pd.DataFrame, pd.Series]] = None
+        if "cond" in kwargs:
+            cond = kwargs["cond"]
+
         self.model = TabularVAE(
             X.dataframe(),
+            cond=cond,
             n_units_embedding=self.n_units_embedding,
-            n_units_conditional=self.n_units_conditional,
             batch_size=self.batch_size,
             lr=self.lr,
             weight_decay=self.weight_decay,

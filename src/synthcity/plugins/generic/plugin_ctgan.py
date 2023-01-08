@@ -2,6 +2,7 @@
 from typing import Any, List, Optional, Union
 
 # third party
+import numpy as np
 import pandas as pd
 
 # Necessary packages
@@ -91,7 +92,6 @@ class CTGANPlugin(Plugin):
     def __init__(
         self,
         n_iter: int = 2000,
-        n_units_conditional: int = 0,
         generator_n_layers_hidden: int = 2,
         generator_n_units_hidden: int = 500,
         generator_nonlin: str = "relu",
@@ -143,7 +143,6 @@ class CTGANPlugin(Plugin):
         self.clipping_value = clipping_value
         self.lambda_gradient_penalty = lambda_gradient_penalty
 
-        self.n_units_conditional = n_units_conditional
         self.encoder_max_clusters = encoder_max_clusters
         self.encoder = encoder
         self.dataloader_sampler = dataloader_sampler
@@ -191,17 +190,24 @@ class CTGANPlugin(Plugin):
             IntegerDistribution(name="encoder_max_clusters", low=2, high=20),
         ]
 
+    def _prepare_cond(
+        self, cond: Union[pd.DataFrame, pd.Series, np.ndarray, list]
+    ) -> np.ndarray:
+        cond = np.asarray(cond)
+        if len(cond.shape) == 1:
+            cond = cond.reshape(-1, 1)
+
+        return cond
+
     def _fit(self, X: DataLoader, *args: Any, **kwargs: Any) -> "CTGANPlugin":
         cond: Optional[Union[pd.DataFrame, pd.Series]] = None
-        if self.n_units_conditional > 0:
-            if "cond" not in kwargs:
-                raise ValueError("expecting 'cond' for training")
-            cond = kwargs["cond"]
+        if "cond" in kwargs:
+            cond = self._prepare_cond(kwargs["cond"])
 
         self.model = TabularGAN(
             X.dataframe(),
+            cond=cond,
             n_units_latent=self.generator_n_units_hidden,
-            n_units_conditional=self.n_units_conditional,
             batch_size=self.batch_size,
             generator_n_layers_hidden=self.generator_n_layers_hidden,
             generator_n_units_hidden=self.generator_n_units_hidden,
@@ -244,7 +250,7 @@ class CTGANPlugin(Plugin):
     def _generate(self, count: int, syn_schema: Schema, **kwargs: Any) -> DataLoader:
         cond: Optional[Union[pd.DataFrame, pd.Series]] = None
         if "cond" in kwargs:
-            cond = kwargs["cond"]
+            cond = self._prepare_cond(kwargs["cond"])
 
         return self._safe_generate(self.model.generate, count, syn_schema, cond=cond)
 

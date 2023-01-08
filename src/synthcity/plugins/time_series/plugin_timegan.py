@@ -32,8 +32,6 @@ class TimeGANPlugin(Plugin):
     Args:
         n_iter: int
             Maximum number of iterations in the Generator.
-        n_units_conditional: int = 0,
-            Number of conditional units
         n_units_in: int
             Number of features
         generator_n_layers_hidden: int
@@ -108,7 +106,6 @@ class TimeGANPlugin(Plugin):
     def __init__(
         self,
         n_iter: int = 1000,
-        n_units_conditional: int = 0,
         generator_n_layers_hidden: int = 2,
         generator_n_units_hidden: int = 150,
         generator_nonlin: str = "leaky_relu",
@@ -150,7 +147,6 @@ class TimeGANPlugin(Plugin):
             f"""TimeGAN: mode = {mode} dataloader_sampling_strategy = {dataloader_sampling_strategy}"""
         )
         self.n_iter = n_iter
-        self.n_units_conditional = n_units_conditional
         self.generator_n_layers_hidden = generator_n_layers_hidden
         self.generator_n_units_hidden = generator_n_units_hidden
         self.generator_nonlin = generator_nonlin
@@ -234,9 +230,7 @@ class TimeGANPlugin(Plugin):
         cond: Optional[Union[pd.DataFrame, pd.Series]] = None
         sampler: Optional[ImbalancedDatasetSampler] = None
 
-        if self.n_units_conditional > 0:
-            if "cond" not in kwargs:
-                raise ValueError("expecting 'cond' for training")
+        if "cond" in kwargs:
             cond = kwargs["cond"]
 
         # Static and temporal generation
@@ -264,8 +258,8 @@ class TimeGANPlugin(Plugin):
             static_data=static,
             temporal_data=temporal,
             temporal_horizons=temporal_horizons,
+            cond=cond,
             generator_n_iter=self.n_iter,
-            n_units_conditional=self.n_units_conditional,
             generator_n_layers_hidden=self.generator_n_layers_hidden,
             generator_n_units_hidden=self.generator_n_units_hidden,
             generator_nonlin=self.generator_nonlin,

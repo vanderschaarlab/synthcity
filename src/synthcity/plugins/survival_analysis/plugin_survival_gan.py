@@ -171,12 +171,6 @@ class SurvivalGANPlugin(Plugin):
             self.surv_conditional = None
 
         train_conditional = self._merge_conditionals(cond, self.surv_conditional)
-        if train_conditional is None:
-            n_units_conditional = 0
-        elif len(train_conditional.shape) == 1:
-            n_units_conditional = 1
-        else:
-            n_units_conditional = train_conditional.shape[-1]
 
         self.model = SurvivalPipeline(
             "adsgan",
@@ -184,7 +178,6 @@ class SurvivalGANPlugin(Plugin):
             uncensoring_model=self.uncensoring_model,
             censoring_strategy=self.censoring_strategy,
             dataloader_sampler=sampler,
-            n_units_conditional=n_units_conditional,
             device=self.device,
             **self.kwargs,
         )

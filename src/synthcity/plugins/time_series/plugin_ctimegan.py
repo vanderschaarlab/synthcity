@@ -20,8 +20,6 @@ class ConditionalTimeGANPlugin(Plugin):
     Args:
         n_iter: int
             Maximum number of iterations in the Generator.
-        n_units_conditional: int = 0,
-            Number of conditional units
         n_units_in: int
             Number of features
         generator_n_layers_hidden: int
@@ -194,11 +192,9 @@ class ConditionalTimeGANPlugin(Plugin):
             temporal,
             temporal_horizons,
         )
-        n_units_conditional = self.conditional.shape[1]
 
         self.model = TimeGANPlugin(
             n_iter=self.n_iter,
-            n_units_conditional=n_units_conditional,
             generator_n_layers_hidden=self.generator_n_layers_hidden,
             generator_n_units_hidden=self.generator_n_units_hidden,
             generator_nonlin=self.generator_nonlin,

@@ -1,3 +1,6 @@
+# stdlib
+import sys
+
 # third party
 import numpy as np
 import pandas as pd
@@ -66,24 +69,24 @@ def test_plugin_generate() -> None:
     assert test_plugin.schema_includes(X_gen)
 
 
-def test_plugin_conditional() -> None:
-    test_plugin = plugin(
-        n_iter=100,
-        generator_n_layers_hidden=1,
-        generator_n_units_hidden=10,
-        n_units_conditional=1,
-    )
+@pytest.mark.skipif(sys.platform != "linux", reason="Linux only for faster results")
+def test_plugin_conditional_adsgan() -> None:
+    test_plugin = plugin(generator_n_units_hidden=5)
     Xraw, y = load_iris(as_frame=True, return_X_y=True)
+    Xraw["target"] = y
+
     X = GenericDataLoader(Xraw)
     test_plugin.fit(X, cond=y)
 
-    X_gen = test_plugin.generate()
-    assert len(X_gen) == len(X)
+    X_gen = test_plugin.generate(2 * len(X))
+    assert len(X_gen) == 2 * len(X)
     assert test_plugin.schema_includes(X_gen)
 
-    X_gen = test_plugin.generate(50, cond=y.sample(50))
-    assert len(X_gen) == 50
-    assert test_plugin.schema_includes(X_gen)
+    count = 10
+    X_gen = test_plugin.generate(count, cond=np.ones(count))
+    assert len(X_gen) == count
+
+    assert (X_gen["target"] == 1).sum() >= 0.8 * count
 
 
 def test_plugin_generate_constraints() -> None:

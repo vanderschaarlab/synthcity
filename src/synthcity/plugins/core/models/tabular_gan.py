@@ -8,6 +8,7 @@ import torch
 from pydantic import validate_arguments
 from scipy.optimize import minimize
 from scipy.special import logsumexp
+from sklearn.preprocessing import OneHotEncoder
 
 # synthcity absolute
 from synthcity.metrics.weighted_metrics import WeightedMetrics
@@ -30,8 +31,8 @@ class TabularGAN(torch.nn.Module):
             Reference dataset, used for training the tabular encoder
         n_units_latent: int
             Number of latent units
-        n_units_conditional: int
-            Number of conditional units
+        cond: Optional
+            Optional conditional
         generator_n_layers_hidden: int
             Number of hidden layers in the generator
         generator_n_units_hidden: int
@@ -121,7 +122,7 @@ class TabularGAN(torch.nn.Module):
         self,
         X: pd.DataFrame,
         n_units_latent: int,
-        n_units_conditional: int = 0,
+        cond: Optional[Union[pd.DataFrame, pd.Series, np.ndarray]] = None,
         generator_n_layers_hidden: int = 2,
         generator_n_units_hidden: int = 150,
         generator_nonlin: str = "leaky_relu",
@@ -171,6 +172,7 @@ class TabularGAN(torch.nn.Module):
         self.batch_size = batch_size
         self.sample_prob: Optional[np.ndarray] = None
         self._adjust_inference_sampling = adjust_inference_sampling
+        n_units_conditional = 0
 
         if encoder is not None:
             self.encoder = encoder
@@ -179,7 +181,18 @@ class TabularGAN(torch.nn.Module):
                 max_clusters=encoder_max_clusters, whitelist=encoder_whitelist
             ).fit(X)
 
-        self.predefined_conditional = n_units_conditional != 0
+        self.cond_encoder: Optional[OneHotEncoder] = None
+        if cond is not None:
+            cond = np.asarray(cond)
+            if len(cond.shape) == 1:
+                cond = cond.reshape(-1, 1)
+
+            self.cond_encoder = OneHotEncoder(handle_unknown="ignore").fit(cond)
+            cond = self.cond_encoder.transform(cond).toarray()
+
+            n_units_conditional = cond.shape[-1]
+
+        self.predefined_conditional = cond is not None
 
         if (
             dataloader_sampler is None and not self.predefined_conditional
@@ -318,6 +331,13 @@ class TabularGAN(torch.nn.Module):
         else:
             X_enc = self.encode(X)
 
+        if cond is not None and self.cond_encoder is not None:
+            cond = np.asarray(cond)
+            if len(cond.shape) == 1:
+                cond = cond.reshape(-1, 1)
+
+            cond = self.cond_encoder.transform(cond).toarray()
+
         if not self.predefined_conditional and self.dataloader_sampler is not None:
             cond = self.dataloader_sampler.get_dataset_conditionals()
 
@@ -366,6 +386,13 @@ class TabularGAN(torch.nn.Module):
     def forward(
         self, count: int, cond: Optional[Union[pd.DataFrame, np.ndarray]] = None
     ) -> torch.Tensor:
+        if cond is not None and self.cond_encoder is not None:
+            cond = np.asarray(cond)
+            if len(cond.shape) == 1:
+                cond = cond.reshape(-1, 1)
+
+            cond = self.cond_encoder.transform(cond).toarray()
+
         if not self.predefined_conditional and self.dataloader_sampler is not None:
             cond = self.dataloader_sampler.sample_conditional(count, p=self.sample_prob)
 

@@ -90,6 +90,8 @@ class Plugin(Serializable, metaclass=ABCMeta):
         workspace.mkdir(parents=True, exist_ok=True)
         self.workspace = workspace
 
+        self.fitted = False
+
     @staticmethod
     @abstractmethod
     def hyperparameter_space(**kwargs: Any) -> List[Distribution]:
@@ -184,7 +186,10 @@ class Plugin(Serializable, metaclass=ABCMeta):
             random_state=self.random_state,
         )
 
-        return self._fit(X, *args, **kwargs)
+        output = self._fit(X, *args, **kwargs)
+        self.fitted = True
+
+        return output
 
     @abstractmethod
     def _fit(self, X: DataLoader, *args: Any, **kwargs: Any) -> "Plugin":
@@ -217,6 +222,9 @@ class Plugin(Serializable, metaclass=ABCMeta):
         Returns:
             <count> synthetic samples
         """
+        if not self.fitted:
+            raise RuntimeError("Fit the generator first")
+
         if self._schema is None:
             raise RuntimeError("Fit the model first")
 

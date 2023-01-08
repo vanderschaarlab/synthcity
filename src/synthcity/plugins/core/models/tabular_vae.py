@@ -6,6 +6,7 @@ import numpy as np
 import pandas as pd
 import torch
 from pydantic import validate_arguments
+from sklearn.preprocessing import OneHotEncoder
 from torch import nn
 
 # synthcity absolute
@@ -24,8 +25,10 @@ class TabularVAE(nn.Module):
     This class combines VAE and tabular encoder to form a generative model for tabular data.
 
     Args:
-        n_units_in: int
-            Number of features
+        X: pd.DataFrame
+            Reference dataset, used for training the tabular encoder
+        cond: Optional
+            Optional conditional
         decoder_n_layers_hidden: int
             Number of hidden layers in the decoder
         decoder_n_units_hidden: int
@@ -76,7 +79,7 @@ class TabularVAE(nn.Module):
         self,
         X: pd.DataFrame,
         n_units_embedding: int,
-        n_units_conditional: int = 0,
+        cond: Optional[Union[pd.DataFrame, pd.Series, np.ndarray]] = None,
         lr: float = 2e-4,
         n_iter: int = 500,
         weight_decay: float = 1e-3,
@@ -114,12 +117,28 @@ class TabularVAE(nn.Module):
             max_clusters=encoder_max_clusters, whitelist=encoder_whitelist
         ).fit(X)
 
-        if dataloader_sampler is None:
+        n_units_conditional = 0
+        self.cond_encoder: Optional[OneHotEncoder] = None
+        if cond is not None:
+            cond = np.asarray(cond)
+            if len(cond.shape) == 1:
+                cond = cond.reshape(-1, 1)
+
+            self.cond_encoder = OneHotEncoder(handle_unknown="ignore").fit(cond)
+            cond = self.cond_encoder.transform(cond).toarray()
+
+            n_units_conditional = cond.shape[-1]
+
+        self.predefined_conditional = cond is not None
+
+        if (
+            dataloader_sampler is None and not self.predefined_conditional
+        ):  # don't mix conditionals
             dataloader_sampler = ConditionalDatasetSampler(
                 self.encoder.transform(X),
                 self.encoder.layout(),
             )
-            n_units_conditional += dataloader_sampler.conditional_dimension()
+            n_units_conditional = dataloader_sampler.conditional_dimension()
 
         self.dataloader_sampler = dataloader_sampler
 
@@ -128,7 +147,7 @@ class TabularVAE(nn.Module):
             fake_samples: torch.Tensor,
             cond: Optional[torch.Tensor],
         ) -> torch.Tensor:
-            if cond is None:
+            if cond is None or self.predefined_conditional:
                 return 0
 
             losses = []
@@ -222,13 +241,26 @@ class TabularVAE(nn.Module):
     def fit(
         self,
         X: pd.DataFrame,
-        cond: Optional[Union[pd.DataFrame, pd.Series]] = None,
+        cond: Optional[Union[pd.DataFrame, pd.Series, np.ndarray]] = None,
         **kwargs: Any,
     ) -> Any:
         X_enc = self.encode(X)
 
-        extra_cond = self.dataloader_sampler.get_dataset_conditionals()
-        cond = self._merge_conditionals(cond, extra_cond)
+        if cond is not None and self.cond_encoder is not None:
+            cond = np.asarray(cond)
+            if len(cond.shape) == 1:
+                cond = cond.reshape(-1, 1)
+
+            cond = self.cond_encoder.transform(cond).toarray()
+
+        if not self.predefined_conditional and self.dataloader_sampler is not None:
+            cond = self.dataloader_sampler.get_dataset_conditionals()
+
+        if cond is not None:
+            if len(cond) != len(X_enc):
+                raise ValueError(
+                    f"Invalid conditional shape. {cond.shape} expected {len(X_enc)}"
+                )
 
         self.model.fit(X_enc, cond, **kwargs)
         return self
@@ -249,25 +281,14 @@ class TabularVAE(nn.Module):
         count: int,
         cond: Optional[Union[pd.DataFrame, pd.Series, np.ndarray]] = None,
     ) -> torch.Tensor:
-        extra_cond = self.dataloader_sampler.sample_conditional(count)
-        cond = self._merge_conditionals(cond, extra_cond)
+        if cond is not None and self.cond_encoder is not None:
+            cond = np.asarray(cond)
+            if len(cond.shape) == 1:
+                cond = cond.reshape(-1, 1)
+
+            cond = self.cond_encoder.transform(cond).toarray()
+
+        if not self.predefined_conditional and self.dataloader_sampler is not None:
+            cond = self.dataloader_sampler.sample_conditional(count)
 
         return self.model.generate(count, cond=cond)
-
-    def _merge_conditionals(
-        self,
-        cond: Optional[Union[pd.DataFrame, pd.Series, np.ndarray]],
-        extra_cond: Optional[np.ndarray],
-    ) -> Optional[np.ndarray]:
-        if extra_cond is None and cond is None:
-            return None
-
-        if extra_cond is None:
-            return cond
-
-        if cond is None:
-            cond = extra_cond
-        else:
-            cond = np.concatenate([extra_cond, np.asarray(cond)], axis=1)
-
-        return cond
