@@ -1,3 +1,6 @@
+# stdlib
+import sys
+
 # third party
 import numpy as np
 import pandas as pd
@@ -66,6 +69,7 @@ def test_plugin_generate() -> None:
     assert test_plugin.schema_includes(X_gen)
 
 
+@pytest.mark.skipif(sys.platform != "linux", reason="Linux only for faster results")
 def test_plugin_conditional_adsgan() -> None:
     test_plugin = plugin(generator_n_units_hidden=5)
     Xraw, y = load_iris(as_frame=True, return_X_y=True)

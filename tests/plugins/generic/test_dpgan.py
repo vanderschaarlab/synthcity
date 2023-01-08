@@ -1,3 +1,6 @@
+# stdlib
+import sys
+
 # third party
 import numpy as np
 import pandas as pd
@@ -109,6 +112,7 @@ def test_sample_hyperparams() -> None:
 
 
 @pytest.mark.slow
+@pytest.mark.skipif(sys.platform != "linux", reason="Linux only for faster results")
 def test_eval_performance_dpgan() -> None:
     results = []
 

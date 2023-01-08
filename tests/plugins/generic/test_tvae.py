@@ -1,3 +1,6 @@
+# stdlib
+import sys
+
 # third party
 import numpy as np
 import pandas as pd
@@ -121,6 +124,7 @@ def test_eval_performance_tvae() -> None:
     assert np.mean(results) > 0.7
 
 
+@pytest.mark.skipif(sys.platform != "linux", reason="Linux only for faster results")
 def test_plugin_conditional() -> None:
     test_plugin = plugin()
     Xraw, y = load_iris(as_frame=True, return_X_y=True)
