@@ -129,6 +129,7 @@ def test_eval_performance_dpgan() -> None:
     assert np.mean(results) > 0.5
 
 
+@pytest.mark.slow
 def test_plugin_conditional_dpgan() -> None:
     test_plugin = plugin(generator_n_units_hidden=5)
     Xraw, y = load_iris(as_frame=True, return_X_y=True)

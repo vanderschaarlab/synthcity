@@ -10,6 +10,7 @@ import torch.nn as nn
 from pytorch_lightning.callbacks import EarlyStopping
 
 # synthcity absolute
+import synthcity.logger as log
 import synthcity.plugins.core.models.dag.utils as ut
 from synthcity.plugins.core.models.dag.data import BetaP, CustomDataModule
 from synthcity.plugins.core.models.dag.dsl import NotearsMLP, NotearsSobolev
@@ -265,7 +266,7 @@ def get_dstruct_dag(
     for threshold in np.linspace(start=0, stop=1, num=100):
         dag = model.get_dag(threshold=threshold)
         if ut.is_dag(dag):
-            print(f"Is DAG for {threshold}")
+            log.info(f"Is DAG for {threshold}")
             break
 
     if not compress:
