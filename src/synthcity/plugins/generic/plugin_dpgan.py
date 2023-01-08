@@ -121,8 +121,8 @@ class DPGANPlugin(Plugin):
         dataloader_sampler: Optional[sampler.Sampler] = None,
         device: Any = DEVICE,
         # privacy settings
-        dp_epsilon: float = 4,
-        dp_delta: Optional[float] = None,
+        epsilon: float = 1,
+        delta: Optional[float] = None,
         dp_max_grad_norm: float = 2,
         dp_secure_mode: bool = False,
         # early stopping
@@ -167,9 +167,9 @@ class DPGANPlugin(Plugin):
         self.n_iter_print = n_iter_print
 
         # privacy
+        self.dp_epsilon = epsilon
+        self.dp_delta = delta
         self.dp_enabled = True
-        self.dp_epsilon = dp_epsilon
-        self.dp_delta = dp_delta
         self.dp_max_grad_norm = dp_max_grad_norm
         self.dp_secure_mode = dp_secure_mode
 
