@@ -214,9 +214,8 @@ assert syn_model.name() == reloaded.name()
 
 ## 📓 Tutorials
 
- - [Tutorial 0: Basics](tutorials/tutorial0_basic_examples.ipynb)
- - [Tutorial 1: Write a new plugin](tutorials/tutorial1_add_a_new_plugin.ipynb)
- - [Tutorial 2: Benchmarks](tutorials/tutorial2_benchmarks.ipynb)
+ - [![Test In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/drive/1Vr2PJswgfFYBkJCm3hhVkuH-9dXnHeYV?usp=sharing) [ Tutorial 0: Getting started with tabular data](https://github.com/vanderschaarlab/synthcity/blob/use_cases/tutorials/tutorial0_basic_examples.ipynb) 
+ 
 
 
 ## 🔑 Methods
