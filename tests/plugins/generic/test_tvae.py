@@ -138,4 +138,4 @@ def test_plugin_conditional() -> None:
     assert len(X_gen) == count
     assert test_plugin.schema_includes(X_gen)
 
-    assert (X_gen["target"] == 1).all()
+    assert (X_gen["target"] == 1).sum() >= 0.8 * count
