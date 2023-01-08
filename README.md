@@ -13,7 +13,7 @@
 [![Tutorials](https://github.com/vanderschaarlab/synthcity/actions/workflows/test_tutorials.yml/badge.svg)](https://github.com/vanderschaarlab/synthcity/actions/workflows/test_tutorials.yml)
 [![Documentation Status](https://readthedocs.org/projects/synthcity/badge/?version=latest)](https://synthcity.readthedocs.io/en/latest/?badge=latest)
 
-[![Test In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/drive/1Vr2PJswgfFYBkJCm3hhVkuH-9dXnHeYV?usp=sharing) 
+[![Test In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/drive/1Vr2PJswgfFYBkJCm3hhVkuH-9dXnHeYV?usp=sharing)
 [![about](https://img.shields.io/badge/about-The%20van%20der%20Schaar%20Lab-blue)](https://www.vanderschaar-lab.com/)
 [![License](https://img.shields.io/badge/License-Apache_2.0-blue.svg)](https://github.com/vanderschaarlab/synthcity/blob/main/LICENSE)
 [![Python 3.7+](https://img.shields.io/badge/python-3.7+-blue.svg)](https://www.python.org/downloads/release/python-370/)
@@ -214,11 +214,11 @@ assert syn_model.name() == reloaded.name()
 
 ## 📓 Tutorials
 
- - [![Test In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/drive/1Vr2PJswgfFYBkJCm3hhVkuH-9dXnHeYV?usp=sharing) [ Tutorial 0: Getting started with tabular data](https://github.com/vanderschaarlab/synthcity/blob/use_cases/tutorials/tutorial0_basic_examples.ipynb) 
-  - [![Test In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/drive/1rTTvV4FT-Ut-rIHoBPXQimiBlZ7zCv59?usp=sharing) [ Tutorial 1: Writing a new plugin](https://github.com/vanderschaarlab/synthcity/blob/use_cases/tutorials/tutorial1_add_a_new_plugin.ipynb) 
-   - [![Test In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/drive/1FXpnQ9bpHzEgJgD-9pf_PPN4D80ENilE?usp=sharing) [ Tutorial 2: Benchmarking models](https://github.com/vanderschaarlab/synthcity/blob/use_cases/tutorials/tutorial2_benchmarks.ipynb) 
-   - [![Test In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/drive/1Wa2CPsbXzbKMPC5fSBhKl00Gi7QqVkse?usp=sharing) [ Tutorial 3: Generating Survival Analysis data](https://github.com/vanderschaarlab/synthcity/blob/use_cases/tutorials/tutorial3_survival_analysis.ipynb) 
-   - [![Test In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/drive/1jN36GCAKEkjzDlczmQfR7Wbh3yF3cIz5?usp=sharing) [ Tutorial 4: Generating Time Series](https://github.com/vanderschaarlab/synthcity/blob/use_cases/tutorials/tutorial4_time_series.ipynb) 
+ - [![Test In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/drive/1Vr2PJswgfFYBkJCm3hhVkuH-9dXnHeYV?usp=sharing) [ Tutorial 0: Getting started with tabular data](https://github.com/vanderschaarlab/synthcity/blob/use_cases/tutorials/tutorial0_basic_examples.ipynb)
+  - [![Test In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/drive/1rTTvV4FT-Ut-rIHoBPXQimiBlZ7zCv59?usp=sharing) [ Tutorial 1: Writing a new plugin](https://github.com/vanderschaarlab/synthcity/blob/use_cases/tutorials/tutorial1_add_a_new_plugin.ipynb)
+   - [![Test In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/drive/1FXpnQ9bpHzEgJgD-9pf_PPN4D80ENilE?usp=sharing) [ Tutorial 2: Benchmarking models](https://github.com/vanderschaarlab/synthcity/blob/use_cases/tutorials/tutorial2_benchmarks.ipynb)
+   - [![Test In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/drive/1Wa2CPsbXzbKMPC5fSBhKl00Gi7QqVkse?usp=sharing) [ Tutorial 3: Generating Survival Analysis data](https://github.com/vanderschaarlab/synthcity/blob/use_cases/tutorials/tutorial3_survival_analysis.ipynb)
+   - [![Test In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/drive/1jN36GCAKEkjzDlczmQfR7Wbh3yF3cIz5?usp=sharing) [ Tutorial 4: Generating Time Series](https://github.com/vanderschaarlab/synthcity/blob/use_cases/tutorials/tutorial4_time_series.ipynb)
 
 
 ## 🔑 Methods
