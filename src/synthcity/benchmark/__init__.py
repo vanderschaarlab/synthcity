@@ -7,6 +7,7 @@ from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
 
 # third party
+import numpy as np
 import pandas as pd
 import torch
 from IPython.display import display
@@ -207,3 +208,46 @@ class Benchmarks:
 
             display(results[plugin].drop(columns=["direction"]))
             print()
+
+    @staticmethod
+    @validate_arguments(config=dict(arbitrary_types_allowed=True))
+    def highlight(
+        results: Dict,
+    ) -> None:
+        pd.set_option("display.max_rows", None, "display.max_columns", None)
+        means = []
+        for plugin in results:
+            data = results[plugin]["mean"]
+            directions = results[plugin]["direction"].to_dict()
+            means.append(data)
+
+        out = pd.concat(means, axis=1)
+        out.set_axis(results.keys(), axis=1, inplace=True)
+
+        bad_highlight = "background-color: lightcoral;"
+        ok_highlight = "background-color: green;"
+        default = ""
+
+        def highlights(row: pd.Series) -> Any:
+            metric = row.name
+            if directions[metric] == "minimize":
+                best_val = np.min(row.values)
+                worst_val = np.max(row)
+            else:
+                best_val = np.max(row.values)
+                worst_val = np.min(row)
+
+            styles = []
+            for val in row.values:
+                if val == best_val:
+                    styles.append(ok_highlight)
+                elif val == worst_val:
+                    styles.append(bad_highlight)
+                else:
+                    styles.append(default)
+
+            return styles
+
+        out.style.apply(highlights, axis=1)
+
+        return out
