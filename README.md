@@ -49,7 +49,7 @@ $ pip install .
 ## :boom: Sample Usage
 
 ### Generic data
-* List the available generators
+* List the available general-purpose generators
 
 ```python
 from synthcity.plugins import Plugins
@@ -57,7 +57,7 @@ from synthcity.plugins import Plugins
 Plugins(categories=["generic"]).list()
 ```
 
-* Load and train a generator
+* Load and train a tabular generator
 
 ```python
 from sklearn.datasets import load_diabetes
@@ -66,28 +66,15 @@ from synthcity.plugins import Plugins
 X, y = load_diabetes(return_X_y=True, as_frame=True)
 X["target"] = y
 
-syn_model = Plugins().get("marginal_distributions")
+syn_model = Plugins().get("adsgan")
 
 syn_model.fit(X)
 ```
 
-* Generate new synthetic data
+* Generate new synthetic tabular data
 
 ```python
 syn_model.generate(count = 10)
-```
-
-* Generate new synthetic data under some constraints
-
-```python
-# Constraint: target <= 100
-from synthcity.plugins.core.constraints import Constraints
-
-constraints = Constraints(rules=[("target", "<=", 100)])
-
-generated = syn_model.generate(count=10, constraints=constraints)
-
-assert (generated["target"] <= 100).any()
 ```
 
 * Benchmark the quality of the plugins
@@ -106,13 +93,13 @@ X["target"] = y
 
 loader = GenericDataLoader(X, target_column="target", sensitive_columns=["sex"])
 
-constraints = Constraints(rules=[("target", "ge", 150)])
-
 score = Benchmarks.evaluate(
-    [("example", "marginal_distributions", {})],  # testname, plugin name, pplugin args
+    [
+        (f"example_{model}", model, {})  # testname, plugin name, plugin args
+        for model in ["adsgan", "ctgan", "tvae"]
+    ],
     loader,
     synthetic_size=1000,
-    synthetic_constraints=constraints,
     metrics={"performance": ["linear_model"]},
     repeats=3,
 )
@@ -121,12 +108,12 @@ Benchmarks.print(score)
 
 ### Survival analysis
 
-* List the available generators
+* List the available generators dedicated to survival analysis
 
 ```python
 from synthcity.plugins import Plugins
 
-Plugins(categories=["survival_analysis"]).list()
+Plugins(categories=["generic", "survival_analysis"]).list()
 ```
 
 * Generate new data
@@ -143,7 +130,7 @@ data = SurvivalAnalysisDataLoader(
     time_to_event_column="week",
 )
 
-syn_model = Plugins().get("marginal_distributions")
+syn_model = Plugins().get("survival_gan")
 
 syn_model.fit(data)
 
@@ -157,7 +144,7 @@ syn_model.generate(count=10)
 ```python
 from synthcity.plugins import Plugins
 
-Plugins(categories=["time_series"]).list()
+Plugins(categories=["generic", "time_series"]).list()
 ```
 
 * Generate new data
@@ -176,7 +163,7 @@ data = TimeSeriesDataLoader(
     outcome=outcome,
 )
 
-syn_model = Plugins().get("marginal_distributions")
+syn_model = Plugins().get("timegan")
 
 syn_model.fit(data)
 
