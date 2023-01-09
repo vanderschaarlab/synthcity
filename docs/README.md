@@ -16,7 +16,10 @@
     - Survival Analysis: SurvivalGAN, SurVAE.
     - Privacy-focused: DECAF, DP-GAN, AdsGAN, PATEGAN, PrivBayes.
     - Domain adaptation: RadialGAN.
+- |:book:| [Read the docs !](https://synthcity.readthedocs.io/)
+- |:airplane:| [Checkout the tutorials!](https://github.com/vanderschaarlab/synthcity#-tutorials)
 
+|:rotating_light:| __NOTE__: Python 3.10 is __NOT__ supported yet.
 
 ## |:rocket:| Installation
 
@@ -76,15 +79,23 @@ assert (generated["target"] <= 100).any()
 * Benchmark the quality of the plugins
 
 ```python
+# third party
+from sklearn.datasets import load_diabetes
+
+# synthcity absolute
 from synthcity.benchmark import Benchmarks
+from synthcity.plugins.core.constraints import Constraints
 from synthcity.plugins.core.dataloader import GenericDataLoader
+
+X, y = load_diabetes(return_X_y=True, as_frame=True)
+X["target"] = y
 
 loader = GenericDataLoader(X, target_column="target", sensitive_columns=["sex"])
 
 constraints = Constraints(rules=[("target", "ge", 150)])
 
 score = Benchmarks.evaluate(
-    ["marginal_distributions"],
+    [("example", "marginal_distributions", {})],  # testname, plugin name, pplugin args
     loader,
     synthetic_size=1000,
     synthetic_constraints=constraints,
@@ -138,13 +149,15 @@ Plugins(categories=["time_series"]).list()
 * Generate new data
 
 ```python
-from synthcity.utils.datasets.time_series.google_stocks import GoogleStocksDataloader
-from synthcity.plugins.core.dataloader import TimeSeriesDataLoader
+# synthcity absolute
 from synthcity.plugins import Plugins
+from synthcity.plugins.core.dataloader import TimeSeriesDataLoader
+from synthcity.utils.datasets.time_series.google_stocks import GoogleStocksDataloader
 
-static_data, temporal_data, outcome = GoogleStocksDataloader().load()
+static_data, temporal_data, horizons, outcome = GoogleStocksDataloader().load()
 data = TimeSeriesDataLoader(
     temporal_data=temporal_data,
+    temporal_horizons=horizons,
     static_data=static_data,
     outcome=outcome,
 )
@@ -187,9 +200,12 @@ assert syn_model.name() == reloaded.name()
 
 ## 📓 Tutorials
 
- - [Tutorial 0: Basics](tutorials/tutorial0_basic_examples.ipynb)
- - [Tutorial 1: Write a new plugin](tutorials/tutorial1_add_a_new_plugin.ipynb)
- - [Tutorial 1: Benchmarks](tutorials/tutorial2_benchmarks.ipynb)
+ - [![Test In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/drive/1Vr2PJswgfFYBkJCm3hhVkuH-9dXnHeYV?usp=sharing) [ Tutorial 0: Getting started with tabular data](https://github.com/vanderschaarlab/synthcity/blob/use_cases/tutorials/tutorial0_basic_examples.ipynb)
+  - [![Test In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/drive/1rTTvV4FT-Ut-rIHoBPXQimiBlZ7zCv59?usp=sharing) [ Tutorial 1: Writing a new plugin](https://github.com/vanderschaarlab/synthcity/blob/use_cases/tutorials/tutorial1_add_a_new_plugin.ipynb)
+   - [![Test In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/drive/1FXpnQ9bpHzEgJgD-9pf_PPN4D80ENilE?usp=sharing) [ Tutorial 2: Benchmarking models](https://github.com/vanderschaarlab/synthcity/blob/use_cases/tutorials/tutorial2_benchmarks.ipynb)
+   - [![Test In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/drive/1Wa2CPsbXzbKMPC5fSBhKl00Gi7QqVkse?usp=sharing) [ Tutorial 3: Generating Survival Analysis data](https://github.com/vanderschaarlab/synthcity/blob/use_cases/tutorials/tutorial3_survival_analysis.ipynb)
+   - [![Test In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/drive/1jN36GCAKEkjzDlczmQfR7Wbh3yF3cIz5?usp=sharing) [ Tutorial 4: Generating Time Series](https://github.com/vanderschaarlab/synthcity/blob/use_cases/tutorials/tutorial4_time_series.ipynb)
+   - [![Test In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/drive/1Nf8d3Y6sXr1uco8MsJA4wb33iFvReL59?usp=sharing) [ Tutorial 5: Generating Data with Differential Privacy Guarantees](https://github.com/vanderschaarlab/synthcity/blob/use_cases/tutorials/tutorial5_differential_privacy.ipynb)
 
 
 ## 🔑 Methods

@@ -7,9 +7,12 @@ Getting started
     :glob:
     :maxdepth: 2
 
-    Getting started <tutorials/tutorial0_basic_examples.ipynb>
+    Getting started with tabular data <tutorials/tutorial0_basic_examples.ipynb>
     Adding a new plugin <tutorials/tutorial1_add_a_new_plugin.ipynb>
     Benchmarks <tutorials/tutorial2_benchmarks.ipynb>
+    Generating Survival Analysis Data <tutorials/tutorial3_survival_analysis.ipynb>
+    Generating Time Series <tutorials/tutorial4_time_series.ipynb>
+    Generating Data with Differential Privacy Guarantees <tutorials/tutorial5_differential_privacy.ipynb>
 
 General-purpose generators
 ---------------------------

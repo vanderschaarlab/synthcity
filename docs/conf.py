@@ -55,11 +55,15 @@ emojis = [
     ":hammer:",
     ":boom:",
     ":notebook:",
+    ":book:",
     ":adhesive_bandage:",
     ":high_brightness:",
+    ":airplane:",
+    ":point_down:",
+    ":rotating_light:",
 ]
 
-# with open("../README.md", "rt") as fin:
+#with open("../README.md", "rt") as fin:
 #    with open("README.md", "wt") as fout:
 #        for line in fin:
 #            for emoji in emojis:
