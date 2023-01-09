@@ -55,6 +55,7 @@ emojis = [
     ":hammer:",
     ":boom:",
     ":notebook:",
+    ":book:",
     ":adhesive_bandage:",
     ":high_brightness:",
     ":airplane:",

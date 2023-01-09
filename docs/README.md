@@ -16,7 +16,7 @@
     - Survival Analysis: SurvivalGAN, SurVAE.
     - Privacy-focused: DECAF, DP-GAN, AdsGAN, PATEGAN, PrivBayes.
     - Domain adaptation: RadialGAN.
-- :book: [Read the docs !](https://synthcity.readthedocs.io/)
+- |:book:| [Read the docs !](https://synthcity.readthedocs.io/)
 - |:airplane:| [Checkout the tutorials!](https://github.com/vanderschaarlab/synthcity#-tutorials)
 
 |:rotating_light:| __NOTE__: Python 3.10 is __NOT__ supported yet.
