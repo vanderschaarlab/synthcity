@@ -7,10 +7,6 @@ on:
     types: [opened, synchronize, reopened]
   schedule:
     - cron:  '2 3 * * 4'
-  paths:
-    - 'src/**'
-    - 'tutorials/**'
-    - 'tests/**'
 
 
 jobs:
