@@ -40,7 +40,7 @@ $ pip install .
 ```python
 from synthcity.plugins import Plugins
 
-Plugins(categories=["generic"]).list()
+Plugins(categories=["generic", "privacy"]).list()
 ```
 
 * Load and train a generator
@@ -61,19 +61,6 @@ syn_model.fit(X)
 
 ```python
 syn_model.generate(count = 10)
-```
-
-* Generate new synthetic data under some constraints
-
-```python
-# Constraint: target <= 100
-from synthcity.plugins.core.constraints import Constraints
-
-constraints = Constraints(rules=[("target", "<=", 100)])
-
-generated = syn_model.generate(count=10, constraints=constraints)
-
-assert (generated["target"] <= 100).any()
 ```
 
 * Benchmark the quality of the plugins
@@ -105,14 +92,14 @@ score = Benchmarks.evaluate(
 Benchmarks.print(score)
 ```
 
-### Survival analysis
+### Static Survival analysis
 
 * List the available generators
 
 ```python
 from synthcity.plugins import Plugins
 
-Plugins(categories=["survival_analysis"]).list()
+Plugins(categories=["generic", "privacy", "survival_analysis"]).list()
 ```
 
 * Generate new data
@@ -136,14 +123,14 @@ syn_model.fit(data)
 syn_model.generate(count=10)
 ```
 
-### Time series
+### Time-Series & Time-Series Survival Analysis
 
 * List the available generators
 
 ```python
 from synthcity.plugins import Plugins
 
-Plugins(categories=["time_series"]).list()
+Plugins(categories=["generic", "privacy", "time_series"]).list()
 ```
 
 * Generate new data

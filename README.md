@@ -238,7 +238,7 @@ assert syn_model.name() == reloaded.name()
 |--- | --- | --- |
 |**nflow**| Normalizing Flows are generative models which produce tractable distributions where both sampling and density evaluation can be efficient and exact.| [Neural Spline Flows](https://arxiv.org/abs/1906.04032) |
 
-### Survival analysis methods
+### Static Survival analysis methods
 
 | Method | Description | Reference |
 |--- | --- | --- |
@@ -247,7 +247,7 @@ assert syn_model.name() == reloaded.name()
 |**survae** | SurvivalGAN version using VAE | --- |
 |**survival_nflow** | SurvivalGAN version using normalizing flows | --- |
 
-### Time Series methods
+### Time-Series and Time-Series Survival Analysis methods
 
 | Method | Description | Reference |
 |--- | --- | --- |

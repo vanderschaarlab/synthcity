@@ -36,7 +36,7 @@ Domain adaptation
 
     RadialGAN <generated/synthcity.plugins.domain_adaptation.plugin_radialgan.rst>
 
-Survival Analysis
+Static Survival Analysis
 -----------------
 .. toctree::
     :glob:
@@ -47,7 +47,7 @@ Survival Analysis
     SurVAE <generated/synthcity.plugins.survival_analysis.plugin_survae.rst>
     Surival NFlows <generated/synthcity.plugins.survival_analysis.plugin_survival_nflow.rst>
 
-Time-series
+Time-series & Time-Series Survival Analysis
 -----------------
 .. toctree::
     :glob:
