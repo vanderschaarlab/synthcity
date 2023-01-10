@@ -22,7 +22,7 @@ from synthcity.utils.constants import DEVICE
 
 
 class TimeVAEPlugin(Plugin):
-    """Synthetic time series generation using TimeVAE.
+    """Synthetic time series generation using a Variational AutoEncoder.
 
     Args:
         n_iter: int
