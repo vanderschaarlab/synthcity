@@ -23,8 +23,9 @@ from synthcity.plugins.core.schema import Schema
 from synthcity.utils.constants import DEVICE
 
 
-class DPGANPlugin(Plugin):
-    """Differentially Private Generative Adversarial Network implementation. The discriminator is trained using DP-SGD.
+class AdsGANPlugin(Plugin):
+    """AdsGAN plugin - Anonymization through Data Synthesis using Generative Adversarial Networks.
+
 
     Args:
         generator_n_layers_hidden: int
@@ -59,6 +60,8 @@ class DPGANPlugin(Plugin):
             Gradients clipping value. Zero disables the feature
         encoder_max_clusters: int
             The max number of clusters to create for continuous columns when encoding
+        adjust_inference_sampling: bool
+            Adjust the conditional probabilities to the ones in the training set. Active only with the ConditionalSampler
         # early stopping
         n_iter_print: int
             Number of iterations after which to print updates and check the validation loss.
@@ -68,17 +71,6 @@ class DPGANPlugin(Plugin):
             Max number of iterations without any improvement before early stopping is trigged.
         patience_metric: Optional[WeightedMetrics]
             If not None, the metric is used for evaluation the criterion for early stopping.
-        # privacy settings
-        dp_enabled: bool
-            Train the discriminator with Differential Privacy guarantees
-        dp_delta: Optional[float]
-            Optional DP delta: the probability of information accidentally being leaked. Usually 1 / len(dataset)
-        dp_epsilon: float = 3
-            DP epsilon: privacy budget, which is a measure of the amount of privacy that is preserved by a given algorithm. Epsilon is a number that represents the maximum amount of information that an adversary can learn about an individual from the output of a differentially private algorithm. The smaller the value of epsilon, the more private the algorithm is. For example, an algorithm with an epsilon of 0.1 preserves more privacy than an algorithm with an epsilon of 1.0.
-        dp_max_grad_norm: float
-            max grad norm used for gradient clipping
-        dp_secure_mode: bool = False,
-             if True uses noise generation approach robust to floating point arithmetic attacks.
 
     Example:
         >>> from sklearn.datasets import load_iris
@@ -87,18 +79,23 @@ class DPGANPlugin(Plugin):
         >>> X, y = load_iris(as_frame = True, return_X_y = True)
         >>> X["target"] = y
         >>>
-        >>> plugin = Plugins().get("dpgan", n_iter = 100)
+        >>> plugin = Plugins().get("adsgan", n_iter = 100)
         >>> plugin.fit(X)
         >>>
         >>> plugin.generate(50)
 
-    Reference: "Differentially Private Generative Adversarial Network", Xie, Liyang  et al.
+    Reference: Jinsung Yoon, Lydia N. Drumright, Mihaela van der Schaar,
+        "Anonymization through Data Synthesis using Generative Adversarial Networks (ADS-GAN):
+        A harmonizing advancement for AI in medicine,"
+        IEEE Journal of Biomedical and Health Informatics (JBHI), 2019.
+    Paper link: https://ieeexplore.ieee.org/document/9034117
+
     """
 
     @validate_arguments(config=dict(arbitrary_types_allowed=True))
     def __init__(
         self,
-        n_iter: int = 2000,
+        n_iter: int = 10000,
         generator_n_layers_hidden: int = 2,
         generator_n_units_hidden: int = 500,
         generator_nonlin: str = "relu",
@@ -110,21 +107,19 @@ class DPGANPlugin(Plugin):
         discriminator_n_iter: int = 1,
         discriminator_dropout: float = 0.1,
         discriminator_opt_betas: tuple = (0.5, 0.999),
+        # training
         lr: float = 1e-3,
         weight_decay: float = 1e-3,
         batch_size: int = 200,
         random_state: int = 0,
         clipping_value: int = 1,
         lambda_gradient_penalty: float = 10,
+        lambda_identifiability_penalty: float = 0.1,
         encoder_max_clusters: int = 5,
         encoder: Any = None,
         dataloader_sampler: Optional[sampler.Sampler] = None,
         device: Any = DEVICE,
-        # privacy settings
-        epsilon: float = 1,
-        delta: Optional[float] = None,
-        dp_max_grad_norm: float = 2,
-        dp_secure_mode: bool = False,
+        adjust_inference_sampling: bool = False,
         # early stopping
         patience: int = 5,
         patience_metric: Optional[WeightedMetrics] = WeightedMetrics(
@@ -141,6 +136,7 @@ class DPGANPlugin(Plugin):
         self.n_iter = n_iter
         self.generator_dropout = generator_dropout
         self.generator_opt_betas = generator_opt_betas
+        self.generator_extra_penalties = ["identifiability_penalty"]
         self.discriminator_n_layers_hidden = discriminator_n_layers_hidden
         self.discriminator_n_units_hidden = discriminator_n_units_hidden
         self.discriminator_nonlin = discriminator_nonlin
@@ -154,32 +150,26 @@ class DPGANPlugin(Plugin):
         self.random_state = random_state
         self.clipping_value = clipping_value
         self.lambda_gradient_penalty = lambda_gradient_penalty
+        self.lambda_identifiability_penalty = lambda_identifiability_penalty
 
         self.encoder_max_clusters = encoder_max_clusters
         self.encoder = encoder
         self.dataloader_sampler = dataloader_sampler
 
         self.device = device
-
         self.patience = patience
         self.patience_metric = patience_metric
         self.n_iter_min = n_iter_min
         self.n_iter_print = n_iter_print
-
-        # privacy
-        self.dp_epsilon = epsilon
-        self.dp_delta = delta
-        self.dp_enabled = True
-        self.dp_max_grad_norm = dp_max_grad_norm
-        self.dp_secure_mode = dp_secure_mode
+        self.adjust_inference_sampling = adjust_inference_sampling
 
     @staticmethod
     def name() -> str:
-        return "dpgan"
+        return "adsgan"
 
     @staticmethod
     def type() -> str:
-        return "generic"
+        return "privacy"
 
     @staticmethod
     def hyperparameter_space(**kwargs: Any) -> List[Distribution]:
@@ -191,7 +181,6 @@ class DPGANPlugin(Plugin):
             CategoricalDistribution(
                 name="generator_nonlin", choices=["relu", "leaky_relu", "tanh", "elu"]
             ),
-            IntegerDistribution(name="n_iter", low=100, high=1000, step=100),
             FloatDistribution(name="generator_dropout", low=0, high=0.2),
             IntegerDistribution(name="discriminator_n_layers_hidden", low=1, high=4),
             IntegerDistribution(
@@ -201,15 +190,13 @@ class DPGANPlugin(Plugin):
                 name="discriminator_nonlin",
                 choices=["relu", "leaky_relu", "tanh", "elu"],
             ),
-            IntegerDistribution(name="discriminator_n_iter", low=1, high=5),
             FloatDistribution(name="discriminator_dropout", low=0, high=0.2),
             CategoricalDistribution(name="lr", choices=[1e-3, 2e-4, 1e-4]),
             CategoricalDistribution(name="weight_decay", choices=[1e-3, 1e-4]),
-            CategoricalDistribution(name="batch_size", choices=[100, 200, 500]),
             IntegerDistribution(name="encoder_max_clusters", low=2, high=20),
         ]
 
-    def _fit(self, X: DataLoader, *args: Any, **kwargs: Any) -> "DPGANPlugin":
+    def _fit(self, X: DataLoader, *args: Any, **kwargs: Any) -> "AdsGANPlugin":
         cond: Optional[Union[pd.DataFrame, pd.Series]] = None
         if "cond" in kwargs:
             cond = kwargs["cond"]
@@ -231,7 +218,7 @@ class DPGANPlugin(Plugin):
             generator_dropout=0,
             generator_weight_decay=self.weight_decay,
             generator_opt_betas=self.generator_opt_betas,
-            generator_extra_penalties=[],
+            generator_extra_penalties=self.generator_extra_penalties,
             discriminator_n_units_hidden=self.discriminator_n_units_hidden,
             discriminator_n_layers_hidden=self.discriminator_n_layers_hidden,
             discriminator_n_iter=self.discriminator_n_iter,
@@ -244,20 +231,15 @@ class DPGANPlugin(Plugin):
             encoder=self.encoder,
             clipping_value=self.clipping_value,
             lambda_gradient_penalty=self.lambda_gradient_penalty,
+            lambda_identifiability_penalty=self.lambda_identifiability_penalty,
             encoder_max_clusters=self.encoder_max_clusters,
             dataloader_sampler=self.dataloader_sampler,
             device=self.device,
-            # privacy
-            dp_enabled=self.dp_enabled,
-            dp_epsilon=self.dp_epsilon,
-            dp_delta=self.dp_delta,
-            dp_max_grad_norm=self.dp_max_grad_norm,
-            dp_secure_mode=self.dp_secure_mode,
-            # early stopping
             patience=self.patience,
             patience_metric=self.patience_metric,
             n_iter_min=self.n_iter_min,
             n_iter_print=self.n_iter_print,
+            adjust_inference_sampling=self.adjust_inference_sampling,
         )
         self.model.fit(X.dataframe(), cond=cond)
 
@@ -271,4 +253,4 @@ class DPGANPlugin(Plugin):
         return self._safe_generate(self.model.generate, count, syn_schema, cond=cond)
 
 
-plugin = DPGANPlugin
+plugin = AdsGANPlugin

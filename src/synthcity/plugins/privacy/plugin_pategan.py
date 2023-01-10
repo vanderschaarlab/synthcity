@@ -453,7 +453,7 @@ class PATEGANPlugin(Plugin):
 
     @staticmethod
     def type() -> str:
-        return "generic"
+        return "privacy"
 
     @staticmethod
     def hyperparameter_space(**kwargs: Any) -> List[Distribution]:

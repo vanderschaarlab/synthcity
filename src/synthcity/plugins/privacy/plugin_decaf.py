@@ -189,7 +189,7 @@ class DECAFPlugin(Plugin):
 
     @staticmethod
     def type() -> str:
-        return "fairness"
+        return "privacy"
 
     @staticmethod
     def hyperparameter_space(**kwargs: Any) -> List[Distribution]:
