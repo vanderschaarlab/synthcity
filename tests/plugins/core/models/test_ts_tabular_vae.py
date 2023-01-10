@@ -7,7 +7,7 @@ import pytest
 
 # synthcity absolute
 from synthcity.plugins.core.dataloader import TimeSeriesDataLoader
-from synthcity.plugins.core.models.ts_tabular_vae import TimeSeriesTabularAutoEncoder
+from synthcity.plugins.core.models.ts_tabular_vae import TimeSeriesTabularVAE
 from synthcity.plugins.core.schema import Schema
 from synthcity.utils.datasets.time_series.google_stocks import GoogleStocksDataloader
 from synthcity.utils.datasets.time_series.sine import SineDataloader
@@ -15,7 +15,7 @@ from synthcity.utils.datasets.time_series.sine import SineDataloader
 
 def test_network_config() -> None:
     static, temporal, temporal_horizons, _ = SineDataloader().load()
-    net = TimeSeriesTabularAutoEncoder(
+    net = TimeSeriesTabularVAE(
         static,
         temporal,
         temporal_horizons,
@@ -56,7 +56,7 @@ def test_network_config() -> None:
 def test_ts_vae_generation(source: Any) -> None:
     static, temporal, temporal_horizons, _ = source().load()
 
-    model = TimeSeriesTabularAutoEncoder(
+    model = TimeSeriesTabularVAE(
         static,
         temporal,
         temporal_horizons,
@@ -80,7 +80,7 @@ def test_ts_vae_generation(source: Any) -> None:
 def test_ts_vae_generation_schema(source: Any) -> None:
     static, temporal, temporal_horizons, _ = source().load()
 
-    model = TimeSeriesTabularAutoEncoder(
+    model = TimeSeriesTabularVAE(
         static,
         temporal,
         temporal_horizons,

@@ -15,7 +15,7 @@ from synthcity.plugins.core.distribution import (
 )
 from synthcity.plugins.core.models.tabular_encoder import TabularEncoder
 from synthcity.plugins.core.models.ts_model import TimeSeriesModel, modes
-from synthcity.plugins.core.models.ts_tabular_vae import TimeSeriesTabularAutoEncoder
+from synthcity.plugins.core.models.ts_tabular_vae import TimeSeriesTabularVAE
 from synthcity.plugins.core.plugin import Plugin
 from synthcity.plugins.core.schema import Schema
 from synthcity.utils.constants import DEVICE
@@ -199,7 +199,7 @@ class TimeVAEPlugin(Plugin):
             outcome = pd.concat([pd.Series(T), pd.Series(E)], axis=1)
             outcome.columns = ["time_to_event", "event"]
 
-        self.cov_model = TimeSeriesTabularAutoEncoder(
+        self.cov_model = TimeSeriesTabularVAE(
             static_data=static,
             temporal_data=temporal,
             temporal_horizons=temporal_horizons,

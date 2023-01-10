@@ -15,7 +15,7 @@ from .tabular_encoder import TimeSeriesTabularEncoder
 from .ts_vae import TimeSeriesAutoEncoder
 
 
-class TimeSeriesTabularAutoEncoder(torch.nn.Module):
+class TimeSeriesTabularVAE(torch.nn.Module):
     """
     TimeSeries Tabular AutoEncoder implementation.
 
@@ -101,7 +101,7 @@ class TimeSeriesTabularAutoEncoder(torch.nn.Module):
         device: Any = DEVICE,
         loss_factor: int = 2,
     ) -> None:
-        super(TimeSeriesTabularAutoEncoder, self).__init__()
+        super(TimeSeriesTabularVAE, self).__init__()
         if encoder is not None:
             self.encoder = encoder
         else:
