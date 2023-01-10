@@ -85,7 +85,7 @@ class Benchmarks:
 
         workspace.mkdir(parents=True, exist_ok=True)
 
-        plugin_cats = ["generic"]
+        plugin_cats = ["generic", "privacy"]
         if task_type == "survival_analysis":
             plugin_cats.append("survival_analysis")
         elif task_type == "time_series" or task_type == "time_series_survival":
