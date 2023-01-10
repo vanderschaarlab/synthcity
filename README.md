@@ -54,7 +54,7 @@ $ pip install .
 ```python
 from synthcity.plugins import Plugins
 
-Plugins(categories=["generic"]).list()
+Plugins(categories=["generic", "privacy"]).list()
 ```
 
 * Load and train a tabular generator
@@ -113,7 +113,7 @@ Benchmarks.print(score)
 ```python
 from synthcity.plugins import Plugins
 
-Plugins(categories=["generic", "survival_analysis"]).list()
+Plugins(categories=["generic", "privacy", "survival_analysis"]).list()
 ```
 
 * Generate new data
@@ -144,7 +144,7 @@ syn_model.generate(count=10)
 ```python
 from synthcity.plugins import Plugins
 
-Plugins(categories=["generic", "time_series"]).list()
+Plugins(categories=["generic", "privacy", "time_series"]).list()
 ```
 
 * Generate new data
