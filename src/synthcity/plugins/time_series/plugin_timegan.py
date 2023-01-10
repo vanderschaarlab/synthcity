@@ -70,18 +70,37 @@ class TimeGANPlugin(Plugin):
             random_state used
         clipping_value: int, default 0
             Gradients clipping value
-        encoder_max_clusters: int
-            The max number of clusters to create for continuous columns when encoding
-        encoder:
-            Pre-trained tabular encoder. If None, a new encoder is trained.
-        device:
-            Device to use for computation
         gamma_penalty
             Latent representation penalty
         moments_penalty: float = 100
             Moments(var and mean) penalty
         embedding_penalty: float = 10
             Embedding representation penalty
+        mode: str = "RNN"
+            Core neural net architecture.
+            Available models:
+                - "LSTM"
+                - "GRU"
+                - "RNN"
+                - "Transformer"
+                - "MLSTM_FCN"
+                - "TCN"
+                - "InceptionTime"
+                - "InceptionTimePlus"
+                - "XceptionTime"
+                - "ResCNN"
+                - "OmniScaleCNN"
+                - "XCM"
+                - "Transformer"
+        device
+            The device used by PyTorch. cpu/cuda
+        use_horizon_condition: bool. Default = True
+            Whether to condition the covariate generation on the observation times or not.
+        encoder_max_clusters: int
+            The max number of clusters to create for continuous columns when encoding
+        encoder:
+            Pre-trained tabular encoder. If None, a new encoder is trained.
+
 
     Example:
         >>> from synthcity.plugins import Plugins

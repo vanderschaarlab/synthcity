@@ -222,7 +222,98 @@ class TimeSeriesDecoder(nn.Module):
         return static_decoded, temporal_decoded, observation_times
 
 
-class TimeSeriesAutoEncoder(nn.Module):
+class TimeSeriesVAE(nn.Module):
+    """Basic Time-Series Variational AutoEncoder
+
+    Args:
+        n_static_units: int
+            Number of input static units.
+        n_static_units_embedding: int.
+            Number of latent static units.
+        n_temporal_units: int.
+            Number of input temporal units.
+        n_temporal_window: int
+            The length of time series sequences.
+        n_temporal_units_embedding: int.
+            Number of latent temporal units.
+        batch_size: int. Default = 100
+            Batch size.
+        n_iter: int. Default = 500
+            Number of epochs
+        n_iter_print: int = 10.
+            Frequency of printing the training loss.
+        random_state: int = 0
+            Random seed
+        clipping_value: int = 1
+            Gradients clipping value. Zero disables the feature
+        lr: float = 2e-4,
+            Learning rate
+        weight_decay: float = 1e-3,
+            l2 (ridge) penalty for the weights.
+        loss_factor: int. Default = 2
+            Reconstruction loss weight.
+        decoder_n_layers_hidden: int. Default = 2
+            Number of hidden layer in the decoder
+        decoder_n_units_hidden: int. Decoder = 250.
+            Number of hidden units in the decoder
+        decoder_nonlin: str. Decoder = "leaky_relu"
+            Activation for the hidden layers. Can be relu, elu, leaky_relu, selu.
+        decoder_static_nonlin_out: Optional[List[Tuple[str, int]]] = None
+            (Optional) Activations to use in the output layer of the decoder for static features.
+        decoder_temporal_nonlin_out: Optional[List[Tuple[str, int]]] = None,
+            (Optional) Activations to use in the output layer of the decoder for temporal features.
+        decoder_batch_norm: bool. Default = False
+            Decoder batch norm
+        decoder_dropout: float. Default = 0
+            Decoder dropout
+        decoder_residual: bool. Default = True
+            Use residual connections in the decoder
+        decoder_mode: str. Default = "LSTM"
+            Core neural net architecture for the decoder.
+            Available models:
+                - "LSTM"
+                - "GRU"
+                - "RNN"
+                - "Transformer"
+                - "MLSTM_FCN"
+                - "TCN"
+                - "InceptionTime"
+                - "InceptionTimePlus"
+                - "XceptionTime"
+                - "ResCNN"
+                - "OmniScaleCNN"
+                - "XCM"
+                - "Transformer"
+        encoder_n_layers_hidden: int. Default = 3
+            Number of hidden layers in the encoder
+        encoder_n_units_hidden. Default int = 300
+            Number of hidden units in the encoder
+        encoder_nonlin: str. Default = "leaky_relu"
+            Activations for the hidden layers in the encoder.
+        encoder_batch_norm: bool. Default = False,
+            Encoder batch norm.
+        encoder_dropout: float. Default = 0.1
+            Encoder dropout.
+        encoder_mode: str. Default = "LSTM"
+            Core neural net architecture for the encoder.
+            Available models:
+                - "LSTM"
+                - "GRU"
+                - "RNN"
+                - "Transformer"
+                - "MLSTM_FCN"
+                - "TCN"
+                - "InceptionTime"
+                - "InceptionTimePlus"
+                - "XceptionTime"
+                - "ResCNN"
+                - "OmniScaleCNN"
+                - "XCM"
+                - "Transformer"
+        device
+            PyTorch device: cpu/cuda.
+    """
+
     def __init__(
         self,
         n_static_units: int,
@@ -257,7 +348,7 @@ class TimeSeriesAutoEncoder(nn.Module):
         encoder_mode: str = "LSTM",
         device: Any = DEVICE,
     ):
-        super(TimeSeriesAutoEncoder, self).__init__()
+        super(TimeSeriesVAE, self).__init__()
 
         self.device = device
         self.batch_size = batch_size

@@ -12,12 +12,14 @@ from synthcity.utils.constants import DEVICE
 
 # synthcity relative
 from .tabular_encoder import TimeSeriesTabularEncoder
-from .ts_vae import TimeSeriesAutoEncoder
+from .ts_vae import TimeSeriesVAE
 
 
 class TimeSeriesTabularVAE(torch.nn.Module):
     """
-    TimeSeries Tabular AutoEncoder implementation.
+    TimeSeries Tabular Variational AutoEncoder implementation.
+
+    This class combines TimeSeriesVAE and tabular encoder to form a generative model for tabular data.
 
     Args:
         static_data: pd.DataFrame
@@ -66,6 +68,24 @@ class TimeSeriesTabularVAE(torch.nn.Module):
             Pre-trained tabular encoder. If None, a new encoder is trained.
         device:
             Device to use for computation
+        loss_factor: float
+            Reconstruction loss weight.
+        mode: str = "RNN"
+            Core neural net architecture.
+            Available models:
+                - "LSTM"
+                - "GRU"
+                - "RNN"
+                - "Transformer"
+                - "MLSTM_FCN"
+                - "TCN"
+                - "InceptionTime"
+                - "InceptionTimePlus"
+                - "XceptionTime"
+                - "ResCNN"
+                - "OmniScaleCNN"
+                - "XCM"
+                - "Transformer"
     """
 
     @validate_arguments(config=dict(arbitrary_types_allowed=True))
@@ -117,7 +137,7 @@ class TimeSeriesTabularVAE(torch.nn.Module):
             discrete_activation=decoder_nonlin_out_discrete,
             continuous_activation=decoder_nonlin_out_continuous,
         )
-        self.model = TimeSeriesAutoEncoder(
+        self.model = TimeSeriesVAE(
             n_static_units=n_static_units,
             n_static_units_embedding=n_static_units,
             n_temporal_units=n_temporal_units,

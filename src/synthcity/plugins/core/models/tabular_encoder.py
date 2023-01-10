@@ -28,7 +28,7 @@ ColumnTransformInfo = namedtuple(
 
 
 class BinEncoder(TransformerMixin, BaseEstimator):
-    """Bin encoder (for SurvivalGAN).
+    """Binary encoder (for SurvivalGAN).
 
     Model continuous columns with a BayesianGMM and normalized to a scalar [0, 1] and a vector.
     Discrete columns are encoded using a scikit-learn OneHotEncoder.
