@@ -324,23 +324,23 @@ class Plugin(Serializable, metaclass=ABCMeta):
         for it in range(self.sampling_patience):
             # sample
             if self.data_info["data_type"] == "time_series":
-                static, temporal, temporal_horizons, outcome = gen_cbk(
+                static, temporal, observation_times, outcome = gen_cbk(
                     count - offset, **kwargs
                 )
                 loader = TimeSeriesDataLoader(
                     temporal_data=temporal,
-                    temporal_horizons=temporal_horizons,
+                    observation_times=observation_times,
                     static_data=static,
                     outcome=outcome,
                     seq_offset=seq_offset,
                 )
             elif self.data_info["data_type"] == "time_series_survival":
-                static, temporal, temporal_horizons, T, E = gen_cbk(
+                static, temporal, observation_times, T, E = gen_cbk(
                     count - offset, **kwargs
                 )
                 loader = TimeSeriesSurvivalDataLoader(
                     temporal_data=temporal,
-                    temporal_horizons=temporal_horizons,
+                    observation_times=observation_times,
                     static_data=static,
                     T=T,
                     E=E,

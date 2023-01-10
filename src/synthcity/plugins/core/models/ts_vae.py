@@ -48,7 +48,7 @@ class LatentODE(nn.Module):
             device=device,
         ).to(self.device)
 
-    def forward(self, temporal_horizons: torch.Tensor, temporal: Tensor) -> Tensor:
+    def forward(self, observation_times: torch.Tensor, temporal: Tensor) -> Tensor:
         return self.model(temporal)
 
 
@@ -117,12 +117,12 @@ class TimeSeriesEncoder(nn.Module):
         self,
         static: Tensor,
         temporal: Tensor,
-        temporal_horizons: Tensor,
+        observation_times: Tensor,
     ) -> Tuple[Tensor, Tensor, Tensor, Tensor, Tensor, Tensor]:
         static_mu, static_logvar = self.static_encoder(static)
-        horizons_mu, horizons_logvar = self.horizons_encoder(temporal_horizons)
+        horizons_mu, horizons_logvar = self.horizons_encoder(observation_times)
 
-        temporal_embs = self.temporal_encoder(static, temporal, temporal_horizons)
+        temporal_embs = self.temporal_encoder(static, temporal, observation_times)
         temporal_mu, temporal_logvar = (
             temporal_embs[:, 0, :].squeeze(),
             temporal_embs[:, 1, :].squeeze(),
@@ -214,12 +214,12 @@ class TimeSeriesDecoder(nn.Module):
         self, static_embs: Tensor, temporal_embs: Tensor, horizon_embs: Tensor
     ) -> Tensor:
         static_decoded = self.static_decoder(static_embs)
-        temporal_horizons = self.horizons_decoder(horizon_embs)
+        observation_times = self.horizons_decoder(horizon_embs)
 
         temporal_decoded = self.temporal_decoder(
-            static_decoded, temporal_embs, temporal_horizons
+            static_decoded, temporal_embs, observation_times
         )
-        return static_decoded, temporal_decoded, temporal_horizons
+        return static_decoded, temporal_decoded, observation_times
 
 
 class TimeSeriesAutoEncoder(nn.Module):
@@ -314,11 +314,11 @@ class TimeSeriesAutoEncoder(nn.Module):
         ).to(device)
 
     def fit(
-        self, static: np.ndarray, temporal: np.ndarray, temporal_horizons: np.ndarray
+        self, static: np.ndarray, temporal: np.ndarray, observation_times: np.ndarray
     ) -> Any:
         static_t = self._check_tensor(static).float()
         temporal_t = self._check_tensor(temporal).float()
-        horizons_t = self._check_tensor(temporal_horizons).float()
+        horizons_t = self._check_tensor(observation_times).float()
 
         self._train(static_t, temporal_t, horizons_t)
 
@@ -377,7 +377,7 @@ class TimeSeriesAutoEncoder(nn.Module):
         return eps * std + mu
 
     def _train_step(
-        self, static: Tensor, temporal: Tensor, temporal_horizons: Tensor
+        self, static: Tensor, temporal: Tensor, observation_times: Tensor
     ) -> Tensor:
         # Encode
         (
@@ -387,7 +387,7 @@ class TimeSeriesAutoEncoder(nn.Module):
             temporal_logvar,
             horizons_mu,
             horizons_logvar,
-        ) = self.encoder.forward(static, temporal, temporal_horizons)
+        ) = self.encoder.forward(static, temporal, observation_times)
         static_embedding = self._reparameterize(static_mu, static_logvar)
         temporal_embedding = self._reparameterize(temporal_mu, temporal_logvar)
         horizons_embedding = self._reparameterize(horizons_mu, horizons_logvar)
@@ -408,7 +408,7 @@ class TimeSeriesAutoEncoder(nn.Module):
             self.temporal_nonlin_out,
         )
         horizons_loss = self._loss_function(
-            horizons_recon, temporal_horizons, horizons_mu, horizons_logvar
+            horizons_recon, observation_times, horizons_mu, horizons_logvar
         )
 
         loss = static_loss + temporal_loss + horizons_loss
@@ -422,9 +422,9 @@ class TimeSeriesAutoEncoder(nn.Module):
 
     @validate_arguments(config=dict(arbitrary_types_allowed=True))
     def _train(
-        self, static: Tensor, temporal: Tensor, temporal_horizons: Tensor
+        self, static: Tensor, temporal: Tensor, observation_times: Tensor
     ) -> Any:
-        loader = self._dataloader(static, temporal, temporal_horizons)
+        loader = self._dataloader(static, temporal, observation_times)
 
         optimizer = Adam(
             self.parameters(),
@@ -454,9 +454,9 @@ class TimeSeriesAutoEncoder(nn.Module):
             return torch.from_numpy(np.asarray(X)).to(self.device)
 
     def _dataloader(
-        self, static: Tensor, temporal: Tensor, temporal_horizons: Tensor
+        self, static: Tensor, temporal: Tensor, observation_times: Tensor
     ) -> DataLoader:
-        dataset = TensorDataset(static, temporal, temporal_horizons)
+        dataset = TensorDataset(static, temporal, observation_times)
         return DataLoader(
             dataset,
             batch_size=self.batch_size,

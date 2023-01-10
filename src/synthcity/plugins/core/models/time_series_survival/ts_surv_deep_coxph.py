@@ -62,7 +62,7 @@ class DeepCoxPHTimeSeriesSurvival(TimeSeriesSurvivalPlugin):
         self,
         static: Optional[np.ndarray],
         temporal: np.ndarray,
-        temporal_horizons: np.ndarray,
+        observation_times: np.ndarray,
     ) -> np.ndarray:
         if static is None:
             static = np.zeros((len(temporal), 0))
@@ -72,7 +72,7 @@ class DeepCoxPHTimeSeriesSurvival(TimeSeriesSurvivalPlugin):
             local_static = static[idx].reshape(1, -1)
             local_static = np.repeat(local_static, len(temporal[idx]), axis=0)
             tst = np.concatenate(
-                [temporal[idx], local_static, temporal_horizons[idx].reshape(-1, 1)],
+                [temporal[idx], local_static, observation_times[idx].reshape(-1, 1)],
                 axis=1,
             )
             merged.append(tst)
@@ -84,11 +84,11 @@ class DeepCoxPHTimeSeriesSurvival(TimeSeriesSurvivalPlugin):
         self,
         static: Optional[np.ndarray],
         temporal: np.ndarray,
-        temporal_horizons: np.ndarray,
+        observation_times: np.ndarray,
         T: np.ndarray,
         E: np.ndarray,
     ) -> TimeSeriesSurvivalPlugin:
-        data = self._merge_data(static, temporal, temporal_horizons)
+        data = self._merge_data(static, temporal, observation_times)
 
         self.model = DeepRecurrentCoxPH(
             data[0].shape[-1],
@@ -116,12 +116,12 @@ class DeepCoxPHTimeSeriesSurvival(TimeSeriesSurvivalPlugin):
         self,
         static: Optional[np.ndarray],
         temporal: np.ndarray,
-        temporal_horizons: np.ndarray,
+        observation_times: np.ndarray,
         time_horizons: List,
     ) -> np.ndarray:
         "Predict risk"
 
-        data = self._merge_data(static, temporal, temporal_horizons)
+        data = self._merge_data(static, temporal, observation_times)
 
         raw = self.model.predict_risk(data, time_horizons)
         out = []

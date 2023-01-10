@@ -24,7 +24,7 @@ class TimeSeriesTabularGAN(torch.nn.Module):
             Reference static data
         temporal_data: List[pd.DataFrame],
             Reference temporal data
-        temporal_horizons: List
+        observation_times: List
             Reference temporal horizons
         cond: Optional
             Optional conditional
@@ -85,7 +85,7 @@ class TimeSeriesTabularGAN(torch.nn.Module):
         self,
         static_data: pd.DataFrame,
         temporal_data: List[pd.DataFrame],
-        temporal_horizons: List,
+        observation_times: List,
         cond: Optional[Union[pd.DataFrame, pd.Series, np.ndarray]] = None,
         generator_n_layers_hidden: int = 2,
         generator_n_units_hidden: int = 150,
@@ -128,7 +128,7 @@ class TimeSeriesTabularGAN(torch.nn.Module):
         else:
             self.encoder = TimeSeriesTabularEncoder(
                 max_clusters=encoder_max_clusters
-            ).fit(static_data, temporal_data, temporal_horizons)
+            ).fit(static_data, temporal_data, observation_times)
 
         self.static_columns = static_data.columns
         self.temporal_columns = temporal_data[0].columns
@@ -185,19 +185,19 @@ class TimeSeriesTabularGAN(torch.nn.Module):
         self,
         static_data: pd.DataFrame,
         temporal_data: List[pd.DataFrame],
-        temporal_horizons: List,
+        observation_times: List,
     ) -> Tuple:
-        return self.encoder.transform(static_data, temporal_data, temporal_horizons)
+        return self.encoder.transform(static_data, temporal_data, observation_times)
 
     @validate_arguments(config=dict(arbitrary_types_allowed=True))
     def decode(
         self,
         static_data: pd.DataFrame,
         temporal_data: List[pd.DataFrame],
-        temporal_horizons: List,
+        observation_times: List,
     ) -> Tuple:
         return self.encoder.inverse_transform(
-            static_data, temporal_data, temporal_horizons
+            static_data, temporal_data, observation_times
         )
 
     @validate_arguments(config=dict(arbitrary_types_allowed=True))
@@ -217,33 +217,33 @@ class TimeSeriesTabularGAN(torch.nn.Module):
     @validate_arguments(config=dict(arbitrary_types_allowed=True))
     def encode_horizons(
         self,
-        temporal_horizons: List,
+        observation_times: List,
     ) -> Tuple:
-        return self.encoder.transform_temporal_horizons(temporal_horizons)
+        return self.encoder.transform_observation_times(observation_times)
 
     @validate_arguments(config=dict(arbitrary_types_allowed=True))
     def decode_horizons(
         self,
-        temporal_horizons: List,
+        observation_times: List,
     ) -> Tuple:
-        return self.encoder.inverse_transform_temporal_horizons(temporal_horizons)
+        return self.encoder.inverse_transform_observation_times(observation_times)
 
     @validate_arguments(config=dict(arbitrary_types_allowed=True))
     def fit(
         self,
         static_data: pd.DataFrame,
         temporal_data: List[pd.DataFrame],
-        temporal_horizons: List,
+        observation_times: List,
         cond: Optional[Union[pd.DataFrame, pd.Series]] = None,
         encoded: bool = False,
     ) -> Any:
         if encoded:
             static_enc = static_data
             temporal_enc = temporal_data
-            temporal_horizons_enc = temporal_horizons
+            observation_times_enc = observation_times
         else:
-            static_enc, temporal_enc, temporal_horizons_enc = self.encode(
-                static_data, temporal_data, temporal_horizons
+            static_enc, temporal_enc, observation_times_enc = self.encode(
+                static_data, temporal_data, observation_times
             )
 
         self.static_encoded_columns = static_enc.columns
@@ -252,7 +252,7 @@ class TimeSeriesTabularGAN(torch.nn.Module):
         self.model.fit(
             np.asarray(static_enc),
             np.asarray(temporal_enc),
-            np.asarray(temporal_horizons_enc),
+            np.asarray(observation_times_enc),
             np.asarray(cond),
         )
         return self
@@ -262,18 +262,18 @@ class TimeSeriesTabularGAN(torch.nn.Module):
         count: int,
         cond: Optional[pd.DataFrame] = None,
         static_data: Optional[np.ndarray] = None,
-        temporal_horizons: Optional[np.ndarray] = None,
+        observation_times: Optional[np.ndarray] = None,
     ) -> pd.DataFrame:
         if static_data is not None:
             static_data = self.encode_static(static_data)
-        if temporal_horizons is not None:
-            temporal_horizons = self.encode_horizons(temporal_horizons)
+        if observation_times is not None:
+            observation_times = self.encode_horizons(observation_times)
 
-        static_raw, temporal_raw, temporal_horizons = self.model.generate(
+        static_raw, temporal_raw, observation_times = self.model.generate(
             count,
             cond=cond,
             static_data=static_data,
-            temporal_horizons=temporal_horizons,
+            observation_times=observation_times,
         )
 
         static_data = pd.DataFrame(static_raw, columns=self.static_encoded_columns)
@@ -283,7 +283,7 @@ class TimeSeriesTabularGAN(torch.nn.Module):
                 pd.DataFrame(item, columns=self.temporal_encoded_columns)
             )
 
-        return self.decode(static_data, temporal_data, temporal_horizons.tolist())
+        return self.decode(static_data, temporal_data, observation_times.tolist())
 
     @validate_arguments(config=dict(arbitrary_types_allowed=True))
     def forward(self, count: int, cond: Optional[pd.DataFrame] = None) -> torch.Tensor:

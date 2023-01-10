@@ -193,16 +193,16 @@ class TimeVAEPlugin(Plugin):
 
         # Static and temporal generation
         if X.type() == "time_series":
-            static, temporal, temporal_horizons, outcome = X.unpack(pad=True)
+            static, temporal, observation_times, outcome = X.unpack(pad=True)
         elif X.type() == "time_series_survival":
-            static, temporal, temporal_horizons, T, E = X.unpack(pad=True)
+            static, temporal, observation_times, T, E = X.unpack(pad=True)
             outcome = pd.concat([pd.Series(T), pd.Series(E)], axis=1)
             outcome.columns = ["time_to_event", "event"]
 
         self.cov_model = TimeSeriesTabularVAE(
             static_data=static,
             temporal_data=temporal,
-            temporal_horizons=temporal_horizons,
+            observation_times=observation_times,
             n_iter=self.n_iter,
             lr=self.lr,
             weight_decay=self.weight_decay,
@@ -228,7 +228,7 @@ class TimeVAEPlugin(Plugin):
             encoder=self.encoder,
             device=self.device,
         )
-        self.cov_model.fit(static, temporal, temporal_horizons)
+        self.cov_model.fit(static, temporal, observation_times)
 
         # Outcome generation
         self.outcome_encoder.fit(outcome)
@@ -263,7 +263,7 @@ class TimeVAEPlugin(Plugin):
         self.outcome_model.fit(
             np.asarray(static),
             np.asarray(temporal),
-            np.asarray(temporal_horizons),
+            np.asarray(observation_times),
             np.asarray(outcome_enc),
         )
 
@@ -271,13 +271,13 @@ class TimeVAEPlugin(Plugin):
 
     def _generate(self, count: int, syn_schema: Schema, **kwargs: Any) -> pd.DataFrame:
         def _sample(count: int) -> Tuple:
-            static, temporal, temporal_horizons = self.cov_model.generate(count)
+            static, temporal, observation_times = self.cov_model.generate(count)
 
             outcome_enc = pd.DataFrame(
                 self.outcome_model.predict(
                     np.asarray(static),
                     np.asarray(temporal),
-                    np.asarray(temporal_horizons),
+                    np.asarray(observation_times),
                 ),
                 columns=self.outcome_encoded_columns,
             )
@@ -287,12 +287,12 @@ class TimeVAEPlugin(Plugin):
             )
 
             if self.data_info["data_type"] == "time_series":
-                return static, temporal, temporal_horizons, outcome
+                return static, temporal, observation_times, outcome
             elif self.data_info["data_type"] == "time_series_survival":
                 return (
                     static,
                     temporal,
-                    temporal_horizons,
+                    observation_times,
                     outcome[self.data_info["time_to_event_column"]],
                     outcome[self.data_info["event_column"]],
                 )

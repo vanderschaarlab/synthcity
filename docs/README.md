@@ -144,7 +144,7 @@ from synthcity.utils.datasets.time_series.google_stocks import GoogleStocksDatal
 static_data, temporal_data, horizons, outcome = GoogleStocksDataloader().load()
 data = TimeSeriesDataLoader(
     temporal_data=temporal_data,
-    temporal_horizons=horizons,
+    observation_times=horizons,
     static_data=static_data,
     outcome=outcome,
 )

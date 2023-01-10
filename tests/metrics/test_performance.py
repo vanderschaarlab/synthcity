@@ -367,12 +367,12 @@ def test_evaluate_performance_time_series(
     (
         static_data,
         temporal_data,
-        temporal_horizons,
+        observation_times,
         outcome,
     ) = GoogleStocksDataloader().load()
     data = TimeSeriesDataLoader(
         temporal_data=temporal_data,
-        temporal_horizons=temporal_horizons,
+        observation_times=observation_times,
         static_data=static_data,
         outcome=outcome,
     )
@@ -425,13 +425,13 @@ def test_evaluate_performance_time_series(
 def test_evaluate_performance_time_series_survival(
     test_plugin: Plugin, evaluator_t: Type
 ) -> None:
-    static_data, temporal_data, temporal_horizons, outcome = PBCDataloader().load()
+    static_data, temporal_data, observation_times, outcome = PBCDataloader().load()
 
     T, E = outcome
 
     data = TimeSeriesSurvivalDataLoader(
         temporal_data=temporal_data,
-        temporal_horizons=temporal_horizons,
+        observation_times=observation_times,
         static_data=static_data,
         T=T,
         E=E,

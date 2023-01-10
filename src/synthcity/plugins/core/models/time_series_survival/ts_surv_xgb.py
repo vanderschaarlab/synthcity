@@ -98,13 +98,13 @@ class XGBTimeSeriesSurvival(TimeSeriesSurvivalPlugin):
         self,
         static: Optional[np.ndarray],
         temporal: np.ndarray,
-        temporal_horizons: np.ndarray,
+        observation_times: np.ndarray,
         T: np.ndarray,
         E: np.ndarray,
     ) -> TimeSeriesSurvivalPlugin:
 
-        self.emb_model.fit(static, temporal, temporal_horizons, T, E)
-        embeddings = self.emb_model.predict_emb(static, temporal, temporal_horizons)
+        self.emb_model.fit(static, temporal, observation_times, T, E)
+        embeddings = self.emb_model.predict_emb(static, temporal, observation_times)
         self.pred_model.fit(pd.DataFrame(embeddings), pd.Series(T), pd.Series(E))
 
         return self
@@ -114,12 +114,12 @@ class XGBTimeSeriesSurvival(TimeSeriesSurvivalPlugin):
         self,
         static: Optional[np.ndarray],
         temporal: np.ndarray,
-        temporal_horizons: np.ndarray,
+        observation_times: np.ndarray,
         time_horizons: List,
     ) -> np.ndarray:
         "Predict risk"
 
-        embeddings = self.emb_model.predict_emb(static, temporal, temporal_horizons)
+        embeddings = self.emb_model.predict_emb(static, temporal, observation_times)
         return self.pred_model.predict(pd.DataFrame(embeddings), time_horizons)
 
     @staticmethod

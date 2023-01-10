@@ -458,7 +458,7 @@ class TimeSeriesTabularEncoder(TransformerMixin, BaseEstimator):
     def fit_temporal(
         self,
         temporal_data: List[pd.DataFrame],
-        temporal_horizons: List,
+        observation_times: List,
         discrete_columns: Optional[List] = None,
     ) -> "TimeSeriesTabularEncoder":
         # Temporal
@@ -478,8 +478,8 @@ class TimeSeriesTabularEncoder(TransformerMixin, BaseEstimator):
         self.temporal_encoder.fit(temporal_df)
 
         # Temporal horizons
-        self.temporal_horizons_encoder = MinMaxScaler().fit(
-            np.asarray(temporal_horizons).reshape(-1, 1)
+        self.observation_times_encoder = MinMaxScaler().fit(
+            np.asarray(observation_times).reshape(-1, 1)
         )
 
         return self
@@ -488,7 +488,7 @@ class TimeSeriesTabularEncoder(TransformerMixin, BaseEstimator):
         self,
         static_data: pd.DataFrame,
         temporal_data: List[pd.DataFrame],
-        temporal_horizons: List,
+        observation_times: List,
         discrete_columns: Optional[List] = None,
     ) -> "TimeSeriesTabularEncoder":
         # Static
@@ -501,21 +501,21 @@ class TimeSeriesTabularEncoder(TransformerMixin, BaseEstimator):
 
         # Temporal
         self.fit_temporal(
-            temporal_data, temporal_horizons, discrete_columns=discrete_columns
+            temporal_data, observation_times, discrete_columns=discrete_columns
         )
 
         return self
 
     @validate_arguments(config=dict(arbitrary_types_allowed=True))
-    def transform_temporal_horizons(
+    def transform_observation_times(
         self,
-        temporal_horizons: List,
+        observation_times: List,
     ) -> List:
         horizons_encoded = (
-            self.temporal_horizons_encoder.transform(
-                np.asarray(temporal_horizons).reshape(-1, 1)
+            self.observation_times_encoder.transform(
+                np.asarray(observation_times).reshape(-1, 1)
             )
-            .reshape(len(temporal_horizons), -1)
+            .reshape(len(observation_times), -1)
             .tolist()
         )
         return horizons_encoded
@@ -524,13 +524,13 @@ class TimeSeriesTabularEncoder(TransformerMixin, BaseEstimator):
     def transform_temporal(
         self,
         temporal_data: List[pd.DataFrame],
-        temporal_horizons: List,
+        observation_times: List,
     ) -> Tuple[pd.DataFrame, List]:
         temporal_encoded = []
         for item in temporal_data:
             temporal_encoded.append(self.temporal_encoder.transform(item))
 
-        horizons_encoded = self.transform_temporal_horizons(temporal_horizons)
+        horizons_encoded = self.transform_observation_times(observation_times)
 
         return temporal_encoded, horizons_encoded
 
@@ -548,12 +548,12 @@ class TimeSeriesTabularEncoder(TransformerMixin, BaseEstimator):
         self,
         static_data: pd.DataFrame,
         temporal_data: List[pd.DataFrame],
-        temporal_horizons: List,
+        observation_times: List,
     ) -> Tuple[pd.DataFrame, pd.DataFrame, List]:
         static_encoded = self.transform_static(static_data)
 
         temporal_encoded, horizons_encoded = self.transform_temporal(
-            temporal_data, temporal_horizons
+            temporal_data, observation_times
         )
 
         return static_encoded, temporal_encoded, horizons_encoded
@@ -562,10 +562,10 @@ class TimeSeriesTabularEncoder(TransformerMixin, BaseEstimator):
     def fit_transform_temporal(
         self,
         temporal_data: List[pd.DataFrame],
-        temporal_horizons: List,
+        observation_times: List,
     ) -> Tuple[pd.DataFrame, List]:
-        return self.fit_temporal(temporal_data, temporal_horizons).transform_temporal(
-            temporal_data, temporal_horizons
+        return self.fit_temporal(temporal_data, observation_times).transform_temporal(
+            temporal_data, observation_times
         )
 
     @validate_arguments(config=dict(arbitrary_types_allowed=True))
@@ -573,22 +573,22 @@ class TimeSeriesTabularEncoder(TransformerMixin, BaseEstimator):
         self,
         static_data: pd.DataFrame,
         temporal_data: List[pd.DataFrame],
-        temporal_horizons: List,
+        observation_times: List,
     ) -> Tuple[pd.DataFrame, pd.DataFrame, List]:
-        return self.fit(static_data, temporal_data, temporal_horizons).transform(
-            static_data, temporal_data, temporal_horizons
+        return self.fit(static_data, temporal_data, observation_times).transform(
+            static_data, temporal_data, observation_times
         )
 
     @validate_arguments(config=dict(arbitrary_types_allowed=True))
-    def inverse_transform_temporal_horizons(
+    def inverse_transform_observation_times(
         self,
-        temporal_horizons: List,
+        observation_times: List,
     ) -> pd.DataFrame:
         horizons_decoded = (
-            self.temporal_horizons_encoder.inverse_transform(
-                np.asarray(temporal_horizons).reshape(-1, 1)
+            self.observation_times_encoder.inverse_transform(
+                np.asarray(observation_times).reshape(-1, 1)
             )
-            .reshape(len(temporal_horizons), -1)
+            .reshape(len(observation_times), -1)
             .tolist()
         )
         return horizons_decoded
@@ -597,13 +597,13 @@ class TimeSeriesTabularEncoder(TransformerMixin, BaseEstimator):
     def inverse_transform_temporal(
         self,
         temporal_encoded: List[pd.DataFrame],
-        temporal_horizons: List,
+        observation_times: List,
     ) -> pd.DataFrame:
         temporal_decoded = []
         for item in temporal_encoded:
             temporal_decoded.append(self.temporal_encoder.inverse_transform(item))
 
-        horizons_decoded = self.inverse_transform_temporal_horizons(temporal_horizons)
+        horizons_decoded = self.inverse_transform_observation_times(observation_times)
 
         return temporal_decoded, horizons_decoded
 
@@ -620,12 +620,12 @@ class TimeSeriesTabularEncoder(TransformerMixin, BaseEstimator):
         self,
         static_encoded: pd.DataFrame,
         temporal_encoded: List[pd.DataFrame],
-        temporal_horizons: List,
+        observation_times: List,
     ) -> pd.DataFrame:
         static_decoded = self.inverse_transform_static(static_encoded)
 
         temporal_decoded, horizons_decoded = self.inverse_transform_temporal(
-            temporal_encoded, temporal_horizons
+            temporal_encoded, observation_times
         )
         return static_decoded, temporal_decoded, horizons_decoded
 
@@ -682,7 +682,7 @@ class TimeSeriesBinEncoder(TransformerMixin, BaseEstimator):
         self,
         static_data: pd.DataFrame,
         temporal_data: List[pd.DataFrame],
-        temporal_horizons: List,
+        observation_times: List,
     ) -> pd.DataFrame:
         temporal_init = np.asarray(temporal_data)[:, 0, :].squeeze()
         temporal_init_df = pd.DataFrame(temporal_init, columns=temporal_data[0].columns)
@@ -703,12 +703,12 @@ class TimeSeriesBinEncoder(TransformerMixin, BaseEstimator):
         self,
         static_data: pd.DataFrame,
         temporal_data: List[pd.DataFrame],
-        temporal_horizons: List,
+        observation_times: List,
         discrete_columns: Optional[List] = None,
     ) -> "TimeSeriesBinEncoder":
         """Fit the TimeSeriesBinEncoder"""
 
-        data = self._prepare(static_data, temporal_data, temporal_horizons)
+        data = self._prepare(static_data, temporal_data, observation_times)
 
         self.encoder.fit(data, discrete_columns=discrete_columns)
         return self
@@ -718,10 +718,10 @@ class TimeSeriesBinEncoder(TransformerMixin, BaseEstimator):
         self,
         static_data: pd.DataFrame,
         temporal_data: List[pd.DataFrame],
-        temporal_horizons: List,
+        observation_times: List,
     ) -> pd.DataFrame:
         """Take raw data and output a matrix data."""
-        data = self._prepare(static_data, temporal_data, temporal_horizons)
+        data = self._prepare(static_data, temporal_data, observation_times)
         return self.encoder.transform(data)
 
     @validate_arguments(config=dict(arbitrary_types_allowed=True))
@@ -729,8 +729,8 @@ class TimeSeriesBinEncoder(TransformerMixin, BaseEstimator):
         self,
         static: pd.DataFrame,
         temporal: List[pd.DataFrame],
-        temporal_horizons: List,
+        observation_times: List,
     ) -> pd.DataFrame:
-        return self.fit(static, temporal, temporal_horizons).transform(
-            static, temporal, temporal_horizons
+        return self.fit(static, temporal, observation_times).transform(
+            static, temporal, observation_times
         )

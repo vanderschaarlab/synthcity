@@ -24,7 +24,7 @@ class TimeSeriesTabularVAE(torch.nn.Module):
             Reference static data
         temporal_data: List[pd.DataFrame]
             Reference temporal data
-        temporal_horizons: List
+        observation_times: List
             Reference temporal horizons
         decoder_n_layers_hidden: int
             Number of hidden layers in the decoder
@@ -73,7 +73,7 @@ class TimeSeriesTabularVAE(torch.nn.Module):
         self,
         static_data: pd.DataFrame,
         temporal_data: List[pd.DataFrame],
-        temporal_horizons: List,
+        observation_times: List,
         decoder_n_layers_hidden: int = 2,
         decoder_n_units_hidden: int = 150,
         decoder_nonlin: str = "leaky_relu",
@@ -107,7 +107,7 @@ class TimeSeriesTabularVAE(torch.nn.Module):
         else:
             self.encoder = TimeSeriesTabularEncoder(
                 max_clusters=encoder_max_clusters
-            ).fit(static_data, temporal_data, temporal_horizons)
+            ).fit(static_data, temporal_data, observation_times)
 
         self.static_columns = static_data.columns
         self.temporal_columns = temporal_data[0].columns
@@ -154,19 +154,19 @@ class TimeSeriesTabularVAE(torch.nn.Module):
         self,
         static_data: pd.DataFrame,
         temporal_data: List[pd.DataFrame],
-        temporal_horizons: List,
+        observation_times: List,
     ) -> Tuple:
-        return self.encoder.transform(static_data, temporal_data, temporal_horizons)
+        return self.encoder.transform(static_data, temporal_data, observation_times)
 
     @validate_arguments(config=dict(arbitrary_types_allowed=True))
     def decode(
         self,
         static_data: pd.DataFrame,
         temporal_data: List[pd.DataFrame],
-        temporal_horizons: List,
+        observation_times: List,
     ) -> Tuple:
         return self.encoder.inverse_transform(
-            static_data, temporal_data, temporal_horizons
+            static_data, temporal_data, observation_times
         )
 
     @validate_arguments(config=dict(arbitrary_types_allowed=True))
@@ -186,32 +186,32 @@ class TimeSeriesTabularVAE(torch.nn.Module):
     @validate_arguments(config=dict(arbitrary_types_allowed=True))
     def encode_horizons(
         self,
-        temporal_horizons: List,
+        observation_times: List,
     ) -> Tuple:
-        return self.encoder.transform_temporal_horizons(temporal_horizons)
+        return self.encoder.transform_observation_times(observation_times)
 
     @validate_arguments(config=dict(arbitrary_types_allowed=True))
     def decode_horizons(
         self,
-        temporal_horizons: List,
+        observation_times: List,
     ) -> Tuple:
-        return self.encoder.inverse_transform_temporal_horizons(temporal_horizons)
+        return self.encoder.inverse_transform_observation_times(observation_times)
 
     @validate_arguments(config=dict(arbitrary_types_allowed=True))
     def fit(
         self,
         static_data: pd.DataFrame,
         temporal_data: List[pd.DataFrame],
-        temporal_horizons: List,
+        observation_times: List,
         encoded: bool = False,
     ) -> Any:
         if encoded:
             static_enc = static_data
             temporal_enc = temporal_data
-            temporal_horizons_enc = temporal_horizons
+            observation_times_enc = observation_times
         else:
-            static_enc, temporal_enc, temporal_horizons_enc = self.encode(
-                static_data, temporal_data, temporal_horizons
+            static_enc, temporal_enc, observation_times_enc = self.encode(
+                static_data, temporal_data, observation_times
             )
 
         self.static_encoded_columns = static_enc.columns
@@ -220,7 +220,7 @@ class TimeSeriesTabularVAE(torch.nn.Module):
         self.model.fit(
             np.asarray(static_enc),
             np.asarray(temporal_enc),
-            np.asarray(temporal_horizons_enc),
+            np.asarray(observation_times_enc),
         )
         return self
 
@@ -228,7 +228,7 @@ class TimeSeriesTabularVAE(torch.nn.Module):
         self,
         count: int,
     ) -> pd.DataFrame:
-        static_raw, temporal_raw, temporal_horizons = self.model.generate(
+        static_raw, temporal_raw, observation_times = self.model.generate(
             count,
         )
 
@@ -239,7 +239,7 @@ class TimeSeriesTabularVAE(torch.nn.Module):
                 pd.DataFrame(item, columns=self.temporal_encoded_columns)
             )
 
-        return self.decode(static_data, temporal_data, temporal_horizons.tolist())
+        return self.decode(static_data, temporal_data, observation_times.tolist())
 
     @validate_arguments(config=dict(arbitrary_types_allowed=True))
     def forward(self, count: int) -> torch.Tensor:

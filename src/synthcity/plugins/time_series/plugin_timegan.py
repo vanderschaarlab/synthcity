@@ -90,7 +90,7 @@ class TimeGANPlugin(Plugin):
         >>> static, temporal, horizons, outcome = GoogleStocksDataloader().load()
         >>> loader = TimeSeriesDataLoader(
         >>>             temporal_data=temporal,
-        >>>             temporal_horizons=horizons,
+        >>>             observation_times=horizons,
         >>>             static_data=static,
         >>>             outcome=outcome,
         >>> )
@@ -235,9 +235,9 @@ class TimeGANPlugin(Plugin):
 
         # Static and temporal generation
         if X.type() == "time_series":
-            static, temporal, temporal_horizons, outcome = X.unpack(pad=True)
+            static, temporal, observation_times, outcome = X.unpack(pad=True)
         elif X.type() == "time_series_survival":
-            static, temporal, temporal_horizons, T, E = X.unpack(pad=True)
+            static, temporal, observation_times, T, E = X.unpack(pad=True)
             outcome = pd.concat([pd.Series(T), pd.Series(E)], axis=1)
             outcome.columns = ["time_to_event", "event"]
 
@@ -257,7 +257,7 @@ class TimeGANPlugin(Plugin):
         self.cov_model = TimeSeriesTabularGAN(
             static_data=static,
             temporal_data=temporal,
-            temporal_horizons=temporal_horizons,
+            observation_times=observation_times,
             cond=cond,
             generator_n_iter=self.n_iter,
             generator_n_layers_hidden=self.generator_n_layers_hidden,
@@ -294,7 +294,7 @@ class TimeGANPlugin(Plugin):
             use_horizon_condition=self.use_horizon_condition,
             dataloader_sampler=sampler,
         )
-        self.cov_model.fit(static, temporal, temporal_horizons, cond=cond)
+        self.cov_model.fit(static, temporal, observation_times, cond=cond)
 
         # Outcome generation
         self.outcome_encoder.fit(outcome)
@@ -329,7 +329,7 @@ class TimeGANPlugin(Plugin):
         self.outcome_model.fit(
             np.asarray(static),
             np.asarray(temporal),
-            np.asarray(temporal_horizons),
+            np.asarray(observation_times),
             np.asarray(outcome_enc),
         )
 
@@ -338,42 +338,42 @@ class TimeGANPlugin(Plugin):
     def _generate(self, count: int, syn_schema: Schema, **kwargs: Any) -> pd.DataFrame:
         cond: Optional[Union[pd.DataFrame, pd.Series]] = None
         static_data_cond: Optional[pd.DataFrame] = None
-        temporal_horizons_cond: Optional[list] = None
+        observation_times_cond: Optional[list] = None
 
         if "cond" in kwargs:
             cond = kwargs["cond"]
         if "static_data" in kwargs:
             static_data_cond = kwargs["static_data"]
-        if "temporal_horizons" in kwargs:
-            temporal_horizons_cond = kwargs["temporal_horizons"]
+        if "observation_times" in kwargs:
+            observation_times_cond = kwargs["observation_times"]
 
         def _sample(count: int) -> Tuple:
             local_cond: Optional[Union[pd.DataFrame, pd.Series]] = None
             local_static_data: Optional[pd.DataFrame] = None
-            local_temporal_horizons: Optional[list] = None
+            local_observation_times: Optional[list] = None
             if cond is not None:
                 local_cond = cond.sample(count, replace=True)
             if static_data_cond is not None:
                 local_static_data = static_data_cond.sample(count, replace=True)
-            if temporal_horizons_cond is not None:
-                ids = list(range(len(temporal_horizons_cond)))
+            if observation_times_cond is not None:
+                ids = list(range(len(observation_times_cond)))
                 local_ids = np.random.choice(ids, count, replace=True)
-                local_temporal_horizons = np.asarray(temporal_horizons_cond)[
+                local_observation_times = np.asarray(observation_times_cond)[
                     local_ids
                 ].tolist()
 
-            static, temporal, temporal_horizons = self.cov_model.generate(
+            static, temporal, observation_times = self.cov_model.generate(
                 count,
                 cond=local_cond,
                 static_data=local_static_data,
-                temporal_horizons=local_temporal_horizons,
+                observation_times=local_observation_times,
             )
 
             outcome_enc = pd.DataFrame(
                 self.outcome_model.predict(
                     np.asarray(static),
                     np.asarray(temporal),
-                    np.asarray(temporal_horizons),
+                    np.asarray(observation_times),
                 ),
                 columns=self.outcome_encoded_columns,
             )
@@ -383,12 +383,12 @@ class TimeGANPlugin(Plugin):
             )
 
             if self.data_info["data_type"] == "time_series":
-                return static, temporal, temporal_horizons, outcome
+                return static, temporal, observation_times, outcome
             elif self.data_info["data_type"] == "time_series_survival":
                 return (
                     static,
                     temporal,
-                    temporal_horizons,
+                    observation_times,
                     outcome[self.data_info["time_to_event_column"]],
                     outcome[self.data_info["event_column"]],
                 )

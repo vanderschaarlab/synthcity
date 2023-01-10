@@ -78,7 +78,7 @@ class ConditionalTimeGANPlugin(Plugin):
         >>> static, temporal, horizons, outcome = GoogleStocksDataloader().load()
         >>> loader = TimeSeriesDataLoader(
         >>>             temporal_data=temporal,
-        >>>             temporal_horizons=horizons,
+        >>>             observation_times=horizons,
         >>>             static_data=static,
         >>>             outcome=outcome,
         >>> )
@@ -179,9 +179,9 @@ class ConditionalTimeGANPlugin(Plugin):
             raise ValueError("Invalid data type = {X.type()}")
 
         if X.type() == "time_series":
-            static, temporal, temporal_horizons, outcome = X.unpack(pad=True)
+            static, temporal, observation_times, outcome = X.unpack(pad=True)
         elif X.type() == "time_series_survival":
-            static, temporal, temporal_horizons, T, E = X.unpack(pad=True)
+            static, temporal, observation_times, T, E = X.unpack(pad=True)
             outcome = pd.concat([pd.Series(T), pd.Series(E)], axis=1)
             outcome.columns = ["time_to_event", "event"]
 
@@ -190,7 +190,7 @@ class ConditionalTimeGANPlugin(Plugin):
                 [static.reset_index(drop=True), outcome.reset_index(drop=True)], axis=1
             ),
             temporal,
-            temporal_horizons,
+            observation_times,
         )
 
         self.model = TimeGANPlugin(

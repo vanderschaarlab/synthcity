@@ -350,16 +350,16 @@ class PerformanceEvaluator(MetricEvaluator):
         (
             id_static_gt,
             id_temporal_gt,
-            id_temporal_horizons_gt,
+            id_observation_times_gt,
             id_outcome_gt,
         ) = X_gt.train().unpack(as_numpy=True)
         (
             ood_static_gt,
             ood_temporal_gt,
-            ood_temporal_horizons_gt,
+            ood_observation_times_gt,
             ood_outcome_gt,
         ) = X_gt.test().unpack(as_numpy=True)
-        static_syn, temporal_syn, temporal_horizons_syn, outcome_syn = X_syn.unpack(
+        static_syn, temporal_syn, observation_times_syn, outcome_syn = X_syn.unpack(
             as_numpy=True
         )
 
@@ -374,19 +374,19 @@ class PerformanceEvaluator(MetricEvaluator):
         def ts_eval_cbk(
             static_train: np.ndarray,
             temporal_train: np.ndarray,
-            temporal_horizons_train: np.ndarray,
+            observation_times_train: np.ndarray,
             outcome_train: np.ndarray,
             static_test: np.ndarray,
             temporal_test: np.ndarray,
-            temporal_horizons_test: np.ndarray,
+            observation_times_test: np.ndarray,
             outcome_test: np.ndarray,
         ) -> float:
             try:
                 estimator = model(**model_args).fit(
-                    static_train, temporal_train, temporal_horizons_train, outcome_train
+                    static_train, temporal_train, observation_times_train, outcome_train
                 )
                 preds = estimator.predict(
-                    static_test, temporal_test, temporal_horizons_test
+                    static_test, temporal_test, observation_times_test
                 )
 
                 score = r2_score(outcome_test, preds)
@@ -399,42 +399,42 @@ class PerformanceEvaluator(MetricEvaluator):
         for train_idx, test_idx in skf.split(id_static_gt):
             static_train_data = id_static_gt[train_idx]
             temporal_train_data = id_temporal_gt[train_idx]
-            temporal_horizons_train_data = id_temporal_horizons_gt[train_idx]
+            observation_times_train_data = id_observation_times_gt[train_idx]
             outcome_train_data = id_outcome_gt[train_idx]
 
             static_test_data = id_static_gt[test_idx]
             temporal_test_data = id_temporal_gt[test_idx]
-            temporal_horizons_test_data = id_temporal_horizons_gt[test_idx]
+            observation_times_test_data = id_observation_times_gt[test_idx]
             outcome_test_data = id_outcome_gt[test_idx]
 
             real_score = ts_eval_cbk(
                 static_train_data,
                 temporal_train_data,
-                temporal_horizons_train_data,
+                observation_times_train_data,
                 outcome_train_data,
                 static_test_data,
                 temporal_test_data,
-                temporal_horizons_test_data,
+                observation_times_test_data,
                 outcome_test_data,
             )
             synth_score_id = ts_eval_cbk(
                 static_syn,
                 temporal_syn,
-                temporal_horizons_syn,
+                observation_times_syn,
                 outcome_syn,
                 static_test_data,
                 temporal_test_data,
-                temporal_horizons_test_data,
+                observation_times_test_data,
                 outcome_test_data,
             )
             synth_score_ood = ts_eval_cbk(
                 static_syn,
                 temporal_syn,
-                temporal_horizons_syn,
+                observation_times_syn,
                 outcome_syn,
                 ood_static_gt,
                 ood_temporal_gt,
-                ood_temporal_horizons_gt,
+                ood_observation_times_gt,
                 ood_outcome_gt,
             )
 
@@ -486,21 +486,21 @@ class PerformanceEvaluator(MetricEvaluator):
         (
             id_X_static_gt,
             id_X_temporal_gt,
-            id_X_temporal_horizons_gt,
+            id_X_observation_times_gt,
             id_T_gt,
             id_E_gt,
         ) = X_gt.train().unpack(as_numpy=True)
         (
             ood_X_static_gt,
             ood_X_temporal_gt,
-            ood_X_temporal_horizons_gt,
+            ood_X_observation_times_gt,
             ood_T_gt,
             ood_E_gt,
         ) = X_gt.test().unpack(as_numpy=True)
         (
             iter_X_static_syn,
             iter_X_temporal_syn,
-            iter_X_temporal_horizons_syn,
+            iter_X_observation_times_syn,
             iter_T_syn,
             iter_E_syn,
         ) = X_syn.unpack(as_numpy=True)
@@ -513,7 +513,7 @@ class PerformanceEvaluator(MetricEvaluator):
             predictor_gt,
             id_X_static_gt,
             id_X_temporal_gt,
-            id_X_temporal_horizons_gt,
+            id_X_observation_times_gt,
             id_T_gt,
             id_E_gt,
             metrics=["c_index", "brier_score"],
@@ -533,7 +533,7 @@ class PerformanceEvaluator(MetricEvaluator):
             predictor_syn.fit(
                 iter_X_static_syn,
                 iter_X_temporal_syn,
-                iter_X_temporal_horizons_syn,
+                iter_X_observation_times_syn,
                 iter_T_syn,
                 iter_E_syn,
             )
@@ -541,7 +541,7 @@ class PerformanceEvaluator(MetricEvaluator):
                 [predictor_syn] * self._n_folds,
                 id_X_static_gt,
                 id_X_temporal_gt,
-                id_X_temporal_horizons_gt,
+                id_X_observation_times_gt,
                 id_T_gt,
                 id_E_gt,
                 metrics=["c_index", "brier_score"],
@@ -561,7 +561,7 @@ class PerformanceEvaluator(MetricEvaluator):
             predictor_syn.fit(
                 iter_X_static_syn,
                 iter_X_temporal_syn,
-                iter_X_temporal_horizons_syn,
+                iter_X_observation_times_syn,
                 iter_T_syn,
                 iter_E_syn,
             )
@@ -569,7 +569,7 @@ class PerformanceEvaluator(MetricEvaluator):
                 [predictor_syn] * self._n_folds,
                 ood_X_static_gt,
                 ood_X_temporal_gt,
-                ood_X_temporal_horizons_gt,
+                ood_X_observation_times_gt,
                 ood_T_gt,
                 ood_E_gt,
                 metrics=["c_index", "brier_score"],
@@ -715,7 +715,7 @@ class PerformanceEvaluatorLinear(PerformanceEvaluator):
                 X_syn,
             )
         elif self._task_type == "time_series_survival":
-            static, temporal, temporal_horizons, T, E = X_gt.unpack()
+            static, temporal, observation_times, T, E = X_gt.unpack()
 
             args: dict = {}
             log.info(f"Performance evaluation using CoxTimeSeriesSurvival and {args}")
@@ -783,7 +783,7 @@ class PerformanceEvaluatorMLP(PerformanceEvaluator):
                 TimeSeriesModel, args, X_gt, X_syn
             )
         elif self._task_type == "time_series_survival":
-            static, temporal, temporal_horizons, T, E = X_gt.unpack()
+            static, temporal, observation_times, T, E = X_gt.unpack()
 
             info = X_gt.info()
 

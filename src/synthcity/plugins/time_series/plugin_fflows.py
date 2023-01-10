@@ -60,7 +60,7 @@ class FourierFlowsPlugin(Plugin):
         >>> static, temporal, horizons, outcome = GoogleStocksDataloader().load()
         >>> loader = TimeSeriesDataLoader(
         >>>             temporal_data=temporal,
-        >>>             temporal_horizons=horizons,
+        >>>             observation_times=horizons,
         >>>             static_data=static,
         >>>             outcome=outcome,
         >>> )
@@ -147,21 +147,21 @@ class FourierFlowsPlugin(Plugin):
             raise ValueError(f"Invalid data type = {X.type()}")
 
         if X.type() == "time_series":
-            static, temporal, temporal_horizons, outcome = X.unpack(pad=True)
+            static, temporal, observation_times, outcome = X.unpack(pad=True)
         elif X.type() == "time_series_survival":
-            static, temporal, temporal_horizons, T, E = X.unpack(pad=True)
+            static, temporal, observation_times, T, E = X.unpack(pad=True)
             outcome = pd.concat([pd.Series(T), pd.Series(E)], axis=1)
             outcome.columns = ["time_to_event", "event"]
 
         # Train static generator
-        self.temporal_encoder.fit_temporal(temporal, temporal_horizons)
+        self.temporal_encoder.fit_temporal(temporal, observation_times)
         (
             temporal_enc,
-            temporal_horizons_enc,
-        ) = self.temporal_encoder.transform_temporal(temporal, temporal_horizons)
+            observation_times_enc,
+        ) = self.temporal_encoder.transform_temporal(temporal, observation_times)
 
         static_data_with_horizons = np.concatenate(
-            [np.asarray(static), np.asarray(temporal_horizons)], axis=1
+            [np.asarray(static), np.asarray(observation_times)], axis=1
         )
         self.static_model.fit(pd.DataFrame(static_data_with_horizons))
 
@@ -190,7 +190,7 @@ class FourierFlowsPlugin(Plugin):
         self.outcome_model.fit(
             np.asarray(static),
             np.asarray(temporal),
-            np.asarray(temporal_horizons),
+            np.asarray(observation_times),
             np.asarray(outcome_enc),
         )
 
@@ -208,7 +208,7 @@ class FourierFlowsPlugin(Plugin):
                 static_data_with_horizons[:, : len(self.static_columns)],
                 columns=self.static_columns,
             )
-            temporal_horizons_enc = static_data_with_horizons[
+            observation_times_enc = static_data_with_horizons[
                 :, len(self.static_columns) :
             ]
 
@@ -223,9 +223,9 @@ class FourierFlowsPlugin(Plugin):
             # Decoding
             (
                 temporal_raw,
-                temporal_horizons,
+                observation_times,
             ) = self.temporal_encoder.inverse_transform_temporal(
-                temporal_enc, temporal_horizons_enc.tolist()
+                temporal_enc, observation_times_enc.tolist()
             )
 
             temporal = []
@@ -239,7 +239,7 @@ class FourierFlowsPlugin(Plugin):
                 self.outcome_model.predict(
                     np.asarray(static),
                     np.asarray(temporal_raw),
-                    np.asarray(temporal_horizons),
+                    np.asarray(observation_times),
                 ),
                 columns=self.outcome_encoded_columns,
             )
@@ -250,12 +250,12 @@ class FourierFlowsPlugin(Plugin):
             static = pd.DataFrame(static, columns=self.data_info["static_features"])
 
             if self.data_info["data_type"] == "time_series":
-                return static, temporal, temporal_horizons, outcome
+                return static, temporal, observation_times, outcome
             elif self.data_info["data_type"] == "time_series_survival":
                 return (
                     static,
                     temporal,
-                    temporal_horizons,
+                    observation_times,
                     outcome[self.data_info["time_to_event_column"]],
                     outcome[self.data_info["event_column"]],
                 )
