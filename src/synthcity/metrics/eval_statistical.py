@@ -7,7 +7,6 @@ from typing import Any, Dict, Optional, Tuple
 import numpy as np
 import pandas as pd
 import torch
-from copulas.univariate.base import Univariate
 from dython.nominal import associations
 from geomloss import SamplesLoss
 from pydantic import validate_arguments
@@ -256,52 +255,6 @@ class MaximumMeanDiscrepancy(StatisticalEvaluator):
             raise ValueError(f"Unsupported kernel {self.kernel}")
 
         return {"joint": float(score)}
-
-
-class InverseCDFDistance(StatisticalEvaluator):
-    """
-    .. inheritance-diagram:: synthcity.metrics.eval_statistical.InverseCDFDistance
-        :parts: 1
-
-    Evaluate the distance between continuous features."""
-
-    @validate_arguments(config=dict(arbitrary_types_allowed=True))
-    def __init__(self, p: int = 2, **kwargs: Any) -> None:
-        super().__init__(default_metric="marginal", **kwargs)
-
-        self.p = p
-
-    @staticmethod
-    def name() -> str:
-        return "inv_cdf_dist"
-
-    @staticmethod
-    def direction() -> str:
-        return "minimize"
-
-    @validate_arguments(config=dict(arbitrary_types_allowed=True))
-    def _evaluate(
-        self,
-        X_gt: DataLoader,
-        X_syn: DataLoader,
-    ) -> Dict:
-        distances = []
-        for col in X_syn.columns:
-            if len(X_syn[col].unique()) < 15:
-                continue
-            syn_col = X_syn[col]
-            gt_col = X_gt[col]
-
-            predictor = Univariate()
-            predictor.fit(syn_col)
-
-            syn_percentiles = predictor.cdf(np.array(syn_col))
-            gt_percentiles = predictor.cdf(np.array(gt_col))
-            distances.append(
-                np.mean(abs(syn_percentiles - gt_percentiles[1]) ** self.p)
-            )
-
-        return {"marginal": float(self.reduction()(distances))}
 
 
 class JensenShannonDistance(StatisticalEvaluator):
