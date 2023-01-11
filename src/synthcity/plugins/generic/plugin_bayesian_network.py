@@ -1,5 +1,5 @@
 """
-Reference: JAnkan, Ankur and Panda, Abinash, "pgmpy: Probabilistic graphical models using python,"
+Reference: Jankan, Ankur and Panda, Abinash, "pgmpy: Probabilistic graphical models using python,"
         Proceedings of the 14th Python in Science Conference (SCIPY 2015), 2015.
 """
 

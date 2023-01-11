@@ -41,6 +41,7 @@ subprocess.run(
         "-f",
         "-o",
         "generated",
+        "-t", "_templates",
         "../src/synthcity/",
     ]
 )
@@ -86,6 +87,7 @@ extensions = [
     "sphinx_diagrams",
     'IPython.sphinxext.ipython_console_highlighting',
     'sphinx.ext.graphviz','sphinx.ext.inheritance_diagram',
+    "sphinx_pyreverse",
 ]
 
 autodoc_default_options = {
