@@ -1,3 +1,7 @@
+"""
+Reference: https://github.com/bayesiains/nflows
+"""
+
 # stdlib
 from typing import Any, List, Optional
 
@@ -21,7 +25,11 @@ from synthcity.plugins.core.schema import Schema
 
 
 class NormalizingFlowsPlugin(Plugin):
-    """Normalizing Flows methods.
+    """
+    .. inheritance-diagram:: synthcity.plugins.generic.plugin_nflow.NormalizingFlowsPlugin
+        :parts: 1
+
+    Normalizing Flows methods.
 
     Normalizing Flows are generative models which produce tractable distributions where both sampling and density evaluation can be efficient and exact.
 
@@ -91,7 +99,6 @@ class NormalizingFlowsPlugin(Plugin):
         >>>
         >>> plugin.generate(50)
 
-    Reference: https://github.com/bayesiains/nflows
     """
 
     @validate_arguments(config=dict(arbitrary_types_allowed=True))

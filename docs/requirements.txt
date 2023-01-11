@@ -13,6 +13,8 @@ Pillow==9.3.0
 seaborn
 sphinx==4.3.1
 sphinx-autopackagesummary
+sphinx-pyreverse
+sphinx_diagrams
 sphinx_gallery==0.10.1
 sphinx_rtd_theme==1.0.0
 sphinxcontrib-napoleon

@@ -22,7 +22,11 @@ from synthcity.utils.samplers import ImbalancedDatasetSampler
 
 
 class SurvivalGANPlugin(Plugin):
-    """Survival Analysis Pipeline based on AdsGAN.
+    """
+    .. inheritance-diagram:: synthcity.plugins.survival_analysis.plugin_survival_gan.SurvivalGANPlugin
+        :parts: 1
+
+    Survival Analysis Pipeline based on AdsGAN.
 
     Args:
        uncensoring_model: str

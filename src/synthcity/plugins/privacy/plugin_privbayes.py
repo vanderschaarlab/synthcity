@@ -1,4 +1,6 @@
 """
+Reference: PrivBayes: Private Data Release via Bayesian Networks. (2017), Zhang J, Cormode G, Procopiuc CM, Srivastava D, Xiao X.
+
 Adapted from:
     - https://github.com/daanknoors/synthetic_data_generation
     - https://github.com/DataResponsibly/DataSynthesizer
@@ -538,7 +540,11 @@ class PrivBayes(Serializable):
 
 
 class PrivBayesPlugin(Plugin):
-    """PrivBayes algorithm.
+    """
+    .. inheritance-diagram:: synthcity.plugins.privacy.plugin_privbayes.PrivBayesPlugin
+        :parts: 1
+
+    PrivBayes algorithm.
 
 
         Args:
@@ -569,7 +575,6 @@ class PrivBayesPlugin(Plugin):
         >>> plugin.generate(50)
 
 
-        Reference: PrivBayes: Private Data Release via Bayesian Networks. (2017), Zhang J, Cormode G, Procopiuc CM, Srivastava D, Xiao X.
     """
 
     def __init__(
@@ -598,7 +603,7 @@ class PrivBayesPlugin(Plugin):
 
     @staticmethod
     def type() -> str:
-        return "generic"
+        return "privacy"
 
     @staticmethod
     def hyperparameter_space(**kwargs: Any) -> List[Distribution]:

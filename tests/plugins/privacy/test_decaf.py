@@ -10,7 +10,7 @@ from sklearn.datasets import load_iris
 # synthcity absolute
 from synthcity.plugins import Plugin
 from synthcity.plugins.core.dataloader import GenericDataLoader
-from synthcity.plugins.fairness.plugin_decaf import plugin
+from synthcity.plugins.privacy.plugin_decaf import plugin
 
 plugin_name = "decaf"
 plugin_args = {"n_iter": 50}
@@ -28,7 +28,7 @@ def test_plugin_name(test_plugin: Plugin) -> None:
 
 @pytest.mark.parametrize("test_plugin", generate_fixtures(plugin_name, plugin))
 def test_plugin_type(test_plugin: Plugin) -> None:
-    assert test_plugin.type() == "fairness"
+    assert test_plugin.type() == "privacy"
 
 
 @pytest.mark.parametrize("test_plugin", generate_fixtures(plugin_name, plugin))

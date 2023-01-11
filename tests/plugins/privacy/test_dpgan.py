@@ -1,8 +1,11 @@
+# stdlib
+import sys
+
 # third party
 import numpy as np
 import pandas as pd
 import pytest
-from generic_helpers import generate_fixtures, get_airfoil_dataset
+from fhelpers import generate_fixtures
 from sklearn.datasets import load_iris
 
 # synthcity absolute
@@ -10,13 +13,14 @@ from synthcity.metrics.eval import PerformanceEvaluatorXGB
 from synthcity.plugins import Plugin
 from synthcity.plugins.core.constraints import Constraints
 from synthcity.plugins.core.dataloader import GenericDataLoader
-from synthcity.plugins.generic.plugin_pategan import plugin
+from synthcity.plugins.privacy.plugin_dpgan import plugin
+from synthcity.utils.serialization import load, save
 
-plugin_name = "pategan"
+plugin_name = "dpgan"
 plugin_args = {
     "generator_n_layers_hidden": 1,
     "generator_n_units_hidden": 10,
-    "lamda": 0.1,
+    "n_iter": 10,
 }
 
 
@@ -32,12 +36,12 @@ def test_plugin_name(test_plugin: Plugin) -> None:
 
 @pytest.mark.parametrize("test_plugin", generate_fixtures(plugin_name, plugin))
 def test_plugin_type(test_plugin: Plugin) -> None:
-    assert test_plugin.type() == "generic"
+    assert test_plugin.type() == "privacy"
 
 
 @pytest.mark.parametrize("test_plugin", generate_fixtures(plugin_name, plugin))
 def test_plugin_hyperparams(test_plugin: Plugin) -> None:
-    assert len(test_plugin.hyperparameter_space()) == 20
+    assert len(test_plugin.hyperparameter_space()) == 14
 
 
 @pytest.mark.parametrize(
@@ -48,24 +52,31 @@ def test_plugin_fit(test_plugin: Plugin) -> None:
     test_plugin.fit(GenericDataLoader(X))
 
 
-def test_plugin_generate_pategan() -> None:
-    test_plugin = plugin(**plugin_args)
-    X = get_airfoil_dataset()
-
+@pytest.mark.parametrize(
+    "test_plugin", generate_fixtures(plugin_name, plugin, plugin_args)
+)
+@pytest.mark.parametrize("serialize", [True, False])
+def test_plugin_generate(test_plugin: Plugin, serialize: bool) -> None:
+    X = pd.DataFrame(load_iris()["data"])
     test_plugin.fit(GenericDataLoader(X))
+
+    if serialize:
+        saved = save(test_plugin)
+        test_plugin = load(saved)
 
     X_gen = test_plugin.generate()
     assert len(X_gen) == len(X)
     assert test_plugin.schema_includes(X_gen)
-    assert X_gen.shape[1] == X.shape[1]
 
     X_gen = test_plugin.generate(50)
     assert len(X_gen) == 50
     assert test_plugin.schema_includes(X_gen)
 
 
-def test_plugin_generate_constraints() -> None:
-    test_plugin = plugin(**plugin_args)
+@pytest.mark.parametrize(
+    "test_plugin", generate_fixtures(plugin_name, plugin, plugin_args)
+)
+def test_plugin_generate_constraints(test_plugin: Plugin) -> None:
     X = pd.DataFrame(load_iris()["data"])
     test_plugin.fit(GenericDataLoader(X))
 
@@ -97,12 +108,12 @@ def test_plugin_generate_constraints() -> None:
 def test_sample_hyperparams() -> None:
     for i in range(100):
         args = plugin.sample_hyperparameters()
-
         assert plugin(**args) is not None
 
 
 @pytest.mark.slow
-def test_eval_performance() -> None:
+@pytest.mark.skipif(sys.platform != "linux", reason="Linux only for faster results")
+def test_eval_performance_dpgan() -> None:
     results = []
 
     Xraw, y = load_iris(return_X_y=True, as_frame=True)
@@ -110,9 +121,7 @@ def test_eval_performance() -> None:
     X = GenericDataLoader(Xraw)
 
     for retry in range(2):
-        test_plugin = plugin(
-            n_iter=200, generator_n_layers_hidden=1, n_teachers=2, lamda=2e-4
-        )
+        test_plugin = plugin(n_iter=300)
         evaluator = PerformanceEvaluatorXGB()
 
         test_plugin.fit(X)
@@ -120,5 +129,25 @@ def test_eval_performance() -> None:
 
         results.append(evaluator.evaluate(X, X_syn)["syn_id"])
 
-    print(plugin.name(), np.mean(results))
-    assert np.mean(results) > 0.7
+    print(results)
+    assert np.mean(results) > 0.5
+
+
+@pytest.mark.slow
+def test_plugin_conditional_dpgan() -> None:
+    test_plugin = plugin(generator_n_units_hidden=5)
+    Xraw, y = load_iris(as_frame=True, return_X_y=True)
+    Xraw["target"] = y
+
+    X = GenericDataLoader(Xraw)
+    test_plugin.fit(X, cond=y)
+
+    X_gen = test_plugin.generate(2 * len(X))
+    assert len(X_gen) == 2 * len(X)
+    assert test_plugin.schema_includes(X_gen)
+
+    count = 10
+    X_gen = test_plugin.generate(count, cond=np.ones(count))
+    assert len(X_gen) == count
+
+    assert (X_gen["target"] == 1).sum() >= 0.8 * count

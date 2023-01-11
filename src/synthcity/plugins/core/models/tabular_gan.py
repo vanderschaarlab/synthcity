@@ -22,6 +22,10 @@ from .tabular_encoder import TabularEncoder
 
 class TabularGAN(torch.nn.Module):
     """
+    .. inheritance-diagram:: synthcity.plugins.core.models.tabular_gan.TabularGAN
+        :parts: 1
+
+
     GAN for tabular data.
 
     This class combines GAN and tabular encoder to form a generative model for tabular data.

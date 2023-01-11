@@ -54,7 +54,7 @@ $ pip install .
 ```python
 from synthcity.plugins import Plugins
 
-Plugins(categories=["generic"]).list()
+Plugins(categories=["generic", "privacy"]).list()
 ```
 
 * Load and train a tabular generator
@@ -113,7 +113,7 @@ Benchmarks.print(score)
 ```python
 from synthcity.plugins import Plugins
 
-Plugins(categories=["generic", "survival_analysis"]).list()
+Plugins(categories=["generic", "privacy", "survival_analysis"]).list()
 ```
 
 * Generate new data
@@ -144,7 +144,7 @@ syn_model.generate(count=10)
 ```python
 from synthcity.plugins import Plugins
 
-Plugins(categories=["generic", "time_series"]).list()
+Plugins(categories=["generic", "privacy", "time_series"]).list()
 ```
 
 * Generate new data
@@ -158,7 +158,7 @@ from synthcity.utils.datasets.time_series.google_stocks import GoogleStocksDatal
 static_data, temporal_data, horizons, outcome = GoogleStocksDataloader().load()
 data = TimeSeriesDataLoader(
     temporal_data=temporal_data,
-    temporal_horizons=horizons,
+    observation_times=horizons,
     static_data=static_data,
     outcome=outcome,
 )
@@ -201,12 +201,12 @@ assert syn_model.name() == reloaded.name()
 
 ## 📓 Tutorials
 
- - [![Test In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/drive/1Vr2PJswgfFYBkJCm3hhVkuH-9dXnHeYV?usp=sharing) [ Tutorial 0: Getting started with tabular data](https://github.com/vanderschaarlab/synthcity/blob/use_cases/tutorials/tutorial0_basic_examples.ipynb)
-  - [![Test In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/drive/1rTTvV4FT-Ut-rIHoBPXQimiBlZ7zCv59?usp=sharing) [ Tutorial 1: Writing a new plugin](https://github.com/vanderschaarlab/synthcity/blob/use_cases/tutorials/tutorial1_add_a_new_plugin.ipynb)
-   - [![Test In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/drive/1FXpnQ9bpHzEgJgD-9pf_PPN4D80ENilE?usp=sharing) [ Tutorial 2: Benchmarking models](https://github.com/vanderschaarlab/synthcity/blob/use_cases/tutorials/tutorial2_benchmarks.ipynb)
-   - [![Test In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/drive/1Wa2CPsbXzbKMPC5fSBhKl00Gi7QqVkse?usp=sharing) [ Tutorial 3: Generating Survival Analysis data](https://github.com/vanderschaarlab/synthcity/blob/use_cases/tutorials/tutorial3_survival_analysis.ipynb)
-   - [![Test In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/drive/1jN36GCAKEkjzDlczmQfR7Wbh3yF3cIz5?usp=sharing) [ Tutorial 4: Generating Time Series](https://github.com/vanderschaarlab/synthcity/blob/use_cases/tutorials/tutorial4_time_series.ipynb)
-   - [![Test In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/drive/1Nf8d3Y6sXr1uco8MsJA4wb33iFvReL59?usp=sharing) [ Tutorial 5: Generating Data with Differential Privacy Guarantees](https://github.com/vanderschaarlab/synthcity/blob/use_cases/tutorials/tutorial5_differential_privacy.ipynb)
+ - [![Test In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/drive/1Vr2PJswgfFYBkJCm3hhVkuH-9dXnHeYV?usp=sharing) [ Tutorial 0: Getting started with tabular data](https://github.com/vanderschaarlab/synthcity/blob/main/tutorials/tutorial0_basic_examples.ipynb)
+  - [![Test In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/drive/1rTTvV4FT-Ut-rIHoBPXQimiBlZ7zCv59?usp=sharing) [ Tutorial 1: Writing a new plugin](https://github.com/vanderschaarlab/synthcity/blob/main/tutorials/tutorial1_add_a_new_plugin.ipynb)
+   - [![Test In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/drive/1FXpnQ9bpHzEgJgD-9pf_PPN4D80ENilE?usp=sharing) [ Tutorial 2: Benchmarking models](https://github.com/vanderschaarlab/synthcity/blob/main/tutorials/tutorial2_benchmarks.ipynb)
+   - [![Test In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/drive/1Wa2CPsbXzbKMPC5fSBhKl00Gi7QqVkse?usp=sharing) [ Tutorial 3: Generating Survival Analysis data](https://github.com/vanderschaarlab/synthcity/blob/main/tutorials/tutorial3_survival_analysis.ipynb)
+   - [![Test In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/drive/1jN36GCAKEkjzDlczmQfR7Wbh3yF3cIz5?usp=sharing) [ Tutorial 4: Generating Time Series](https://github.com/vanderschaarlab/synthcity/blob/main/tutorials/tutorial4_time_series.ipynb)
+   - [![Test In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/drive/1Nf8d3Y6sXr1uco8MsJA4wb33iFvReL59?usp=sharing) [ Tutorial 5: Generating Data with Differential Privacy Guarantees](https://github.com/vanderschaarlab/synthcity/blob/main/tutorials/tutorial5_differential_privacy.ipynb)
 
 
 ## 🔑 Methods
@@ -238,7 +238,7 @@ assert syn_model.name() == reloaded.name()
 |--- | --- | --- |
 |**nflow**| Normalizing Flows are generative models which produce tractable distributions where both sampling and density evaluation can be efficient and exact.| [Neural Spline Flows](https://arxiv.org/abs/1906.04032) |
 
-### Survival analysis methods
+### Static Survival analysis methods
 
 | Method | Description | Reference |
 |--- | --- | --- |
@@ -247,7 +247,7 @@ assert syn_model.name() == reloaded.name()
 |**survae** | SurvivalGAN version using VAE | --- |
 |**survival_nflow** | SurvivalGAN version using normalizing flows | --- |
 
-### Time Series methods
+### Time-Series and Time-Series Survival Analysis methods
 
 | Method | Description | Reference |
 |--- | --- | --- |

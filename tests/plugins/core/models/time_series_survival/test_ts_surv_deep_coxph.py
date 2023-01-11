@@ -30,7 +30,7 @@ def test_hyperparams() -> None:
 @pytest.mark.parametrize("rnn_type", ["GRU", "LSTM", "Transformer"])
 @pytest.mark.slow
 def test_train_prediction(rnn_type: str) -> None:
-    static, temporal, temporal_horizons, outcome = PBCDataloader(as_numpy=True).load()
+    static, temporal, observation_times, outcome = PBCDataloader(as_numpy=True).load()
     T, E = outcome
 
     horizons = [0.25, 0.5, 0.75]
@@ -38,7 +38,7 @@ def test_train_prediction(rnn_type: str) -> None:
 
     model = DeepCoxPHTimeSeriesSurvival(rnn_type=rnn_type)
     score = evaluate_ts_survival_model(
-        model, static, temporal, temporal_horizons, T, E, time_horizons
+        model, static, temporal, observation_times, T, E, time_horizons
     )
 
     print("Perf", model.name(), score["str"])
@@ -47,7 +47,7 @@ def test_train_prediction(rnn_type: str) -> None:
 
 @pytest.mark.slow
 def test_hyperparams_search() -> None:
-    static, temporal, temporal_horizons, outcome = PBCDataloader(as_numpy=True).load()
+    static, temporal, observation_times, outcome = PBCDataloader(as_numpy=True).load()
     T, E = outcome
 
     horizons = [0.25, 0.5, 0.75]
@@ -59,7 +59,7 @@ def test_hyperparams_search() -> None:
         DeepCoxPHTimeSeriesSurvival,
         static,
         temporal,
-        temporal_horizons,
+        observation_times,
         T,
         E,
         time_horizons,
@@ -67,7 +67,7 @@ def test_hyperparams_search() -> None:
 
     model = DeepCoxPHTimeSeriesSurvival(**args)
     score = evaluate_ts_survival_model(
-        model, static, temporal, temporal_horizons, T, E, time_horizons
+        model, static, temporal, observation_times, T, E, time_horizons
     )
 
     print("Perf", model.name(), args, score["str"])

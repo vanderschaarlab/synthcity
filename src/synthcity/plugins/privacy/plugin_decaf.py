@@ -1,3 +1,7 @@
+"""
+Reference: Boris van Breugel, Trent Kyono, Jeroen Berrevoets, Mihaela van der Schaar "DECAF: Generating Fair Synthetic Data Using Causally-Aware Generative Networks"(2021).
+"""
+
 # stdlib
 from typing import Any, List, Tuple
 
@@ -22,7 +26,11 @@ DEVICE = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
 
 class DECAFPlugin(Plugin):
-    """DECAF (DEbiasing CAusal Fairness) plugin.
+    """
+    .. inheritance-diagram:: synthcity.plugins.privacy.plugin_decaf.DECAFPlugin
+        :parts: 1
+
+    DECAF (DEbiasing CAusal Fairness) plugin.
 
     Args:
         n_iter: int
@@ -100,10 +108,6 @@ class DECAFPlugin(Plugin):
         >>> plugin.fit(X)
         >>>
         >>> plugin.generate(50)
-
-
-
-    Reference: Boris van Breugel, Trent Kyono, Jeroen Berrevoets, Mihaela van der Schaar "DECAF: Generating Fair Synthetic Data Using Causally-Aware Generative Networks"(2021).
     """
 
     def __init__(
@@ -189,7 +193,7 @@ class DECAFPlugin(Plugin):
 
     @staticmethod
     def type() -> str:
-        return "fairness"
+        return "privacy"
 
     @staticmethod
     def hyperparameter_space(**kwargs: Any) -> List[Distribution]:

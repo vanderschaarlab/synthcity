@@ -119,7 +119,12 @@ class Decoder(nn.Module):
 
 
 class VAE(nn.Module):
-    """Basic VAE implementation.
+    """
+    .. inheritance-diagram:: synthcity.plugins.core.models.vae.VAE
+        :parts: 1
+
+
+    Basic VAE implementation.
 
     Args:
         n_features: int

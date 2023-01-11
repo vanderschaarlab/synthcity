@@ -12,7 +12,12 @@ from synthcity.plugins.core.constraints import Constraints
 
 
 class Distribution(BaseModel, metaclass=ABCMeta):
-    """Base class of all Distributions.
+    """
+    .. inheritance-diagram:: synthcity.plugins.core.distribution.Distribution
+        :parts: 1
+
+
+    Base class of all Distributions.
 
     The Distribution class characterizes the **empirical** marginal distribution of the feature.
     Each derived class must implement the following methods:
@@ -123,6 +128,11 @@ class Distribution(BaseModel, metaclass=ABCMeta):
 
 
 class CategoricalDistribution(Distribution):
+    """
+    .. inheritance-diagram:: synthcity.plugins.core.distribution.CategoricalDistribution
+        :parts: 1
+    """
+
     choices: list = []
 
     @validator("choices", always=True)
@@ -193,6 +203,11 @@ class CategoricalDistribution(Distribution):
 
 
 class FloatDistribution(Distribution):
+    """
+    .. inheritance-diagram:: synthcity.plugins.core.distribution.FloatDistribution
+        :parts: 1
+    """
+
     low: float = np.iinfo(np.int32).min
     high: float = np.iinfo(np.int32).max
 
@@ -258,6 +273,11 @@ class FloatDistribution(Distribution):
 
 
 class IntegerDistribution(Distribution):
+    """
+    .. inheritance-diagram:: synthcity.plugins.core.distribution.IntegerDistribution
+        :parts: 1
+    """
+
     low: int = np.iinfo(np.int32).min
     high: int = np.iinfo(np.int32).max
     step: int = 1

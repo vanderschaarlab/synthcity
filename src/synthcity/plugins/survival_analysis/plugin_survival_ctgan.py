@@ -19,7 +19,11 @@ from synthcity.utils.constants import DEVICE
 
 
 class SurvivalCTGANPlugin(Plugin):
-    """Survival Analysis Pipeline based on Conditional Tabular GANs.
+    """
+    .. inheritance-diagram:: synthcity.plugins.survival_analysis.plugin_survival_ctgan.SurvivalCTGANPlugin
+        :parts: 1
+
+    Survival Analysis Pipeline based on Conditional Tabular GANs.
 
     Args:
        uncensoring_model: str

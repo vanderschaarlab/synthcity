@@ -7,18 +7,18 @@ import pytest
 
 # synthcity absolute
 from synthcity.plugins.core.dataloader import TimeSeriesDataLoader
-from synthcity.plugins.core.models.ts_tabular_vae import TimeSeriesTabularAutoEncoder
+from synthcity.plugins.core.models.ts_tabular_vae import TimeSeriesTabularVAE
 from synthcity.plugins.core.schema import Schema
 from synthcity.utils.datasets.time_series.google_stocks import GoogleStocksDataloader
 from synthcity.utils.datasets.time_series.sine import SineDataloader
 
 
 def test_network_config() -> None:
-    static, temporal, temporal_horizons, _ = SineDataloader().load()
-    net = TimeSeriesTabularAutoEncoder(
+    static, temporal, observation_times, _ = SineDataloader().load()
+    net = TimeSeriesTabularVAE(
         static,
         temporal,
-        temporal_horizons,
+        observation_times,
         # decoder
         decoder_n_layers_hidden=2,
         decoder_n_units_hidden=100,
@@ -54,20 +54,20 @@ def test_network_config() -> None:
 
 @pytest.mark.parametrize("source", [SineDataloader, GoogleStocksDataloader])
 def test_ts_vae_generation(source: Any) -> None:
-    static, temporal, temporal_horizons, _ = source().load()
+    static, temporal, observation_times, _ = source().load()
 
-    model = TimeSeriesTabularAutoEncoder(
+    model = TimeSeriesTabularVAE(
         static,
         temporal,
-        temporal_horizons,
+        observation_times,
         n_iter=10,
     )
-    model.fit(static, temporal, temporal_horizons)
+    model.fit(static, temporal, observation_times)
 
-    static_gen, temporal_gen, temporal_horizons_gen = model.generate(10)
+    static_gen, temporal_gen, observation_times_gen = model.generate(10)
 
     assert static_gen.shape == (10, static.shape[1])
-    assert len(temporal_horizons_gen) == len(temporal_gen)
+    assert len(observation_times_gen) == len(temporal_gen)
     assert np.asarray(temporal_gen).shape == (
         10,
         temporal[0].shape[0],
@@ -78,28 +78,28 @@ def test_ts_vae_generation(source: Any) -> None:
 @pytest.mark.slow
 @pytest.mark.parametrize("source", [GoogleStocksDataloader])
 def test_ts_vae_generation_schema(source: Any) -> None:
-    static, temporal, temporal_horizons, _ = source().load()
+    static, temporal, observation_times, _ = source().load()
 
-    model = TimeSeriesTabularAutoEncoder(
+    model = TimeSeriesTabularVAE(
         static,
         temporal,
-        temporal_horizons,
+        observation_times,
         n_iter=10,
     )
-    model.fit(static, temporal, temporal_horizons)
+    model.fit(static, temporal, observation_times)
 
-    static_gen, temporal_gen, temporal_horizons_gen = model.generate(1000)
+    static_gen, temporal_gen, observation_times_gen = model.generate(1000)
 
     reference_data = TimeSeriesDataLoader(
         temporal_data=temporal,
-        temporal_horizons=temporal_horizons,
+        observation_times=observation_times,
         static_data=static,
     )
     reference_schema = Schema(data=reference_data)
 
     gen_data = TimeSeriesDataLoader(
         temporal_data=temporal_gen,
-        temporal_horizons=temporal_horizons_gen,
+        observation_times=observation_times_gen,
         static_data=static_gen,
     )
 

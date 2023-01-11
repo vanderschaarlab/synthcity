@@ -144,10 +144,10 @@ def test_bin_encoder() -> None:
 def test_ts_encoder_fit(source: Any) -> None:
     max_clusters = 5
     categorical_limit = 10
-    static, temporal, temporal_horizons, _ = source().load()
+    static, temporal, observation_times, _ = source().load()
     net = TimeSeriesTabularEncoder(
         max_clusters=max_clusters, categorical_limit=categorical_limit
-    ).fit(static, temporal, temporal_horizons)
+    ).fit(static, temporal, observation_times)
 
     static_layout, temporal_layout = net.layout()
 
@@ -176,14 +176,14 @@ def test_ts_encoder_fit(source: Any) -> None:
 def test_ts_encoder_fit_transform(source: Any) -> None:
     max_clusters = 5
     categorical_limit = 10
-    static, temporal, temporal_horizons, _ = source().load()
+    static, temporal, observation_times, _ = source().load()
     net = TimeSeriesTabularEncoder(
         max_clusters=max_clusters, categorical_limit=categorical_limit
-    ).fit(static, temporal, temporal_horizons)
+    ).fit(static, temporal, observation_times)
 
     static_layout, temporal_layout = net.layout()
     static_encoded, temporal_encoded, horizons_encoded = net.fit_transform(
-        static, temporal, temporal_horizons
+        static, temporal, observation_times
     )
 
     assert (static.index == static_encoded.index).all()
@@ -228,14 +228,14 @@ def test_ts_encoder_fit_transform(source: Any) -> None:
 def test_ts_encoder_inverse_transform(source: Any) -> None:
     max_clusters = 5
     categorical_limit = 10
-    static, temporal, temporal_horizons, _ = source().load()
+    static, temporal, observation_times, _ = source().load()
     net = TimeSeriesTabularEncoder(
         max_clusters=max_clusters, categorical_limit=categorical_limit
-    ).fit(static, temporal, temporal_horizons)
+    ).fit(static, temporal, observation_times)
 
     static_layout, temporal_layout = net.layout()
     static_encoded, temporal_encoded, horizons_encoded = net.fit_transform(
-        static, temporal, temporal_horizons
+        static, temporal, observation_times
     )
     static_reversed, temporal_reversed, horizons_reversed = net.inverse_transform(
         static_encoded, temporal_encoded, horizons_encoded
@@ -245,7 +245,7 @@ def test_ts_encoder_inverse_transform(source: Any) -> None:
     assert static_reversed.shape == static.shape
     assert (static_reversed.columns == static.columns).all()
     assert (
-        np.abs(np.asarray(temporal_horizons) - np.asarray(horizons_reversed))
+        np.abs(np.asarray(observation_times) - np.asarray(horizons_reversed))
         .sum()
         .sum()
         < 1

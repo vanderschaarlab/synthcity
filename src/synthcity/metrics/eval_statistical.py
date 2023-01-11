@@ -29,6 +29,12 @@ from synthcity.utils.serialization import load_from_file, save_to_file
 
 
 class StatisticalEvaluator(MetricEvaluator):
+    """
+    .. inheritance-diagram:: synthcity.metrics.eval_statistical.StatisticalEvaluator
+        :parts: 1
+
+    """
+
     def __init__(self, **kwargs: Any) -> None:
         super().__init__(**kwargs)
 
@@ -63,7 +69,12 @@ class StatisticalEvaluator(MetricEvaluator):
 
 
 class InverseKLDivergence(StatisticalEvaluator):
-    """Returns the average inverse of the Kullback–Leibler Divergence metric.
+    """
+    .. inheritance-diagram:: synthcity.metrics.eval_statistical.InverseKLDivergence
+        :parts: 1
+
+
+    Returns the average inverse of the Kullback–Leibler Divergence metric.
 
     Score:
         0: the datasets are from different distributions.
@@ -95,7 +106,11 @@ class InverseKLDivergence(StatisticalEvaluator):
 
 
 class KolmogorovSmirnovTest(StatisticalEvaluator):
-    """Performs the Kolmogorov-Smirnov test for goodness of fit.
+    """
+    .. inheritance-diagram:: synthcity.metrics.eval_statistical.KolmogorovSmirnovTest
+        :parts: 1
+
+    Performs the Kolmogorov-Smirnov test for goodness of fit.
 
     Score:
         0: the distributions are totally different.
@@ -124,7 +139,11 @@ class KolmogorovSmirnovTest(StatisticalEvaluator):
 
 
 class ChiSquaredTest(StatisticalEvaluator):
-    """Performs the one-way chi-square test.
+    """
+    .. inheritance-diagram:: synthcity.metrics.eval_statistical.ChiSquaredTest
+        :parts: 1
+
+    Performs the one-way chi-square test.
 
     Returns:
         The p-value. A small value indicates that we can reject the null hypothesis and that the distributions are different.
@@ -165,7 +184,11 @@ class ChiSquaredTest(StatisticalEvaluator):
 
 
 class MaximumMeanDiscrepancy(StatisticalEvaluator):
-    """Empirical maximum mean discrepancy. The lower the result the more evidence that distributions are the same.
+    """
+    .. inheritance-diagram:: synthcity.metrics.eval_statistical.MaximumMeanDiscrepancy
+        :parts: 1
+
+    Empirical maximum mean discrepancy. The lower the result the more evidence that distributions are the same.
 
     Args:
         kernel: "rbf", "linear" or "polynomial"
@@ -236,7 +259,11 @@ class MaximumMeanDiscrepancy(StatisticalEvaluator):
 
 
 class InverseCDFDistance(StatisticalEvaluator):
-    """Evaluate the distance between continuous features."""
+    """
+    .. inheritance-diagram:: synthcity.metrics.eval_statistical.InverseCDFDistance
+        :parts: 1
+
+    Evaluate the distance between continuous features."""
 
     @validate_arguments(config=dict(arbitrary_types_allowed=True))
     def __init__(self, p: int = 2, **kwargs: Any) -> None:
@@ -338,7 +365,11 @@ class JensenShannonDistance(StatisticalEvaluator):
 
 
 class FeatureCorrelation(StatisticalEvaluator):
-    """Evaluate the correlation/strength-of-association of features in data-set with both categorical and continuous features using: * Pearson's R for continuous-continuous cases ** Cramer's V or Theil's U for categorical-categorical cases."""
+    """
+    .. inheritance-diagram:: synthcity.metrics.eval_statistical.FeatureCorrelation
+        :parts: 1
+
+    Evaluate the correlation/strength-of-association of features in data-set with both categorical and continuous features using: * Pearson's R for continuous-continuous cases ** Cramer's V or Theil's U for categorical-categorical cases."""
 
     def __init__(
         self, nom_nom_assoc: str = "theil", nominal_columns: str = "auto", **kwargs: Any
@@ -391,7 +422,11 @@ class FeatureCorrelation(StatisticalEvaluator):
 
 
 class WassersteinDistance(StatisticalEvaluator):
-    """Compare Wasserstein distance between original data and synthetic data.
+    """
+    .. inheritance-diagram:: synthcity.metrics.eval_statistical.WassersteinDistance
+        :parts: 1
+
+    Compare Wasserstein distance between original data and synthetic data.
 
     Args:
         X: original data
@@ -439,6 +474,10 @@ class WassersteinDistance(StatisticalEvaluator):
 
 class PRDCScore(StatisticalEvaluator):
     """
+    .. inheritance-diagram:: synthcity.metrics.eval_statistical.PRDCScore
+        :parts: 1
+
+
     Computes precision, recall, density, and coverage given two manifolds.
 
     Args:
@@ -572,7 +611,11 @@ class PRDCScore(StatisticalEvaluator):
 
 
 class AlphaPrecision(StatisticalEvaluator):
-    """Evaluates the alpha-precision, beta-recall, and authenticity scores.
+    """
+    .. inheritance-diagram:: synthcity.metrics.eval_statistical.AlphaPrecision
+        :parts: 1
+
+    Evaluates the alpha-precision, beta-recall, and authenticity scores.
 
     The class evaluates the synthetic data using a tuple of three metrics:
     alpha-precision, beta-recall, and authenticity.
@@ -717,7 +760,11 @@ class AlphaPrecision(StatisticalEvaluator):
 
 
 class SurvivalKMDistance(StatisticalEvaluator):
-    """The distance between two Kaplan-Meier plots. Used for survival analysis"""
+    """
+    .. inheritance-diagram:: synthcity.metrics.eval_statistical.SurvivalKMDistance
+        :parts: 1
+
+    The distance between two Kaplan-Meier plots. Used for survival analysis"""
 
     def __init__(self, **kwargs: Any) -> None:
         super().__init__(default_metric="optimism", **kwargs)
