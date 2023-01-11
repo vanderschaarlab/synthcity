@@ -11,7 +11,12 @@ import synthcity.logger as log
 
 
 class Constraints(BaseModel):
-    """Constraints on data.
+    """
+    .. inheritance-diagram:: synthcity.plugins.core.constraints.Constraints
+        :parts: 1
+
+
+    Constraints on data.
 
     The Constraints class allows users to specify constraints on the features. Examples include the feature value range, allowed item set, and data type.
     These constraints can be used to filter out invalid values in synthetic datasets.

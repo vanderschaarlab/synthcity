@@ -39,7 +39,11 @@ from synthcity.utils.serialization import load_from_file, save_to_file
 
 
 class Plugin(Serializable, metaclass=ABCMeta):
-    """Base class for all plugins.
+    """
+    .. inheritance-diagram:: synthcity.plugins.core.plugin.Plugin
+        :parts: 1
+
+    Base class for all plugins.
 
     Each derived class must implement the following methods:
         type() - a static method that returns the type of the plugin. e.g., debug, generative, bayesian, etc.
@@ -154,7 +158,8 @@ class Plugin(Serializable, metaclass=ABCMeta):
         Args:
             X: DataLoader.
                 The reference dataset.
-
+            cond: Optional, Union[pd.DataFrame, pd.Series, np.ndarray]
+                Training Conditional
         Returns:
             self
         """
@@ -198,7 +203,8 @@ class Plugin(Serializable, metaclass=ABCMeta):
         Args:
             X: DataLoader.
                 The reference dataset.
-
+            cond: Optional, Union[pd.DataFrame, pd.Series, np.ndarray]
+                Training Conditional
         Returns:
             self
         """
@@ -218,6 +224,8 @@ class Plugin(Serializable, metaclass=ABCMeta):
                 The number of samples to generate. If None, it generated len(reference_dataset) samples.
             constraints: optional Constraints
                 Optional constraints to apply on the generated data. If none, the reference schema constraints are applied.
+            cond: Optional, Union[pd.DataFrame, pd.Series, np.ndarray]
+                Generation Conditional
 
         Returns:
             <count> synthetic samples
@@ -271,6 +279,8 @@ class Plugin(Serializable, metaclass=ABCMeta):
                 The number of samples to generate. If None, it generated len(reference_dataset) samples.
             syn_schema:
                 The schema/constraints that need to be satisfied by the synthetic data.
+            cond: Optional, Union[pd.DataFrame, pd.Series, np.ndarray]
+                Generation Conditional
 
         Returns:
             <count> synthetic samples

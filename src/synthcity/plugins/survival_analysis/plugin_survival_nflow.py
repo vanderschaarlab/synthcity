@@ -19,7 +19,11 @@ from synthcity.utils.constants import DEVICE
 
 
 class SurvivalNFlowPlugin(Plugin):
-    """Survival Analysis Pipeline based on Normalizing flows.
+    """
+    .. inheritance-diagram:: synthcity.plugins.survival_analysis.plugin_survival_nflow.SurvivalNFlowPlugin
+        :parts: 1
+
+    Survival Analysis Pipeline based on Normalizing flows.
 
     Args:
        uncensoring_model: str

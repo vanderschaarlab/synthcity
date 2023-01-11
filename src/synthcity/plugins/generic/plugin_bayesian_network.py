@@ -1,3 +1,8 @@
+"""
+Reference: JAnkan, Ankur and Panda, Abinash, "pgmpy: Probabilistic graphical models using python,"
+        Proceedings of the 14th Python in Science Conference (SCIPY 2015), 2015.
+"""
+
 # stdlib
 from typing import Any, List
 
@@ -17,8 +22,11 @@ from synthcity.plugins.core.schema import Schema
 
 
 class BayesianNetworkPlugin(Plugin):
-    """Bayesian Network for generative modeling. Implemented using pgmpy backend.
+    """
+    .. inheritance-diagram:: synthcity.plugins.generic.plugin_bayesian_network.BayesianNetworkPlugin
+        :parts: 1
 
+    Bayesian Network for generative modeling. Implemented using pgmpy backend.
     Args:
         struct_learning_n_iter: int
             Number of iterations for the DAG learning
@@ -46,8 +54,6 @@ class BayesianNetworkPlugin(Plugin):
         >>>
         >>> plugin.generate(50)
 
-    Reference: JAnkan, Ankur and Panda, Abinash, "pgmpy: Probabilistic graphical models using python,"
-        Proceedings of the 14th Python in Science Conference (SCIPY 2015), 2015.
     """
 
     def __init__(

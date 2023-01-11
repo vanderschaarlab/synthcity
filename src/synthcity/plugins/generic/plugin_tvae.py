@@ -23,7 +23,11 @@ from synthcity.plugins.core.schema import Schema
 
 
 class TVAEPlugin(Plugin):
-    """Tabular VAE implementation.
+    """
+    .. inheritance-diagram:: synthcity.plugins.generic.plugin_tvae.TVAEPlugin
+        :parts: 1
+
+    Tabular VAE implementation.
 
     Args:
         decoder_n_layers_hidden: int

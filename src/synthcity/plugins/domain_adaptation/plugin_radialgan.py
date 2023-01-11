@@ -1,3 +1,11 @@
+"""
+Reference: Yoon, Jinsung and Jordon, James and van der Schaar, Mihaela
+    "RadialGAN: Leveraging multiple datasets to improve target-specific predictive models using Generative Adversarial Networks"
+
+Original implementation: https://github.com/vanderschaarlab/mlforhealthlabpub/blob/main/alg/RadialGAN/RadialGAN.py
+
+
+"""
 # stdlib
 from typing import Any, Dict, List, Optional, Tuple
 
@@ -31,13 +39,19 @@ from synthcity.utils.reproducibility import clear_cache, enable_reproducible_res
 
 class RadialGAN(nn.Module):
     """
-    Basic RadialGAN implementation.
+    .. inheritance-diagram:: synthcity.plugins.domain_adaptation.plugin_radialgan.RadialGAN
+        :parts: 1
+
+
+    RadialGAN implementation: Leveraging multiple datasets to improve target-specific predictive models using Generative Adversarial Networks.
 
     Args:
-        n_domains: int
-            number of domains
-        n_units_in: int
+        domains: List[int]
+            List of domains
+        n_features: int
             Number of features
+        n_units_latent: int
+            Number of hidden units
         generator_n_layers_hidden: int
             Number of hidden layers in the generator
         generator_n_units_hidden: int
@@ -713,7 +727,13 @@ class TabularRadialGAN(torch.nn.Module):
 
 
 class RadialGANPlugin(Plugin):
-    """RadialGAN  PyTorch implementation
+    """
+    .. inheritance-diagram:: synthcity.plugins.domain_adaptation.plugin_radialgan.RadialGANPlugin
+        :parts: 1
+
+
+    RadialGAN PyTorch implementation: Leveraging multiple datasets to improve target-specific predictive models using Generative Adversarial Networks.
+
 
     Args:
         generator_n_layers_hidden: int
@@ -764,12 +784,6 @@ class RadialGANPlugin(Plugin):
         >>> plugin.fit(dataloader)
         >>>
         >>> plugin.generate(50)
-
-
-    Reference: Yoon, Jinsung and Jordon, James and van der Schaar, Mihaela
-        "RadialGAN: Leveraging multiple datasets to improve target-specific predictive models using Generative Adversarial Networks"
-
-    Original implementation: https://github.com/vanderschaarlab/mlforhealthlabpub/blob/main/alg/RadialGAN/RadialGAN.py
 
     """
 

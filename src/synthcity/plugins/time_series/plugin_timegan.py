@@ -1,5 +1,5 @@
 """
-Implementation for the paper "Time-series Generative Adversarial Networks", Jinsung Yoon, Daniel Jarrett, Mihaela van der Schaar
+Reference: "Time-series Generative Adversarial Networks", Jinsung Yoon, Daniel Jarrett, Mihaela van der Schaar
 """
 # stdlib
 from typing import Any, Callable, List, Optional, Tuple, Union
@@ -27,7 +27,12 @@ from synthcity.utils.samplers import ImbalancedDatasetSampler
 
 
 class TimeGANPlugin(Plugin):
-    """Synthetic time series generation using TimeGAN.
+    """
+    .. inheritance-diagram:: synthcity.plugins.time_series.plugin_timegan.TimeGANPlugin
+        :parts: 1
+
+
+    Synthetic time series generation using TimeGAN.
 
     Args:
         n_iter: int
@@ -91,7 +96,6 @@ class TimeGANPlugin(Plugin):
                 - "ResCNN"
                 - "OmniScaleCNN"
                 - "XCM"
-                - "Transformer"
         device
             The device used by PyTorch. cpu/cuda
         use_horizon_condition: bool. Default = True
@@ -119,7 +123,6 @@ class TimeGANPlugin(Plugin):
         >>>
         >>> plugin.generate(count = 10)
 
-    Reference: "Time-series Generative Adversarial Networks", Jinsung Yoon et. al
     """
 
     def __init__(

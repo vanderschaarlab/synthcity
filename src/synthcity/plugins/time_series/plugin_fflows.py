@@ -1,3 +1,6 @@
+"""
+Reference: "Generative Time-series Modeling with Fourier Flows", Ahmed Alaa, Alex Chan, and Mihaela van der Schaar.
+"""
 # stdlib
 from typing import Any, List, Tuple
 
@@ -25,7 +28,12 @@ from synthcity.utils.constants import DEVICE
 
 
 class FourierFlowsPlugin(Plugin):
-    """Synthetic time series generation using FourierFlows.
+    """
+    .. inheritance-diagram:: synthcity.plugins.time_series.plugin_fflows.FourierFlowsPlugin
+        :parts: 1
+
+
+    Synthetic time series generation using FourierFlows.
 
     Args:
         n_iter: int
@@ -71,7 +79,6 @@ class FourierFlowsPlugin(Plugin):
         >>> plugin.generate(count = 10)
 
 
-    Reference: "Generative Time-series Modeling with Fourier Flows", Ahmed Alaa, Alex Chan, and Mihaela van der Schaar.
     """
 
     def __init__(

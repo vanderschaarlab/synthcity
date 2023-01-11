@@ -23,7 +23,12 @@ from synthcity.utils.constants import DEVICE
 
 
 class SurvivalPipeline(Plugin):
-    """Survival uncensoring plugin pipeline.
+    """
+    .. inheritance-diagram:: synthcity.plugins.survival_analysis._survival_pipeline.SurvivalPipeline
+        :parts: 1
+
+
+    Survival uncensoring plugin pipeline.
 
     Args:
         method: str

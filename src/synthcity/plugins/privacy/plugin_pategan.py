@@ -1,3 +1,8 @@
+"""
+Reference: James Jordon, Jinsung Yoon, Mihaela van der Schaar, "PATE-GAN: Generating Synthetic Data with Differential Privacy Guarantees," International Conference on Learning Representations (ICLR), 2019.
+Paper link: https://openreview.net/forum?id=S1zk9iRqF7
+"""
+
 # stdlib
 from typing import Any, Dict, List, Optional, Tuple
 
@@ -326,7 +331,11 @@ class PATEGAN(Serializable):
 
 
 class PATEGANPlugin(Plugin):
-    """PATE-GAN: Generating Synthetic Data with Differential Privacy Guarantees.
+    """
+    .. inheritance-diagram:: synthcity.plugins.privacy.plugin_pategan.PATEGANPlugin
+        :parts: 1
+
+    PATE-GAN: Generating Synthetic Data with Differential Privacy Guarantees.
 
     Args:
         generator_n_layers_hidden: int
@@ -383,8 +392,6 @@ class PATEGANPlugin(Plugin):
         >>> plugin.generate(50)
 
 
-    Reference: James Jordon, Jinsung Yoon, Mihaela van der Schaar, "PATE-GAN: Generating Synthetic Data with Differential Privacy Guarantees," International Conference on Learning Representations (ICLR), 2019.
-    Paper link: https://openreview.net/forum?id=S1zk9iRqF7
     """
 
     @validate_arguments(config=dict(arbitrary_types_allowed=True))

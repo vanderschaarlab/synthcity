@@ -1,3 +1,7 @@
+"""
+Reference: "Differentially Private Generative Adversarial Network", Xie, Liyang  et al.
+"""
+
 # stdlib
 from typing import Any, List, Optional, Union
 
@@ -24,7 +28,11 @@ from synthcity.utils.constants import DEVICE
 
 
 class DPGANPlugin(Plugin):
-    """Differentially Private Generative Adversarial Network implementation. The discriminator is trained using DP-SGD.
+    """
+    .. inheritance-diagram:: synthcity.plugins.privacy.plugin_dpgan.DPGANPlugin
+        :parts: 1
+
+    Differentially Private Generative Adversarial Network implementation. The discriminator is trained using DP-SGD.
 
     Args:
         generator_n_layers_hidden: int
@@ -92,7 +100,6 @@ class DPGANPlugin(Plugin):
         >>>
         >>> plugin.generate(50)
 
-    Reference: "Differentially Private Generative Adversarial Network", Xie, Liyang  et al.
     """
 
     @validate_arguments(config=dict(arbitrary_types_allowed=True))

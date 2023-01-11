@@ -23,6 +23,9 @@ from .mlp import MLP
 
 class GAN(nn.Module):
     """
+    .. inheritance-diagram:: synthcity.plugins.core.models.gan.GAN
+        :parts: 1
+
     Basic GAN implementation.
 
     Args:

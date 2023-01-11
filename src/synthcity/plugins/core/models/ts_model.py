@@ -38,7 +38,6 @@ modes = [
     "ResCNN",
     "OmniScaleCNN",
     "XCM",
-    "Transformer",
 ]
 
 
@@ -81,7 +80,6 @@ class TimeSeriesModel(nn.Module):
                 - "ResCNN"
                 - "OmniScaleCNN"
                 - "XCM"
-                - "Transformer"
         n_iter_print: int. Default = 10
             Number of epochs to print the loss.
         batch_size: int. Default = 100

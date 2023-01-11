@@ -15,7 +15,12 @@ from synthcity.utils.constants import DEVICE
 
 
 class ProbabilisticAutoregressivePlugin(Plugin):
-    """Synthetic time series generation using Probabilistic Autoregressive models.
+    """
+    .. inheritance-diagram:: synthcity.plugins.time_series.plugin_probabilistic_ar.ProbabilisticAutoregressivePlugin
+        :parts: 1
+
+
+    Synthetic time series generation using Probabilistic Autoregressive models.
 
     Args:
         n_iter: int

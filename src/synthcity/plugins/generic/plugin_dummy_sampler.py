@@ -12,7 +12,11 @@ from synthcity.plugins.core.schema import Schema
 
 
 class DummySamplerPlugin(Plugin):
-    """Dummy sampling plugin for debugging.
+    """
+    .. inheritance-diagram:: synthcity.plugins.generic.plugin_dummy_sampler.DummySamplerPlugin
+        :parts: 1
+
+    Dummy sampling plugin for debugging.
 
     Example:
         >>> from sklearn.datasets import load_iris

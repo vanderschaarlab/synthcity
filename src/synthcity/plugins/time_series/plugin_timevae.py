@@ -22,7 +22,12 @@ from synthcity.utils.constants import DEVICE
 
 
 class TimeVAEPlugin(Plugin):
-    """Synthetic time series generation using a Variational AutoEncoder.
+    """
+    .. inheritance-diagram:: synthcity.plugins.time_series.plugin_timevae.TimeVAEPlugin
+        :parts: 1
+
+
+    Synthetic time series generation using a Variational AutoEncoder.
 
     Args:
         n_iter: int
@@ -80,7 +85,6 @@ class TimeVAEPlugin(Plugin):
                 - "ResCNN"
                 - "OmniScaleCNN"
                 - "XCM"
-                - "Transformer"
         device
             The device used by PyTorch. cpu/cuda
         use_horizon_condition: bool. Default = True

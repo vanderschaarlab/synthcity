@@ -223,7 +223,11 @@ class TimeSeriesDecoder(nn.Module):
 
 
 class TimeSeriesVAE(nn.Module):
-    """Basic Time-Series Variational AutoEncoder
+    """
+    .. inheritance-diagram:: synthcity.plugins.core.models.ts_vae.TimeSeriesVAE
+        :parts: 1
+
+    Basic Time-Series Variational AutoEncoder
 
     Args:
         n_static_units: int
@@ -283,7 +287,6 @@ class TimeSeriesVAE(nn.Module):
                 - "ResCNN"
                 - "OmniScaleCNN"
                 - "XCM"
-                - "Transformer"
         encoder_n_layers_hidden: int. Default = 3
             Number of hidden layers in the encoder
         encoder_n_units_hidden. Default int = 300

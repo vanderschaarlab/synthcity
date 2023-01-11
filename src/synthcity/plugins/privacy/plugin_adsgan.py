@@ -1,3 +1,10 @@
+"""
+Reference: Jinsung Yoon, Lydia N. Drumright, Mihaela van der Schaar,
+        "Anonymization through Data Synthesis using Generative Adversarial Networks (ADS-GAN):
+        A harmonizing advancement for AI in medicine,"
+        IEEE Journal of Biomedical and Health Informatics (JBHI), 2019.
+Paper link: https://ieeexplore.ieee.org/document/9034117
+"""
 # stdlib
 from typing import Any, List, Optional, Union
 
@@ -24,7 +31,11 @@ from synthcity.utils.constants import DEVICE
 
 
 class AdsGANPlugin(Plugin):
-    """AdsGAN plugin - Anonymization through Data Synthesis using Generative Adversarial Networks.
+    """
+    .. inheritance-diagram:: synthcity.plugins.privacy.plugin_adsgan.AdsGANPlugin
+        :parts: 1
+
+    AdsGAN plugin - Anonymization through Data Synthesis using Generative Adversarial Networks.
 
 
     Args:
@@ -83,13 +94,6 @@ class AdsGANPlugin(Plugin):
         >>> plugin.fit(X)
         >>>
         >>> plugin.generate(50)
-
-    Reference: Jinsung Yoon, Lydia N. Drumright, Mihaela van der Schaar,
-        "Anonymization through Data Synthesis using Generative Adversarial Networks (ADS-GAN):
-        A harmonizing advancement for AI in medicine,"
-        IEEE Journal of Biomedical and Health Informatics (JBHI), 2019.
-    Paper link: https://ieeexplore.ieee.org/document/9034117
-
     """
 
     @validate_arguments(config=dict(arbitrary_types_allowed=True))

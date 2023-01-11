@@ -44,7 +44,11 @@ from synthcity.utils.serialization import load_from_file, save_to_file
 
 
 class PerformanceEvaluator(MetricEvaluator):
-    """Evaluating synthetic data based on downstream performance.
+    """
+    .. inheritance-diagram:: synthcity.metrics.eval_performance.PerformanceEvaluator
+        :parts: 1
+
+    Evaluating synthetic data based on downstream performance.
 
     This implements the train-on-synthetic test-on-real methodology for evaluation.
     """
@@ -616,7 +620,12 @@ class PerformanceEvaluator(MetricEvaluator):
 
 
 class PerformanceEvaluatorXGB(PerformanceEvaluator):
-    """Train an XGBoost classifier or regressor on the synthetic data and evaluate the performance on real test data.
+    """
+    .. inheritance-diagram:: synthcity.metrics.eval_performance.PerformanceEvaluatorXGB
+        :parts: 1
+
+
+    Train an XGBoost classifier or regressor on the synthetic data and evaluate the performance on real test data.
 
     Returns the average performance discrepancy between training on real data vs on synthetic data.
 
@@ -684,7 +693,11 @@ class PerformanceEvaluatorXGB(PerformanceEvaluator):
 
 
 class PerformanceEvaluatorLinear(PerformanceEvaluator):
-    """Train a Linear classifier or regressor on the synthetic data and evaluate the performance on real test data.
+    """
+    .. inheritance-diagram:: synthcity.metrics.eval_performance.PerformanceEvaluatorLinear
+        :parts: 1
+
+    Train a Linear classifier or regressor on the synthetic data and evaluate the performance on real test data.
 
     Returns the average performance discrepancy between training on real data vs on synthetic data.
 
@@ -727,7 +740,11 @@ class PerformanceEvaluatorLinear(PerformanceEvaluator):
 
 
 class PerformanceEvaluatorMLP(PerformanceEvaluator):
-    """Train a Neural Net classifier or regressor on the synthetic data and evaluate the performance on real test data.
+    """
+    .. inheritance-diagram:: synthcity.metrics.eval_performance.PerformanceEvaluatorMLP
+        :parts: 1
+
+    Train a Neural Net classifier or regressor on the synthetic data and evaluate the performance on real test data.
 
     Returns the average performance discrepancy between training on real data vs on synthetic data.
 
@@ -800,7 +817,11 @@ class PerformanceEvaluatorMLP(PerformanceEvaluator):
 
 
 class FeatureImportanceRankDistance(MetricEvaluator):
-    """Train an XGBoost classifier or regressor on the synthetic data and evaluate the feature importance.
+    """
+    .. inheritance-diagram:: synthcity.metrics.eval_performance.FeatureImportanceRankDistance
+        :parts: 1
+
+    Train an XGBoost classifier or regressor on the synthetic data and evaluate the feature importance.
     Train an XGBoost model on the real data and evaluate the feature importance.
 
     Returns the rank distance between the feature importance

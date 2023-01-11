@@ -1,3 +1,8 @@
+"""
+Reference: "Modeling Tabular Data using Conditional GAN", Xu, Lei et al.
+Original implementation: https://github.com/sdv-dev/CTGAN
+"""
+
 # stdlib
 from typing import Any, List, Optional, Union
 
@@ -25,7 +30,12 @@ from synthcity.utils.constants import DEVICE
 
 
 class CTGANPlugin(Plugin):
-    """Conditional Tabular GAN implementation.
+    """
+    .. inheritance-diagram:: synthcity.plugins.generic.plugin_ctgan.CTGANPlugin
+        :parts: 1
+
+
+    Conditional Tabular GAN implementation.
 
     Args:
         generator_n_layers_hidden: int
@@ -84,8 +94,6 @@ class CTGANPlugin(Plugin):
         >>>
         >>> plugin.generate(50)
 
-    Reference: "Modeling Tabular Data using Conditional GAN", Xu, Lei et al.
-    Original implementation: https://github.com/sdv-dev/CTGAN
     """
 
     @validate_arguments(config=dict(arbitrary_types_allowed=True))

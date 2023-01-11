@@ -17,7 +17,11 @@ from synthcity.utils.serialization import dataframe_hash
 
 
 class DataLoader(metaclass=ABCMeta):
-    """Base class for all data loaders.
+    """
+    .. inheritance-diagram:: synthcity.plugins.core.dataloader.DataLoader
+        :parts: 1
+
+    Base class for all data loaders.
 
     Each derived class must implement the following methods:
         unpack() - a method that unpacks the columns and returns features and labels (X, y).
@@ -223,7 +227,11 @@ class DataLoader(metaclass=ABCMeta):
 
 
 class GenericDataLoader(DataLoader):
-    """Data loader for generic tabular data.
+    """
+    .. inheritance-diagram:: synthcity.plugins.core.dataloader.GenericDataLoader
+        :parts: 1
+
+    Data loader for generic tabular data.
 
     Constructor Args:
         data: Union[pd.DataFrame, list, np.ndarray]
@@ -405,6 +413,12 @@ class GenericDataLoader(DataLoader):
 
 
 class SurvivalAnalysisDataLoader(DataLoader):
+    """
+    .. inheritance-diagram:: synthcity.plugins.core.dataloader.SurvivalAnalysisDataLoader
+        :parts: 1
+
+    """
+
     @validate_arguments(config=dict(arbitrary_types_allowed=True))
     def __init__(
         self,
@@ -577,6 +591,11 @@ class SurvivalAnalysisDataLoader(DataLoader):
 
 
 class TimeSeriesDataLoader(DataLoader):
+    """
+    .. inheritance-diagram:: synthcity.plugins.core.dataloader.TimeSeriesDataLoader
+        :parts: 1
+    """
+
     @validate_arguments(config=dict(arbitrary_types_allowed=True))
     def __init__(
         self,
@@ -1210,6 +1229,11 @@ class TimeSeriesDataLoader(DataLoader):
 
 
 class TimeSeriesSurvivalDataLoader(TimeSeriesDataLoader):
+    """
+    .. inheritance-diagram:: synthcity.plugins.core.dataloader.TimeSeriesSurvivalDataLoader
+        :parts: 1
+    """
+
     @validate_arguments(config=dict(arbitrary_types_allowed=True))
     def __init__(
         self,

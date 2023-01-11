@@ -17,6 +17,11 @@ from .ts_gan import TimeSeriesGAN
 
 class TimeSeriesTabularGAN(torch.nn.Module):
     """
+
+    .. inheritance-diagram:: synthcity.plugins.core.models.ts_tabular_gan.TimeSeriesTabularGAN
+        :parts: 1
+
+
     TimeSeries Tabular GAN implementation.
 
     This class combines TimeSeriesGAN and tabular encoder to form a generative model for tabular data.
@@ -95,7 +100,6 @@ class TimeSeriesTabularGAN(torch.nn.Module):
                 - "ResCNN"
                 - "OmniScaleCNN"
                 - "XCM"
-                - "Transformer"
         device
             The device used by PyTorch. cpu/cuda
         use_horizon_condition: bool. Default = True

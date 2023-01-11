@@ -21,6 +21,10 @@ from .ts_model import TimeSeriesModel
 
 class TimeSeriesGAN(nn.Module):
     """
+    .. inheritance-diagram:: synthcity.plugins.core.models.ts_gan.TimeSeriesGAN
+        :parts: 1
+
+
     Basic TimeSeriesGAN implementation.
 
     Args:
@@ -101,7 +105,6 @@ class TimeSeriesGAN(nn.Module):
                 - "ResCNN"
                 - "OmniScaleCNN"
                 - "XCM"
-                - "Transformer"
         device
             The device used by PyTorch. cpu/cuda
         use_horizon_condition: bool. Default = True

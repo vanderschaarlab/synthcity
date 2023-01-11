@@ -13,7 +13,11 @@ from synthcity.plugins.core.schema import Schema
 
 
 class MarginalDistributionPlugin(Plugin):
-    """Synthetic data generation via marginal distributions.
+    """
+    .. inheritance-diagram:: synthcity.plugins.generic.plugin_marginal_distributions.MarginalDistributionPlugin
+        :parts: 1
+
+    Synthetic data generation via marginal distributions.
 
     Example:
         >>> from sklearn.datasets import load_iris

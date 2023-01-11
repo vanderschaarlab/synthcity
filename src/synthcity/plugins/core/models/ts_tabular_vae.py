@@ -17,6 +17,9 @@ from .ts_vae import TimeSeriesVAE
 
 class TimeSeriesTabularVAE(torch.nn.Module):
     """
+    .. inheritance-diagram:: synthcity.plugins.core.models.ts_tabular_vae.TimeSeriesTabularVAE
+        :parts: 1
+
     TimeSeries Tabular Variational AutoEncoder implementation.
 
     This class combines TimeSeriesVAE and tabular encoder to form a generative model for tabular data.
@@ -85,7 +88,6 @@ class TimeSeriesTabularVAE(torch.nn.Module):
                 - "ResCNN"
                 - "OmniScaleCNN"
                 - "XCM"
-                - "Transformer"
     """
 
     @validate_arguments(config=dict(arbitrary_types_allowed=True))
