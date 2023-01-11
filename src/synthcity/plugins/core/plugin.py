@@ -54,9 +54,21 @@ class Plugin(Serializable, metaclass=ABCMeta):
 
     If any method implementation is missing, the class constructor will fail.
 
-    Constructor Args:
-        strict: float.
+    Args:
+        strict: bool. Default = True
             If True, is raises an exception if the generated data is not following the requested constraints. If False, it returns only the rows that match the constraints.
+        workspace: Path
+            Path for caching intermediary results
+        compress_dataset: bool. Default = False
+            Drop redundant features before training the generator.
+        device:
+            PyTorch device: cpu or cuda.
+        random_state: int
+            Random seed
+        sampling_patience: int.
+            Max inference iterations to wait for the generated data to match the training schema.
+        sampling_strategy: str
+            Internal parameter for schema. marginal or uniform.
     """
 
     class Config:
@@ -65,23 +77,14 @@ class Plugin(Serializable, metaclass=ABCMeta):
 
     def __init__(
         self,
-        sampling_strategy: str = "marginal",  # uniform, marginal
         sampling_patience: int = 500,
         strict: bool = True,
         device: Any = DEVICE,
         random_state: int = 0,
         workspace: Path = Path("workspace"),
         compress_dataset: bool = False,
+        sampling_strategy: str = "marginal",  # uniform, marginal
     ) -> None:
-        """
-
-        Args:
-            sampling_strategy: str
-                Internal sampling strategy [marginal, uniform].
-            strict: bool
-                If True, the generation process will raise an exception if the synthetic data doesn't satisfy the generation constraints. If False, the generation process will return only the valid rows under the constraint.
-
-        """
         super().__init__()
         self._schema: Optional[Schema] = None
         self._training_schema: Optional[Schema] = None
