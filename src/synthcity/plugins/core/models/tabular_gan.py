@@ -100,7 +100,7 @@ class TabularGAN(torch.nn.Module):
         device: Any = DEVICE
             CUDA/CPU
         adjust_inference_sampling: bool
-            Adjust the conditional probabilities to the ones in the training set. Active only with the ConditionalSampler
+            Adjust the marginal probabilities in the synthetic data to closer match the training set. Active only with the ConditionalSampler
         # privacy settings
         dp_enabled: bool
             Train the discriminator with Differential Privacy guarantees

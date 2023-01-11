@@ -72,7 +72,7 @@ class AdsGANPlugin(Plugin):
         encoder_max_clusters: int
             The max number of clusters to create for continuous columns when encoding
         adjust_inference_sampling: bool
-            Adjust the conditional probabilities to the ones in the training set. Active only with the ConditionalSampler
+            Adjust the marginal probabilities in the synthetic data to closer match the training set. Active only with the ConditionalSampler
         # early stopping
         n_iter_print: int
             Number of iterations after which to print updates and check the validation loss.
