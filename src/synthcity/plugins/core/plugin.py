@@ -84,6 +84,8 @@ class Plugin(Serializable, metaclass=ABCMeta):
         """
         super().__init__()
         self._schema: Optional[Schema] = None
+        self._training_schema: Optional[Schema] = None
+
         self.sampling_strategy = sampling_strategy
         self.sampling_patience = sampling_patience
         self.strict = strict

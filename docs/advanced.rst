@@ -8,6 +8,7 @@ Core components
     :glob:
     :maxdepth: 2
 
+    Plugin <generated/synthcity.plugins.core.plugin.rst>
     Dataloader <generated/synthcity.plugins.core.dataloader.rst>
     Constraints <generated/synthcity.plugins.core.constraints.rst>
     Distribution <generated/synthcity.plugins.core.distribution.rst>
