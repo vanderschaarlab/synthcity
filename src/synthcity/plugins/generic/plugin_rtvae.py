@@ -203,7 +203,7 @@ class RTVAEPlugin(Plugin):
 
     def _generate(self, count: int, syn_schema: Schema, **kwargs: Any) -> pd.DataFrame:
         cond: Optional[Union[pd.DataFrame, pd.Series]] = None
-        if "cond" in kwargs:
+        if "cond" in kwargs and kwargs["cond"] is not None:
             cond = np.asarray(kwargs["cond"])
 
         return self._safe_generate(self.model.generate, count, syn_schema, cond=cond)

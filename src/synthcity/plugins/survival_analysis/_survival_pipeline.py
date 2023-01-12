@@ -1,7 +1,8 @@
 # stdlib
-from typing import Any, List, Optional
+from typing import Any, List, Optional, Union
 
 # third party
+import numpy as np
 import pandas as pd
 
 # Necessary packages
@@ -79,7 +80,13 @@ class SurvivalPipeline(Plugin):
     def hyperparameter_space(**kwargs: Any) -> List[Distribution]:
         return []
 
-    def _fit(self, X: DataLoader, *args: Any, **kwargs: Any) -> "SurvivalPipeline":
+    def _fit(
+        self,
+        X: DataLoader,
+        *args: Any,
+        cond: Optional[Union[pd.DataFrame, pd.Series, np.ndarray, list]] = None,
+        **kwargs: Any,
+    ) -> "SurvivalPipeline":
         if X.type() != "survival_analysis":
             raise ValueError(f"Invalid data type {X.type()}")
 
@@ -92,6 +99,7 @@ class SurvivalPipeline(Plugin):
         data_info = X.info()
         self.time_to_event_column = data_info["time_to_event_column"]
         self.target_column = data_info["target_column"]
+        self.train_conditional = cond
 
         if self.uncensoring_model is not None:
             log.info("Train the uncensoring model")
@@ -110,10 +118,10 @@ class SurvivalPipeline(Plugin):
             df_train = Xcov.copy()
             df_train[self.time_to_event_column] = T_uncensored
 
-            self.generator.fit(df_train, **kwargs)
+            self.generator.fit(df_train, cond=cond, **kwargs)
         elif self.strategy == "survival_function":
             # Synthetic data generator
-            self.generator.fit(X.dataframe(), **kwargs)
+            self.generator.fit(X.dataframe(), cond=cond, **kwargs)
         else:
             raise ValueError(f"unsupported strategy {self.strategy}")
 
@@ -127,10 +135,30 @@ class SurvivalPipeline(Plugin):
 
         return self
 
-    def _generate(self, count: int, syn_schema: Schema, **kwargs: Any) -> DataLoader:
+    def _generate(
+        self,
+        count: int,
+        syn_schema: Schema,
+        cond: Optional[Union[pd.DataFrame, pd.Series, np.ndarray, list]] = None,
+        **kwargs: Any,
+    ) -> DataLoader:
+
+        gen_conditional: Optional[Union[pd.DataFrame, pd.Series]] = None
+        if cond is not None:
+            gen_conditional = pd.DataFrame(cond)
+        elif self.train_conditional is not None:
+            gen_conditional = pd.DataFrame(self.train_conditional)
+            while len(gen_conditional) < count:
+                gen_conditional = pd.concat(
+                    [gen_conditional, gen_conditional], ignore_index=True
+                )
+            gen_conditional = gen_conditional.head(count)
+
         def _generate(count: int) -> pd.DataFrame:
 
-            generated = self.generator.generate(count, **kwargs).dataframe()
+            generated = self.generator.generate(
+                count, cond=gen_conditional, **kwargs
+            ).dataframe()
             if self.censoring_strategy == "covariate_dependent":
                 generated[self.target_column] = self.censoring_predictor.predict(
                     generated.drop(
