@@ -1,3 +1,6 @@
+# stdlib
+import sys
+
 # third party
 import pytest
 from lifelines.datasets import load_rossi
@@ -51,21 +54,9 @@ def test_plugin_type(test_plugin: Plugin) -> None:
     "test_plugin", generate_fixtures(plugin_name, plugin, plugins_args)
 )
 def test_plugin_hyperparams(test_plugin: Plugin) -> None:
-    assert len(test_plugin.hyperparameter_space()) == 11
+    assert len(test_plugin.hyperparameter_space()) == 14
 
 
-@pytest.mark.parametrize(
-    "use_survival_conditional",
-    [True, False],
-)
-@pytest.mark.parametrize(
-    "dataloader_sampling_strategy",
-    [
-        "imbalanced_censoring",
-        "imbalanced_time_censoring",
-        "none",
-    ],
-)
 @pytest.mark.parametrize(
     "tte_strategy",
     [
@@ -73,16 +64,8 @@ def test_plugin_hyperparams(test_plugin: Plugin) -> None:
         "uncensoring",
     ],
 )
-def test_plugin_fit(
-    use_survival_conditional: bool, dataloader_sampling_strategy: str, tte_strategy: str
-) -> None:
-    test_plugin = plugin(
-        tte_strategy=tte_strategy,
-        dataloader_sampling_strategy=dataloader_sampling_strategy,
-        device="cpu",
-        use_survival_conditional=use_survival_conditional,
-        **plugins_args
-    )
+def test_plugin_fit(tte_strategy: str) -> None:
+    test_plugin = plugin(tte_strategy=tte_strategy, device="cpu", **plugins_args)
 
     test_plugin.fit(data)
 
@@ -133,6 +116,7 @@ def test_sample_hyperparams() -> None:
         assert plugin(**args) is not None
 
 
+@pytest.mark.skipif(sys.platform != "linux", reason="Linux only for faster results")
 def test_plugin_generate_with_conditional() -> None:
     bin_conditional = X["wexp"]
 

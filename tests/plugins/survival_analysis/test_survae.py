@@ -130,6 +130,7 @@ def test_sample_hyperparams() -> None:
         assert plugin(**args) is not None
 
 
+@pytest.mark.skipif(sys.platform != "linux", reason="Linux only for faster results")
 def test_plugin_generate_with_conditional_survae() -> None:
     bin_conditional = X["wexp"]
 

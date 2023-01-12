@@ -199,8 +199,11 @@ class CTGANPlugin(Plugin):
         ]
 
     def _prepare_cond(
-        self, cond: Union[pd.DataFrame, pd.Series, np.ndarray, list]
-    ) -> np.ndarray:
+        self, cond: Optional[Union[pd.DataFrame, pd.Series, np.ndarray, list]]
+    ) -> Optional[np.ndarray]:
+        if cond is None:
+            return None
+
         cond = np.asarray(cond)
         if len(cond.shape) == 1:
             cond = cond.reshape(-1, 1)
