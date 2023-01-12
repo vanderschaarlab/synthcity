@@ -158,8 +158,6 @@ class SurvivalGANPlugin(Plugin):
             )
             train_conditional = BinEncoder().fit_transform(precond)
 
-        self.train_conditional = train_conditional
-
         self.model = SurvivalPipeline(
             "adsgan",
             strategy=self.tte_strategy,
@@ -180,21 +178,10 @@ class SurvivalGANPlugin(Plugin):
         cond: Optional[Union[pd.DataFrame, pd.Series, np.ndarray, list]] = None,
         **kwargs: Any,
     ) -> pd.DataFrame:
-        gen_conditional: Optional[Union[pd.DataFrame, pd.Series]] = None
-        if cond is not None:
-            gen_conditional = pd.DataFrame(cond)
-        elif self.train_conditional is not None:
-            gen_conditional = self.train_conditional
-            while len(gen_conditional) < count:
-                gen_conditional = pd.concat(
-                    [gen_conditional, self.train_conditional], ignore_index=True
-                )
-            gen_conditional = gen_conditional.head(count)
-
         return self.model._generate(
             count,
             syn_schema=syn_schema,
-            cond=gen_conditional,
+            cond=cond,
             **kwargs,
         )
 

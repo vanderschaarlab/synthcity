@@ -130,7 +130,7 @@ def test_sample_hyperparams() -> None:
         assert plugin(**args) is not None
 
 
-def test_plugin_generate_with_conditional() -> None:
+def test_plugin_generate_with_conditional_survae() -> None:
     bin_conditional = X["wexp"]
 
     test_plugin = plugin()
