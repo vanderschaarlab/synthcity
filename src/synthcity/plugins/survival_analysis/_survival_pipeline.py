@@ -150,7 +150,7 @@ class SurvivalPipeline(Plugin):
             gen_conditional = pd.DataFrame(self.train_conditional)
             while len(gen_conditional) < count:
                 gen_conditional = pd.concat(
-                    [gen_conditional, self.train_conditional], ignore_index=True
+                    [gen_conditional, gen_conditional], ignore_index=True
                 )
             gen_conditional = gen_conditional.head(count)
 

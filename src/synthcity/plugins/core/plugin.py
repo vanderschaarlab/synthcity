@@ -100,6 +100,7 @@ class Plugin(Serializable, metaclass=ABCMeta):
         self.workspace = workspace
 
         self.fitted = False
+        self.expecting_conditional = False
 
     @staticmethod
     @abstractmethod
@@ -170,6 +171,10 @@ class Plugin(Serializable, metaclass=ABCMeta):
         """
         if isinstance(X, (pd.DataFrame)):
             X = GenericDataLoader(X)
+
+        if "cond" in kwargs and kwargs["cond"] is not None:
+            self.expecting_conditional = True
+
         self.data_info = X.info()
 
         self._schema = Schema(
@@ -240,6 +245,12 @@ class Plugin(Serializable, metaclass=ABCMeta):
 
         if self._schema is None:
             raise RuntimeError("Fit the model first")
+
+        has_gen_cond = "cond" in kwargs and kwargs["cond"] is not None
+        if has_gen_cond and not self.expecting_conditional:
+            raise RuntimeError(
+                "Conditional mismatch. Got inference conditional, without any training conditional"
+            )
 
         if count is None:
             count = self.data_info["len"]
