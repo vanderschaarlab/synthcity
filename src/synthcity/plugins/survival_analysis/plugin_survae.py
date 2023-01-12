@@ -1,7 +1,8 @@
 # stdlib
-from typing import Any, List
+from typing import Any, List, Optional, Union
 
 # third party
+import numpy as np
 import pandas as pd
 
 # Necessary packages
@@ -106,7 +107,13 @@ class SurVAEPlugin(Plugin):
     def hyperparameter_space(**kwargs: Any) -> List[Distribution]:
         return plugins.Plugins().get_type("tvae").hyperparameter_space()
 
-    def _fit(self, X: DataLoader, *args: Any, **kwargs: Any) -> "SurVAEPlugin":
+    def _fit(
+        self,
+        X: DataLoader,
+        *args: Any,
+        cond: Optional[Union[pd.DataFrame, pd.Series, np.ndarray, list]] = None,
+        **kwargs: Any,
+    ) -> "SurVAEPlugin":
         if X.type() != "survival_analysis":
             raise ValueError(f"Invalid data type = {X.type()}")
 
@@ -118,14 +125,21 @@ class SurVAEPlugin(Plugin):
             device=self.device,
             **self.kwargs,
         )
-        self.model.fit(X, **kwargs)
+        self.model.fit(X, cond=cond, **kwargs)
 
         return self
 
-    def _generate(self, count: int, syn_schema: Schema, **kwargs: Any) -> pd.DataFrame:
+    def _generate(
+        self,
+        count: int,
+        syn_schema: Schema,
+        cond: Optional[Union[pd.DataFrame, pd.Series, np.ndarray, list]] = None,
+        **kwargs: Any,
+    ) -> pd.DataFrame:
         return self.model._generate(
             count,
             syn_schema=syn_schema,
+            cond=cond,
             **kwargs,
         )
 
