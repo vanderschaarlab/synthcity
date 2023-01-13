@@ -213,8 +213,9 @@ class Plugin(Serializable, metaclass=ABCMeta):
         Args:
             X: DataLoader.
                 The reference dataset.
-            cond: Optional, Union[pd.DataFrame, pd.Series, np.ndarray]
-                Training Conditional
+            cond: Optional, Union[pd.DataFrame, pd.Series, np.ndarray, list]
+                Optional Training Conditional, used by GANs and VAEs.
+
         Returns:
             self
         """
@@ -234,9 +235,8 @@ class Plugin(Serializable, metaclass=ABCMeta):
                 The number of samples to generate. If None, it generated len(reference_dataset) samples.
             constraints: optional Constraints
                 Optional constraints to apply on the generated data. If none, the reference schema constraints are applied.
-            cond: Optional, Union[pd.DataFrame, pd.Series, np.ndarray]
-                Generation Conditional
-
+            cond: Optional, Union[pd.DataFrame, pd.Series, np.ndarray, list]
+                Optional Generation Conditional, used by GANs and VAEs
         Returns:
             <count> synthetic samples
         """
