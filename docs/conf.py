@@ -82,7 +82,7 @@ extensions = [
     "sphinx.ext.autosummary",
     "sphinx.ext.napoleon",
     "m2r2",
-    #"sphinxemoji.sphinxemoji",
+    "sphinxemoji.sphinxemoji",
     "nbsphinx",
     "sphinx_diagrams",
     'IPython.sphinxext.ipython_console_highlighting',
@@ -116,7 +116,7 @@ exclude_patterns = ["_build", "Thumbs.db", ".DS_Store", "**.ipynb_checkpoints"]
 # a list of builtin themes.
 #
 html_theme = "sphinx_rtd_theme"
-#sphinxemoji_style = "twemoji"
+sphinxemoji_style = "twemoji"
 
 
 # Add any paths that contain custom static files (such as style sheets) here,

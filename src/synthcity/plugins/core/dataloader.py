@@ -7,8 +7,8 @@ from typing import Any, Dict, List, Optional, Tuple, Union
 import numpy as np
 import pandas as pd
 from pydantic import validate_arguments
+from rdt import HyperTransformer
 from sklearn.model_selection import train_test_split
-from sklearn.preprocessing import LabelEncoder
 
 # synthcity absolute
 from synthcity.plugins.core.constraints import Constraints
@@ -203,27 +203,27 @@ class DataLoader(metaclass=ABCMeta):
 
     def encode(
         self,
-        encoders: Optional[Dict[str, Any]] = None,
-    ) -> Tuple["DataLoader", Dict]:
+        encoder: Optional[HyperTransformer] = None,
+    ) -> Tuple["DataLoader", HyperTransformer]:
         encoded = self.dataframe().copy()
-        if encoders is not None:
-            for col in encoders:
-                if col not in encoded.columns:
-                    continue
-                encoded[col] = encoders[col].transform(encoded[col])
-        else:
-            encoders = {}
+        encoded.columns = encoded.astype(str)
 
-        for col in encoded.columns:
-            if len(encoded[col].unique()) < 15 or encoded[col].dtype.name in [
-                "object",
-                "category",
-            ]:
-                encoder = LabelEncoder().fit(encoded[col])
-                encoded[col] = encoder.transform(encoded[col])
-                encoders[col] = encoder
+        if encoder is None:
+            encoder = HyperTransformer()
+            encoder.detect_initial_config(encoded)
 
-        return self.from_info(encoded, self.info()), encoders
+        encoded = encoder.transform(encoded)
+
+        return self.from_info(encoded, self.info()), encoder
+
+    def decoder(
+        self,
+        encoder: HyperTransformer,
+    ) -> "DataLoader":
+        encoded = self.dataframe().copy()
+        decoded = encoder.reverse_transform(encoded)
+
+        return self.from_info(decoded, self.info())
 
 
 class GenericDataLoader(DataLoader):
