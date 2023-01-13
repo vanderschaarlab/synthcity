@@ -27,22 +27,22 @@ def test_hyperparams() -> None:
 @pytest.mark.parametrize("survival_base_learner", ["RNN", "Transformer", "LSTM", "GRU"])
 @pytest.mark.skip
 def test_train_prediction(survival_base_learner: str) -> None:
-    static, temporal, temporal_horizons, outcome = PBCDataloader(as_numpy=True).load()
+    static, temporal, observation_times, outcome = PBCDataloader(as_numpy=True).load()
     T, E = outcome
 
-    temporal_horizons = np.asarray(temporal_horizons)
+    observation_times = np.asarray(observation_times)
 
     model = TSSurvivalFunctionTimeToEvent(
         survival_base_learner=survival_base_learner, n_iter=10
     )
 
-    model.fit(static, temporal, temporal_horizons, T, E)
+    model.fit(static, temporal, observation_times, T, E)
 
-    prediction = model.predict(static, temporal, temporal_horizons)
+    prediction = model.predict(static, temporal, observation_times)
 
     assert prediction.shape == T.shape
 
-    prediction_any = model.predict_any(static, temporal, temporal_horizons, E)
+    prediction_any = model.predict_any(static, temporal, observation_times, E)
 
     assert prediction_any.shape == T.shape
     print("error", survival_base_learner, mean_squared_error(T, prediction_any))

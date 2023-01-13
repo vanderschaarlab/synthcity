@@ -89,7 +89,7 @@ class DynamicDeephitTimeSeriesSurvival(TimeSeriesSurvivalPlugin):
         self,
         static: Optional[np.ndarray],
         temporal: np.ndarray,
-        temporal_horizons: np.ndarray,
+        observation_times: np.ndarray,
     ) -> np.ndarray:
         if static is None:
             static = np.zeros((len(temporal), 0))
@@ -102,7 +102,7 @@ class DynamicDeephitTimeSeriesSurvival(TimeSeriesSurvivalPlugin):
                 [
                     temporal[idx],
                     local_static,
-                    np.asarray(temporal_horizons[idx]).reshape(-1, 1),
+                    np.asarray(observation_times[idx]).reshape(-1, 1),
                 ],
                 axis=1,
             )
@@ -115,17 +115,17 @@ class DynamicDeephitTimeSeriesSurvival(TimeSeriesSurvivalPlugin):
         self,
         static: Optional[np.ndarray],
         temporal: Union[np.ndarray, List],
-        temporal_horizons: Union[np.ndarray, List],
+        observation_times: Union[np.ndarray, List],
         T: Union[np.ndarray, List],
         E: Union[np.ndarray, List],
     ) -> TimeSeriesSurvivalPlugin:
         static = np.asarray(static)
         temporal = np.asarray(temporal)
-        temporal_horizons = np.asarray(temporal_horizons)
+        observation_times = np.asarray(observation_times)
         T = np.asarray(T)
         E = np.asarray(E)
 
-        data = self._merge_data(static, temporal, temporal_horizons)
+        data = self._merge_data(static, temporal, observation_times)
 
         self.model.fit(
             data,
@@ -139,15 +139,15 @@ class DynamicDeephitTimeSeriesSurvival(TimeSeriesSurvivalPlugin):
         self,
         static: Optional[np.ndarray],
         temporal: Union[np.ndarray, List],
-        temporal_horizons: Union[np.ndarray, List],
+        observation_times: Union[np.ndarray, List],
         time_horizons: List,
     ) -> np.ndarray:
         "Predict risk"
         static = np.asarray(static)
         temporal = np.asarray(temporal)
-        temporal_horizons = np.asarray(temporal_horizons)
+        observation_times = np.asarray(observation_times)
 
-        data = self._merge_data(static, temporal, temporal_horizons)
+        data = self._merge_data(static, temporal, observation_times)
 
         return pd.DataFrame(
             self.model.predict_risk(data, time_horizons), columns=time_horizons
@@ -158,14 +158,14 @@ class DynamicDeephitTimeSeriesSurvival(TimeSeriesSurvivalPlugin):
         self,
         static: Optional[np.ndarray],
         temporal: Union[np.ndarray, List],
-        temporal_horizons: Union[np.ndarray, List],
+        observation_times: Union[np.ndarray, List],
     ) -> np.ndarray:
         "Predict embeddings"
         static = np.asarray(static)
         temporal = np.asarray(temporal)
-        temporal_horizons = np.asarray(temporal_horizons)
+        observation_times = np.asarray(observation_times)
 
-        data = self._merge_data(static, temporal, temporal_horizons)
+        data = self._merge_data(static, temporal, observation_times)
 
         return self.model.predict_emb(data).detach().cpu().numpy()
 

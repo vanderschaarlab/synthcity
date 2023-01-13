@@ -39,7 +39,11 @@ from synthcity.utils.serialization import load_from_file, save_to_file
 
 
 class Plugin(Serializable, metaclass=ABCMeta):
-    """Base class for all plugins.
+    """
+    .. inheritance-diagram:: synthcity.plugins.core.plugin.Plugin
+        :parts: 1
+
+    Base class for all plugins.
 
     Each derived class must implement the following methods:
         type() - a static method that returns the type of the plugin. e.g., debug, generative, bayesian, etc.
@@ -50,9 +54,21 @@ class Plugin(Serializable, metaclass=ABCMeta):
 
     If any method implementation is missing, the class constructor will fail.
 
-    Constructor Args:
-        strict: float.
+    Args:
+        strict: bool. Default = True
             If True, is raises an exception if the generated data is not following the requested constraints. If False, it returns only the rows that match the constraints.
+        workspace: Path
+            Path for caching intermediary results
+        compress_dataset: bool. Default = False
+            Drop redundant features before training the generator.
+        device:
+            PyTorch device: cpu or cuda.
+        random_state: int
+            Random seed
+        sampling_patience: int.
+            Max inference iterations to wait for the generated data to match the training schema.
+        sampling_strategy: str
+            Internal parameter for schema. marginal or uniform.
     """
 
     class Config:
@@ -61,25 +77,18 @@ class Plugin(Serializable, metaclass=ABCMeta):
 
     def __init__(
         self,
-        sampling_strategy: str = "marginal",  # uniform, marginal
         sampling_patience: int = 500,
         strict: bool = True,
         device: Any = DEVICE,
         random_state: int = 0,
         workspace: Path = Path("workspace"),
         compress_dataset: bool = False,
+        sampling_strategy: str = "marginal",  # uniform, marginal
     ) -> None:
-        """
-
-        Args:
-            sampling_strategy: str
-                Internal sampling strategy [marginal, uniform].
-            strict: bool
-                If True, the generation process will raise an exception if the synthetic data doesn't satisfy the generation constraints. If False, the generation process will return only the valid rows under the constraint.
-
-        """
         super().__init__()
         self._schema: Optional[Schema] = None
+        self._training_schema: Optional[Schema] = None
+
         self.sampling_strategy = sampling_strategy
         self.sampling_patience = sampling_patience
         self.strict = strict
@@ -91,6 +100,7 @@ class Plugin(Serializable, metaclass=ABCMeta):
         self.workspace = workspace
 
         self.fitted = False
+        self.expecting_conditional = False
 
     @staticmethod
     @abstractmethod
@@ -154,12 +164,17 @@ class Plugin(Serializable, metaclass=ABCMeta):
         Args:
             X: DataLoader.
                 The reference dataset.
-
+            cond: Optional, Union[pd.DataFrame, pd.Series, np.ndarray]
+                Training Conditional
         Returns:
             self
         """
         if isinstance(X, (pd.DataFrame)):
             X = GenericDataLoader(X)
+
+        if "cond" in kwargs and kwargs["cond"] is not None:
+            self.expecting_conditional = True
+
         self.data_info = X.info()
 
         self._schema = Schema(
@@ -198,7 +213,8 @@ class Plugin(Serializable, metaclass=ABCMeta):
         Args:
             X: DataLoader.
                 The reference dataset.
-
+            cond: Optional, Union[pd.DataFrame, pd.Series, np.ndarray]
+                Training Conditional
         Returns:
             self
         """
@@ -218,6 +234,8 @@ class Plugin(Serializable, metaclass=ABCMeta):
                 The number of samples to generate. If None, it generated len(reference_dataset) samples.
             constraints: optional Constraints
                 Optional constraints to apply on the generated data. If none, the reference schema constraints are applied.
+            cond: Optional, Union[pd.DataFrame, pd.Series, np.ndarray]
+                Generation Conditional
 
         Returns:
             <count> synthetic samples
@@ -227,6 +245,12 @@ class Plugin(Serializable, metaclass=ABCMeta):
 
         if self._schema is None:
             raise RuntimeError("Fit the model first")
+
+        has_gen_cond = "cond" in kwargs and kwargs["cond"] is not None
+        if has_gen_cond and not self.expecting_conditional:
+            raise RuntimeError(
+                "Conditional mismatch. Got inference conditional, without any training conditional"
+            )
 
         if count is None:
             count = self.data_info["len"]
@@ -271,6 +295,8 @@ class Plugin(Serializable, metaclass=ABCMeta):
                 The number of samples to generate. If None, it generated len(reference_dataset) samples.
             syn_schema:
                 The schema/constraints that need to be satisfied by the synthetic data.
+            cond: Optional, Union[pd.DataFrame, pd.Series, np.ndarray]
+                Generation Conditional
 
         Returns:
             <count> synthetic samples
@@ -324,23 +350,23 @@ class Plugin(Serializable, metaclass=ABCMeta):
         for it in range(self.sampling_patience):
             # sample
             if self.data_info["data_type"] == "time_series":
-                static, temporal, temporal_horizons, outcome = gen_cbk(
+                static, temporal, observation_times, outcome = gen_cbk(
                     count - offset, **kwargs
                 )
                 loader = TimeSeriesDataLoader(
                     temporal_data=temporal,
-                    temporal_horizons=temporal_horizons,
+                    observation_times=observation_times,
                     static_data=static,
                     outcome=outcome,
                     seq_offset=seq_offset,
                 )
             elif self.data_info["data_type"] == "time_series_survival":
-                static, temporal, temporal_horizons, T, E = gen_cbk(
+                static, temporal, observation_times, T, E = gen_cbk(
                     count - offset, **kwargs
                 )
                 loader = TimeSeriesSurvivalDataLoader(
                     temporal_data=temporal,
-                    temporal_horizons=temporal_horizons,
+                    observation_times=observation_times,
                     static_data=static,
                     T=T,
                     E=E,

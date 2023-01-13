@@ -10,7 +10,7 @@ from surv_helpers import generate_fixtures
 from synthcity.plugins import Plugin
 from synthcity.plugins.core.constraints import Constraints
 from synthcity.plugins.core.dataloader import SurvivalAnalysisDataLoader
-from synthcity.plugins.survival_analysis.plugin_survival_gan import plugin
+from synthcity.plugins.survival_analysis.plugin_survival_ctgan import plugin
 
 X = load_rossi()
 data = SurvivalAnalysisDataLoader(
@@ -20,7 +20,7 @@ data = SurvivalAnalysisDataLoader(
 )
 
 
-plugin_name = "survival_gan"
+plugin_name = "survival_ctgan"
 plugins_args = {
     "generator_n_layers_hidden": 1,
     "generator_n_units_hidden": 10,
@@ -54,21 +54,9 @@ def test_plugin_type(test_plugin: Plugin) -> None:
     "test_plugin", generate_fixtures(plugin_name, plugin, plugins_args)
 )
 def test_plugin_hyperparams(test_plugin: Plugin) -> None:
-    assert len(test_plugin.hyperparameter_space()) == 11
+    assert len(test_plugin.hyperparameter_space()) == 14
 
 
-@pytest.mark.parametrize(
-    "use_survival_conditional",
-    [True, False],
-)
-@pytest.mark.parametrize(
-    "dataloader_sampling_strategy",
-    [
-        "imbalanced_censoring",
-        "imbalanced_time_censoring",
-        "none",
-    ],
-)
 @pytest.mark.parametrize(
     "tte_strategy",
     [
@@ -76,16 +64,8 @@ def test_plugin_hyperparams(test_plugin: Plugin) -> None:
         "uncensoring",
     ],
 )
-def test_plugin_fit(
-    use_survival_conditional: bool, dataloader_sampling_strategy: str, tte_strategy: str
-) -> None:
-    test_plugin = plugin(
-        tte_strategy=tte_strategy,
-        dataloader_sampling_strategy=dataloader_sampling_strategy,
-        device="cpu",
-        use_survival_conditional=use_survival_conditional,
-        **plugins_args
-    )
+def test_plugin_fit(tte_strategy: str) -> None:
+    test_plugin = plugin(tte_strategy=tte_strategy, device="cpu", **plugins_args)
 
     test_plugin.fit(data)
 

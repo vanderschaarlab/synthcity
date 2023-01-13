@@ -56,12 +56,22 @@ class Benchmarks:
         """Benchmark the performance of several algorithms.
 
         Args:
-            tests:
-                The list of algorithms to evaluate
-            X:
+            tests: List[Tuple[str, str, dict]]
+                Tuples of form (testname: str, plugin_name, str, plugin_args: dict)
+            X: DataLoader
                 The baseline dataset to learn
+            X_test: Optional[DataLoader]
+                Optional test dataset for evaluation. If None, X will be split in train/test datasets.
             metrics:
                 List of metrics to test. By default, all metrics are evaluated.
+                Full dictionary of metrics is:
+                {
+                    'sanity': ['data_mismatch', 'common_rows_proportion', 'nearest_syn_neighbor_distance', 'close_values_probability', 'distant_values_probability'],
+                    'stats': ['jensenshannon_dist', 'chi_squared_test', 'feature_corr', 'inv_kl_divergence', 'ks_test', 'max_mean_discrepancy', 'wasserstein_dist', 'prdc', 'alpha_precision', 'survival_km_distance'],
+                    'performance': ['linear_model', 'mlp', 'xgb', 'feat_rank_distance'],
+                    'detection': ['detection_xgb', 'detection_mlp', 'detection_gmm', 'detection_linear'],
+                    'privacy': ['delta-presence', 'k-anonymization', 'k-map', 'distinct l-diversity', 'identifiability_score']
+                }
             repeats:
                 Number of test repeats
             synthetic_size: int
@@ -73,9 +83,9 @@ class Benchmarks:
             synthetic_reuse_if_exists: bool
                 If the current synthetic dataset is cached, it will be reused for the experiments.
             task_type: str
-                The task type to benchmark for performance. Options: classification, regression, survival_analysis.
+                The type of problem. Relevant for evaluating the downstream models with the correct metrics. Valid tasks are:  "classification", "regression", "survival_analysis", "time_series", "time_series_survival".
             workspace: Path
-                Path for caching experiments
+                Path for caching experiments. Default: "workspace".
             plugin_kwargs:
                 Optional kwargs for each algorithm. Example {"adsgan": {"n_iter": 10}},
         """
@@ -85,7 +95,7 @@ class Benchmarks:
 
         workspace.mkdir(parents=True, exist_ok=True)
 
-        plugin_cats = ["generic"]
+        plugin_cats = ["generic", "privacy"]
         if task_type == "survival_analysis":
             plugin_cats.append("survival_analysis")
         elif task_type == "time_series" or task_type == "time_series_survival":

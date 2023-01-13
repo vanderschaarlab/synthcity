@@ -20,6 +20,10 @@ from .vae import VAE
 
 class TabularVAE(nn.Module):
     """
+    .. inheritance-diagram:: synthcity.plugins.core.models.tabular_vae.TabularVAE
+        :parts: 1
+
+
     VAE for tabular data.
 
     This class combines VAE and tabular encoder to form a generative model for tabular data.

@@ -20,12 +20,9 @@ General-purpose generators
     :glob:
     :maxdepth: 2
 
-    AdsGAN <tutorials/plugins/generic/plugin_adsgan.ipynb>
     Bayesian Network <tutorials/plugins/generic/plugin_bayesian_network.ipynb>
     CTGAN <tutorials/plugins/generic/plugin_ctgan.ipynb>
     Normalizing Flows <tutorials/plugins/generic/plugin_nflow.ipynb>
-    PATEGAN <tutorials/plugins/generic/plugin_pategan.ipynb>
-    PrivBayes <tutorials/plugins/generic/plugin_privbayes.ipynb>
     TVAE <tutorials/plugins/generic/plugin_tvae.ipynb>
 
 
@@ -45,11 +42,11 @@ Privacy-related generators
     :glob:
     :maxdepth: 2
 
-    DECAF <tutorials/plugins/fairness/plugin_decaf.ipynb>
-    DP-GAN <tutorials/plugins/generic/plugin_dpgan.ipynb>
-    AdsGAN <tutorials/plugins/generic/plugin_adsgan.ipynb>
-    PATEGAN <tutorials/plugins/generic/plugin_pategan.ipynb>
-    PrivBayes <tutorials/plugins/generic/plugin_privbayes.ipynb>
+    DECAF <tutorials/plugins/privacy/plugin_decaf.ipynb>
+    DP-GAN <tutorials/plugins/privacy/plugin_dpgan.ipynb>
+    AdsGAN <tutorials/plugins/privacy/plugin_adsgan.ipynb>
+    PATEGAN <tutorials/plugins/privacy/plugin_pategan.ipynb>
+    PrivBayes <tutorials/plugins/privacy/plugin_privbayes.ipynb>
 
 Domain adaptation generators
 ------------------------------

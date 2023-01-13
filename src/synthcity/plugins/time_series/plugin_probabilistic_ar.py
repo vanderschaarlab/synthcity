@@ -15,7 +15,12 @@ from synthcity.utils.constants import DEVICE
 
 
 class ProbabilisticAutoregressivePlugin(Plugin):
-    """Synthetic time series generation using Probabilistic Autoregressive models.
+    """
+    .. inheritance-diagram:: synthcity.plugins.time_series.plugin_probabilistic_ar.ProbabilisticAutoregressivePlugin
+        :parts: 1
+
+
+    Synthetic time series generation using Probabilistic Autoregressive models.
 
     Args:
         n_iter: int
@@ -34,7 +39,7 @@ class ProbabilisticAutoregressivePlugin(Plugin):
         >>> static, temporal, horizons, outcome = GoogleStocksDataloader().load()
         >>> loader = TimeSeriesDataLoader(
         >>>             temporal_data=temporal,
-        >>>             temporal_horizons=horizons,
+        >>>             observation_times=horizons,
         >>>             static_data=static,
         >>>             outcome=outcome,
         >>> )
@@ -84,9 +89,9 @@ class ProbabilisticAutoregressivePlugin(Plugin):
             raise ValueError("Invalid data type = {X.type()}")
 
         if X.type() == "time_series":
-            static, temporal, temporal_horizons, outcome = X.unpack(pad=True)
+            static, temporal, observation_times, outcome = X.unpack(pad=True)
         elif X.type() == "time_series_survival":
-            static, temporal, temporal_horizons, T, E = X.unpack(pad=True)
+            static, temporal, observation_times, T, E = X.unpack(pad=True)
             outcome = pd.concat([pd.Series(T), pd.Series(E)], axis=1)
             outcome.columns = ["time_to_event", "event"]
 

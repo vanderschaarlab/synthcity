@@ -19,7 +19,12 @@ from synthcity.plugins.core.distribution import (
 
 
 class Schema(BaseModel):
-    """Utility class for defining the schema of a Dataset.
+    """
+    .. inheritance-diagram:: synthcity.plugins.core.schema.Schema
+        :parts: 1
+
+
+    Utility class for defining the schema of a Dataset.
 
     Constructor Args:
         domain: Dict

@@ -107,12 +107,12 @@ def test_detect_synth_timeseries(test_plugin: Plugin, evaluator_t: Type) -> None
     (
         static_data,
         temporal_data,
-        temporal_horizons,
+        observation_times,
         outcome,
     ) = GoogleStocksDataloader().load()
     data = TimeSeriesDataLoader(
         temporal_data=temporal_data,
-        temporal_horizons=temporal_horizons,
+        observation_times=observation_times,
         static_data=static_data,
         outcome=outcome,
     )

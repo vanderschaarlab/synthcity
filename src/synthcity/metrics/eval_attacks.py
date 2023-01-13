@@ -17,7 +17,11 @@ from synthcity.utils.serialization import load_from_file, save_to_file
 
 
 class AttackEvaluator(MetricEvaluator):
-    """Evaluating the risk of attribute inference attack.
+    """
+    .. inheritance-diagram:: synthcity.metrics.eval_attacks.AttackEvaluator
+        :parts: 1
+
+    Evaluating the risk of attribute inference attack.
 
     This class evaluates the risk of a type of privacy attack, known as attribute inference attack.
     In this setting, the attacker has access to the synthetic dataset as well as partial information about the real data
@@ -104,6 +108,13 @@ class AttackEvaluator(MetricEvaluator):
 
 
 class DataLeakageMLP(AttackEvaluator):
+    """
+    .. inheritance-diagram:: synthcity.metrics.eval_attacks.DataLeakageMLP
+        :parts: 1
+
+    Data leakage test using a neural net.
+    """
+
     @staticmethod
     def name() -> str:
         return "data_leakage_mlp"
@@ -139,6 +150,13 @@ class DataLeakageMLP(AttackEvaluator):
 
 
 class DataLeakageXGB(AttackEvaluator):
+    """
+    .. inheritance-diagram:: synthcity.metrics.eval_attacks.DataLeakageXGB
+        :parts: 1
+
+    Data leakage test using XGBoost
+    """
+
     @staticmethod
     def name() -> str:
         return "data_leakage_xgb"
@@ -167,6 +185,14 @@ class DataLeakageXGB(AttackEvaluator):
 
 
 class DataLeakageLinear(AttackEvaluator):
+    """
+    .. inheritance-diagram:: synthcity.metrics.eval_attacks.DataLeakageLinear
+        :parts: 1
+
+
+    Data leakage test using a linear model
+    """
+
     @staticmethod
     def name() -> str:
         return "data_leakage_linear"

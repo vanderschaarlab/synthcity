@@ -30,16 +30,16 @@ def test_hyperparams() -> None:
 
 @pytest.mark.parametrize("rnn_type", rnn_modes)
 def test_train(rnn_type: str) -> None:
-    static, temporal, temporal_horizons, outcome = PBCDataloader(as_numpy=True).load()
+    static, temporal, observation_times, outcome = PBCDataloader(as_numpy=True).load()
     T, E = outcome
 
     horizons = [0.25, 0.5, 0.75]
     time_horizons = np.quantile(T, horizons).tolist()
 
     model = DynamicDeephitTimeSeriesSurvival(rnn_type=rnn_type)
-    model.fit(static, temporal, temporal_horizons, T, E)
+    model.fit(static, temporal, observation_times, T, E)
     out = model.predict(
-        static, temporal, temporal_horizons, time_horizons=time_horizons
+        static, temporal, observation_times, time_horizons=time_horizons
     )
 
     assert out.shape == (len(temporal), len(time_horizons))
@@ -48,7 +48,7 @@ def test_train(rnn_type: str) -> None:
 @pytest.mark.parametrize("rnn_type", ["LSTM", "Transformer"])
 @pytest.mark.parametrize("output_type", ["MLP"])
 def test_train_prediction_dyn_deephit(rnn_type: str, output_type: str) -> None:
-    static, temporal, temporal_horizons, outcome = PBCDataloader(as_numpy=True).load()
+    static, temporal, observation_times, outcome = PBCDataloader(as_numpy=True).load()
     T, E = outcome
 
     horizons = [0.25, 0.5, 0.75]
@@ -56,7 +56,7 @@ def test_train_prediction_dyn_deephit(rnn_type: str, output_type: str) -> None:
 
     model = DynamicDeephitTimeSeriesSurvival(rnn_type=rnn_type, output_type=output_type)
     score = evaluate_ts_survival_model(
-        model, static, temporal, temporal_horizons, T, E, time_horizons
+        model, static, temporal, observation_times, T, E, time_horizons
     )
 
     print("Perf", model.name(), score["str"])
@@ -65,7 +65,7 @@ def test_train_prediction_dyn_deephit(rnn_type: str, output_type: str) -> None:
 
 @pytest.mark.slow
 def test_hyperparam_search() -> None:
-    static, temporal, temporal_horizons, outcome = PBCDataloader(as_numpy=True).load()
+    static, temporal, observation_times, outcome = PBCDataloader(as_numpy=True).load()
     T, E = outcome
 
     horizons = [0.25, 0.5, 0.75]
@@ -77,7 +77,7 @@ def test_hyperparam_search() -> None:
         DynamicDeephitTimeSeriesSurvival,
         static,
         temporal,
-        temporal_horizons,
+        observation_times,
         T,
         E,
         time_horizons,
@@ -85,7 +85,7 @@ def test_hyperparam_search() -> None:
 
     model = DynamicDeephitTimeSeriesSurvival(**args)
     score = evaluate_ts_survival_model(
-        model, static, temporal, temporal_horizons, T, E, time_horizons
+        model, static, temporal, observation_times, T, E, time_horizons
     )
 
     print("Perf", model.name(), score["str"])

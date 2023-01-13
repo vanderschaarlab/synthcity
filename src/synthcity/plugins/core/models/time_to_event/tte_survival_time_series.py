@@ -71,19 +71,19 @@ class TSSurvivalFunctionTimeToEvent(TimeToEventPlugin):
         self,
         static: Optional[np.ndarray],
         temporal: np.ndarray,
-        temporal_horizons: np.ndarray,
+        observation_times: np.ndarray,
         T: np.ndarray,
         E: np.ndarray,
     ) -> "TimeToEventPlugin":
         "Training logic"
-        self.model.fit(static, temporal, temporal_horizons, T, E)
+        self.model.fit(static, temporal, observation_times, T, E)
 
         self.time_horizons = np.linspace(
             T.min(), T.max(), self.time_points, dtype=int
         ).tolist()
 
         surv_fn = self.model.predict(
-            static, temporal, temporal_horizons, time_horizons=self.time_horizons
+            static, temporal, observation_times, time_horizons=self.time_horizons
         )
         surv_fn = surv_fn.loc[:, ~surv_fn.columns.duplicated()]
 
@@ -100,7 +100,7 @@ class TSSurvivalFunctionTimeToEvent(TimeToEventPlugin):
             n_temporal_window=temporal[0].shape[0],
             output_shape=[1],
             **self.rnn_generator_extra_args,
-        ).fit(data, temporal, temporal_horizons, Tlog)
+        ).fit(data, temporal, observation_times, Tlog)
 
         return self
 
@@ -109,11 +109,11 @@ class TSSurvivalFunctionTimeToEvent(TimeToEventPlugin):
         self,
         static: Optional[np.ndarray],
         temporal: Union[List, np.ndarray],
-        temporal_horizons: Union[List, np.ndarray],
+        observation_times: Union[List, np.ndarray],
     ) -> pd.Series:
         "Predict time-to-event"
         return self.predict_any(
-            static, temporal, temporal_horizons, np.ones(len(temporal))
+            static, temporal, observation_times, np.ones(len(temporal))
         )
 
     @validate_arguments(config=dict(arbitrary_types_allowed=True))
@@ -121,13 +121,13 @@ class TSSurvivalFunctionTimeToEvent(TimeToEventPlugin):
         self,
         static: Optional[np.ndarray],
         temporal: Union[List, np.ndarray],
-        temporal_horizons: Union[List, np.ndarray],
+        observation_times: Union[List, np.ndarray],
         E: np.ndarray,
     ) -> pd.Series:
         "Predict time-to-event or censoring"
 
         surv_fn = self.model.predict(
-            static, temporal, temporal_horizons, time_horizons=self.time_horizons
+            static, temporal, observation_times, time_horizons=self.time_horizons
         )
         surv_fn = surv_fn.loc[:, ~surv_fn.columns.duplicated()]
 
@@ -136,7 +136,7 @@ class TSSurvivalFunctionTimeToEvent(TimeToEventPlugin):
         )
 
         return np.exp(
-            self.tte_regressor.predict(data, temporal, temporal_horizons)
+            self.tte_regressor.predict(data, temporal, observation_times)
         ).squeeze()
 
     @staticmethod

@@ -153,6 +153,10 @@ class MultiActivationHead(nn.Module):
 
 class MLP(nn.Module):
     """
+    .. inheritance-diagram:: synthcity.plugins.core.models.mlp.MLP
+        :parts: 1
+
+
     Fully connected or residual neural nets for classification and regression.
 
     Parameters

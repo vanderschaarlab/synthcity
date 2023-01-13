@@ -1,4 +1,7 @@
-""""""
+"""
+Reference: Akrami, Haleh, Anand A. Joshi, Jian Li, Sergül Aydöre, and Richard M. Leahy. "A robust variational autoencoder using beta divergence." Knowledge-Based Systems 238 (2022): 107886.
+"""
+
 # stdlib
 from typing import Any, List, Optional, Union
 
@@ -24,9 +27,12 @@ from synthcity.plugins.core.schema import Schema
 
 
 class RTVAEPlugin(Plugin):
-    """Tabular VAE with robust beta divergence.
+    """
+    .. inheritance-diagram:: synthcity.plugins.generic.plugin_rtvae.RTVAEPlugin
+        :parts: 1
 
 
+    Tabular VAE with robust beta divergence.
 
     Args:
         decoder_n_layers_hidden: int
@@ -71,7 +77,6 @@ class RTVAEPlugin(Plugin):
         >>> plugin.generate(50)
 
 
-    Reference: Akrami, Haleh, Anand A. Joshi, Jian Li, Sergül Aydöre, and Richard M. Leahy. "A robust variational autoencoder using beta divergence." Knowledge-Based Systems 238 (2022): 107886.
     """
 
     @validate_arguments(config=dict(arbitrary_types_allowed=True))
@@ -198,7 +203,7 @@ class RTVAEPlugin(Plugin):
 
     def _generate(self, count: int, syn_schema: Schema, **kwargs: Any) -> pd.DataFrame:
         cond: Optional[Union[pd.DataFrame, pd.Series]] = None
-        if "cond" in kwargs:
+        if "cond" in kwargs and kwargs["cond"] is not None:
             cond = np.asarray(kwargs["cond"])
 
         return self._safe_generate(self.model.generate, count, syn_schema, cond=cond)

@@ -1,3 +1,8 @@
+"""
+Reference: "Modeling Tabular Data using Conditional GAN", Xu, Lei et al.
+Original implementation: https://github.com/sdv-dev/CTGAN
+"""
+
 # stdlib
 from typing import Any, List, Optional, Union
 
@@ -25,7 +30,12 @@ from synthcity.utils.constants import DEVICE
 
 
 class CTGANPlugin(Plugin):
-    """Conditional Tabular GAN implementation.
+    """
+    .. inheritance-diagram:: synthcity.plugins.generic.plugin_ctgan.CTGANPlugin
+        :parts: 1
+
+
+    Conditional Tabular GAN implementation.
 
     Args:
         generator_n_layers_hidden: int
@@ -61,7 +71,7 @@ class CTGANPlugin(Plugin):
         encoder_max_clusters: int
             The max number of clusters to create for continuous columns when encoding
         adjust_inference_sampling: bool
-            Adjust the conditional probabilities to the ones in the training set. Active only with the ConditionalSampler
+            Adjust the marginal probabilities in the synthetic data to closer match the training set. Active only with the ConditionalSampler
         # early stopping
         n_iter_print: int
             Number of iterations after which to print updates and check the validation loss.
@@ -84,8 +94,6 @@ class CTGANPlugin(Plugin):
         >>>
         >>> plugin.generate(50)
 
-    Reference: "Modeling Tabular Data using Conditional GAN", Xu, Lei et al.
-    Original implementation: https://github.com/sdv-dev/CTGAN
     """
 
     @validate_arguments(config=dict(arbitrary_types_allowed=True))
@@ -191,8 +199,11 @@ class CTGANPlugin(Plugin):
         ]
 
     def _prepare_cond(
-        self, cond: Union[pd.DataFrame, pd.Series, np.ndarray, list]
-    ) -> np.ndarray:
+        self, cond: Optional[Union[pd.DataFrame, pd.Series, np.ndarray, list]]
+    ) -> Optional[np.ndarray]:
+        if cond is None:
+            return None
+
         cond = np.asarray(cond)
         if len(cond.shape) == 1:
             cond = cond.reshape(-1, 1)

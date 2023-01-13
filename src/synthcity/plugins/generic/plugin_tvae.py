@@ -23,7 +23,11 @@ from synthcity.plugins.core.schema import Schema
 
 
 class TVAEPlugin(Plugin):
-    """Tabular VAE implementation.
+    """
+    .. inheritance-diagram:: synthcity.plugins.generic.plugin_tvae.TVAEPlugin
+        :parts: 1
+
+    Tabular VAE implementation.
 
     Args:
         decoder_n_layers_hidden: int
@@ -201,7 +205,7 @@ class TVAEPlugin(Plugin):
 
     def _generate(self, count: int, syn_schema: Schema, **kwargs: Any) -> pd.DataFrame:
         cond: Optional[Union[pd.DataFrame, pd.Series]] = None
-        if "cond" in kwargs:
+        if "cond" in kwargs and kwargs["cond"] is not None:
             cond = np.asarray(kwargs["cond"])
 
         return self._safe_generate(self.model.generate, count, syn_schema, cond=cond)

@@ -41,6 +41,7 @@ subprocess.run(
         "-f",
         "-o",
         "generated",
+        "-t", "_templates",
         "../src/synthcity/",
     ]
 )
@@ -81,8 +82,12 @@ extensions = [
     "sphinx.ext.autosummary",
     "sphinx.ext.napoleon",
     "m2r2",
-    "sphinxemoji.sphinxemoji",
+    #"sphinxemoji.sphinxemoji",
     "nbsphinx",
+    "sphinx_diagrams",
+    'IPython.sphinxext.ipython_console_highlighting',
+    'sphinx.ext.graphviz','sphinx.ext.inheritance_diagram',
+    "sphinx_pyreverse",
 ]
 
 autodoc_default_options = {
@@ -111,7 +116,7 @@ exclude_patterns = ["_build", "Thumbs.db", ".DS_Store", "**.ipynb_checkpoints"]
 # a list of builtin themes.
 #
 html_theme = "sphinx_rtd_theme"
-sphinxemoji_style = "twemoji"
+#sphinxemoji_style = "twemoji"
 
 
 # Add any paths that contain custom static files (such as style sheets) here,
@@ -126,9 +131,6 @@ nbsphinx_prolog = r"""
 .. only:: html
     .. role:: raw-html(raw)
         :format: html
-    .. nbinfo::
-        :raw-html:`<a href="https://colab.research.google.com/github/DTUWindEnergy/PyWake/blob/master/{{ docname }}"><img alt="Open and run in Colab (interactive)" src="https://colab.research.google.com/assets/colab-badge.svg" style="vertical-align:text-bottom"></a>
-        <a href="https://gitlab.windenergy.dtu.dk/TOPFARM/PyWake/-/tree/master/{{ docname }}"><img alt="Edit on Gitlab" src="https://img.shields.io/badge/Edit%20on-Gitlab-blue?style=flat&logo=gitlab" style="vertical-align:text-bottom"></a>`
 """
 
 autodoc_mock_imports = [

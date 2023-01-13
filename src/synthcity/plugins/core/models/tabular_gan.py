@@ -22,6 +22,10 @@ from .tabular_encoder import TabularEncoder
 
 class TabularGAN(torch.nn.Module):
     """
+    .. inheritance-diagram:: synthcity.plugins.core.models.tabular_gan.TabularGAN
+        :parts: 1
+
+
     GAN for tabular data.
 
     This class combines GAN and tabular encoder to form a generative model for tabular data.
@@ -96,7 +100,7 @@ class TabularGAN(torch.nn.Module):
         device: Any = DEVICE
             CUDA/CPU
         adjust_inference_sampling: bool
-            Adjust the conditional probabilities to the ones in the training set. Active only with the ConditionalSampler
+            Adjust the marginal probabilities in the synthetic data to closer match the training set. Active only with the ConditionalSampler
         # privacy settings
         dp_enabled: bool
             Train the discriminator with Differential Privacy guarantees

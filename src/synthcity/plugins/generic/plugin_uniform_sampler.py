@@ -13,7 +13,12 @@ from synthcity.plugins.core.schema import Schema
 
 
 class UniformSamplerPlugin(Plugin):
-    """Dummy plugin for debugging.
+    """
+    .. inheritance-diagram:: synthcity.plugins.generic.plugin_uniform_sampler.UniformSamplerPlugin
+        :parts: 1
+
+
+    Dummy plugin for debugging.
 
     Example:
         >>> from sklearn.datasets import load_iris

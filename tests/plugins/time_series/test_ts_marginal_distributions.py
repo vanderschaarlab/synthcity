@@ -25,12 +25,12 @@ def test_plugin_fit(test_plugin: Plugin) -> None:
     (
         static_data,
         temporal_data,
-        temporal_horizons,
+        observation_times,
         outcome,
     ) = GoogleStocksDataloader().load()
     data = TimeSeriesDataLoader(
         temporal_data=temporal_data,
-        temporal_horizons=temporal_horizons,
+        observation_times=observation_times,
         static_data=static_data,
         outcome=outcome,
     )
@@ -50,10 +50,10 @@ def test_plugin_fit(test_plugin: Plugin) -> None:
     ],
 )
 def test_plugin_generate(test_plugin: Plugin, source: Any) -> None:
-    static_data, temporal_data, temporal_horizons, outcome = source.load()
+    static_data, temporal_data, observation_times, outcome = source.load()
     data = TimeSeriesDataLoader(
         temporal_data=temporal_data,
-        temporal_horizons=temporal_horizons,
+        observation_times=observation_times,
         static_data=static_data,
         outcome=outcome,
     )
@@ -84,7 +84,7 @@ def test_plugin_generate_survival() -> None:
 
     survival_data = TimeSeriesSurvivalDataLoader(
         temporal_data=temporal_surv,
-        temporal_horizons=temporal_surv_horizons,
+        observation_times=temporal_surv_horizons,
         static_data=static_surv,
         T=T,
         E=E,

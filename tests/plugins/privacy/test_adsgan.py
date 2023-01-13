@@ -1,8 +1,11 @@
+# stdlib
+import sys
+
 # third party
 import numpy as np
 import pandas as pd
 import pytest
-from generic_helpers import generate_fixtures, get_airfoil_dataset
+from fhelpers import generate_fixtures, get_airfoil_dataset
 from sklearn.datasets import load_iris
 
 # synthcity absolute
@@ -10,10 +13,9 @@ from synthcity.metrics.eval import PerformanceEvaluatorXGB
 from synthcity.plugins import Plugin
 from synthcity.plugins.core.constraints import Constraints
 from synthcity.plugins.core.dataloader import GenericDataLoader
-from synthcity.plugins.generic.plugin_sdv_tvae import plugin
+from synthcity.plugins.privacy.plugin_adsgan import plugin
 
-plugin_name = "sdv_tvae"
-plugin_args = {"n_iter": 10}
+plugin_name = "adsgan"
 
 
 @pytest.mark.parametrize("test_plugin", generate_fixtures(plugin_name, plugin))
@@ -28,31 +30,38 @@ def test_plugin_name(test_plugin: Plugin) -> None:
 
 @pytest.mark.parametrize("test_plugin", generate_fixtures(plugin_name, plugin))
 def test_plugin_type(test_plugin: Plugin) -> None:
-    assert test_plugin.type() == "generic"
+    assert test_plugin.type() == "privacy"
 
 
 @pytest.mark.parametrize("test_plugin", generate_fixtures(plugin_name, plugin))
 def test_plugin_hyperparams(test_plugin: Plugin) -> None:
-    assert len(test_plugin.hyperparameter_space()) == 9
+    assert len(test_plugin.hyperparameter_space()) == 11
 
 
-@pytest.mark.parametrize(
-    "test_plugin", generate_fixtures(plugin_name, plugin, plugin_args)
-)
-def test_plugin_fit(test_plugin: Plugin) -> None:
-    X = get_airfoil_dataset()
-    test_plugin.fit(GenericDataLoader(X))
+def test_plugin_fit() -> None:
+    test_plugin = plugin(
+        n_iter=100, generator_n_layers_hidden=1, generator_n_units_hidden=10
+    )
+
+    df = pd.DataFrame(load_iris()["data"])
+    X = GenericDataLoader(df)
+
+    test_plugin.fit(X)
 
 
-@pytest.mark.parametrize(
-    "test_plugin", generate_fixtures(plugin_name, plugin, plugin_args)
-)
-def test_plugin_generate(test_plugin: Plugin) -> None:
-    X = get_airfoil_dataset()
-    test_plugin.fit(GenericDataLoader(X))
+def test_plugin_generate() -> None:
+    test_plugin = plugin(
+        n_iter=100, generator_n_layers_hidden=1, generator_n_units_hidden=10
+    )
+
+    df = get_airfoil_dataset()
+    X = GenericDataLoader(df)
+
+    test_plugin.fit(X)
 
     X_gen = test_plugin.generate()
     assert len(X_gen) == len(X)
+    assert X_gen.shape[1] == df.shape[1]
     assert test_plugin.schema_includes(X_gen)
 
     X_gen = test_plugin.generate(50)
@@ -60,12 +69,34 @@ def test_plugin_generate(test_plugin: Plugin) -> None:
     assert test_plugin.schema_includes(X_gen)
 
 
-@pytest.mark.parametrize(
-    "test_plugin", generate_fixtures(plugin_name, plugin, plugin_args)
-)
-def test_plugin_generate_constraints(test_plugin: Plugin) -> None:
-    X = pd.DataFrame(load_iris()["data"])
-    test_plugin.fit(GenericDataLoader(X))
+@pytest.mark.skipif(sys.platform != "linux", reason="Linux only for faster results")
+def test_plugin_conditional_adsgan() -> None:
+    test_plugin = plugin(generator_n_units_hidden=5)
+    Xraw, y = load_iris(as_frame=True, return_X_y=True)
+    Xraw["target"] = y
+
+    X = GenericDataLoader(Xraw)
+    test_plugin.fit(X, cond=y)
+
+    X_gen = test_plugin.generate(2 * len(X))
+    assert len(X_gen) == 2 * len(X)
+    assert test_plugin.schema_includes(X_gen)
+
+    count = 10
+    X_gen = test_plugin.generate(count, cond=np.ones(count))
+    assert len(X_gen) == count
+
+    assert (X_gen["target"] == 1).sum() >= 0.8 * count
+
+
+def test_plugin_generate_constraints() -> None:
+    test_plugin = plugin(
+        n_iter=100, generator_n_layers_hidden=1, generator_n_units_hidden=10
+    )
+
+    Xraw = pd.DataFrame(load_iris()["data"])
+    X = GenericDataLoader(Xraw)
+    test_plugin.fit(X)
 
     constraints = Constraints(
         rules=[
@@ -80,15 +111,15 @@ def test_plugin_generate_constraints(test_plugin: Plugin) -> None:
         ]
     )
 
-    X_gen = test_plugin.generate(constraints=constraints).dataframe()
+    X_gen = test_plugin.generate(constraints=constraints)
     assert len(X_gen) == len(X)
     assert test_plugin.schema_includes(X_gen)
-    assert constraints.filter(X_gen).sum() == len(X_gen)
+    assert constraints.filter(X_gen.dataframe()).sum() == len(X_gen)
 
-    X_gen = test_plugin.generate(count=50, constraints=constraints).dataframe()
+    X_gen = test_plugin.generate(count=50, constraints=constraints)
     assert len(X_gen) == 50
     assert test_plugin.schema_includes(X_gen)
-    assert constraints.filter(X_gen).sum() == len(X_gen)
+    assert constraints.filter(X_gen.dataframe()).sum() == len(X_gen)
     assert list(X_gen.columns) == list(X.columns)
 
 
@@ -100,7 +131,8 @@ def test_sample_hyperparams() -> None:
 
 
 @pytest.mark.slow
-def test_eval_performance_sdv_tvae() -> None:
+@pytest.mark.parametrize("compress_dataset", [True, False])
+def test_eval_performance(compress_dataset: bool) -> None:
     results = []
 
     Xraw, y = load_iris(return_X_y=True, as_frame=True)
@@ -108,7 +140,7 @@ def test_eval_performance_sdv_tvae() -> None:
     X = GenericDataLoader(Xraw)
 
     for retry in range(2):
-        test_plugin = plugin(n_iter=100)
+        test_plugin = plugin(n_iter=5000, compress_dataset=compress_dataset)
         evaluator = PerformanceEvaluatorXGB()
 
         test_plugin.fit(X)
@@ -116,5 +148,5 @@ def test_eval_performance_sdv_tvae() -> None:
 
         results.append(evaluator.evaluate(X, X_syn)["syn_id"])
 
-    print(plugin.name(), np.mean(results))
-    assert np.mean(results) > 0.7
+    print(plugin.name(), results)
+    assert np.mean(results) > 0.8

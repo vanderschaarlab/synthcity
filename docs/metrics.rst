@@ -1,5 +1,5 @@
-Metrics
-============
+Metrics and benchmarks
+=======================
 .. toctree::
     :glob:
     :maxdepth: 2
@@ -11,3 +11,4 @@ Metrics
     Privacy Metrics <generated/synthcity.metrics.eval_privacy.rst>
     Attacks <generated/synthcity.metrics.eval_attacks.rst>
     Weighted metrics <generated/synthcity.metrics.weighted_metrics.rst>
+    Benchmarks <generated/synthcity.benchmark.rst>
