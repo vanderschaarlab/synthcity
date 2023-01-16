@@ -7,8 +7,8 @@ from typing import Any, Dict, List, Optional, Tuple, Union
 import numpy as np
 import pandas as pd
 from pydantic import validate_arguments
+from rdt.transformers import FrequencyEncoder, UnixTimestampEncoder
 from sklearn.model_selection import train_test_split
-from sklearn.preprocessing import LabelEncoder
 
 # synthcity absolute
 from synthcity.plugins.core.constraints import Constraints
@@ -215,15 +215,38 @@ class DataLoader(metaclass=ABCMeta):
             encoders = {}
 
         for col in encoded.columns:
-            if len(encoded[col].unique()) < 15 or encoded[col].dtype.name in [
-                "object",
-                "category",
-            ]:
-                encoder = LabelEncoder().fit(encoded[col])
-                encoded[col] = encoder.transform(encoded[col])
+            if encoded[col].infer_objects().dtype.kind in ["O", "b"]:
+                encoder = FrequencyEncoder()
+                encoder.fit(encoded, col)
+                encoded[col] = encoder.transform(encoded[[col]]).values
+                encoders[col] = encoder
+            elif encoded[col].infer_objects().dtype.kind in ["M"]:
+                encoder = UnixTimestampEncoder()
+                encoder.fit(encoded, col)
+                encoded[col] = encoder.transform(encoded[[col]]).values
+                encoders[col] = encoder
+            elif len(encoded[col].unique()) < 15:
+                encoder = FrequencyEncoder()
+                encoder.fit(encoded, col)
+                encoded[col] = encoder.transform(encoded[[col]]).values
                 encoders[col] = encoder
 
         return self.from_info(encoded, self.info()), encoders
+
+    def decode(
+        self,
+        encoders: Dict[str, Any],
+    ) -> "DataLoader":
+        decoded = self.dataframe().copy()
+
+        for col in encoders:
+            decoded_local = decoded[[col]].copy()
+            decoded_local[f"{col}.value"] = decoded_local[col]
+            decoded[col] = encoders[col].reverse_transform(
+                decoded_local[[f"{col}.value"]]
+            )
+
+        return self.from_info(decoded, self.info())
 
 
 class GenericDataLoader(DataLoader):

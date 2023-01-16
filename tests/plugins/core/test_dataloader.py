@@ -1,8 +1,10 @@
 # stdlib
+from datetime import datetime
 from typing import Any
 
 # third party
 import numpy as np
+import pandas as pd
 import pytest
 from lifelines.datasets import load_rossi
 from sklearn.datasets import load_breast_cancer
@@ -49,6 +51,35 @@ def test_generic_dataloader_sanity() -> None:
 
     loader = GenericDataLoader(X, target_column="target", train_size=0.5)
     assert abs(len(loader.train()) - len(loader.test())) < 2
+
+
+def test_generic_dataloader_encoder() -> None:
+    def _get_dtypes(df: pd.DataFrame) -> list:
+        return list(df.infer_objects().dtypes)
+
+    test = pd.DataFrame(
+        [
+            [0, 0.344, "cat1", datetime.now()],
+            [1, 0.444, "cat1", datetime.now()],
+            [0, 0.544, "cat2", datetime.now()],
+        ]
+    )
+    loader = GenericDataLoader(test)
+    dtypes = _get_dtypes(test)
+
+    encoded, encoders = loader.encode()
+    encoded_dtypes = _get_dtypes(encoded.dataframe())
+    for dt in encoded_dtypes:
+        assert dt == "float64"
+
+    assert (encoded.columns == test.columns).all()
+
+    decoded = encoded.decode(encoders)
+    decoded_dtypes = _get_dtypes(decoded.dataframe())
+
+    assert (decoded.columns == test.columns).all()
+    for idx, dt in enumerate(dtypes):
+        assert dt == decoded_dtypes[idx]
 
 
 def test_generic_dataloader_info() -> None:
