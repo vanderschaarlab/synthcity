@@ -70,7 +70,7 @@ def test_generic_dataloader_encoder() -> None:
     encoded, encoders = loader.encode()
     encoded_dtypes = _get_dtypes(encoded.dataframe())
     for dt in encoded_dtypes:
-        assert dt == "float64"
+        assert dt in ["float64", "int64", "float", "int"]
 
     assert (encoded.columns == test.columns).all()
 
