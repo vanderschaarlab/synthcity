@@ -248,7 +248,7 @@ class DataLoader(metaclass=ABCMeta):
             decoded_local = decoded[[col]].copy()
             decoded_local[f"{col}.value"] = decoded_local[col]
             decoded[col] = encoders[col].reverse_transform(
-                decoded_local[[f"{col}.value"]]
+                decoded_local[[f"{col}.value"]].astype(float)
             )
 
         return self.from_info(decoded, self.info())
