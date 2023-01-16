@@ -216,6 +216,13 @@ class DataLoader(metaclass=ABCMeta):
 
             for col in encoded.columns:
                 if (
+                    encoded[col].infer_objects().dtype.kind == "i"
+                    and encoded[col].min() == 0
+                    and encoded[col].max() == len(encoded[col].unique()) - 1
+                ):
+                    continue
+
+                if (
                     encoded[col].infer_objects().dtype.kind in ["O", "b"]
                     or len(encoded[col].unique()) < 15
                 ):
