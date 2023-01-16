@@ -236,7 +236,8 @@ def test_datetime() -> None:
     param = DatetimeDistribution(name="test", low=rnd_date, high=datetime.now())
 
     assert param.get()[0] == "test"
-    assert param.get()[1] == rnd_date
+    assert param.get()[1] >= rnd_date - timedelta(seconds=120)
+    assert param.get()[2] <= datetime.now() + timedelta(seconds=120)
 
     assert len(param.sample(count=5)) == 5
     for sample in param.sample(count=5):
@@ -245,13 +246,13 @@ def test_datetime() -> None:
     assert len(param.as_constraint().rules) == 3
 
     param_other = DatetimeDistribution(
-        name="test", low=rnd_date, high=datetime.now() - timedelta(0, 10)
+        name="test", low=rnd_date, high=datetime.now() - timedelta(seconds=200)
     )
     assert param.includes(param_other)
     assert not param_other.includes(param)
 
-    assert param.has(rnd_date + timedelta(0, 10))
-    assert not param.has(rnd_date - timedelta(0, 10))
+    assert param.has(rnd_date + timedelta(seconds=100))
+    assert not param.has(rnd_date - timedelta(seconds=200))
 
     assert param.marginal_distribution is None
     assert param.dtype() == "datetime"

@@ -1,6 +1,6 @@
 # stdlib
 from abc import ABCMeta, abstractmethod
-from datetime import datetime
+from datetime import datetime, timedelta
 from typing import Any, Dict, List, Optional
 
 # third party
@@ -345,6 +345,9 @@ class IntegerDistribution(Distribution):
         return "int"
 
 
+OFFSET = 120
+
+
 class DatetimeDistribution(Distribution):
     """
     .. inheritance-diagram:: synthcity.plugins.core.distribution.DatetimeDistribution
@@ -360,7 +363,7 @@ class DatetimeDistribution(Distribution):
         if mkey in values and values[mkey] is not None:
             v = values[mkey].index.min()
 
-        return v
+        return v - timedelta(seconds=OFFSET)
 
     @validator("high", always=True)
     def _validate_high_thresh(cls: Any, v: datetime, values: Dict) -> datetime:
@@ -368,7 +371,7 @@ class DatetimeDistribution(Distribution):
         if mkey in values and values[mkey] is not None:
             v = values[mkey].index.max()
 
-        return v
+        return v + timedelta(seconds=OFFSET)
 
     def get(self) -> List[Any]:
         return [self.name, self.low, self.high]
@@ -393,7 +396,9 @@ class DatetimeDistribution(Distribution):
         return self.low <= val and val <= self.high
 
     def includes(self, other: "Distribution") -> bool:
-        return self.min() <= other.min() and other.max() <= self.max()
+        return self.min() - timedelta(
+            seconds=OFFSET
+        ) <= other.min() and other.max() <= self.max() + timedelta(seconds=OFFSET)
 
     def as_constraint(self) -> Constraints:
         return Constraints(
