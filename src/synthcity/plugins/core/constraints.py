@@ -266,7 +266,7 @@ class Constraints(BaseModel):
         rules = self.feature_constraints(feature)
 
         dist_template = "float"
-        dist_args = {"low": np.iinfo(np.int32).min, "high": np.iinfo(np.int32).max}
+        dist_args = {"low": np.iinfo(np.int64).min, "high": np.iinfo(np.int64).max}
 
         for op, value in rules:
             if op == "in":

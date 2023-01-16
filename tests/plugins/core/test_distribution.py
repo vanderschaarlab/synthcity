@@ -1,9 +1,14 @@
+# stdlib
+import random
+from datetime import datetime, timedelta
+
 # third party
 import pandas as pd
 
 # synthcity absolute
 from synthcity.plugins.core.distribution import (
     CategoricalDistribution,
+    DatetimeDistribution,
     FloatDistribution,
     IntegerDistribution,
     constraint_to_distribution,
@@ -216,3 +221,37 @@ def test_float_constraint_to_distribution() -> None:
     assert new_dist.name == "test"
     assert new_dist.low == -1
     assert new_dist.high == 5
+
+
+def gen_datetime(min_year: int = 2000, max_year: int = datetime.now().year) -> datetime:
+    # generate a datetime in format yyyy-mm-dd hh:mm:ss.000000
+    start = datetime(min_year, 1, 1, 00, 00, 00)
+    years = max_year - min_year + 1
+    end = start + timedelta(days=365 * years)
+    return start + (end - start) * random.random()
+
+
+def test_datetime() -> None:
+    rnd_date = gen_datetime()
+    param = DatetimeDistribution(name="test", low=rnd_date, high=datetime.now())
+
+    assert param.get()[0] == "test"
+    assert param.get()[1] == rnd_date
+
+    assert len(param.sample(count=5)) == 5
+    for sample in param.sample(count=5):
+        assert sample < datetime.now()
+        assert sample > datetime.utcfromtimestamp(0)
+    assert len(param.as_constraint().rules) == 3
+
+    param_other = DatetimeDistribution(
+        name="test", low=rnd_date, high=datetime.now() - timedelta(0, 10)
+    )
+    assert param.includes(param_other)
+    assert not param_other.includes(param)
+
+    assert param.has(rnd_date + timedelta(0, 10))
+    assert not param.has(rnd_date - timedelta(0, 10))
+
+    assert param.marginal_distribution is None
+    assert param.dtype() == "datetime"

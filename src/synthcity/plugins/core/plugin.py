@@ -88,6 +88,7 @@ class Plugin(Serializable, metaclass=ABCMeta):
         super().__init__()
         self._schema: Optional[Schema] = None
         self._training_schema: Optional[Schema] = None
+        self._data_encoders: Optional[Dict] = None
 
         self.sampling_strategy = sampling_strategy
         self.sampling_patience = sampling_patience
@@ -218,6 +219,7 @@ class Plugin(Serializable, metaclass=ABCMeta):
             random_state=self.random_state,
         )
 
+        X, self._data_encoders = X.encode()
         if self.compress_dataset:
             X_hash = X.hash()
             bkp_file = (
@@ -315,6 +317,8 @@ class Plugin(Serializable, metaclass=ABCMeta):
         X_syn = self._generate(count=count, syn_schema=syn_schema, **kwargs)
         if self.compress_dataset:
             X_syn = X_syn.decompress(self.compress_context)
+        if self._data_encoders is not None:
+            X_syn = X_syn.decode(self._data_encoders)
 
         # The dataset is decompressed here, we can use the public schema
         gen_constraints = self.schema().as_constraints()

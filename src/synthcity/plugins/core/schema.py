@@ -11,6 +11,7 @@ from synthcity.plugins.core.constraints import Constraints
 from synthcity.plugins.core.dataloader import DataLoader
 from synthcity.plugins.core.distribution import (
     CategoricalDistribution,
+    DatetimeDistribution,
     Distribution,
     FloatDistribution,
     IntegerDistribution,
@@ -68,37 +69,48 @@ class Schema(BaseModel):
 
         if sampling_strategy == "marginal":
             for col in X.columns:
-                if X[col].dtype == "object" or len(X[col].unique()) < 10:
+                if X[col].dtype.kind in ["O", "b"] or len(X[col].unique()) < 10:
                     feature_domain[col] = CategoricalDistribution(
                         name=col, data=X[col], random_state=random_state
                     )
-                elif X[col].dtype in ["int", "int32", "int64", "uint32", "uint64"]:
+                elif X[col].dtype.kind == "i":
                     feature_domain[col] = IntegerDistribution(
                         name=col, data=X[col], random_state=random_state
                     )
-                elif X[col].dtype in ["float", "float32", "float64", "double"]:
+                elif X[col].dtype.kind == "f":
                     feature_domain[col] = FloatDistribution(
+                        name=col, data=X[col], random_state=random_state
+                    )
+                elif X[col].dtype.kind == "M":
+                    feature_domain[col] = DatetimeDistribution(
                         name=col, data=X[col], random_state=random_state
                     )
                 else:
                     raise ValueError("unsupported format ", col)
         elif sampling_strategy == "uniform":
             for col in X.columns:
-                if X[col].dtype == "object" or len(X[col].unique()) < 10:
+                if X[col].dtype.kind in ["O", "b"] or len(X[col].unique()) < 10:
                     feature_domain[col] = CategoricalDistribution(
                         name=col,
                         choices=list(X[col].unique()),
                         random_state=random_state,
                     )
-                elif X[col].dtype in ["int", "int32", "int64", "uint32", "uint64"]:
+                elif X[col].dtype.kind == "i":
                     feature_domain[col] = IntegerDistribution(
                         name=col,
                         low=X[col].min(),
                         high=X[col].max(),
                         random_state=random_state,
                     )
-                elif X[col].dtype in ["float", "float64", "double"]:
+                elif X[col].dtype.kind == "f":
                     feature_domain[col] = FloatDistribution(
+                        name=col,
+                        low=X[col].min(),
+                        high=X[col].max(),
+                        random_state=random_state,
+                    )
+                elif X[col].dtype.kind == "M":
+                    feature_domain[col] = DatetimeDistribution(
                         name=col,
                         low=X[col].min(),
                         high=X[col].max(),
