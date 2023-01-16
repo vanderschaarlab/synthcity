@@ -1,5 +1,7 @@
 # stdlib
+import random
 import sys
+from datetime import datetime, timedelta
 
 # third party
 import numpy as np
@@ -155,3 +157,29 @@ def test_plugin_conditional_ctgan() -> None:
     assert len(X_gen) == count
 
     assert (X_gen["target"] == 1).sum() >= 0.8 * count
+
+
+def gen_datetime(min_year: int = 2000, max_year: int = datetime.now().year) -> datetime:
+    # generate a datetime in format yyyy-mm-dd hh:mm:ss.000000
+    start = datetime(min_year, 1, 1, 00, 00, 00)
+    years = max_year - min_year + 1
+    end = start + timedelta(days=365 * years)
+    return start + (end - start) * random.random()
+
+
+def test_plugin_encoding() -> None:
+    data = [[gen_datetime(), i % 2 == 0, i] for i in range(1000)]
+
+    df = pd.DataFrame(data, columns=["date", "bool", "int"])
+    test_plugin = plugin(generator_n_units_hidden=5)
+    test_plugin.fit(df)
+
+    syn = test_plugin.generate(10)
+
+    assert len(syn) == 10
+    assert test_plugin.schema_includes(syn)
+
+    syn_df = syn.dataframe()
+
+    assert syn_df["date"].infer_objects().dtype.kind == "M"
+    assert syn_df["bool"].infer_objects().dtype.kind == "b"

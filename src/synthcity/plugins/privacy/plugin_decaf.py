@@ -3,7 +3,7 @@ Reference: Boris van Breugel, Trent Kyono, Jeroen Berrevoets, Mihaela van der Sc
 """
 
 # stdlib
-from typing import Any, List, Tuple
+from typing import Any, Dict, List, Optional, Tuple
 
 # third party
 import pandas as pd
@@ -112,7 +112,8 @@ class DECAFPlugin(Plugin):
 
     def __init__(
         self,
-        n_iter: int = 1000,
+        n_iter: int = 100,
+        n_iter_baseline: int = 1000,
         generator_n_layers_hidden: int = 2,
         generator_n_units_hidden: int = 500,
         generator_nonlin: str = "relu",
@@ -149,6 +150,7 @@ class DECAFPlugin(Plugin):
         super().__init__(**kwargs)
 
         self.n_iter = n_iter
+        self.n_iter_baseline = n_iter_baseline
         self.generator_n_layers_hidden = generator_n_layers_hidden
         self.generator_n_units_hidden = generator_n_units_hidden
         self.generator_nonlin = generator_nonlin
@@ -215,53 +217,126 @@ class DECAFPlugin(Plugin):
             "bds": estimators.BDsScore,
         }[self.struct_learning_score]
 
-    def _get_dag(self, X: pd.DataFrame) -> Any:
-        if self.struct_learning_search_method == "d-struct":
+    def get_dag(
+        self,
+        X: pd.DataFrame,
+        struct_learning_search_method: Optional[str] = None,
+        as_index: bool = False,
+    ) -> Any:
+        if struct_learning_search_method is None:
+            struct_learning_search_method = self.struct_learning_search_method
+        if struct_learning_search_method == "d-struct":
             return get_dstruct_dag(
                 X,
                 batch_size=self.batch_size,
                 seed=self.random_state,
-                n_iter=self.n_iter,
+                n_iter=self.n_iter_baseline,
             )
 
         scoring_method = scoring_method = self._get_structure_scorer()(data=X)
-        if self.struct_learning_search_method == "hillclimb":
+        if struct_learning_search_method == "hillclimb":
             raw_dag = estimators.HillClimbSearch(data=X).estimate(
                 scoring_method=scoring_method,
                 max_indegree=self.struct_max_indegree,
                 max_iter=self.struct_learning_n_iter,
                 show_progress=False,
             )
-        elif self.struct_learning_search_method == "pc":
+        elif struct_learning_search_method == "pc":
             raw_dag = estimators.PC(data=X).estimate(
                 scoring_method=scoring_method, show_progress=False
             )
-        elif self.struct_learning_search_method == "tree_search":
+        elif struct_learning_search_method == "tree_search":
             raw_dag = estimators.TreeSearch(data=X).estimate(show_progress=False)
-        elif self.struct_learning_search_method == "mmhc":
+        elif struct_learning_search_method == "mmhc":
             raw_dag = estimators.MmhcEstimator(data=X).estimate(
                 scoring_method=scoring_method,
             )
-        elif self.struct_learning_search_method == "exhaustive":
+        elif struct_learning_search_method == "exhaustive":
             raw_dag = estimators.ExhaustiveSearch(data=X).estimate()
         else:
-            raise ValueError(f"invalid estimator {self.struct_learning_search_method}")
+            raise ValueError(f"invalid estimator {struct_learning_search_method}")
 
         raw_dag = raw_dag.edges()
         dag = []
-        for src, dst in raw_dag:
-            dag.append(
-                (
-                    X.columns.values.tolist().index(src),
-                    X.columns.values.tolist().index(dst),
+
+        if as_index:
+            for src, dst in raw_dag:
+                dag.append(
+                    (
+                        X.columns.values.tolist().index(src),
+                        X.columns.values.tolist().index(dst),
+                    )
                 )
-            )
+        else:
+            for src, dst in raw_dag:
+                dag.append((src, dst))
 
         return dag
 
+    def _encode_dag(self, dag: List[Tuple[str, str]]) -> List[Tuple[int, int]]:
+        encoder = self.baseline_generator.get_encoder()
+        encoded_dag = []
+        for edge in dag:
+            for src_col in encoder.get_column_info(edge[0]).output_columns:
+                for dst_col in encoder.get_column_info(edge[1]).output_columns:
+                    encoded_dag.append(
+                        (
+                            self.encoded_features.index(src_col),
+                            self.encoded_features.index(dst_col),
+                        )
+                    )
+
+        return encoded_dag
+
+    def _encode_edges(
+        self,
+        edges: Dict[str, List[str]],
+    ) -> Dict[int, List[int]]:
+        encoder = self.baseline_generator.get_encoder()
+
+        for src_col in edges:
+            if src_col not in self.original_features:
+                raise ValueError(
+                    f"biased_edges: src_col {src_col} not found in original columns"
+                )
+            for dst_col in edges[src_col]:
+                if dst_col not in self.original_features:
+                    raise ValueError(
+                        f"biased_edges: dst_col {dst_col} not found in original columns"
+                    )
+
+        encoded_dict: Dict[int, List[int]] = {}
+        for src_col in edges:
+            for encoded_src_col in encoder.get_column_info(src_col).output_columns:
+                encoded_dict[encoded_src_col] = []
+
+                for dst_col in edges[src_col]:
+                    for encoded_dst_col in encoder.get_column_info(
+                        dst_col
+                    ).output_columns:
+                        encoded_dict[encoded_src_col].append(encoded_dst_col)
+
+        return encoded_dict
+
     def _fit(
-        self, X: DataLoader, *args: Any, dag: List[Tuple[int, int]] = [], **kwargs: Any
+        self,
+        X: DataLoader,
+        *args: Any,
+        dag: List[Tuple[str, str]] = [],  # list of tuples (column1, column2)
+        **kwargs: Any,
     ) -> "DECAFPlugin":
+        # sanity checks
+        for lcol, rcol in dag:
+            if lcol not in X.columns:
+                raise ValueError(
+                    f"DAG value {lcol} not found in the training dataset: {X.dataframe()}"
+                )
+
+            if rcol not in X.columns:
+                raise ValueError(
+                    f"DAG value {rcol} not found in the training dataset: {X.dataframe()}"
+                )
+
         # train the baseline generator
         log.info("[DECAF] train baseline generator")
         self.baseline_generator = TabularGAN(
@@ -275,7 +350,7 @@ class DECAFPlugin(Plugin):
             generator_nonlin_out_continuous="none",
             generator_lr=self.lr,
             generator_residual=True,
-            generator_n_iter=self.n_iter,
+            generator_n_iter=self.n_iter_baseline,
             generator_batch_norm=False,
             generator_dropout=0,
             generator_weight_decay=self.weight_decay,
@@ -301,19 +376,22 @@ class DECAFPlugin(Plugin):
         df = X.dataframe()
         df = self.baseline_generator.encode(df)
 
-        if dag == [] and self.struct_learning_enabled:
-            dag = self._get_dag(df)
+        self.original_features = list(X.columns)
+        self.encoded_features = list(df.columns)
 
-        log.info(f"[DECAF] using DAG {dag}")
+        encoded_dag = self._encode_dag(dag)
+
+        if encoded_dag == [] and self.struct_learning_enabled:
+            encoded_dag = self.get_dag(df, as_index=True)
+
+        log.info(f"[DECAF] using encoded DAG {encoded_dag}")
 
         dm = DataModule(df)
-        self.features = X.columns
-        self.encoded_features = df.columns
 
         log.info("[DECAF] train debiasing generator")
         self.model = DECAF(
             dm.dims[0],
-            dag_seed=dag,
+            dag_seed=encoded_dag,
             h_dim=self.generator_n_units_hidden,
             lr=self.lr,
             batch_size=self.batch_size,
@@ -340,14 +418,25 @@ class DECAFPlugin(Plugin):
 
         return self
 
-    def _generate(self, count: int, syn_schema: Schema, **kwargs: Any) -> pd.DataFrame:
+    def _generate(
+        self,
+        count: int,
+        syn_schema: Schema,
+        biased_edges: Dict[str, List[str]] = {},
+        **kwargs: Any,
+    ) -> pd.DataFrame:
+        encoded_biased_edges = self._encode_edges(biased_edges)
+
         def _sample(count: int) -> pd.DataFrame:
             # generate baseline values
             seed_values = self.baseline_generator(count)
             seed_values = torch.from_numpy(seed_values).to(DEVICE)
             # debias baseline values
             vals = (
-                self.model.gen_synthetic(seed_values, **kwargs).detach().cpu().numpy()
+                self.model.gen_synthetic(seed_values, biased_edges=encoded_biased_edges)
+                .detach()
+                .cpu()
+                .numpy()
             )
 
             output = self.baseline_generator.decode(
