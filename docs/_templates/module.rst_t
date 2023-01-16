@@ -2,6 +2,8 @@
 {{- [basename, "module"] | join(' ') | e | heading }}
 
 {% endif -%}
+.. uml:: {{ qualname }}
+    :classes:
 .. automodule:: {{ qualname }}
 
 {%- for option in automodule_options %}
