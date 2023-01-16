@@ -7,7 +7,7 @@ from typing import Any, Dict, List, Optional, Tuple, Union
 import numpy as np
 import pandas as pd
 from pydantic import validate_arguments
-from rdt.transformers import FrequencyEncoder, UnixTimestampEncoder
+from rdt.transformers import FrequencyEncoder, LabelEncoder, UnixTimestampEncoder
 from sklearn.model_selection import train_test_split
 
 # synthcity absolute
@@ -214,22 +214,25 @@ class DataLoader(metaclass=ABCMeta):
         else:
             encoders = {}
 
-        for col in encoded.columns:
-            if encoded[col].infer_objects().dtype.kind in ["O", "b"]:
-                encoder = FrequencyEncoder()
-                encoder.fit(encoded, col)
-                encoded[col] = encoder.transform(encoded[[col]]).values
-                encoders[col] = encoder
-            elif encoded[col].infer_objects().dtype.kind in ["M"]:
-                encoder = UnixTimestampEncoder()
-                encoder.fit(encoded, col)
-                encoded[col] = encoder.transform(encoded[[col]]).values
-                encoders[col] = encoder
-            elif len(encoded[col].unique()) < 15:
-                encoder = FrequencyEncoder()
-                encoder.fit(encoded, col)
-                encoded[col] = encoder.transform(encoded[[col]]).values
-                encoders[col] = encoder
+            for col in encoded.columns:
+                if encoded[col].infer_objects().dtype.kind in ["O", "b"]:
+                    if col in self.compression_protected_features():
+                        encoder = LabelEncoder()
+                    else:
+                        encoder = FrequencyEncoder()
+                    encoder.fit(encoded, col)
+                    encoded[col] = encoder.transform(encoded[[col]]).values
+                    encoders[col] = encoder
+                elif encoded[col].infer_objects().dtype.kind in ["M"]:
+                    encoder = UnixTimestampEncoder()
+                    encoder.fit(encoded, col)
+                    encoded[col] = encoder.transform(encoded[[col]]).values
+                    encoders[col] = encoder
+                elif len(encoded[col].unique()) < 15:
+                    encoder = FrequencyEncoder()
+                    encoder.fit(encoded, col)
+                    encoded[col] = encoder.transform(encoded[[col]]).values
+                    encoders[col] = encoder
 
         return self.from_info(encoded, self.info()), encoders
 
