@@ -241,6 +241,9 @@ class TabularVAE(nn.Module):
     def decode(self, X: pd.DataFrame) -> pd.DataFrame:
         return self.encoder.inverse_transform(X)
 
+    def get_encoder(self) -> TabularEncoder:
+        return self.encoder
+
     @validate_arguments(config=dict(arbitrary_types_allowed=True))
     def fit(
         self,

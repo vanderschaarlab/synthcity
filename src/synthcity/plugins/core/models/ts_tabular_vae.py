@@ -219,6 +219,9 @@ class TimeSeriesTabularVAE(torch.nn.Module):
     ) -> Tuple:
         return self.encoder.inverse_transform_observation_times(observation_times)
 
+    def get_encoder(self) -> TimeSeriesTabularEncoder:
+        return self.encoder
+
     @validate_arguments(config=dict(arbitrary_types_allowed=True))
     def fit(
         self,
