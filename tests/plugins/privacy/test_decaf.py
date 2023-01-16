@@ -161,6 +161,7 @@ def test_plugin_generate_and_learn_dag(struct_learning_search_method: str) -> No
 
 
 @pytest.mark.parametrize("use_dag_seed", [True, False])
+@pytest.mark.skipif(sys.platform != "linux", reason="Linux only for faster results")
 def test_debiasing(use_dag_seed: bool) -> None:
     # causal structure is in dag_seed
     synthetic_dag_seed = [
