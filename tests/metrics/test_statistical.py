@@ -203,7 +203,7 @@ def test_evaluate_wasserstein_distance(test_plugin: Plugin) -> None:
     assert WassersteinDistance.direction() == "minimize"
 
 
-@pytest.mark.parametrize("test_plugin", [Plugins().get("dummy_sampler")])
+@pytest.mark.parametrize("test_plugin", [Plugins().get("ctgan")])
 def test_evaluate_prdc(test_plugin: Plugin) -> None:
     X, y = load_iris(return_X_y=True, as_frame=True)
     X["target"] = y
