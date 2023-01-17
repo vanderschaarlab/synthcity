@@ -1,4 +1,4 @@
-__version__ = "0.1.4"
+__version__ = "0.1.5"
 
 MAJOR_VERSION = ".".join(__version__.split(".")[:-1])
 MINOR_VERSION = __version__.split(".")[-1]
