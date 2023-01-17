@@ -288,7 +288,7 @@ class Constraints(BaseModel):
                 dist_args["high"] = value - 1
                 if "choices" in dist_args:
                     dist_args["choices"] = [
-                        v for v in dist_args["choices"] if v <= value
+                        v for v in dist_args["choices"] if v < value
                     ]
             elif (op == "ge" or op == ">=") and dist_args["low"] < value:
                 dist_args["low"] = value
