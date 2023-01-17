@@ -79,20 +79,14 @@ def test_plugin_generate(test_plugin: Plugin, serialize: bool) -> None:
 @pytest.mark.parametrize(
     "test_plugin", generate_fixtures(plugin_name, plugin, plugin_args)
 )
-def test_plugin_generate_constraints(test_plugin: Plugin) -> None:
-    X = pd.DataFrame(load_iris()["data"])
+def test_plugin_generate_constraints_ctgan(test_plugin: Plugin) -> None:
+    X, y = load_iris(as_frame=True, return_X_y=True)
+    X["target"] = y
     test_plugin.fit(GenericDataLoader(X))
 
     constraints = Constraints(
         rules=[
-            ("0", "le", 6),
-            ("0", "ge", 4.3),
-            ("1", "le", 4.4),
-            ("1", "ge", 3),
-            ("2", "le", 5.5),
-            ("2", "ge", 1.0),
-            ("3", "le", 2),
-            ("3", "ge", 0.1),
+            ("target", "eq", 1),
         ]
     )
 
@@ -100,6 +94,7 @@ def test_plugin_generate_constraints(test_plugin: Plugin) -> None:
     assert len(X_gen) == len(X)
     assert test_plugin.schema_includes(X_gen)
     assert constraints.filter(X_gen).sum() == len(X_gen)
+    assert (X_gen["target"] == 1).all()
 
     X_gen = test_plugin.generate(count=50, constraints=constraints).dataframe()
     assert len(X_gen) == 50

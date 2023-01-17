@@ -269,8 +269,23 @@ class Plugin(Serializable, metaclass=ABCMeta):
         Args:
             count: optional int.
                 The number of samples to generate. If None, it generated len(reference_dataset) samples.
-            constraints: optional Constraints
+            cond: Optional, Union[pd.DataFrame, pd.Series, np.ndarray].
+                Optional Generation Conditional. The conditional can be used only if the model was trained using a conditional too.
+                If provided, it must have `count` length.
+                Not all models support conditionals. The conditionals can be used in VAEs or GANs to speed-up the generation under some constraints. For model agnostic solutions, check out the `constraints` parameter.
+            constraints: optional Constraints.
                 Optional constraints to apply on the generated data. If none, the reference schema constraints are applied. The constraints are model agnostic, and will filter the output of the generative model.
+                The constraints are a list of rules. Each rule is a tuple of the form (<feature>, <operation>, <value>).
+
+                Valid Operations:
+                    - "<", "lt" : less than <value>
+                    - "<=", "le": less or equal with <value>
+                    - ">", "gt" : greater than <value>
+                    - ">=", "ge": greater or equal with <value>
+                    - "==", "eq": equal with <value>
+                    - "in": valid for categorical features, and <value> must be array. for example, ("target", "in", [0, 1])
+                    - "dtype": <value> can be a data type. For example, ("target", "dtype", "int")
+
                 Usage example:
                     >>> from synthcity.plugins.core.constraints import Constraints
                     >>> constraints = Constraints(
@@ -286,9 +301,6 @@ class Plugin(Serializable, metaclass=ABCMeta):
                     >>>
                     >>> assert (syn_data["InterestingFeature"] == 0).all()
 
-            cond: Optional, Union[pd.DataFrame, pd.Series, np.ndarray]
-                Optional Generation Conditional. The conditional can be used only if the model was trained using a conditional too.
-                If provided, it must have `count` length.
         Returns:
             <count> synthetic samples
         """
