@@ -365,5 +365,4 @@ If you use this code, please cite the associated paper:
   year = {2023},
   copyright = {Creative Commons Attribution 4.0 International}
 }
-}
 ```
