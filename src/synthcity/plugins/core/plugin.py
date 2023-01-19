@@ -35,6 +35,7 @@ from synthcity.plugins.core.distribution import (
 from synthcity.plugins.core.schema import Schema
 from synthcity.plugins.core.serializable import Serializable
 from synthcity.utils.constants import DEVICE
+from synthcity.utils.reproducibility import enable_reproducible_results
 from synthcity.utils.serialization import load_from_file, save_to_file
 
 
@@ -86,6 +87,9 @@ class Plugin(Serializable, metaclass=ABCMeta):
         sampling_strategy: str = "marginal",  # uniform, marginal
     ) -> None:
         super().__init__()
+
+        enable_reproducible_results(random_state)
+
         self._schema: Optional[Schema] = None
         self._training_schema: Optional[Schema] = None
         self._data_encoders: Optional[Dict] = None

@@ -3,6 +3,7 @@ Reference: "Differentially Private Generative Adversarial Network", Xie, Liyang 
 """
 
 # stdlib
+from pathlib import Path
 from typing import Any, List, Optional, Union
 
 # third party
@@ -134,14 +135,29 @@ class DPGANPlugin(Plugin):
         dp_secure_mode: bool = False,
         # early stopping
         patience: int = 5,
-        patience_metric: Optional[WeightedMetrics] = WeightedMetrics(
-            metrics=[("detection", "detection_mlp")], weights=[1]
-        ),
+        patience_metric: Optional[WeightedMetrics] = None,
         n_iter_print: int = 50,
         n_iter_min: int = 100,
+        # core plugin arguments
+        workspace: Path = Path("workspace"),
+        compress_dataset: bool = False,
+        sampling_patience: int = 500,
         **kwargs: Any
     ) -> None:
-        super().__init__(**kwargs)
+        super().__init__(
+            device=device,
+            random_state=random_state,
+            sampling_patience=sampling_patience,
+            workspace=workspace,
+            compress_dataset=compress_dataset,
+            **kwargs
+        )
+        if patience_metric is None:
+            patience_metric = WeightedMetrics(
+                metrics=[("detection", "detection_mlp")],
+                weights=[1],
+                workspace=workspace,
+            )
         self.generator_n_layers_hidden = generator_n_layers_hidden
         self.generator_n_units_hidden = generator_n_units_hidden
         self.generator_nonlin = generator_nonlin

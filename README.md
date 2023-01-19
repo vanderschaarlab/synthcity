@@ -1,5 +1,5 @@
 <h2 align="center">
-  synthcity BETA
+  synthcity
 </h2>
 
 <h4 align="center">
@@ -18,6 +18,8 @@
 [![License](https://img.shields.io/badge/License-Apache_2.0-blue.svg)](https://github.com/vanderschaarlab/synthcity/blob/main/LICENSE)
 [![Python 3.7+](https://img.shields.io/badge/python-3.7+-blue.svg)](https://www.python.org/downloads/release/python-370/)
 
+![image](https://github.com/vanderschaarlab/synthcity/raw/main/docs/arch.png "Synthcity")
+
 </div>
 
 
@@ -32,8 +34,6 @@
     - Domain adaptation: RadialGAN.
 - :book: [Read the docs !](https://synthcity.readthedocs.io/)
 - :airplane: [Checkout the tutorials!](https://github.com/vanderschaarlab/synthcity#-tutorials)
-
-:rotating_light: __NOTE__: Python 3.10 is __NOT__ supported yet.
 
 ## :rocket: Installation
 
@@ -352,4 +352,19 @@ pip install .[testing]
 The tests can be executed using
 ```bash
 pytest -vsx
+```
+## Citing
+
+If you use this code, please cite the associated paper:
+
+```
+@misc{https://doi.org/10.48550/arxiv.2301.07573,
+  doi = {10.48550/ARXIV.2301.07573},
+  url = {https://arxiv.org/abs/2301.07573},
+  author = {Qian, Zhaozhi and Cebere, Bogdan-Constantin and van der Schaar, Mihaela},
+  keywords = {Machine Learning (cs.LG), Artificial Intelligence (cs.AI), FOS: Computer and information sciences, FOS: Computer and information sciences},
+  title = {Synthcity: facilitating innovative use cases of synthetic data in different data modalities},
+  year = {2023},
+  copyright = {Creative Commons Attribution 4.0 International}
+}
 ```

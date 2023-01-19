@@ -4,6 +4,7 @@ Reference: Jankan, Ankur and Panda, Abinash, "pgmpy: Probabilistic graphical mod
 """
 
 # stdlib
+from pathlib import Path
 from typing import Any, List
 
 # third party
@@ -38,9 +39,16 @@ class BayesianNetworkPlugin(Plugin):
             The maximum number of parents for each node.
         encoder_max_clusters: int = 10
             Data encoding clusters.
-        encoder_noise_scale: float
+        encoder_noise_scale: float.
             Small noise to add to the final data, to prevent data leakage.
-
+        workspace: Path.
+            Optional Path for caching intermediary results.
+        compress_dataset: bool. Default = False.
+            Drop redundant features before training the generator.
+        random_state: int.
+            Random seed.
+        sampling_patience: int.
+            Max inference iterations to wait for the generated data to match the training schema.
 
     Example:
         >>> from sklearn.datasets import load_iris
@@ -64,9 +72,20 @@ class BayesianNetworkPlugin(Plugin):
         struct_max_indegree: int = 4,
         encoder_max_clusters: int = 10,
         encoder_noise_scale: float = 0.1,
+        # core plugin
+        workspace: Path = Path("workspace"),
+        compress_dataset: bool = False,
+        random_state: int = 0,
+        sampling_patience: int = 500,
         **kwargs: Any,
     ) -> None:
-        super().__init__(**kwargs)
+        super().__init__(
+            random_state=random_state,
+            sampling_patience=sampling_patience,
+            workspace=workspace,
+            compress_dataset=compress_dataset,
+            **kwargs,
+        )
 
         self.struct_learning_n_iter = struct_learning_n_iter
         self.struct_learning_search_method = struct_learning_search_method

@@ -4,9 +4,7 @@ Adapted from https://github.com/sdv-dev/CTGAN
 """
 
 # stdlib
-import platform
 from collections import namedtuple
-from pathlib import Path
 from typing import Any, List, Optional, Sequence, Tuple
 
 # third party
@@ -19,7 +17,7 @@ from sklearn.preprocessing import MinMaxScaler, OneHotEncoder
 
 # synthcity absolute
 import synthcity.logger as log
-from synthcity.utils.serialization import dataframe_hash, load_from_file, save_to_file
+from synthcity.utils.serialization import dataframe_hash
 
 ColumnTransformInfo = namedtuple(
     "ColumnTransformInfo",
@@ -67,7 +65,7 @@ class BinEncoder(TransformerMixin, BaseEstimator):
             max_clusters=min(self.max_clusters, len(data)),
             enforce_min_max_values=True,
         )
-        gm.fit(data.to_frame(), [column_name])
+        gm.fit(data.to_frame(), column_name)
         num_components = sum(gm.valid_component_indicator)
 
         output_columns = [f"{column_name}.normalized"] + [
@@ -111,7 +109,7 @@ class BinEncoder(TransformerMixin, BaseEstimator):
     ) -> pd.Series:
         column_name = data.name
         gm = column_transform_info.transform
-        transformed = gm.transform(data.to_frame(), [column_name])
+        transformed = gm.transform(data.to_frame()[[column_name]])
 
         return transformed[f"{column_name}.component"].to_numpy().astype(int)
 
@@ -147,7 +145,6 @@ class TabularEncoder(TransformerMixin, BaseEstimator):
         max_clusters: int = 10,
         categorical_limit: int = 10,
         whitelist: list = [],
-        workspace: Path = Path("workspace"),
     ) -> None:
         """Create a data transformer.
 
@@ -158,8 +155,6 @@ class TabularEncoder(TransformerMixin, BaseEstimator):
         self.max_clusters = max_clusters
         self.categorical_limit = categorical_limit
         self.whitelist = whitelist
-        self.workspace = workspace
-        self.workspace.mkdir(parents=True, exist_ok=True)
 
     @validate_arguments(config=dict(arbitrary_types_allowed=True))
     def _fit_continuous(self, data: pd.Series) -> ColumnTransformInfo:
@@ -179,7 +174,7 @@ class TabularEncoder(TransformerMixin, BaseEstimator):
             max_clusters=min(len(data), self.max_clusters),
             enforce_min_max_values=True,
         )
-        gm.fit(data.to_frame(), [column_name])
+        gm.fit(data.to_frame(), column_name)
         num_components = sum(gm.valid_component_indicator)
 
         output_columns = [f"{column_name}.normalized"] + [
@@ -243,27 +238,16 @@ class TabularEncoder(TransformerMixin, BaseEstimator):
         self._column_raw_dtypes = raw_data.infer_objects().dtypes
         self._column_transform_info_list = []
 
-        self.workspace.mkdir(parents=True, exist_ok=True)
-
         for column_name in raw_data.columns:
             if column_name in self.whitelist:
                 continue
             column_hash = dataframe_hash(raw_data[[column_name]])
-            bkp_file = (
-                self.workspace
-                / f"encoder_cache_{column_hash}_{column_name[:50]}_{self.max_clusters}_{self.categorical_limit}_{platform.python_version()}.bkp"
-            )
-
             log.info(f"Encoding {column_name} {column_hash}")
 
-            if bkp_file.exists():
-                column_transform_info = load_from_file(bkp_file)
+            if column_name in discrete_columns:
+                column_transform_info = self._fit_discrete(raw_data[column_name])
             else:
-                if column_name in discrete_columns:
-                    column_transform_info = self._fit_discrete(raw_data[column_name])
-                else:
-                    column_transform_info = self._fit_continuous(raw_data[column_name])
-                save_to_file(bkp_file, column_transform_info)
+                column_transform_info = self._fit_continuous(raw_data[column_name])
 
             self.output_dimensions += column_transform_info.output_dimensions
             self._column_transform_info_list.append(column_transform_info)
@@ -275,7 +259,7 @@ class TabularEncoder(TransformerMixin, BaseEstimator):
     ) -> pd.DataFrame:
         column_name = data.name
         gm = column_transform_info.transform
-        transformed = gm.transform(data.to_frame(), [column_name])
+        transformed = gm.transform(data.to_frame()[[column_name]])
 
         #  Converts the transformed data to the appropriate output format.
         #  The first column (ending in '.normalized') stays the same,
@@ -341,7 +325,7 @@ class TabularEncoder(TransformerMixin, BaseEstimator):
             column_data.values[:, :2], columns=list(gm.get_output_sdtypes())
         )
         data.iloc[:, 1] = np.argmax(column_data.values[:, 1:], axis=1)
-        return gm.reverse_transform(data, [column_transform_info.column_name])
+        return gm.reverse_transform(data)
 
     @validate_arguments(config=dict(arbitrary_types_allowed=True))
     def _inverse_transform_discrete(

@@ -4,6 +4,7 @@ Original implementation: https://github.com/sdv-dev/CTGAN
 """
 
 # stdlib
+from pathlib import Path
 from typing import Any, List, Optional, Union
 
 # third party
@@ -81,7 +82,13 @@ class CTGANPlugin(Plugin):
             Max number of iterations without any improvement before early stopping is trigged.
         patience_metric: Optional[WeightedMetrics]
             If not None, the metric is used for evaluation the criterion for early stopping.
-
+        # Core Plugin arguments
+        workspace: Path.
+            Optional Path for caching intermediary results.
+        compress_dataset: bool. Default = False.
+            Drop redundant features before training the generator.
+        sampling_patience: int.
+            Max inference iterations to wait for the generated data to match the training schema.
     Example:
         >>> from sklearn.datasets import load_iris
         >>> from synthcity.plugins import Plugins
@@ -122,15 +129,30 @@ class CTGANPlugin(Plugin):
         dataloader_sampler: Optional[sampler.Sampler] = None,
         device: Any = DEVICE,
         patience: int = 5,
-        patience_metric: Optional[WeightedMetrics] = WeightedMetrics(
-            metrics=[("detection", "detection_mlp")], weights=[1]
-        ),
+        patience_metric: Optional[WeightedMetrics] = None,
         n_iter_print: int = 50,
         n_iter_min: int = 100,
         adjust_inference_sampling: bool = False,
+        # core plugin arguments
+        workspace: Path = Path("workspace"),
+        compress_dataset: bool = False,
+        sampling_patience: int = 500,
         **kwargs: Any
     ) -> None:
-        super().__init__(**kwargs)
+        super().__init__(
+            device=device,
+            random_state=random_state,
+            sampling_patience=sampling_patience,
+            workspace=workspace,
+            compress_dataset=compress_dataset,
+            **kwargs
+        )
+        if patience_metric is None:
+            patience_metric = WeightedMetrics(
+                metrics=[("detection", "detection_mlp")],
+                weights=[1],
+                workspace=workspace,
+            )
         self.generator_n_layers_hidden = generator_n_layers_hidden
         self.generator_n_units_hidden = generator_n_units_hidden
         self.generator_nonlin = generator_nonlin

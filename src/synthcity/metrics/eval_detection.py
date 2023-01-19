@@ -126,6 +126,9 @@ class SyntheticDetectionXGB(DetectionEvaluator):
         1: The datasets are totally distinguishable.
     """
 
+    def __init__(self, **kwargs: Any) -> None:
+        super().__init__(**kwargs)
+
     @staticmethod
     def name() -> str:
         return "detection_xgb"
@@ -157,6 +160,9 @@ class SyntheticDetectionMLP(DetectionEvaluator):
         0: The datasets are indistinguishable.
         1: The datasets are totally distinguishable.
     """
+
+    def __init__(self, **kwargs: Any) -> None:
+        super().__init__(**kwargs)
 
     @staticmethod
     def name() -> str:
@@ -193,6 +199,9 @@ class SyntheticDetectionLinear(DetectionEvaluator):
         1: The datasets are totally distinguishable.
     """
 
+    def __init__(self, **kwargs: Any) -> None:
+        super().__init__(**kwargs)
+
     @staticmethod
     def name() -> str:
         return "detection_linear"
@@ -226,6 +235,9 @@ class SyntheticDetectionGMM(DetectionEvaluator):
         0: The datasets are indistinguishable.
         1: The datasets are totally distinguishable.
     """
+
+    def __init__(self, **kwargs: Any) -> None:
+        super().__init__(**kwargs)
 
     @staticmethod
     def name() -> str:

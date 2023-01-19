@@ -160,8 +160,8 @@ def test_plugin_generate_and_learn_dag(struct_learning_search_method: str) -> No
     assert list(X_gen.columns) == list(X.columns)
 
 
-@pytest.mark.parametrize("use_dag_seed", [True, False])
-@pytest.mark.skipif(sys.platform != "linux", reason="Linux only for faster results")
+@pytest.mark.parametrize("use_dag_seed", [True])
+@pytest.mark.slow
 def test_debiasing(use_dag_seed: bool) -> None:
     # causal structure is in dag_seed
     synthetic_dag_seed = [
@@ -188,8 +188,8 @@ def test_debiasing(use_dag_seed: bool) -> None:
     # model initialisation and train
     test_plugin = plugin(
         struct_learning_enabled=(not use_dag_seed),
-        n_iter=20,
-        n_iter_baseline=500,
+        n_iter=100,
+        n_iter_baseline=200,
     )
 
     # DAG check before

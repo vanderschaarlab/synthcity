@@ -1,4 +1,5 @@
 # stdlib
+from pathlib import Path
 from typing import Any, List, Optional, Union
 
 # third party
@@ -39,7 +40,13 @@ class SurVAEPlugin(Plugin):
             torch device to use for training(cpu/cuda)
         kwargs: Any
             "tvae" additional args, like n_iter = 100 etc.
-
+        # Core Plugin arguments
+        workspace: Path.
+            Optional Path for caching intermediary results.
+        compress_dataset: bool. Default = False.
+            Drop redundant features before training the generator.
+        sampling_patience: int.
+            Max inference iterations to wait for the generated data to match the training schema.
 
     Example:
         >>> from lifelines.datasets import load_rossi
@@ -67,9 +74,20 @@ class SurVAEPlugin(Plugin):
         tte_strategy: str = "survival_function",
         censoring_strategy: str = "random",  # "covariate_dependent"
         device: Any = DEVICE,
+        # core plugin arguments
+        workspace: Path = Path("workspace"),
+        random_state: int = 0,
+        compress_dataset: bool = False,
+        sampling_patience: int = 500,
         **kwargs: Any,
     ) -> None:
-        super().__init__()
+        super().__init__(
+            device=device,
+            random_state=random_state,
+            sampling_patience=sampling_patience,
+            workspace=workspace,
+            compress_dataset=compress_dataset,
+        )
 
         valid_sampling_strategies = [
             "none",
@@ -84,6 +102,10 @@ class SurVAEPlugin(Plugin):
         self.censoring_strategy = censoring_strategy
         self.uncensoring_model = uncensoring_model
         self.device = device
+        self.random_state = random_state
+        self.workspace = workspace
+        self.compress_dataset = compress_dataset
+        self.sampling_patience = sampling_patience
         self.kwargs = kwargs
 
         log.info(
@@ -123,6 +145,10 @@ class SurVAEPlugin(Plugin):
             uncensoring_model=self.uncensoring_model,
             censoring_strategy=self.censoring_strategy,
             device=self.device,
+            random_state=self.random_state,
+            workspace=self.workspace,
+            compress_dataset=self.compress_dataset,
+            sampling_patience=self.sampling_patience,
             **self.kwargs,
         )
         self.model.fit(X, cond=cond, **kwargs)
