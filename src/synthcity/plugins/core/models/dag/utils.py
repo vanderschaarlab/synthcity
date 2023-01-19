@@ -1,9 +1,8 @@
 # stdlib
 import math
-from typing import Callable
+from typing import Callable, List
 
 # third party
-import igraph as ig
 import numpy as np
 import scipy.optimize as sopt
 import torch
@@ -12,9 +11,32 @@ import torch.nn as nn
 DEVICE = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
 
+def has_cycle(W: np.ndarray, v: int, visited: List[bool], recstack: List[bool]) -> bool:
+    visited[v] = True
+    recstack[v] = True
+
+    for neighbour in range(len(W[v])):
+        if W[v][neighbour] == 0:
+            continue
+        if not visited[neighbour]:
+            if has_cycle(W, neighbour, visited, recstack):
+                return True
+        elif recstack[neighbour]:
+            return True
+
+    recstack[v] = False
+    return False
+
+
 def is_dag(W: np.ndarray) -> bool:
-    G = ig.Graph.Weighted_Adjacency(W.tolist())
-    return G.is_dag()
+    visited = [False] * len(W)
+    recstack = [False] * len(W)
+
+    for node in range(len(W)):
+        if not visited[node]:
+            if has_cycle(W, node, visited, recstack):
+                return False
+    return True
 
 
 # Zheng et al.
