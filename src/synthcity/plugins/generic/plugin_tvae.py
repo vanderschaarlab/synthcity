@@ -114,6 +114,7 @@ class TVAEPlugin(Plugin):
         n_iter_print: int = 50,
         n_iter_min: int = 100,
         patience: int = 5,
+        # core plugin arguments
         device: Any = DEVICE,
         workspace: Path = Path("workspace"),
         compress_dataset: bool = False,

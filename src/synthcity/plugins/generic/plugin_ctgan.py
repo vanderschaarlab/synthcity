@@ -135,6 +135,7 @@ class CTGANPlugin(Plugin):
         n_iter_print: int = 50,
         n_iter_min: int = 100,
         adjust_inference_sampling: bool = False,
+        # core plugin arguments
         workspace: Path = Path("workspace"),
         compress_dataset: bool = False,
         sampling_patience: int = 500,

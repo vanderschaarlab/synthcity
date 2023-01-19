@@ -9,6 +9,7 @@ Adapted from:
 from collections import namedtuple
 from itertools import combinations, product
 from math import ceil
+from pathlib import Path
 from typing import Any, List, Optional, Tuple
 
 # third party
@@ -561,6 +562,13 @@ class PrivBayesPlugin(Plugin):
     information to average scale of noise is no less than θ. 5-useful is the recommended value.
             random_state: int
                 Random seed
+            # Core Plugin arguments
+            workspace: Path.
+                Optional Path for caching intermediary results.
+            compress_dataset: bool. Default = False.
+                Drop redundant features before training the generator.
+            sampling_patience: int.
+                Max inference iterations to wait for the generated data to match the training schema.
 
     Example:
         >>> from sklearn.datasets import load_iris
@@ -585,9 +593,19 @@ class PrivBayesPlugin(Plugin):
         mi_thresh: float = 0.01,
         target_usefulness: int = 5,
         random_state: int = 0,
+        # core plugin arguments
+        workspace: Path = Path("workspace"),
+        compress_dataset: bool = False,
+        sampling_patience: int = 500,
         **kwargs: Any,
     ) -> None:
-        super().__init__(**kwargs)
+        super().__init__(
+            random_state=random_state,
+            sampling_patience=sampling_patience,
+            workspace=workspace,
+            compress_dataset=compress_dataset,
+            **kwargs,
+        )
 
         enable_reproducible_results(random_state)
 

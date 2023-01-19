@@ -6,6 +6,7 @@ Reference: Jinsung Yoon, Lydia N. Drumright, Mihaela van der Schaar,
 Paper link: https://ieeexplore.ieee.org/document/9034117
 """
 # stdlib
+from pathlib import Path
 from typing import Any, List, Optional, Union
 
 # third party
@@ -79,9 +80,16 @@ class AdsGANPlugin(Plugin):
         n_iter_min: int
             Minimum number of iterations to go through before starting early stopping
         patience: int
-            Max number of iterations without any improvement before early stopping is trigged.
+            Max number of iterations without any improvement before training early stopping is trigged.
         patience_metric: Optional[WeightedMetrics]
-            If not None, the metric is used for evaluation the criterion for early stopping.
+            If not None, the metric is used for evaluation the criterion for training early stopping.
+        # Core Plugin arguments
+        workspace: Path.
+            Optional Path for caching intermediary results.
+        compress_dataset: bool. Default = False.
+            Drop redundant features before training the generator.
+        sampling_patience: int.
+            Max inference iterations to wait for the generated data to match the training schema.
 
     Example:
         >>> from sklearn.datasets import load_iris
@@ -131,9 +139,20 @@ class AdsGANPlugin(Plugin):
         ),
         n_iter_print: int = 50,
         n_iter_min: int = 100,
+        # core plugin arguments
+        workspace: Path = Path("workspace"),
+        compress_dataset: bool = False,
+        sampling_patience: int = 500,
         **kwargs: Any
     ) -> None:
-        super().__init__(**kwargs)
+        super().__init__(
+            device=device,
+            random_state=random_state,
+            sampling_patience=sampling_patience,
+            workspace=workspace,
+            compress_dataset=compress_dataset,
+            **kwargs
+        )
         self.generator_n_layers_hidden = generator_n_layers_hidden
         self.generator_n_units_hidden = generator_n_units_hidden
         self.generator_nonlin = generator_nonlin

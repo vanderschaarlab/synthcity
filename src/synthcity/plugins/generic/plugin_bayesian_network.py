@@ -72,6 +72,7 @@ class BayesianNetworkPlugin(Plugin):
         struct_max_indegree: int = 4,
         encoder_max_clusters: int = 10,
         encoder_noise_scale: float = 0.1,
+        # core plugin
         workspace: Path = Path("workspace"),
         compress_dataset: bool = False,
         random_state: int = 0,

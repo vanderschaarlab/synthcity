@@ -4,6 +4,7 @@ Paper link: https://openreview.net/forum?id=S1zk9iRqF7
 """
 
 # stdlib
+from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
 
 # third party
@@ -31,6 +32,7 @@ from synthcity.plugins.core.models.tabular_gan import TabularGAN
 from synthcity.plugins.core.plugin import Plugin
 from synthcity.plugins.core.schema import Schema
 from synthcity.plugins.core.serializable import Serializable
+from synthcity.utils.constants import DEVICE
 
 
 class Teachers(Serializable):
@@ -161,6 +163,7 @@ class PATEGAN(Serializable):
         random_state: int = 0,
         clipping_value: int = 1,
         encoder_max_clusters: int = 5,
+        device: Any = DEVICE,
         # Privacy
         n_teachers: int = 10,
         teacher_template: str = "linear",
@@ -188,6 +191,7 @@ class PATEGAN(Serializable):
         self.batch_size = batch_size
         self.random_state = random_state
         self.clipping_value = clipping_value
+        self.device = device
         # Privacy
         self.n_teachers = n_teachers
         self.teacher_template = teacher_template
@@ -237,6 +241,7 @@ class PATEGAN(Serializable):
             encoder_max_clusters=self.encoder_max_clusters,
             encoder=self.encoder,
             n_iter_print=self.generator_n_iter - 1,
+            device=self.device,
         )
         X_train_enc = self.model.encode(X_train)
         self.samples_per_teacher = int(len(X_train_enc) / self.n_teachers)
@@ -378,6 +383,13 @@ class PATEGANPlugin(Plugin):
             Noise size
         encoder_max_clusters: int
             The max number of clusters to create for continuous columns when encoding
+        # Core Plugin arguments
+        workspace: Path.
+            Optional Path for caching intermediary results.
+        compress_dataset: bool. Default = False.
+            Drop redundant features before training the generator.
+        sampling_patience: int.
+            Max inference iterations to wait for the generated data to match the training schema.
 
     Example:
         >>> from sklearn.datasets import load_iris
@@ -423,9 +435,21 @@ class PATEGANPlugin(Plugin):
         lamda: float = 1e-3,
         alpha: int = 100,
         encoder: Any = None,
+        # core plugin arguments
+        device: Any = DEVICE,
+        workspace: Path = Path("workspace"),
+        compress_dataset: bool = False,
+        sampling_patience: int = 500,
         **kwargs: Any,
     ) -> None:
-        super().__init__(**kwargs)
+        super().__init__(
+            device=device,
+            random_state=random_state,
+            sampling_patience=sampling_patience,
+            workspace=workspace,
+            compress_dataset=compress_dataset,
+            **kwargs,
+        )
 
         self.model = PATEGAN(
             max_iter=n_iter,
@@ -446,6 +470,7 @@ class PATEGANPlugin(Plugin):
             clipping_value=clipping_value,
             encoder_max_clusters=encoder_max_clusters,
             encoder=encoder,
+            device=device,
             # Privacy
             n_teachers=n_teachers,
             teacher_template=teacher_template,

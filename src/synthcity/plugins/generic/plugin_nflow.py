@@ -85,9 +85,9 @@ class NormalizingFlowsPlugin(Plugin):
         n_iter_min: int
             Minimum number of iterations to go through before starting early stopping
         patience: int
-            Max number of iterations without any improvement before early stopping is trigged.
+            Max number of iterations without any improvement before training early stopping is trigged.
         patience_metric: Optional[WeightedMetrics]
-            If not None, the metric is used for evaluation the criterion for early stopping.
+            If not None, the metric is used for evaluation the criterion for training early stopping.
         # Core Plugin arguments
         workspace: Path.
             Optional Path for caching intermediary results.
@@ -137,6 +137,7 @@ class NormalizingFlowsPlugin(Plugin):
         patience_metric: Optional[WeightedMetrics] = WeightedMetrics(
             metrics=[("detection", "detection_mlp")], weights=[1]
         ),
+        # core plugin arguments
         workspace: Path = Path("workspace"),
         compress_dataset: bool = False,
         sampling_patience: int = 500,

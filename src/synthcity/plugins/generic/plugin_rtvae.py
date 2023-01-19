@@ -112,6 +112,7 @@ class RTVAEPlugin(Plugin):
         n_iter_min: int = 100,
         patience: int = 5,
         device: Any = DEVICE,
+        # core plugin arguments
         workspace: Path = Path("workspace"),
         compress_dataset: bool = False,
         sampling_patience: int = 500,
