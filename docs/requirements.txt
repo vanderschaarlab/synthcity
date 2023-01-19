@@ -1,5 +1,4 @@
 autodoc
-git+https://github.com/sphinx-contrib/emojicodes
 jupyter
 m2r2==0.3.1
 matplotlib
@@ -19,4 +18,5 @@ sphinx_diagrams
 sphinx_gallery==0.10.1
 sphinx_rtd_theme==1.0.0
 sphinxcontrib-napoleon
+sphinxemoji
 tqdm
