@@ -2,6 +2,7 @@
 Reference: "Generative Time-series Modeling with Fourier Flows", Ahmed Alaa, Alex Chan, and Mihaela van der Schaar.
 """
 # stdlib
+from pathlib import Path
 from typing import Any, List, Tuple
 
 # third party
@@ -60,6 +61,13 @@ class FourierFlowsPlugin(Plugin):
             torch device to use for training(cpu/cuda)
         encoder_max_clusters: int = 10
             Number of clusters used for tabular encoding
+        # Core Plugin arguments
+        workspace: Path.
+            Optional Path for caching intermediary results.
+        compress_dataset: bool. Default = False.
+            Drop redundant features before training the generator.
+        sampling_patience: int.
+            Max inference iterations to wait for the generated data to match the training schema.
 
     Example:
         >>> from synthcity.plugins import Plugins
@@ -95,9 +103,20 @@ class FourierFlowsPlugin(Plugin):
         static_model: str = "ctgan",
         device: Any = DEVICE,
         encoder_max_clusters: int = 10,
+        # core plugin arguments
+        random_state: int = 0,
+        workspace: Path = Path("workspace"),
+        compress_dataset: bool = False,
+        sampling_patience: int = 500,
         **kwargs: Any,
     ) -> None:
-        super().__init__()
+        super().__init__(
+            device=device,
+            random_state=random_state,
+            sampling_patience=sampling_patience,
+            workspace=workspace,
+            compress_dataset=compress_dataset,
+        )
         self.static_model_name = static_model
         self.device = device
 
