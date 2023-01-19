@@ -1,6 +1,4 @@
 """TabularEncoder module.
-
-Adapted from https://github.com/sdv-dev/CTGAN
 """
 
 # stdlib

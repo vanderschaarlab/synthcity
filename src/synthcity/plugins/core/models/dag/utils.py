@@ -41,11 +41,7 @@ def is_dag(W: np.ndarray) -> bool:
 
 # Zheng et al.
 class LBFGSBScipy(torch.optim.Optimizer):
-    """Wrap L-BFGS-B algorithm, using scipy routines.
-
-    Courtesy: Arthur Mensch's gist
-    https://gist.github.com/arthurmensch/c55ac413868550f89225a0b9212aa4cd
-    """
+    """Wrap L-BFGS-B algorithm, using scipy routines."""
 
     def __init__(self, params: dict) -> None:
         super(LBFGSBScipy, self).__init__(params, {})

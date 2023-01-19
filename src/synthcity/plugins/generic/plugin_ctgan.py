@@ -1,6 +1,5 @@
 """
 Reference: "Modeling Tabular Data using Conditional GAN", Xu, Lei et al.
-Original implementation: https://github.com/sdv-dev/CTGAN
 """
 
 # stdlib

@@ -1,7 +1,3 @@
-"""
-Reference: https://github.com/bayesiains/nflows
-"""
-
 # stdlib
 from pathlib import Path
 from typing import Any, List, Optional

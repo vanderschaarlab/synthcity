@@ -1,9 +1,5 @@
 """
 Reference: PrivBayes: Private Data Release via Bayesian Networks. (2017), Zhang J, Cormode G, Procopiuc CM, Srivastava D, Xiao X.
-
-Adapted from:
-    - https://github.com/daanknoors/synthetic_data_generation
-    - https://github.com/DataResponsibly/DataSynthesizer
 """
 # stdlib
 from collections import namedtuple
