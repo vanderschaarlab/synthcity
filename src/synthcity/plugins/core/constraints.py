@@ -266,7 +266,7 @@ class Constraints(BaseModel):
         rules = self.feature_constraints(feature)
 
         dist_template = "float"
-        dist_args = {"low": np.iinfo(np.int32).min, "high": np.iinfo(np.int32).max}
+        dist_args = {"low": np.iinfo(np.int64).min, "high": np.iinfo(np.int64).max}
 
         for op, value in rules:
             if op == "in":
@@ -280,14 +280,31 @@ class Constraints(BaseModel):
                 dist_template = "integer"
             elif (op == "le" or op == "<=") and value < dist_args["high"]:
                 dist_args["high"] = value
+                if "choices" in dist_args:
+                    dist_args["choices"] = [
+                        v for v in dist_args["choices"] if v <= value
+                    ]
             elif (op == "lt" or op == "<") and value < dist_args["high"]:
                 dist_args["high"] = value - 1
+                if "choices" in dist_args:
+                    dist_args["choices"] = [
+                        v for v in dist_args["choices"] if v < value
+                    ]
             elif (op == "ge" or op == ">=") and dist_args["low"] < value:
                 dist_args["low"] = value
+                if "choices" in dist_args:
+                    dist_args["choices"] = [
+                        v for v in dist_args["choices"] if v >= value
+                    ]
             elif (op == "gt" or op == ">") and dist_args["low"] < value:
                 dist_args["low"] = value + 1
+                if "choices" in dist_args:
+                    dist_args["choices"] = [
+                        v for v in dist_args["choices"] if v > value
+                    ]
             elif op == "eq" or op == "==":
                 dist_args["low"] = value
                 dist_args["high"] = value
+                dist_args["choices"] = [value]
 
         return dist_template, dist_args

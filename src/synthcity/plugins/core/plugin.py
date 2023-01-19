@@ -88,6 +88,7 @@ class Plugin(Serializable, metaclass=ABCMeta):
         super().__init__()
         self._schema: Optional[Schema] = None
         self._training_schema: Optional[Schema] = None
+        self._data_encoders: Optional[Dict] = None
 
         self.sampling_strategy = sampling_strategy
         self.sampling_patience = sampling_patience
@@ -165,7 +166,42 @@ class Plugin(Serializable, metaclass=ABCMeta):
             X: DataLoader.
                 The reference dataset.
             cond: Optional, Union[pd.DataFrame, pd.Series, np.ndarray]
-                Training Conditional
+                Optional Training Conditional.
+                The training conditional can be used to control to output of some models, like GANs or VAEs. The content can be anything, as long as it maps to the training dataset X.
+                Usage example:
+                    >>> from sklearn.datasets import load_iris
+                    >>> from synthcity.plugins.core.dataloader import GenericDataLoader
+                    >>> from synthcity.plugins.core.constraints import Constraints
+                    >>>
+                    >>> # Load in `test_plugin` the generative model of choice
+                    >>> # ....
+                    >>>
+                    >>> X, y = load_iris(as_frame=True, return_X_y=True)
+                    >>> X["target"] = y
+                    >>>
+                    >>> X = GenericDataLoader(X)
+                    >>> test_plugin.fit(X, cond=y)
+                    >>>
+                    >>> count = 10
+                    >>> X_gen = test_plugin.generate(count, cond=np.ones(count))
+                    >>>
+                    >>> # The Conditional only optimizes the output generation
+                    >>> # for GANs and VAEs, but does NOT guarantee the samples
+                    >>> # are only from that condition.
+                    >>> # If you want to guarantee that output contains only
+                    >>> # "target" == 1 samples, use Constraints.
+                    >>>
+                    >>> constraints = Constraints(
+                    >>>     rules=[
+                    >>>         ("target", "==", 1),
+                    >>>     ]
+                    >>> )
+                    >>> X_gen = test_plugin.generate(count,
+                    >>>         cond=np.ones(count),
+                    >>>         constraints=constraints
+                    >>>        )
+                    >>> assert (X_gen["target"] == 1).all()
+
         Returns:
             self
         """
@@ -183,6 +219,7 @@ class Plugin(Serializable, metaclass=ABCMeta):
             random_state=self.random_state,
         )
 
+        X, self._data_encoders = X.encode()
         if self.compress_dataset:
             X_hash = X.hash()
             bkp_file = (
@@ -213,9 +250,8 @@ class Plugin(Serializable, metaclass=ABCMeta):
         Args:
             X: DataLoader.
                 The reference dataset.
-            cond: Optional, Union[pd.DataFrame, pd.Series, np.ndarray, list]
-                Optional Training Conditional, used by GANs and VAEs.
-
+            cond: Optional, Union[pd.DataFrame, pd.Series, np.ndarray]
+                Training Conditional
         Returns:
             self
         """
@@ -233,10 +269,38 @@ class Plugin(Serializable, metaclass=ABCMeta):
         Args:
             count: optional int.
                 The number of samples to generate. If None, it generated len(reference_dataset) samples.
-            constraints: optional Constraints
-                Optional constraints to apply on the generated data. If none, the reference schema constraints are applied.
-            cond: Optional, Union[pd.DataFrame, pd.Series, np.ndarray, list]
-                Optional Generation Conditional, used by GANs and VAEs
+            cond: Optional, Union[pd.DataFrame, pd.Series, np.ndarray].
+                Optional Generation Conditional. The conditional can be used only if the model was trained using a conditional too.
+                If provided, it must have `count` length.
+                Not all models support conditionals. The conditionals can be used in VAEs or GANs to speed-up the generation under some constraints. For model agnostic solutions, check out the `constraints` parameter.
+            constraints: optional Constraints.
+                Optional constraints to apply on the generated data. If none, the reference schema constraints are applied. The constraints are model agnostic, and will filter the output of the generative model.
+                The constraints are a list of rules. Each rule is a tuple of the form (<feature>, <operation>, <value>).
+
+                Valid Operations:
+                    - "<", "lt" : less than <value>
+                    - "<=", "le": less or equal with <value>
+                    - ">", "gt" : greater than <value>
+                    - ">=", "ge": greater or equal with <value>
+                    - "==", "eq": equal with <value>
+                    - "in": valid for categorical features, and <value> must be array. for example, ("target", "in", [0, 1])
+                    - "dtype": <value> can be a data type. For example, ("target", "dtype", "int")
+
+                Usage example:
+                    >>> from synthcity.plugins.core.constraints import Constraints
+                    >>> constraints = Constraints(
+                    >>>   rules=[
+                    >>>             ("InterestingFeature", "==", 0),
+                    >>>         ]
+                    >>>     )
+                    >>>
+                    >>> syn_data = syn_model.generate(
+                            count=count,
+                            constraints=constraints
+                        ).dataframe()
+                    >>>
+                    >>> assert (syn_data["InterestingFeature"] == 0).all()
+
         Returns:
             <count> synthetic samples
         """
@@ -265,6 +329,8 @@ class Plugin(Serializable, metaclass=ABCMeta):
         X_syn = self._generate(count=count, syn_schema=syn_schema, **kwargs)
         if self.compress_dataset:
             X_syn = X_syn.decompress(self.compress_context)
+        if self._data_encoders is not None:
+            X_syn = X_syn.decode(self._data_encoders)
 
         # The dataset is decompressed here, we can use the public schema
         gen_constraints = self.schema().as_constraints()

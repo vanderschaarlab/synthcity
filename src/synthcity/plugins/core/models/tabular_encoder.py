@@ -23,7 +23,7 @@ from synthcity.utils.serialization import dataframe_hash, load_from_file, save_t
 
 ColumnTransformInfo = namedtuple(
     "ColumnTransformInfo",
-    ["column_name", "column_type", "transform", "output_dimensions"],
+    ["column_name", "column_type", "transform", "output_dimensions", "output_columns"],
 )
 
 
@@ -70,11 +70,16 @@ class BinEncoder(TransformerMixin, BaseEstimator):
         gm.fit(data.to_frame(), [column_name])
         num_components = sum(gm.valid_component_indicator)
 
+        output_columns = [f"{column_name}.normalized"] + [
+            f"{column_name}.component_{i}" for i in range(num_components)
+        ]
+
         return ColumnTransformInfo(
             column_name=column_name,
             column_type="continuous",
             transform=gm,
             output_dimensions=1 + num_components,
+            output_columns=output_columns,
         )
 
     def fit(
@@ -177,11 +182,15 @@ class TabularEncoder(TransformerMixin, BaseEstimator):
         gm.fit(data.to_frame(), [column_name])
         num_components = sum(gm.valid_component_indicator)
 
+        output_columns = [f"{column_name}.normalized"] + [
+            f"{column_name}.component_{i}" for i in range(num_components)
+        ]
         return ColumnTransformInfo(
             column_name=column_name,
             column_type="continuous",
             transform=gm,
             output_dimensions=1 + num_components,
+            output_columns=output_columns,
         )
 
     @validate_arguments(config=dict(arbitrary_types_allowed=True))
@@ -201,11 +210,14 @@ class TabularEncoder(TransformerMixin, BaseEstimator):
         ohe.fit(data.values.reshape(-1, 1))
         num_categories = len(ohe.categories_[0])
 
+        output_columns = ohe.get_feature_names_out([data.name])
+
         return ColumnTransformInfo(
             column_name=column_name,
             column_type="discrete",
             transform=ohe,
             output_dimensions=num_categories,
+            output_columns=output_columns,
         )
 
     @validate_arguments(config=dict(arbitrary_types_allowed=True))
@@ -275,11 +287,7 @@ class TabularEncoder(TransformerMixin, BaseEstimator):
 
         return pd.DataFrame(
             output,
-            columns=[f"{column_name}.normalized"]
-            + [
-                f"{column_name}.component_{i}"
-                for i in range(column_transform_info.output_dimensions - 1)
-            ],
+            columns=column_transform_info.output_columns,
         )
 
     def _transform_discrete(
@@ -288,7 +296,7 @@ class TabularEncoder(TransformerMixin, BaseEstimator):
         ohe = column_transform_info.transform
         return pd.DataFrame(
             ohe.transform(data.to_frame().values),
-            columns=ohe.get_feature_names_out([data.name]),
+            columns=column_transform_info.output_columns,
         )
 
     @validate_arguments(config=dict(arbitrary_types_allowed=True))
@@ -406,6 +414,13 @@ class TabularEncoder(TransformerMixin, BaseEstimator):
                 for column_transform_info in self._column_transform_info_list
             ]
         )
+
+    def get_column_info(self, column_name: str) -> ColumnTransformInfo:
+        for column_transform_info in self._column_transform_info_list:
+            if column_transform_info.column_name == column_name:
+                return column_transform_info
+
+        raise RuntimeError(f"Unknown column {column_name}")
 
     @validate_arguments(config=dict(arbitrary_types_allowed=True))
     def activation_layout(
