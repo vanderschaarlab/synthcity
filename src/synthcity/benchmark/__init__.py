@@ -103,6 +103,9 @@ class Benchmarks:
 
         for testcase, plugin, kwargs in tests:
             log.info(f"Testcase : {testcase}")
+            if not isinstance(kwargs, dict):
+                raise ValueError(f"'kwargs' must be a dict for {testcase}:{plugin}")
+
             scores = ScoreEvaluator()
 
             kwargs_hash = ""
@@ -116,6 +119,10 @@ class Benchmarks:
 
             for repeat in repeats_list:
                 enable_reproducible_results(repeat)
+
+                kwargs["workspace"] = workspace
+                kwargs["random_state"] = repeat
+
                 torch.cuda.empty_cache()
 
                 cache_file = (
