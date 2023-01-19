@@ -67,7 +67,7 @@ class BinEncoder(TransformerMixin, BaseEstimator):
             max_clusters=min(self.max_clusters, len(data)),
             enforce_min_max_values=True,
         )
-        gm.fit(data.to_frame(), [column_name])
+        gm.fit(data.to_frame(), column_name)
         num_components = sum(gm.valid_component_indicator)
 
         output_columns = [f"{column_name}.normalized"] + [
@@ -111,7 +111,7 @@ class BinEncoder(TransformerMixin, BaseEstimator):
     ) -> pd.Series:
         column_name = data.name
         gm = column_transform_info.transform
-        transformed = gm.transform(data.to_frame(), [column_name])
+        transformed = gm.transform(data.to_frame())
 
         return transformed[f"{column_name}.component"].to_numpy().astype(int)
 
@@ -179,7 +179,7 @@ class TabularEncoder(TransformerMixin, BaseEstimator):
             max_clusters=min(len(data), self.max_clusters),
             enforce_min_max_values=True,
         )
-        gm.fit(data.to_frame(), [column_name])
+        gm.fit(data.to_frame(), column_name)
         num_components = sum(gm.valid_component_indicator)
 
         output_columns = [f"{column_name}.normalized"] + [
@@ -275,7 +275,7 @@ class TabularEncoder(TransformerMixin, BaseEstimator):
     ) -> pd.DataFrame:
         column_name = data.name
         gm = column_transform_info.transform
-        transformed = gm.transform(data.to_frame(), [column_name])
+        transformed = gm.transform(data.to_frame())
 
         #  Converts the transformed data to the appropriate output format.
         #  The first column (ending in '.normalized') stays the same,
@@ -341,7 +341,7 @@ class TabularEncoder(TransformerMixin, BaseEstimator):
             column_data.values[:, :2], columns=list(gm.get_output_sdtypes())
         )
         data.iloc[:, 1] = np.argmax(column_data.values[:, 1:], axis=1)
-        return gm.reverse_transform(data, [column_transform_info.column_name])
+        return gm.reverse_transform(data)
 
     @validate_arguments(config=dict(arbitrary_types_allowed=True))
     def _inverse_transform_discrete(
