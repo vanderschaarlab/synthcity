@@ -134,9 +134,7 @@ class NormalizingFlowsPlugin(Plugin):
         n_iter_min: int = 100,
         n_iter_print: int = 50,
         patience: int = 5,
-        patience_metric: Optional[WeightedMetrics] = WeightedMetrics(
-            metrics=[("detection", "detection_mlp")], weights=[1]
-        ),
+        patience_metric: Optional[WeightedMetrics] = None,
         # core plugin arguments
         workspace: Path = Path("workspace"),
         compress_dataset: bool = False,
@@ -153,6 +151,13 @@ class NormalizingFlowsPlugin(Plugin):
             compress_dataset=compress_dataset,
             **kwargs,
         )
+
+        if patience_metric is None:
+            patience_metric = WeightedMetrics(
+                metrics=[("detection", "detection_mlp")],
+                weights=[1],
+                workspace=workspace,
+            )
 
         self.n_iter = n_iter
         self.n_layers_hidden = n_layers_hidden

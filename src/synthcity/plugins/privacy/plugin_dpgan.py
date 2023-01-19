@@ -135,9 +135,7 @@ class DPGANPlugin(Plugin):
         dp_secure_mode: bool = False,
         # early stopping
         patience: int = 5,
-        patience_metric: Optional[WeightedMetrics] = WeightedMetrics(
-            metrics=[("detection", "detection_mlp")], weights=[1]
-        ),
+        patience_metric: Optional[WeightedMetrics] = None,
         n_iter_print: int = 50,
         n_iter_min: int = 100,
         # core plugin arguments
@@ -154,6 +152,12 @@ class DPGANPlugin(Plugin):
             compress_dataset=compress_dataset,
             **kwargs
         )
+        if patience_metric is None:
+            patience_metric = WeightedMetrics(
+                metrics=[("detection", "detection_mlp")],
+                weights=[1],
+                workspace=workspace,
+            )
         self.generator_n_layers_hidden = generator_n_layers_hidden
         self.generator_n_units_hidden = generator_n_units_hidden
         self.generator_nonlin = generator_nonlin
