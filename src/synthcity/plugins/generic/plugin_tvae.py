@@ -1,4 +1,5 @@
 # stdlib
+from pathlib import Path
 from typing import Any, List, Optional, Union
 
 # third party
@@ -20,6 +21,7 @@ from synthcity.plugins.core.distribution import (
 from synthcity.plugins.core.models.tabular_vae import TabularVAE
 from synthcity.plugins.core.plugin import Plugin
 from synthcity.plugins.core.schema import Schema
+from synthcity.utils.constants import DEVICE
 
 
 class TVAEPlugin(Plugin):
@@ -65,6 +67,14 @@ class TVAEPlugin(Plugin):
             Minimum number of iterations to go through before starting early stopping
         patience: int
             Max number of iterations without any improvement before early stopping is trigged.
+        # Core Plugin arguments
+        workspace: Path.
+            Optional Path for caching intermediary results.
+        compress_dataset: bool. Default = False.
+            Drop redundant features before training the generator.
+        sampling_patience: int.
+            Max inference iterations to wait for the generated data to match the training schema.
+
 
     Example:
         >>> from sklearn.datasets import load_iris
@@ -104,9 +114,20 @@ class TVAEPlugin(Plugin):
         n_iter_print: int = 50,
         n_iter_min: int = 100,
         patience: int = 5,
+        device: Any = DEVICE,
+        workspace: Path = Path("workspace"),
+        compress_dataset: bool = False,
+        sampling_patience: int = 500,
         **kwargs: Any
     ) -> None:
-        super().__init__(**kwargs)
+        super().__init__(
+            device=device,
+            random_state=random_state,
+            sampling_patience=sampling_patience,
+            workspace=workspace,
+            compress_dataset=compress_dataset,
+            **kwargs
+        )
         self.n_units_embedding = n_units_embedding
         self.decoder_n_layers_hidden = decoder_n_layers_hidden
         self.decoder_n_units_hidden = decoder_n_units_hidden
@@ -125,6 +146,7 @@ class TVAEPlugin(Plugin):
         self.dataloader_sampler = dataloader_sampler
         self.loss_factor = loss_factor
         self.clipping_value = clipping_value
+        self.device = device
 
         self.n_iter_print = n_iter_print
         self.n_iter_min = n_iter_min
@@ -198,6 +220,7 @@ class TVAEPlugin(Plugin):
             n_iter_min=self.n_iter_min,
             n_iter_print=self.n_iter_print,
             patience=self.patience,
+            device=self.device,
         )
         self.model.fit(X.dataframe(), **kwargs)
 
