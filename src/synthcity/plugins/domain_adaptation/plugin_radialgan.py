@@ -2,9 +2,6 @@
 Reference: Yoon, Jinsung and Jordon, James and van der Schaar, Mihaela
     "RadialGAN: Leveraging multiple datasets to improve target-specific predictive models using Generative Adversarial Networks"
 
-Original implementation: https://github.com/vanderschaarlab/mlforhealthlabpub/blob/main/alg/RadialGAN/RadialGAN.py
-
-
 """
 # stdlib
 from typing import Any, Dict, List, Optional, Tuple
