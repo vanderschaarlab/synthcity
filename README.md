@@ -18,6 +18,8 @@
 [![License](https://img.shields.io/badge/License-Apache_2.0-blue.svg)](https://github.com/vanderschaarlab/synthcity/blob/main/LICENSE)
 [![Python 3.7+](https://img.shields.io/badge/python-3.7+-blue.svg)](https://www.python.org/downloads/release/python-370/)
 
+![image](https://github.com/vanderschaarlab/synthcity/raw/main/docs/arch.png "Synthcity")
+
 </div>
 
 
