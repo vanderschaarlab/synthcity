@@ -244,7 +244,7 @@ class DataLoader(metaclass=ABCMeta):
         decoded = self.dataframe().copy()
 
         for col in encoders:
-            decoded[col] = encoders[col].inverse_transform(decoded[col])
+            decoded[col] = encoders[col].inverse_transform(decoded[col].infer_objects())
 
         return self.from_info(decoded, self.info())
 
