@@ -295,8 +295,8 @@ class DECAFPlugin(Plugin):
         encoder = self.baseline_generator.get_encoder()
         encoded_dag = []
         for edge in dag:
-            for src_col in encoder.get_column_info(edge[0]).output_columns:
-                for dst_col in encoder.get_column_info(edge[1]).output_columns:
+            for src_col in encoder.get_column_info(edge[0]).transformed_features:
+                for dst_col in encoder.get_column_info(edge[1]).transformed_features:
                     encoded_dag.append(
                         (
                             self.encoded_features.index(src_col),
@@ -325,13 +325,15 @@ class DECAFPlugin(Plugin):
 
         encoded_dict: Dict[int, List[int]] = {}
         for src_col in edges:
-            for encoded_src_col in encoder.get_column_info(src_col).output_columns:
+            for encoded_src_col in encoder.get_column_info(
+                src_col
+            ).transformed_features:
                 encoded_dict[encoded_src_col] = []
 
                 for dst_col in edges[src_col]:
                     for encoded_dst_col in encoder.get_column_info(
                         dst_col
-                    ).output_columns:
+                    ).transformed_features:
                         encoded_dict[encoded_src_col].append(encoded_dst_col)
 
         return encoded_dict

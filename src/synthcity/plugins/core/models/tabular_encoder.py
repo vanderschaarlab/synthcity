@@ -2,13 +2,12 @@
 """
 
 # stdlib
-from collections import namedtuple
 from typing import Any, List, Optional, Sequence, Tuple
 
 # third party
 import numpy as np
 import pandas as pd
-from pydantic import validate_arguments
+from pydantic import BaseModel, validate_arguments, validator
 from rdt.transformers import ClusterBasedNormalizer
 from sklearn.base import BaseEstimator, TransformerMixin
 from sklearn.preprocessing import MinMaxScaler, OneHotEncoder
@@ -17,10 +16,29 @@ from sklearn.preprocessing import MinMaxScaler, OneHotEncoder
 import synthcity.logger as log
 from synthcity.utils.serialization import dataframe_hash
 
-ColumnTransformInfo = namedtuple(
-    "ColumnTransformInfo",
-    ["column_name", "column_type", "transform", "output_dimensions", "output_columns"],
-)
+
+class FeatureInfo(BaseModel):
+    name: str
+    feature_type: str
+    transform: Any
+    output_dimensions: int
+    transformed_features: List[str]
+
+    @validator("feature_type")
+    def _feature_type_validator(cls: Any, v: str) -> str:
+        if v not in ["discrete", "continuous"]:
+            raise ValueError(f"Invalid feature type {v}")
+        return v
+
+    @validator("transform")
+    def _transform_validator(cls: Any, v: Any) -> Any:
+        if not (
+            hasattr(v, "fit")
+            and hasattr(v, "transform")
+            # and hasattr(v, "ivnerse_transform")
+        ):
+            raise ValueError(f"Invalid transform {v}")
+        return v
 
 
 class BinEncoder(TransformerMixin, BaseEstimator):
@@ -46,7 +64,7 @@ class BinEncoder(TransformerMixin, BaseEstimator):
         self.categorical_limit = categorical_limit
 
     @validate_arguments(config=dict(arbitrary_types_allowed=True))
-    def _fit_continuous(self, data: pd.Series) -> ColumnTransformInfo:
+    def _fit_continuous(self, data: pd.Series) -> FeatureInfo:
         """Train Bayesian GMM for continuous columns.
 
         Args:
@@ -55,27 +73,27 @@ class BinEncoder(TransformerMixin, BaseEstimator):
 
         Returns:
             namedtuple:
-                A ``ColumnTransformInfo`` object.
+                A ``FeatureInfo`` object.
         """
-        column_name = data.name
+        name = data.name
         gm = ClusterBasedNormalizer(
             model_missing_values=True,
             max_clusters=min(self.max_clusters, len(data)),
             enforce_min_max_values=True,
         )
-        gm.fit(data.to_frame(), column_name)
+        gm.fit(data.to_frame(), name)
         num_components = sum(gm.valid_component_indicator)
 
-        output_columns = [f"{column_name}.normalized"] + [
-            f"{column_name}.component_{i}" for i in range(num_components)
+        transformed_features = [f"{name}.normalized"] + [
+            f"{name}.component_{i}" for i in range(num_components)
         ]
 
-        return ColumnTransformInfo(
-            column_name=column_name,
-            column_type="continuous",
+        return FeatureInfo(
+            name=name,
+            feature_type="continuous",
             transform=gm,
             output_dimensions=1 + num_components,
-            output_columns=output_columns,
+            transformed_features=transformed_features,
         )
 
     def fit(
@@ -95,32 +113,32 @@ class BinEncoder(TransformerMixin, BaseEstimator):
         self.output_dimensions = 0
 
         self._column_transform_info = {}
-        for column_name in raw_data.columns:
-            if column_name not in discrete_columns:
-                column_transform_info = self._fit_continuous(raw_data[column_name])
-                self._column_transform_info[column_name] = column_transform_info
+        for name in raw_data.columns:
+            if name not in discrete_columns:
+                column_transform_info = self._fit_continuous(raw_data[name])
+                self._column_transform_info[name] = column_transform_info
 
         return self
 
     def _transform_continuous(
-        self, column_transform_info: ColumnTransformInfo, data: pd.Series
+        self, column_transform_info: FeatureInfo, data: pd.Series
     ) -> pd.Series:
-        column_name = data.name
+        name = data.name
         gm = column_transform_info.transform
-        transformed = gm.transform(data.to_frame()[[column_name]])
+        transformed = gm.transform(data.to_frame()[[name]])
 
-        return transformed[f"{column_name}.component"].to_numpy().astype(int)
+        return transformed[f"{name}.component"].to_numpy().astype(int)
 
     @validate_arguments(config=dict(arbitrary_types_allowed=True))
     def transform(self, raw_data: pd.DataFrame) -> pd.DataFrame:
         """Take raw data and output a matrix data."""
         output = raw_data.copy()
 
-        for column_name in self._column_transform_info:
-            column_transform_info = self._column_transform_info[column_name]
+        for name in self._column_transform_info:
+            column_transform_info = self._column_transform_info[name]
 
-            output[column_name] = self._transform_continuous(
-                column_transform_info, raw_data[column_name]
+            output[name] = self._transform_continuous(
+                column_transform_info, raw_data[name]
             )
 
         return output
@@ -155,7 +173,7 @@ class TabularEncoder(TransformerMixin, BaseEstimator):
         self.whitelist = whitelist
 
     @validate_arguments(config=dict(arbitrary_types_allowed=True))
-    def _fit_continuous(self, data: pd.Series) -> ColumnTransformInfo:
+    def _fit_continuous(self, data: pd.Series) -> FeatureInfo:
         """Train Bayesian GMM for continuous columns.
 
         Args:
@@ -164,30 +182,30 @@ class TabularEncoder(TransformerMixin, BaseEstimator):
 
         Returns:
             namedtuple:
-                A ``ColumnTransformInfo`` object.
+                A ``FeatureInfo`` object.
         """
-        column_name = data.name
+        name = data.name
         gm = ClusterBasedNormalizer(
             model_missing_values=True,
             max_clusters=min(len(data), self.max_clusters),
             enforce_min_max_values=True,
         )
-        gm.fit(data.to_frame(), column_name)
+        gm.fit(data.to_frame(), name)
         num_components = sum(gm.valid_component_indicator)
 
-        output_columns = [f"{column_name}.normalized"] + [
-            f"{column_name}.component_{i}" for i in range(num_components)
+        transformed_features = [f"{name}.normalized"] + [
+            f"{name}.component_{i}" for i in range(num_components)
         ]
-        return ColumnTransformInfo(
-            column_name=column_name,
-            column_type="continuous",
+        return FeatureInfo(
+            name=name,
+            feature_type="continuous",
             transform=gm,
             output_dimensions=1 + num_components,
-            output_columns=output_columns,
+            transformed_features=transformed_features,
         )
 
     @validate_arguments(config=dict(arbitrary_types_allowed=True))
-    def _fit_discrete(self, data: pd.Series) -> ColumnTransformInfo:
+    def _fit_discrete(self, data: pd.Series) -> FeatureInfo:
         """Fit one hot encoder for discrete column.
 
         Args:
@@ -196,21 +214,21 @@ class TabularEncoder(TransformerMixin, BaseEstimator):
 
         Returns:
             namedtuple:
-                A ``ColumnTransformInfo`` object.
+                A ``FeatureInfo`` object.
         """
-        column_name = data.name
+        name = data.name
         ohe = OneHotEncoder(handle_unknown="ignore", sparse=False)
         ohe.fit(data.values.reshape(-1, 1))
         num_categories = len(ohe.categories_[0])
 
-        output_columns = ohe.get_feature_names_out([data.name])
+        transformed_features = list(ohe.get_feature_names_out([data.name]))
 
-        return ColumnTransformInfo(
-            column_name=column_name,
-            column_type="discrete",
+        return FeatureInfo(
+            name=name,
+            feature_type="discrete",
             transform=ohe,
             output_dimensions=num_categories,
-            output_columns=output_columns,
+            transformed_features=transformed_features,
         )
 
     @validate_arguments(config=dict(arbitrary_types_allowed=True))
@@ -236,16 +254,16 @@ class TabularEncoder(TransformerMixin, BaseEstimator):
         self._column_raw_dtypes = raw_data.infer_objects().dtypes
         self._column_transform_info_list = []
 
-        for column_name in raw_data.columns:
-            if column_name in self.whitelist:
+        for name in raw_data.columns:
+            if name in self.whitelist:
                 continue
-            column_hash = dataframe_hash(raw_data[[column_name]])
-            log.info(f"Encoding {column_name} {column_hash}")
+            column_hash = dataframe_hash(raw_data[[name]])
+            log.info(f"Encoding {name} {column_hash}")
 
-            if column_name in discrete_columns:
-                column_transform_info = self._fit_discrete(raw_data[column_name])
+            if name in discrete_columns:
+                column_transform_info = self._fit_discrete(raw_data[name])
             else:
-                column_transform_info = self._fit_continuous(raw_data[column_name])
+                column_transform_info = self._fit_continuous(raw_data[name])
 
             self.output_dimensions += column_transform_info.output_dimensions
             self._column_transform_info_list.append(column_transform_info)
@@ -253,32 +271,32 @@ class TabularEncoder(TransformerMixin, BaseEstimator):
         return self
 
     def _transform_continuous(
-        self, column_transform_info: ColumnTransformInfo, data: pd.Series
+        self, column_transform_info: FeatureInfo, data: pd.Series
     ) -> pd.DataFrame:
-        column_name = data.name
+        name = data.name
         gm = column_transform_info.transform
-        transformed = gm.transform(data.to_frame()[[column_name]])
+        transformed = gm.transform(data.to_frame()[[name]])
 
         #  Converts the transformed data to the appropriate output format.
         #  The first column (ending in '.normalized') stays the same,
         #  but the lable encoded column (ending in '.component') is one hot encoded.
         output = np.zeros((len(transformed), column_transform_info.output_dimensions))
-        output[:, 0] = transformed[f"{column_name}.normalized"].to_numpy()
-        index = transformed[f"{column_name}.component"].to_numpy().astype(int)
+        output[:, 0] = transformed[f"{name}.normalized"].to_numpy()
+        index = transformed[f"{name}.component"].to_numpy().astype(int)
         output[np.arange(index.size), index + 1] = 1
 
         return pd.DataFrame(
             output,
-            columns=column_transform_info.output_columns,
+            columns=column_transform_info.transformed_features,
         )
 
     def _transform_discrete(
-        self, column_transform_info: ColumnTransformInfo, data: pd.Series
+        self, column_transform_info: FeatureInfo, data: pd.Series
     ) -> pd.DataFrame:
         ohe = column_transform_info.transform
         return pd.DataFrame(
             ohe.transform(data.to_frame().values),
-            columns=column_transform_info.output_columns,
+            columns=column_transform_info.transformed_features,
         )
 
     @validate_arguments(config=dict(arbitrary_types_allowed=True))
@@ -288,17 +306,17 @@ class TabularEncoder(TransformerMixin, BaseEstimator):
             return pd.DataFrame(np.zeros((len(raw_data), 0)))
 
         column_data_list = []
-        for column_name in self.whitelist:
-            if column_name not in raw_data.columns:
+        for name in self.whitelist:
+            if name not in raw_data.columns:
                 continue
-            data = raw_data[column_name]
+            data = raw_data[name]
             column_data_list.append(data)
 
         for column_transform_info in self._column_transform_info_list:
-            column_name = column_transform_info.column_name
-            data = raw_data[column_name]
+            name = column_transform_info.name
+            data = raw_data[name]
 
-            if column_transform_info.column_type == "continuous":
+            if column_transform_info.feature_type == "continuous":
                 column_data_list.append(
                     self._transform_continuous(column_transform_info, data)
                 )
@@ -315,7 +333,7 @@ class TabularEncoder(TransformerMixin, BaseEstimator):
     @validate_arguments(config=dict(arbitrary_types_allowed=True))
     def _inverse_transform_continuous(
         self,
-        column_transform_info: ColumnTransformInfo,
+        column_transform_info: FeatureInfo,
         column_data: pd.DataFrame,
     ) -> pd.DataFrame:
         gm = column_transform_info.transform
@@ -327,10 +345,10 @@ class TabularEncoder(TransformerMixin, BaseEstimator):
 
     @validate_arguments(config=dict(arbitrary_types_allowed=True))
     def _inverse_transform_discrete(
-        self, column_transform_info: ColumnTransformInfo, column_data: pd.DataFrame
+        self, column_transform_info: FeatureInfo, column_data: pd.DataFrame
     ) -> pd.DataFrame:
         ohe = column_transform_info.transform
-        column = column_transform_info.column_name
+        column = column_transform_info.name
         return pd.DataFrame(
             ohe.inverse_transform(column_data),
             columns=[column],
@@ -347,21 +365,21 @@ class TabularEncoder(TransformerMixin, BaseEstimator):
 
         st = 0
         recovered_column_data_list = []
-        column_names = []
-        column_types = []
+        names = []
+        feature_types = []
 
-        for column_name in self.whitelist:
-            if column_name not in data.columns:
+        for name in self.whitelist:
+            if name not in data.columns:
                 continue
-            local_data = data[column_name]
-            column_names.append(column_name)
-            column_types.append(self._column_raw_dtypes)
+            local_data = data[name]
+            names.append(name)
+            feature_types.append(self._column_raw_dtypes)
             recovered_column_data_list.append(local_data)
 
         for column_transform_info in self._column_transform_info_list:
             dim = column_transform_info.output_dimensions
             column_data = data.iloc[:, list(range(st, st + dim))]
-            if column_transform_info.column_type == "continuous":
+            if column_transform_info.feature_type == "continuous":
                 recovered_column_data = self._inverse_transform_continuous(
                     column_transform_info, column_data
                 )
@@ -371,13 +389,13 @@ class TabularEncoder(TransformerMixin, BaseEstimator):
                 )
 
             recovered_column_data_list.append(recovered_column_data)
-            column_names.append(column_transform_info.column_name)
+            names.append(column_transform_info.name)
             st += dim
 
         recovered_data = np.column_stack(recovered_column_data_list)
         recovered_data = pd.DataFrame(
-            recovered_data, columns=column_names, index=data.index
-        ).astype(self._column_raw_dtypes.filter(column_names))
+            recovered_data, columns=names, index=data.index
+        ).astype(self._column_raw_dtypes.filter(names))
         return recovered_data
 
     def layout(self) -> List[Tuple]:
@@ -397,12 +415,12 @@ class TabularEncoder(TransformerMixin, BaseEstimator):
             ]
         )
 
-    def get_column_info(self, column_name: str) -> ColumnTransformInfo:
+    def get_column_info(self, name: str) -> FeatureInfo:
         for column_transform_info in self._column_transform_info_list:
-            if column_transform_info.column_name == column_name:
+            if column_transform_info.name == name:
                 return column_transform_info
 
-        raise RuntimeError(f"Unknown column {column_name}")
+        raise RuntimeError(f"Unknown column {name}")
 
     @validate_arguments(config=dict(arbitrary_types_allowed=True))
     def activation_layout(
@@ -416,7 +434,7 @@ class TabularEncoder(TransformerMixin, BaseEstimator):
         """
         out = []
         for column_transform_info in self._column_transform_info_list:
-            if column_transform_info.column_type == "continuous":
+            if column_transform_info.feature_type == "continuous":
                 out.extend(
                     [
                         (continuous_activation, 1),
