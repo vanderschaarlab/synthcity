@@ -244,7 +244,12 @@ class DataLoader(metaclass=ABCMeta):
         decoded = self.dataframe().copy()
 
         for col in encoders:
-            decoded[col] = encoders[col].inverse_transform(decoded[col].infer_objects())
+            if isinstance(encoders[col], LabelEncoder):
+                decoded[col] = decoded[col].astype(int)
+            else:
+                decoded[col] = decoded[col].astype(float)
+
+            decoded[col] = encoders[col].inverse_transform(decoded[col])
 
         return self.from_info(decoded, self.info())
 
