@@ -225,7 +225,7 @@ class TabularGAN(torch.nn.Module):
             for item in self.encoder.layout():
                 length = item.output_dimensions
 
-                if item.column_type != "discrete":
+                if item.feature_type != "discrete":
                     idx += length
                     continue
 

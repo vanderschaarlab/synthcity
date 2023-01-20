@@ -123,7 +123,7 @@ class BayesianNetworkPlugin(Plugin):
             loc=0, scale=self.encoder_noise_scale, size=len(encoded)
         )
         for col in encoded.columns:
-            if col.endswith(".normalized"):
+            if col.endswith(".value"):
                 encoded[col] += noise
 
         decoded = self.encoder.inverse_transform(encoded)

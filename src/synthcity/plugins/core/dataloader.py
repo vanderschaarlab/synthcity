@@ -7,11 +7,12 @@ from typing import Any, Dict, List, Optional, Tuple, Union
 import numpy as np
 import pandas as pd
 from pydantic import validate_arguments
-from rdt.transformers import LabelEncoder, UnixTimestampEncoder
 from sklearn.model_selection import train_test_split
+from sklearn.preprocessing import LabelEncoder
 
 # synthcity absolute
 from synthcity.plugins.core.constraints import Constraints
+from synthcity.plugins.core.models.data_encoder import DatetimeEncoder
 from synthcity.utils.compression import compress_dataset, decompress_dataset
 from synthcity.utils.serialization import dataframe_hash
 
@@ -226,14 +227,12 @@ class DataLoader(metaclass=ABCMeta):
                     encoded[col].infer_objects().dtype.kind in ["O", "b"]
                     or len(encoded[col].unique()) < 15
                 ):
-                    encoder = LabelEncoder()
-                    encoder.fit(encoded, col)
-                    encoded[col] = encoder.transform(encoded[[col]]).values
+                    encoder = LabelEncoder().fit(encoded[col])
+                    encoded[col] = encoder.transform(encoded[col])
                     encoders[col] = encoder
                 elif encoded[col].infer_objects().dtype.kind in ["M"]:
-                    encoder = UnixTimestampEncoder()
-                    encoder.fit(encoded, col)
-                    encoded[col] = encoder.transform(encoded[[col]]).values
+                    encoder = DatetimeEncoder().fit(encoded[col])
+                    encoded[col] = encoder.transform(encoded[col]).values
                     encoders[col] = encoder
 
         return self.from_info(encoded, self.info()), encoders
@@ -245,7 +244,12 @@ class DataLoader(metaclass=ABCMeta):
         decoded = self.dataframe().copy()
 
         for col in encoders:
-            decoded[col] = encoders[col].reverse_transform(decoded[[col]].astype(float))
+            if isinstance(encoders[col], LabelEncoder):
+                decoded[col] = decoded[col].astype(int)
+            else:
+                decoded[col] = decoded[col].astype(float)
+
+            decoded[col] = encoders[col].inverse_transform(decoded[col])
 
         return self.from_info(decoded, self.info())
 

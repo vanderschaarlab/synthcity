@@ -31,7 +31,7 @@ class MockPlugin(Plugin):
         return self
 
     def _generate(self, *args: Any, **kwargs: Any) -> DataLoader:
-        return GenericDataLoader([1])
+        return GenericDataLoader([0])
 
 
 def test_mock_plugin_fail() -> None:

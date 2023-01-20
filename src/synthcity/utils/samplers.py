@@ -10,7 +10,7 @@ from pydantic import validate_arguments
 from sklearn.model_selection import train_test_split
 
 # synthcity absolute
-from synthcity.plugins.core.models.tabular_encoder import ColumnTransformInfo
+from synthcity.plugins.core.models.tabular_encoder import FeatureInfo
 from synthcity.utils.constants import DEVICE
 
 
@@ -92,7 +92,7 @@ class ConditionalDatasetSampler(BaseSampler):
     def __init__(
         self,
         data: pd.DataFrame,
-        output_info: List[ColumnTransformInfo],
+        output_info: List[FeatureInfo],
         device: Any = DEVICE,
         train_size: float = 0.8,
     ) -> None:
@@ -212,13 +212,13 @@ class ConditionalDatasetSampler(BaseSampler):
     def _internal_setup(
         self,
         data: pd.DataFrame,
-        output_info: List[ColumnTransformInfo],
+        output_info: List[FeatureInfo],
     ) -> None:
         if data.shape[1] != sum([item.output_dimensions for item in output_info]):
             raise ValueError("Invalid data shape {data.shape}")
 
-        def is_discrete_column(column_info: ColumnTransformInfo) -> bool:
-            return column_info.column_type == "discrete"
+        def is_discrete_column(column_info: FeatureInfo) -> bool:
+            return column_info.feature_type == "discrete"
 
         n_discrete_columns = sum(
             [1 for column_info in output_info if is_discrete_column(column_info)]
