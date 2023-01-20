@@ -36,7 +36,7 @@ class MockPlugin(Plugin):
 
 def test_mock_plugin_fail() -> None:
     with pytest.raises(TypeError):
-        AbstractMockPlugin()
+        AbstractMockPlugin()  # type: ignore
 
 
 def test_mock_plugin_ok() -> None:
