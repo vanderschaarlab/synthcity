@@ -4,12 +4,11 @@ from typing import Any
 # third party
 import numpy as np
 import pandas as pd
-import seaborn as sns
 from pydantic import validate_arguments
 from sklearn.manifold import TSNE
 
 # synthcity absolute
-from synthcity.metrics.eval_statistical import FeatureCorrelation, JensenShannonDistance
+from synthcity.metrics.eval_statistical import JensenShannonDistance
 from synthcity.plugins.core.dataloader import DataLoader
 
 COLOR_PALETTE = ["#2b2d42", "#d90429"]
@@ -78,65 +77,6 @@ def plot_marginal_comparison(
             local_ax.set_ylabel("Count")
 
         local_ax.legend()
-
-
-@validate_arguments(config=dict(arbitrary_types_allowed=True))
-def plot_associations_comparison(
-    plt: Any,
-    X_gt: DataLoader,
-    X_syn: DataLoader,
-    nom_nom_assoc: str = "theil",
-    nominal_columns: str = "auto",
-) -> None:
-    evaluator = FeatureCorrelation(
-        nom_nom_assoc=nom_nom_assoc, nominal_columns=nominal_columns
-    )
-    stats_gt, stats_syn = evaluator._evaluate_stats(X_gt, X_syn)
-    pcd = evaluator.evaluate(X_gt, X_syn)["joint"]
-
-    fig, ax = plt.subplots(1, 2, figsize=(12, 10))
-    cbar_ax = fig.add_axes([0.91, 0.3, 0.01, 0.4])
-
-    cmap = sns.diverging_palette(220, 10, as_cmap=True)
-
-    heatmap_original = sns.heatmap(
-        stats_gt.values.astype(float),
-        ax=ax[0],
-        square=True,
-        annot=False,
-        center=0,
-        linewidths=0,
-        cmap=cmap,
-        xticklabels=True,
-        yticklabels=True,
-        cbar_kws={"shrink": 0.8},
-        cbar_ax=cbar_ax,
-        fmt=".2f",
-    )
-    ax[0].set_title(LABELS[0] + "\n")
-
-    # Synthetic
-    sns.heatmap(
-        stats_syn.values.astype(float),
-        ax=ax[1],
-        square=True,
-        annot=False,
-        center=0,
-        linewidths=0,
-        cmap=cmap,
-        xticklabels=True,
-        yticklabels=False,
-        cbar=False,
-        cbar_kws={"shrink": 0.8},
-    )
-    ax[1].set_title(
-        LABELS[1] + "\n" + "pairwise correlation distance: {}".format(round(pcd, 4))
-    )
-
-    cbar = heatmap_original.collections[0].colorbar
-    cbar.ax.tick_params(labelsize=10)
-
-    ax[0].set_ylabel("Correlation")
 
 
 @validate_arguments(config=dict(arbitrary_types_allowed=True))

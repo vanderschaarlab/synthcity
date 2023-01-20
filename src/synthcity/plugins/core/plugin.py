@@ -13,11 +13,7 @@ from pydantic import validate_arguments
 
 # synthcity absolute
 import synthcity.logger as log
-from synthcity.metrics.plots import (
-    plot_associations_comparison,
-    plot_marginal_comparison,
-    plot_tsne,
-)
+from synthcity.metrics.plots import plot_marginal_comparison, plot_tsne
 from synthcity.plugins.core.constraints import Constraints
 from synthcity.plugins.core.dataloader import (
     DataLoader,
@@ -517,8 +513,6 @@ class Plugin(Serializable, metaclass=ABCMeta):
 
         if "marginal" in plots:
             plot_marginal_comparison(plt, X, X_syn)
-        if "associations" in plots:
-            plot_associations_comparison(plt, X, X_syn)
         if "tsne" in plots:
             plot_tsne(plt, X, X_syn)
 

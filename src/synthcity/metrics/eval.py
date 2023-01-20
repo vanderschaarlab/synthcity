@@ -43,7 +43,6 @@ from .eval_sanity import (
 from .eval_statistical import (
     AlphaPrecision,
     ChiSquaredTest,
-    FeatureCorrelation,
     InverseKLDivergence,
     JensenShannonDistance,
     KolmogorovSmirnovTest,
@@ -64,7 +63,6 @@ standard_metrics = [
     # statistical tests
     JensenShannonDistance,
     ChiSquaredTest,
-    FeatureCorrelation,
     InverseKLDivergence,
     KolmogorovSmirnovTest,
     MaximumMeanDiscrepancy,

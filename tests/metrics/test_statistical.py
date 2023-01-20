@@ -12,7 +12,6 @@ from sklearn.datasets import load_iris
 from synthcity.metrics.eval_statistical import (
     AlphaPrecision,
     ChiSquaredTest,
-    FeatureCorrelation,
     InverseKLDivergence,
     JensenShannonDistance,
     KolmogorovSmirnovTest,
@@ -159,27 +158,6 @@ def test_evaluate_avg_jensenshannon_distance(test_plugin: Plugin) -> None:
     assert JensenShannonDistance.name() == "jensenshannon_dist"
     assert JensenShannonDistance.type() == "stats"
     assert JensenShannonDistance.direction() == "minimize"
-
-
-@pytest.mark.parametrize("test_plugin", [Plugins().get("dummy_sampler")])
-def test_evaluate_feature_correlation(test_plugin: Plugin) -> None:
-    X, y = load_iris(return_X_y=True, as_frame=True)
-    X["target"] = y
-    Xloader = GenericDataLoader(X)
-
-    test_plugin.fit(Xloader)
-    X_gen = test_plugin.generate(1000)
-
-    syn_score, rnd_score = _eval_plugin(FeatureCorrelation, Xloader, X_gen)
-
-    for key in syn_score:
-        assert syn_score[key] > 0
-        assert rnd_score[key] > 0
-        assert syn_score[key] < rnd_score[key]
-
-    assert FeatureCorrelation.name() == "feature_corr"
-    assert FeatureCorrelation.type() == "stats"
-    assert FeatureCorrelation.direction() == "minimize"
 
 
 @pytest.mark.parametrize("test_plugin", [Plugins().get("dummy_sampler")])
