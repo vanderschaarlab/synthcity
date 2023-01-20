@@ -7,7 +7,6 @@ from typing import Any, Dict, Optional, Tuple
 import numpy as np
 import pandas as pd
 import torch
-from dython.nominal import associations
 from geomloss import SamplesLoss
 from pydantic import validate_arguments
 from scipy.spatial.distance import jensenshannon
@@ -315,63 +314,6 @@ class JensenShannonDistance(StatisticalEvaluator):
         stats_, _, _ = self._evaluate_stats(X_gt, X_syn)
 
         return {"marginal": sum(stats_.values()) / len(stats_.keys())}
-
-
-class FeatureCorrelation(StatisticalEvaluator):
-    """
-    .. inheritance-diagram:: synthcity.metrics.eval_statistical.FeatureCorrelation
-        :parts: 1
-
-    Evaluate the correlation/strength-of-association of features in data-set with both categorical and continuous features using: * Pearson's R for continuous-continuous cases ** Cramer's V or Theil's U for categorical-categorical cases."""
-
-    def __init__(
-        self, nom_nom_assoc: str = "theil", nominal_columns: str = "auto", **kwargs: Any
-    ) -> None:
-        super().__init__(default_metric="joint", **kwargs)
-
-        self.nom_nom_assoc = nom_nom_assoc
-        self.nominal_columns = nominal_columns
-
-    @staticmethod
-    def name() -> str:
-        return "feature_corr"
-
-    @staticmethod
-    def direction() -> str:
-        return "minimize"
-
-    @validate_arguments(config=dict(arbitrary_types_allowed=True))
-    def _evaluate_stats(
-        self,
-        X_gt: DataLoader,
-        X_syn: DataLoader,
-    ) -> Tuple[Dict, Dict]:
-        stats_gt = associations(
-            X_gt.numpy(),
-            nom_nom_assoc=self.nom_nom_assoc,
-            nominal_columns=self.nominal_columns,
-            nan_replace_value="nan",
-            compute_only=True,
-        )["corr"]
-        stats_syn = associations(
-            X_syn.numpy(),
-            nom_nom_assoc=self.nom_nom_assoc,
-            nominal_columns=self.nominal_columns,
-            nan_replace_value="nan",
-            compute_only=True,
-        )["corr"]
-
-        return stats_gt, stats_syn
-
-    @validate_arguments(config=dict(arbitrary_types_allowed=True))
-    def _evaluate(
-        self,
-        X_gt: DataLoader,
-        X_syn: DataLoader,
-    ) -> Dict:
-        stats_gt, stats_syn = self._evaluate_stats(X_gt, X_syn)
-
-        return {"joint": np.linalg.norm(stats_gt - stats_syn, "fro")}
 
 
 class WassersteinDistance(StatisticalEvaluator):
