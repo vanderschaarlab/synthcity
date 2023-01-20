@@ -1,5 +1,5 @@
 """
-Reference: "SurvivalGAN: Generating time-to-event Data for Survival Analysis", B. Cebere*, A. Norcliffe*, F. Imrie, M. van der Schaar 
+Reference: "SurvivalGAN: Generating time-to-event Data for Survival Analysis", B. Cebere*, A. Norcliffe*, F. Imrie, M. van der Schaar, AISTATS 2023
 """
 
 # stdlib
