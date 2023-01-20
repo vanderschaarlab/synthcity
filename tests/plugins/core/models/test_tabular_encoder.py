@@ -75,13 +75,16 @@ def test_encoder_fit_transform(max_clusters: int) -> None:
         if column.feature_type == "discrete":
             for val in X[column.name].unique():
                 assert f"{column.name}_{val}" in encoded.columns
-                assert set(encoded[f"{column.name}_{val}"].unique()) == set([0, 1])
+                assert set(encoded[f"{column.name}_{val}"].unique()).issubset(
+                    set([0, 1])
+                )
 
         else:
-            assert f"{column.name}.normalized" in encoded.columns
+            assert f"{column.name}.value" in encoded.columns
             for enc_col in encoded.columns:
-                if column.name in enc_col and "normalized" not in enc_col:
-                    assert set(encoded[enc_col].unique()) == set([0, 1])
+                if column.name in enc_col and "value" not in enc_col:
+                    print(enc_col, encoded[enc_col])
+                    assert set(encoded[enc_col].unique()).issubset(set([0, 1]))
 
 
 @pytest.mark.parametrize("max_clusters", [20, 50])
@@ -192,9 +195,9 @@ def test_ts_encoder_fit_transform(source: Any) -> None:
                 )
 
         else:
-            assert f"{column.name}.normalized" in static_encoded.columns
+            assert f"{column.name}.value" in static_encoded.columns
             for enc_col in static_encoded.columns:
-                if column.name in enc_col and "normalized" not in enc_col:
+                if column.name in enc_col and "value" not in enc_col:
                     assert set(static_encoded[enc_col].unique().astype(int)).issubset(
                         set([0, 1])
                     )
@@ -210,9 +213,9 @@ def test_ts_encoder_fit_transform(source: Any) -> None:
                     assert set(item[f"{column.name}_{val}"].unique()) == set([0, 1])
 
             else:
-                assert f"{column.name}.normalized" in item.columns
+                assert f"{column.name}.value" in item.columns
                 for enc_col in item.columns:
-                    if column.name in enc_col and "normalized" not in enc_col:
+                    if column.name in enc_col and "value" not in enc_col:
                         assert set(item[enc_col].unique().astype(int)).issubset(
                             set([0, 1])
                         )

@@ -8,13 +8,15 @@ from typing import Any, List, Optional, Sequence, Tuple
 import numpy as np
 import pandas as pd
 from pydantic import BaseModel, validate_arguments, validator
-from rdt.transformers import ClusterBasedNormalizer
 from sklearn.base import BaseEstimator, TransformerMixin
 from sklearn.preprocessing import MinMaxScaler, OneHotEncoder
 
 # synthcity absolute
 import synthcity.logger as log
 from synthcity.utils.serialization import dataframe_hash
+
+# synthcity relative
+from .data_encoder import ContinuousDataEncoder
 
 
 class FeatureInfo(BaseModel):
@@ -35,9 +37,15 @@ class FeatureInfo(BaseModel):
         if not (
             hasattr(v, "fit")
             and hasattr(v, "transform")
-            # and hasattr(v, "ivnerse_transform")
+            and hasattr(v, "inverse_transform")
         ):
             raise ValueError(f"Invalid transform {v}")
+        return v
+
+    @validator("output_dimensions")
+    def _output_dimensions_validator(cls: Any, v: int) -> int:
+        if v <= 0:
+            raise ValueError(f"Invalid output_dimensions {v}")
         return v
 
 
@@ -76,22 +84,20 @@ class BinEncoder(TransformerMixin, BaseEstimator):
                 A ``FeatureInfo`` object.
         """
         name = data.name
-        gm = ClusterBasedNormalizer(
-            model_missing_values=True,
-            max_clusters=min(self.max_clusters, len(data)),
-            enforce_min_max_values=True,
+        encoder = ContinuousDataEncoder(
+            n_components=min(self.max_clusters, len(data)),
         )
-        gm.fit(data.to_frame(), name)
-        num_components = sum(gm.valid_component_indicator)
+        encoder.fit(data)
+        num_components = encoder.components()
 
-        transformed_features = [f"{name}.normalized"] + [
+        transformed_features = [f"{name}.value"] + [
             f"{name}.component_{i}" for i in range(num_components)
         ]
 
         return FeatureInfo(
             name=name,
             feature_type="continuous",
-            transform=gm,
+            transform=encoder,
             output_dimensions=1 + num_components,
             transformed_features=transformed_features,
         )
@@ -101,7 +107,7 @@ class BinEncoder(TransformerMixin, BaseEstimator):
     ) -> "BinEncoder":
         """Fit the ``BinEncoder``.
 
-        Fits a ``ClusterBasedNormalizer`` for continuous columns
+        Fits a ``ContinuousDataEncoder`` for continuous columns
         """
         if discrete_columns is None:
             discrete_columns = []
@@ -124,8 +130,8 @@ class BinEncoder(TransformerMixin, BaseEstimator):
         self, column_transform_info: FeatureInfo, data: pd.Series
     ) -> pd.Series:
         name = data.name
-        gm = column_transform_info.transform
-        transformed = gm.transform(data.to_frame()[[name]])
+        encoder = column_transform_info.transform
+        transformed = encoder.transform(data)
 
         return transformed[f"{name}.component"].to_numpy().astype(int)
 
@@ -185,21 +191,19 @@ class TabularEncoder(TransformerMixin, BaseEstimator):
                 A ``FeatureInfo`` object.
         """
         name = data.name
-        gm = ClusterBasedNormalizer(
-            model_missing_values=True,
-            max_clusters=min(len(data), self.max_clusters),
-            enforce_min_max_values=True,
+        encoder = ContinuousDataEncoder(
+            n_components=min(len(data), self.max_clusters),
         )
-        gm.fit(data.to_frame(), name)
-        num_components = sum(gm.valid_component_indicator)
+        encoder.fit(data)
+        num_components = encoder.components()
 
-        transformed_features = [f"{name}.normalized"] + [
+        transformed_features = [f"{name}.value"] + [
             f"{name}.component_{i}" for i in range(num_components)
         ]
         return FeatureInfo(
             name=name,
             feature_type="continuous",
-            transform=gm,
+            transform=encoder,
             output_dimensions=1 + num_components,
             transformed_features=transformed_features,
         )
@@ -237,7 +241,7 @@ class TabularEncoder(TransformerMixin, BaseEstimator):
     ) -> Any:
         """Fit the ``TabularEncoder``.
 
-        Fits a ``ClusterBasedNormalizer`` for continuous columns and a
+        Fits a ``ContinuousDataEncoder`` for continuous columns and a
         ``OneHotEncoder`` for discrete columns.
 
         This step also counts the #columns in matrix data and span information.
@@ -274,14 +278,12 @@ class TabularEncoder(TransformerMixin, BaseEstimator):
         self, column_transform_info: FeatureInfo, data: pd.Series
     ) -> pd.DataFrame:
         name = data.name
-        gm = column_transform_info.transform
-        transformed = gm.transform(data.to_frame()[[name]])
+        encoder = column_transform_info.transform
+        transformed = encoder.transform(data)
 
         #  Converts the transformed data to the appropriate output format.
-        #  The first column (ending in '.normalized') stays the same,
-        #  but the lable encoded column (ending in '.component') is one hot encoded.
         output = np.zeros((len(transformed), column_transform_info.output_dimensions))
-        output[:, 0] = transformed[f"{name}.normalized"].to_numpy()
+        output[:, 0] = transformed[f"{name}.value"].to_numpy()
         index = transformed[f"{name}.component"].to_numpy().astype(int)
         output[np.arange(index.size), index + 1] = 1
 
@@ -336,12 +338,10 @@ class TabularEncoder(TransformerMixin, BaseEstimator):
         column_transform_info: FeatureInfo,
         column_data: pd.DataFrame,
     ) -> pd.DataFrame:
-        gm = column_transform_info.transform
-        data = pd.DataFrame(
-            column_data.values[:, :2], columns=list(gm.get_output_sdtypes())
-        )
+        encoder = column_transform_info.transform
+        data = pd.DataFrame(column_data.values[:, :2], columns=["value", "component"])
         data.iloc[:, 1] = np.argmax(column_data.values[:, 1:], axis=1)
-        return gm.reverse_transform(data)
+        return encoder.inverse_transform(data)
 
     @validate_arguments(config=dict(arbitrary_types_allowed=True))
     def _inverse_transform_discrete(
