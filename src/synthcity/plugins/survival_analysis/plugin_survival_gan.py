@@ -1,3 +1,7 @@
+"""
+Reference: "SurvivalGAN: Generating time-to-event Data for Survival Analysis", B. Cebere*, A. Norcliffe*, F. Imrie, M. van der Schaar 
+"""
+
 # stdlib
 from pathlib import Path
 from typing import Any, List, Optional, Union
