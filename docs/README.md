@@ -1,5 +1,5 @@
 <h2 align="center">
-  synthcity BETA
+  synthcity
 </h2>
 
 <h4 align="center">
@@ -19,8 +19,6 @@
 - |:book:| [Read the docs !](https://synthcity.readthedocs.io/)
 - |:airplane:| [Checkout the tutorials!](https://github.com/vanderschaarlab/synthcity#-tutorials)
 
-|:rotating_light:| __NOTE__: Python 3.10 is __NOT__ supported yet.
-
 ## |:rocket:| Installation
 
 The library can be installed from PyPI using
@@ -35,7 +33,7 @@ $ pip install .
 ## |:boom:| Sample Usage
 
 ### Generic data
-* List the available generators
+* List the available general-purpose generators
 
 ```python
 from synthcity.plugins import Plugins
@@ -43,7 +41,7 @@ from synthcity.plugins import Plugins
 Plugins(categories=["generic", "privacy"]).list()
 ```
 
-* Load and train a generator
+* Load and train a tabular generator
 
 ```python
 from sklearn.datasets import load_diabetes
@@ -52,12 +50,12 @@ from synthcity.plugins import Plugins
 X, y = load_diabetes(return_X_y=True, as_frame=True)
 X["target"] = y
 
-syn_model = Plugins().get("marginal_distributions")
+syn_model = Plugins().get("adsgan")
 
 syn_model.fit(X)
 ```
 
-* Generate new synthetic data
+* Generate new synthetic tabular data
 
 ```python
 syn_model.generate(count = 10)
@@ -79,13 +77,13 @@ X["target"] = y
 
 loader = GenericDataLoader(X, target_column="target", sensitive_columns=["sex"])
 
-constraints = Constraints(rules=[("target", "ge", 150)])
-
 score = Benchmarks.evaluate(
-    [("example", "marginal_distributions", {})],  # testname, plugin name, pplugin args
+    [
+        (f"example_{model}", model, {})  # testname, plugin name, plugin args
+        for model in ["adsgan", "ctgan", "tvae"]
+    ],
     loader,
     synthetic_size=1000,
-    synthetic_constraints=constraints,
     metrics={"performance": ["linear_model"]},
     repeats=3,
 )
@@ -94,7 +92,7 @@ Benchmarks.print(score)
 
 ### Static Survival analysis
 
-* List the available generators
+* List the available generators dedicated to survival analysis
 
 ```python
 from synthcity.plugins import Plugins
@@ -116,14 +114,14 @@ data = SurvivalAnalysisDataLoader(
     time_to_event_column="week",
 )
 
-syn_model = Plugins().get("marginal_distributions")
+syn_model = Plugins().get("survival_gan")
 
 syn_model.fit(data)
 
 syn_model.generate(count=10)
 ```
 
-### Time-Series & Time-Series Survival Analysis
+### Time series
 
 * List the available generators
 
@@ -149,7 +147,7 @@ data = TimeSeriesDataLoader(
     outcome=outcome,
 )
 
-syn_model = Plugins().get("marginal_distributions")
+syn_model = Plugins().get("timegan")
 
 syn_model.fit(data)
 
@@ -187,12 +185,12 @@ assert syn_model.name() == reloaded.name()
 
 ## 📓 Tutorials
 
- - [![Test In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/drive/1Vr2PJswgfFYBkJCm3hhVkuH-9dXnHeYV?usp=sharing) [ Tutorial 0: Getting started with tabular data](https://github.com/vanderschaarlab/synthcity/blob/use_cases/tutorials/tutorial0_basic_examples.ipynb)
-  - [![Test In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/drive/1rTTvV4FT-Ut-rIHoBPXQimiBlZ7zCv59?usp=sharing) [ Tutorial 1: Writing a new plugin](https://github.com/vanderschaarlab/synthcity/blob/use_cases/tutorials/tutorial1_add_a_new_plugin.ipynb)
-   - [![Test In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/drive/1FXpnQ9bpHzEgJgD-9pf_PPN4D80ENilE?usp=sharing) [ Tutorial 2: Benchmarking models](https://github.com/vanderschaarlab/synthcity/blob/use_cases/tutorials/tutorial2_benchmarks.ipynb)
-   - [![Test In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/drive/1Wa2CPsbXzbKMPC5fSBhKl00Gi7QqVkse?usp=sharing) [ Tutorial 3: Generating Survival Analysis data](https://github.com/vanderschaarlab/synthcity/blob/use_cases/tutorials/tutorial3_survival_analysis.ipynb)
-   - [![Test In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/drive/1jN36GCAKEkjzDlczmQfR7Wbh3yF3cIz5?usp=sharing) [ Tutorial 4: Generating Time Series](https://github.com/vanderschaarlab/synthcity/blob/use_cases/tutorials/tutorial4_time_series.ipynb)
-   - [![Test In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/drive/1Nf8d3Y6sXr1uco8MsJA4wb33iFvReL59?usp=sharing) [ Tutorial 5: Generating Data with Differential Privacy Guarantees](https://github.com/vanderschaarlab/synthcity/blob/use_cases/tutorials/tutorial5_differential_privacy.ipynb)
+ - [![Test In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/drive/1Vr2PJswgfFYBkJCm3hhVkuH-9dXnHeYV?usp=sharing) [ Tutorial 0: Getting started with tabular data](https://github.com/vanderschaarlab/synthcity/blob/main/tutorials/tutorial0_basic_examples.ipynb)
+  - [![Test In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/drive/1rTTvV4FT-Ut-rIHoBPXQimiBlZ7zCv59?usp=sharing) [ Tutorial 1: Writing a new plugin](https://github.com/vanderschaarlab/synthcity/blob/main/tutorials/tutorial1_add_a_new_plugin.ipynb)
+   - [![Test In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/drive/1FXpnQ9bpHzEgJgD-9pf_PPN4D80ENilE?usp=sharing) [ Tutorial 2: Benchmarking models](https://github.com/vanderschaarlab/synthcity/blob/main/tutorials/tutorial2_benchmarks.ipynb)
+   - [![Test In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/drive/1Wa2CPsbXzbKMPC5fSBhKl00Gi7QqVkse?usp=sharing) [ Tutorial 3: Generating Survival Analysis data](https://github.com/vanderschaarlab/synthcity/blob/main/tutorials/tutorial3_survival_analysis.ipynb)
+   - [![Test In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/drive/1jN36GCAKEkjzDlczmQfR7Wbh3yF3cIz5?usp=sharing) [ Tutorial 4: Generating Time Series](https://github.com/vanderschaarlab/synthcity/blob/main/tutorials/tutorial4_time_series.ipynb)
+   - [![Test In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/drive/1Nf8d3Y6sXr1uco8MsJA4wb33iFvReL59?usp=sharing) [ Tutorial 5: Generating Data with Differential Privacy Guarantees](https://github.com/vanderschaarlab/synthcity/blob/main/tutorials/tutorial5_differential_privacy.ipynb)
 
 
 ## 🔑 Methods
@@ -224,7 +222,7 @@ assert syn_model.name() == reloaded.name()
 |--- | --- | --- |
 |**nflow**| Normalizing Flows are generative models which produce tractable distributions where both sampling and density evaluation can be efficient and exact.| [Neural Spline Flows](https://arxiv.org/abs/1906.04032) |
 
-### Survival analysis methods
+### Static Survival analysis methods
 
 | Method | Description | Reference |
 |--- | --- | --- |
@@ -233,7 +231,7 @@ assert syn_model.name() == reloaded.name()
 |**survae** | SurvivalGAN version using VAE | --- |
 |**survival_nflow** | SurvivalGAN version using normalizing flows | --- |
 
-### Time Series methods
+### Time-Series and Time-Series Survival Analysis methods
 
 | Method | Description | Reference |
 |--- | --- | --- |
@@ -291,9 +289,7 @@ The following table contains the available evaluation metrics:
 |**ks_test**|The Kolmogorov-Smirnov test|0: the distributions are totally different. <br/>1: the distributions are identical.|
 |**chi_squared_test**|The p-value. A small value indicates that we can reject the null hypothesis and that the distributions are different.|0: the distributions are different<br/>1: the distributions are identical.|
 |**max_mean_discrepancy**|Empirical maximum mean discrepancy.|0: The distributions are the same. <br/>1: The distributions are totally different.|
-|**inv_cdf_distance**|The total distance between continuous features, |0: The distributions are the same. <br/>1: The distributions are totally different.|
 |**jensenshannon_dist**|The Jensen-Shannon distance (metric) between two probability arrays. This is the square root of the Jensen-Shannon divergence. |0: The distributions are the same. <br/>1: The distributions are totally different.|
-|**feature_corr**| The correlation/strength-of-association of features in data-set with both categorical and continuous features using: * Pearson's R for continuous-continuous cases * Cramer's V or Theil's U for categorical-categorical cases |0: The distributions are the same. <br/>1: The distributions are totally different.|
 |**wasserstein_dist**| Wasserstein Distance is a measure of the distance between two probability distributions. |0: The distributions are the same.|
 |**prdc**| Computes precision, recall, density, and coverage given two manifolds. | --- |
 |**alpha_precision**|Evaluate the alpha-precision, beta-recall, and authenticity scores. | --- |
@@ -338,4 +334,19 @@ pip install .[testing]
 The tests can be executed using
 ```bash
 pytest -vsx
+```
+## Citing
+
+If you use this code, please cite the associated paper:
+
+```
+@misc{https://doi.org/10.48550/arxiv.2301.07573,
+  doi = {10.48550/ARXIV.2301.07573},
+  url = {https://arxiv.org/abs/2301.07573},
+  author = {Qian, Zhaozhi and Cebere, Bogdan-Constantin and van der Schaar, Mihaela},
+  keywords = {Machine Learning (cs.LG), Artificial Intelligence (cs.AI), FOS: Computer and information sciences, FOS: Computer and information sciences},
+  title = {Synthcity: facilitating innovative use cases of synthetic data in different data modalities},
+  year = {2023},
+  copyright = {Creative Commons Attribution 4.0 International}
+}
 ```
