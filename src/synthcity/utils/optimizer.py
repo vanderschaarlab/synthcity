@@ -126,7 +126,7 @@ class EarlyStoppingExceeded(optuna.exceptions.OptunaError):
 
 
 class ParamRepeatPruner:
-    """Prunes reapeated trials, which means trials with the same paramters won't waste time/resources."""
+    """Prunes reapeated trials, which means trials with the same parameters won't waste time/resources."""
 
     def __init__(
         self,
