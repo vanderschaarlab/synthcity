@@ -97,6 +97,7 @@ class TimeEventGAN(nn.Module):
             lr=generator_lr,
             residual=generator_residual,
             opt_betas=generator_opt_betas,
+            device=self.device,
         ).to(self.device)
 
         self.discriminator = MLP(
@@ -114,6 +115,7 @@ class TimeEventGAN(nn.Module):
             random_state=random_state,
             lr=discriminator_lr,
             opt_betas=discriminator_opt_betas,
+            device=self.device,
         ).to(self.device)
 
         # training
