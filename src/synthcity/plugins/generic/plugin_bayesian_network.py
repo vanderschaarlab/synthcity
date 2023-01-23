@@ -1,11 +1,10 @@
-"""Bayesian Network for generative modeling. Implemented using pgmpy backend.
-
-Reference: JAnkan, Ankur and Panda, Abinash,
-"pgmpy: Probabilistic graphical models using python,"
-Proceedings of the 14th Python in Science Conference (SCIPY 2015), 2015.
+"""
+Reference: Jankan, Ankur and Panda, Abinash, "pgmpy: Probabilistic graphical models using python,"
+        Proceedings of the 14th Python in Science Conference (SCIPY 2015), 2015.
 """
 
 # stdlib
+from pathlib import Path
 from typing import Any, List
 
 # third party
@@ -24,15 +23,45 @@ from synthcity.plugins.core.schema import Schema
 
 
 class BayesianNetworkPlugin(Plugin):
-    """BayesianNetwork plugin.
+    """
+    .. inheritance-diagram:: synthcity.plugins.generic.plugin_bayesian_network.BayesianNetworkPlugin
+        :parts: 1
+
+    Bayesian Network for generative modeling. Implemented using pgmpy backend.
+    Args:
+        struct_learning_n_iter: int
+            Number of iterations for the DAG learning
+        struct_learning_search_method: str = "tree_search"
+             Search method for learning the DAG: hillclimb, pc, tree_search, mmhc, exhaustive
+        struct_learning_score: str = "k2",
+            Scoring for the DAG search: k2, bdeu, bic, bds
+        struct_max_indegree: int = 4
+            The maximum number of parents for each node.
+        encoder_max_clusters: int = 10
+            Data encoding clusters.
+        encoder_noise_scale: float.
+            Small noise to add to the final data, to prevent data leakage.
+        workspace: Path.
+            Optional Path for caching intermediary results.
+        compress_dataset: bool. Default = False.
+            Drop redundant features before training the generator.
+        random_state: int.
+            Random seed.
+        sampling_patience: int.
+            Max inference iterations to wait for the generated data to match the training schema.
 
     Example:
-        >>> from synthcity.plugins import Plugins
-        >>> plugin = Plugins().get("bayesian_network")
         >>> from sklearn.datasets import load_iris
-        >>> X = load_iris()
+        >>> from synthcity.plugins import Plugins
+        >>>
+        >>> X, y = load_iris(as_frame = True, return_X_y = True)
+        >>> X["target"] = y
+        >>>
+        >>> plugin = Plugins().get("bayesian_network")
         >>> plugin.fit(X)
-        >>> plugin.generate()
+        >>>
+        >>> plugin.generate(50)
+
     """
 
     def __init__(
@@ -43,9 +72,20 @@ class BayesianNetworkPlugin(Plugin):
         struct_max_indegree: int = 4,
         encoder_max_clusters: int = 10,
         encoder_noise_scale: float = 0.1,
+        # core plugin
+        workspace: Path = Path("workspace"),
+        compress_dataset: bool = False,
+        random_state: int = 0,
+        sampling_patience: int = 500,
         **kwargs: Any,
     ) -> None:
-        super().__init__(**kwargs)
+        super().__init__(
+            random_state=random_state,
+            sampling_patience=sampling_patience,
+            workspace=workspace,
+            compress_dataset=compress_dataset,
+            **kwargs,
+        )
 
         self.struct_learning_n_iter = struct_learning_n_iter
         self.struct_learning_search_method = struct_learning_search_method
@@ -83,7 +123,7 @@ class BayesianNetworkPlugin(Plugin):
             loc=0, scale=self.encoder_noise_scale, size=len(encoded)
         )
         for col in encoded.columns:
-            if col.endswith(".normalized"):
+            if col.endswith(".value"):
                 encoded[col] += noise
 
         decoded = self.encoder.inverse_transform(encoded)

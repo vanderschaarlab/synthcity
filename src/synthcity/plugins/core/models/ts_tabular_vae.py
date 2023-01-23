@@ -1,5 +1,5 @@
 # stdlib
-from typing import Any, List, Optional, Tuple
+from typing import Any, List, Tuple
 
 # third party
 import numpy as np
@@ -12,24 +12,25 @@ from synthcity.utils.constants import DEVICE
 
 # synthcity relative
 from .tabular_encoder import TimeSeriesTabularEncoder
-from .ts_vae import TimeSeriesAutoEncoder
+from .ts_vae import TimeSeriesVAE
 
 
-class TimeSeriesTabularAutoEncoder(torch.nn.Module):
+class TimeSeriesTabularVAE(torch.nn.Module):
     """
-    TimeSeries Tabular AutoEncoder implementation.
+    .. inheritance-diagram:: synthcity.plugins.core.models.ts_tabular_vae.TimeSeriesTabularVAE
+        :parts: 1
+
+    TimeSeries Tabular Variational AutoEncoder implementation.
+
+    This class combines TimeSeriesVAE and tabular encoder to form a generative model for tabular data.
 
     Args:
-        n_static_units: int,
-            Number of units for the static features
-        n_temporal_units: int,
-            Number of units for the temporal features
-        n_temporal_window: int,
-            Number of temporal sequences for each subject
-        n_units_conditional: int = 0,
-            Number of conditional units
-        n_units_in: int
-            Number of features
+        static_data: pd.DataFrame
+            Reference static data
+        temporal_data: List[pd.DataFrame]
+            Reference temporal data
+        observation_times: List
+            Reference temporal horizons
         decoder_n_layers_hidden: int
             Number of hidden layers in the decoder
         decoder_n_units_hidden: int
@@ -70,6 +71,23 @@ class TimeSeriesTabularAutoEncoder(torch.nn.Module):
             Pre-trained tabular encoder. If None, a new encoder is trained.
         device:
             Device to use for computation
+        loss_factor: float
+            Reconstruction loss weight.
+        mode: str = "RNN"
+            Core neural net architecture.
+            Available models:
+                - "LSTM"
+                - "GRU"
+                - "RNN"
+                - "Transformer"
+                - "MLSTM_FCN"
+                - "TCN"
+                - "InceptionTime"
+                - "InceptionTimePlus"
+                - "XceptionTime"
+                - "ResCNN"
+                - "OmniScaleCNN"
+                - "XCM"
     """
 
     @validate_arguments(config=dict(arbitrary_types_allowed=True))
@@ -77,7 +95,7 @@ class TimeSeriesTabularAutoEncoder(torch.nn.Module):
         self,
         static_data: pd.DataFrame,
         temporal_data: List[pd.DataFrame],
-        temporal_horizons: List,
+        observation_times: List,
         decoder_n_layers_hidden: int = 2,
         decoder_n_units_hidden: int = 150,
         decoder_nonlin: str = "leaky_relu",
@@ -105,13 +123,13 @@ class TimeSeriesTabularAutoEncoder(torch.nn.Module):
         device: Any = DEVICE,
         loss_factor: int = 2,
     ) -> None:
-        super(TimeSeriesTabularAutoEncoder, self).__init__()
+        super(TimeSeriesTabularVAE, self).__init__()
         if encoder is not None:
             self.encoder = encoder
         else:
             self.encoder = TimeSeriesTabularEncoder(
                 max_clusters=encoder_max_clusters
-            ).fit(static_data, temporal_data, temporal_horizons)
+            ).fit(static_data, temporal_data, observation_times)
 
         self.static_columns = static_data.columns
         self.temporal_columns = temporal_data[0].columns
@@ -121,7 +139,7 @@ class TimeSeriesTabularAutoEncoder(torch.nn.Module):
             discrete_activation=decoder_nonlin_out_discrete,
             continuous_activation=decoder_nonlin_out_continuous,
         )
-        self.model = TimeSeriesAutoEncoder(
+        self.model = TimeSeriesVAE(
             n_static_units=n_static_units,
             n_static_units_embedding=n_static_units,
             n_temporal_units=n_temporal_units,
@@ -158,19 +176,19 @@ class TimeSeriesTabularAutoEncoder(torch.nn.Module):
         self,
         static_data: pd.DataFrame,
         temporal_data: List[pd.DataFrame],
-        temporal_horizons: List,
+        observation_times: List,
     ) -> Tuple:
-        return self.encoder.transform(static_data, temporal_data, temporal_horizons)
+        return self.encoder.transform(static_data, temporal_data, observation_times)
 
     @validate_arguments(config=dict(arbitrary_types_allowed=True))
     def decode(
         self,
         static_data: pd.DataFrame,
         temporal_data: List[pd.DataFrame],
-        temporal_horizons: List,
+        observation_times: List,
     ) -> Tuple:
         return self.encoder.inverse_transform(
-            static_data, temporal_data, temporal_horizons
+            static_data, temporal_data, observation_times
         )
 
     @validate_arguments(config=dict(arbitrary_types_allowed=True))
@@ -190,32 +208,35 @@ class TimeSeriesTabularAutoEncoder(torch.nn.Module):
     @validate_arguments(config=dict(arbitrary_types_allowed=True))
     def encode_horizons(
         self,
-        temporal_horizons: List,
+        observation_times: List,
     ) -> Tuple:
-        return self.encoder.transform_temporal_horizons(temporal_horizons)
+        return self.encoder.transform_observation_times(observation_times)
 
     @validate_arguments(config=dict(arbitrary_types_allowed=True))
     def decode_horizons(
         self,
-        temporal_horizons: List,
+        observation_times: List,
     ) -> Tuple:
-        return self.encoder.inverse_transform_temporal_horizons(temporal_horizons)
+        return self.encoder.inverse_transform_observation_times(observation_times)
+
+    def get_encoder(self) -> TimeSeriesTabularEncoder:
+        return self.encoder
 
     @validate_arguments(config=dict(arbitrary_types_allowed=True))
     def fit(
         self,
         static_data: pd.DataFrame,
         temporal_data: List[pd.DataFrame],
-        temporal_horizons: List,
+        observation_times: List,
         encoded: bool = False,
     ) -> Any:
         if encoded:
             static_enc = static_data
             temporal_enc = temporal_data
-            temporal_horizons_enc = temporal_horizons
+            observation_times_enc = observation_times
         else:
-            static_enc, temporal_enc, temporal_horizons_enc = self.encode(
-                static_data, temporal_data, temporal_horizons
+            static_enc, temporal_enc, observation_times_enc = self.encode(
+                static_data, temporal_data, observation_times
             )
 
         self.static_encoded_columns = static_enc.columns
@@ -224,7 +245,7 @@ class TimeSeriesTabularAutoEncoder(torch.nn.Module):
         self.model.fit(
             np.asarray(static_enc),
             np.asarray(temporal_enc),
-            np.asarray(temporal_horizons_enc),
+            np.asarray(observation_times_enc),
         )
         return self
 
@@ -232,7 +253,7 @@ class TimeSeriesTabularAutoEncoder(torch.nn.Module):
         self,
         count: int,
     ) -> pd.DataFrame:
-        static_raw, temporal_raw, temporal_horizons = self.model.generate(
+        static_raw, temporal_raw, observation_times = self.model.generate(
             count,
         )
 
@@ -243,8 +264,8 @@ class TimeSeriesTabularAutoEncoder(torch.nn.Module):
                 pd.DataFrame(item, columns=self.temporal_encoded_columns)
             )
 
-        return self.decode(static_data, temporal_data, temporal_horizons.tolist())
+        return self.decode(static_data, temporal_data, observation_times.tolist())
 
     @validate_arguments(config=dict(arbitrary_types_allowed=True))
-    def forward(self, count: int, cond: Optional[pd.DataFrame] = None) -> torch.Tensor:
-        return self.model.forward(count, cond)
+    def forward(self, count: int) -> torch.Tensor:
+        return self.model.forward(count)

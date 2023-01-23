@@ -1,4 +1,5 @@
 # stdlib
+import platform
 from abc import abstractmethod
 from typing import Any, Dict, Optional, Tuple
 
@@ -6,8 +7,6 @@ from typing import Any, Dict, Optional, Tuple
 import numpy as np
 import pandas as pd
 import torch
-from copulas.univariate.base import Univariate
-from dython.nominal import associations
 from geomloss import SamplesLoss
 from pydantic import validate_arguments
 from scipy.spatial.distance import jensenshannon
@@ -28,6 +27,12 @@ from synthcity.utils.serialization import load_from_file, save_to_file
 
 
 class StatisticalEvaluator(MetricEvaluator):
+    """
+    .. inheritance-diagram:: synthcity.metrics.eval_statistical.StatisticalEvaluator
+        :parts: 1
+
+    """
+
     def __init__(self, **kwargs: Any) -> None:
         super().__init__(**kwargs)
 
@@ -43,7 +48,7 @@ class StatisticalEvaluator(MetricEvaluator):
     def evaluate(self, X_gt: DataLoader, X_syn: DataLoader) -> Dict:
         cache_file = (
             self._workspace
-            / f"sc_metric_cache_{self.type()}_{self.name()}_{X_gt.hash()}_{X_syn.hash()}_{self._reduction}.bkp"
+            / f"sc_metric_cache_{self.type()}_{self.name()}_{X_gt.hash()}_{X_syn.hash()}_{self._reduction}_{platform.python_version()}.bkp"
         )
         if self.use_cache(cache_file):
             return load_from_file(cache_file)
@@ -62,7 +67,12 @@ class StatisticalEvaluator(MetricEvaluator):
 
 
 class InverseKLDivergence(StatisticalEvaluator):
-    """Returns the average inverse of the Kullback–Leibler Divergence metric.
+    """
+    .. inheritance-diagram:: synthcity.metrics.eval_statistical.InverseKLDivergence
+        :parts: 1
+
+
+    Returns the average inverse of the Kullback–Leibler Divergence metric.
 
     Score:
         0: the datasets are from different distributions.
@@ -94,7 +104,11 @@ class InverseKLDivergence(StatisticalEvaluator):
 
 
 class KolmogorovSmirnovTest(StatisticalEvaluator):
-    """Performs the Kolmogorov-Smirnov test for goodness of fit.
+    """
+    .. inheritance-diagram:: synthcity.metrics.eval_statistical.KolmogorovSmirnovTest
+        :parts: 1
+
+    Performs the Kolmogorov-Smirnov test for goodness of fit.
 
     Score:
         0: the distributions are totally different.
@@ -123,7 +137,11 @@ class KolmogorovSmirnovTest(StatisticalEvaluator):
 
 
 class ChiSquaredTest(StatisticalEvaluator):
-    """Performs the one-way chi-square test.
+    """
+    .. inheritance-diagram:: synthcity.metrics.eval_statistical.ChiSquaredTest
+        :parts: 1
+
+    Performs the one-way chi-square test.
 
     Returns:
         The p-value. A small value indicates that we can reject the null hypothesis and that the distributions are different.
@@ -164,7 +182,11 @@ class ChiSquaredTest(StatisticalEvaluator):
 
 
 class MaximumMeanDiscrepancy(StatisticalEvaluator):
-    """Empirical maximum mean discrepancy. The lower the result the more evidence that distributions are the same.
+    """
+    .. inheritance-diagram:: synthcity.metrics.eval_statistical.MaximumMeanDiscrepancy
+        :parts: 1
+
+    Empirical maximum mean discrepancy. The lower the result the more evidence that distributions are the same.
 
     Args:
         kernel: "rbf", "linear" or "polynomial"
@@ -234,48 +256,6 @@ class MaximumMeanDiscrepancy(StatisticalEvaluator):
         return {"joint": float(score)}
 
 
-class InverseCDFDistance(StatisticalEvaluator):
-    """Evaluate the distance between continuous features."""
-
-    @validate_arguments(config=dict(arbitrary_types_allowed=True))
-    def __init__(self, p: int = 2, **kwargs: Any) -> None:
-        super().__init__(default_metric="marginal", **kwargs)
-
-        self.p = p
-
-    @staticmethod
-    def name() -> str:
-        return "inv_cdf_dist"
-
-    @staticmethod
-    def direction() -> str:
-        return "minimize"
-
-    @validate_arguments(config=dict(arbitrary_types_allowed=True))
-    def _evaluate(
-        self,
-        X_gt: DataLoader,
-        X_syn: DataLoader,
-    ) -> Dict:
-        distances = []
-        for col in X_syn.columns:
-            if len(X_syn[col].unique()) < 15:
-                continue
-            syn_col = X_syn[col]
-            gt_col = X_gt[col]
-
-            predictor = Univariate()
-            predictor.fit(syn_col)
-
-            syn_percentiles = predictor.cdf(np.array(syn_col))
-            gt_percentiles = predictor.cdf(np.array(gt_col))
-            distances.append(
-                np.mean(abs(syn_percentiles - gt_percentiles[1]) ** self.p)
-            )
-
-        return {"marginal": float(self.reduction()(distances))}
-
-
 class JensenShannonDistance(StatisticalEvaluator):
     """Evaluate the average Jensen-Shannon distance (metric) between two probability arrays."""
 
@@ -336,61 +316,12 @@ class JensenShannonDistance(StatisticalEvaluator):
         return {"marginal": sum(stats_.values()) / len(stats_.keys())}
 
 
-class FeatureCorrelation(StatisticalEvaluator):
-    """Evaluate the correlation/strength-of-association of features in data-set with both categorical and continuous features using: * Pearson's R for continuous-continuous cases ** Cramer's V or Theil's U for categorical-categorical cases."""
-
-    def __init__(
-        self, nom_nom_assoc: str = "theil", nominal_columns: str = "auto", **kwargs: Any
-    ) -> None:
-        super().__init__(default_metric="joint", **kwargs)
-
-        self.nom_nom_assoc = nom_nom_assoc
-        self.nominal_columns = nominal_columns
-
-    @staticmethod
-    def name() -> str:
-        return "feature_corr"
-
-    @staticmethod
-    def direction() -> str:
-        return "minimize"
-
-    @validate_arguments(config=dict(arbitrary_types_allowed=True))
-    def _evaluate_stats(
-        self,
-        X_gt: DataLoader,
-        X_syn: DataLoader,
-    ) -> Tuple[Dict, Dict]:
-        stats_gt = associations(
-            X_gt.numpy(),
-            nom_nom_assoc=self.nom_nom_assoc,
-            nominal_columns=self.nominal_columns,
-            nan_replace_value="nan",
-            compute_only=True,
-        )["corr"]
-        stats_syn = associations(
-            X_syn.numpy(),
-            nom_nom_assoc=self.nom_nom_assoc,
-            nominal_columns=self.nominal_columns,
-            nan_replace_value="nan",
-            compute_only=True,
-        )["corr"]
-
-        return stats_gt, stats_syn
-
-    @validate_arguments(config=dict(arbitrary_types_allowed=True))
-    def _evaluate(
-        self,
-        X_gt: DataLoader,
-        X_syn: DataLoader,
-    ) -> Dict:
-        stats_gt, stats_syn = self._evaluate_stats(X_gt, X_syn)
-
-        return {"joint": np.linalg.norm(stats_gt - stats_syn, "fro")}
-
-
 class WassersteinDistance(StatisticalEvaluator):
-    """Compare Wasserstein distance between original data and synthetic data.
+    """
+    .. inheritance-diagram:: synthcity.metrics.eval_statistical.WassersteinDistance
+        :parts: 1
+
+    Compare Wasserstein distance between original data and synthetic data.
 
     Args:
         X: original data
@@ -438,6 +369,10 @@ class WassersteinDistance(StatisticalEvaluator):
 
 class PRDCScore(StatisticalEvaluator):
     """
+    .. inheritance-diagram:: synthcity.metrics.eval_statistical.PRDCScore
+        :parts: 1
+
+
     Computes precision, recall, density, and coverage given two manifolds.
 
     Args:
@@ -571,7 +506,11 @@ class PRDCScore(StatisticalEvaluator):
 
 
 class AlphaPrecision(StatisticalEvaluator):
-    """Evaluates the alpha-precision, beta-recall, and authenticity scores.
+    """
+    .. inheritance-diagram:: synthcity.metrics.eval_statistical.AlphaPrecision
+        :parts: 1
+
+    Evaluates the alpha-precision, beta-recall, and authenticity scores.
 
     The class evaluates the synthetic data using a tuple of three metrics:
     alpha-precision, beta-recall, and authenticity.
@@ -602,9 +541,8 @@ class AlphaPrecision(StatisticalEvaluator):
         X_syn: np.ndarray,
         emb_center: Optional[np.ndarray] = None,
     ) -> Tuple:
-        assert len(X) == len(
-            X_syn
-        ), "The real and synthetic data mush have the same length"
+        if len(X) != len(X_syn):
+            raise RuntimeError("The real and synthetic data mush have the same length")
 
         if emb_center is None:
             emb_center = np.mean(X.numpy(), axis=0)
@@ -717,6 +655,12 @@ class AlphaPrecision(StatisticalEvaluator):
 
 
 class SurvivalKMDistance(StatisticalEvaluator):
+    """
+    .. inheritance-diagram:: synthcity.metrics.eval_statistical.SurvivalKMDistance
+        :parts: 1
+
+    The distance between two Kaplan-Meier plots. Used for survival analysis"""
+
     def __init__(self, **kwargs: Any) -> None:
         super().__init__(default_metric="optimism", **kwargs)
 

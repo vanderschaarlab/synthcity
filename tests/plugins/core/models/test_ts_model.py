@@ -53,7 +53,7 @@ def test_rnn_sanity(mode: str, task_type: str) -> None:
 def test_rnn_regression_fit_predict(
     mode: str, source: Any, use_horizon_condition: bool
 ) -> None:
-    static, temporal, temporal_horizons, outcome = source(as_numpy=True).load()
+    static, temporal, observation_times, outcome = source(as_numpy=True).load()
     outcome = outcome.reshape(-1, 1)
 
     outlen = len(outcome.reshape(-1)) / len(outcome)
@@ -70,19 +70,19 @@ def test_rnn_regression_fit_predict(
         use_horizon_condition=use_horizon_condition,
     )
 
-    model.fit(static, temporal, temporal_horizons, outcome)
+    model.fit(static, temporal, observation_times, outcome)
 
-    y_pred = model.predict(static, temporal, temporal_horizons)
+    y_pred = model.predict(static, temporal, observation_times)
 
     assert y_pred.shape == outcome.shape
 
-    assert model.score(static, temporal, temporal_horizons, outcome) < 2
+    assert model.score(static, temporal, observation_times, outcome) < 2
 
 
 @pytest.mark.parametrize("mode", modes)
 @pytest.mark.parametrize("source", [SineDataloader, GoogleStocksDataloader])
 def test_rnn_classification_fit_predict(mode: str, source: Any) -> None:
-    static, temporal, temporal_horizons, outcome = source(as_numpy=True).load()
+    static, temporal, observation_times, outcome = source(as_numpy=True).load()
     static_fake, temporal_fake = np.random.randn(*static.shape), np.random.randn(
         *temporal.shape
     )
@@ -101,22 +101,21 @@ def test_rnn_classification_fit_predict(mode: str, source: Any) -> None:
 
     static_data = np.concatenate([static, static_fake])
     temporal_data = np.concatenate([temporal, temporal_fake])
-    temporal_horizons = np.concatenate([temporal_horizons, temporal_horizons])
+    observation_times = np.concatenate([observation_times, observation_times])
 
-    model.fit(static_data, temporal_data, temporal_horizons, y)
+    model.fit(static_data, temporal_data, observation_times, y)
 
-    y_pred = model.predict(static_data, temporal_data, temporal_horizons)
+    y_pred = model.predict(static_data, temporal_data, observation_times)
 
     assert y_pred.shape == y.shape
 
-    print(mode, model.score(static_data, temporal_data, temporal_horizons, y))
-    assert model.score(static_data, temporal_data, temporal_horizons, y) <= 1
+    print(mode, model.score(static_data, temporal_data, observation_times, y))
+    assert model.score(static_data, temporal_data, observation_times, y) <= 1
 
 
-@pytest.mark.skip  # TODO
 @pytest.mark.parametrize("mode", modes)
 def test_rnn_irregular_ts(mode: str) -> None:
-    static, temporal, temporal_horizons, outcome = PBCDataloader(as_numpy=True).load()
+    static, temporal, observation_times, outcome = PBCDataloader(as_numpy=True).load()
     T, E = outcome
     y = np.concatenate([np.expand_dims(T, axis=1), np.expand_dims(E, axis=1)], axis=1)
 
@@ -130,8 +129,8 @@ def test_rnn_irregular_ts(mode: str) -> None:
         mode=mode,
     )
 
-    model.fit(static, temporal, temporal_horizons, y)
+    model.fit(static, temporal, observation_times, y)
 
-    y_pred = model.predict(static, temporal, temporal_horizons)
+    y_pred = model.predict(static, temporal, observation_times)
 
     assert y_pred.shape == y.shape

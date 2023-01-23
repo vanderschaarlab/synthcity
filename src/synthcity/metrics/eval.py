@@ -43,7 +43,6 @@ from .eval_sanity import (
 from .eval_statistical import (
     AlphaPrecision,
     ChiSquaredTest,
-    FeatureCorrelation,
     InverseKLDivergence,
     JensenShannonDistance,
     KolmogorovSmirnovTest,
@@ -64,7 +63,6 @@ standard_metrics = [
     # statistical tests
     JensenShannonDistance,
     ChiSquaredTest,
-    FeatureCorrelation,
     InverseKLDivergence,
     KolmogorovSmirnovTest,
     MaximumMeanDiscrepancy,
@@ -104,6 +102,31 @@ class Metrics:
         random_state: int = 0,
         workspace: Path = Path("workspace"),
     ) -> pd.DataFrame:
+        """Core evaluation logic for the metrics
+
+        X_gt: Dataloader or DataFrame
+            Reference real data
+        X_syn: Dataloader or DataFrame
+            Synthetic data
+        metrics: dict
+            the dictionary of metrics to evaluate
+            Full dictionary of metrics is:
+            {
+                'sanity': ['data_mismatch', 'common_rows_proportion', 'nearest_syn_neighbor_distance', 'close_values_probability', 'distant_values_probability'],
+                'stats': ['jensenshannon_dist', 'chi_squared_test', 'feature_corr', 'inv_kl_divergence', 'ks_test', 'max_mean_discrepancy', 'wasserstein_dist', 'prdc', 'alpha_precision', 'survival_km_distance'],
+                'performance': ['linear_model', 'mlp', 'xgb', 'feat_rank_distance'],
+                'detection': ['detection_xgb', 'detection_mlp', 'detection_gmm', 'detection_linear'],
+                'privacy': ['delta-presence', 'k-anonymization', 'k-map', 'distinct l-diversity', 'identifiability_score']
+            }
+        reduction: str
+            The way to aggregate metrics across folds. Can be: 'mean', "min", or "max".
+        task_type: str
+            The type of problem. Relevant for evaluating the downstream models with the correct metrics. Valid tasks are:  "classification", "regression", "survival_analysis", "time_series", "time_series_survival".
+        random_state: int
+            random seed
+        workspace: Path
+            The folder for caching intermediary results.
+        """
         workspace.mkdir(parents=True, exist_ok=True)
 
         supported_tasks = [

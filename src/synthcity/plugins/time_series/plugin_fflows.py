@@ -1,7 +1,8 @@
 """
-Fourier-Flows method based on " Generative Time-series Modeling with Fourier Flows", Ahmed Alaa, Alex Chan, and Mihaela van der Schaar.
+Reference: "Generative Time-series Modeling with Fourier Flows", Ahmed Alaa, Alex Chan, and Mihaela van der Schaar.
 """
 # stdlib
+from pathlib import Path
 from typing import Any, List, Tuple
 
 # third party
@@ -28,24 +29,64 @@ from synthcity.utils.constants import DEVICE
 
 
 class FourierFlowsPlugin(Plugin):
-    """Synthetic time series generation using FourierFlows.
+    """
+    .. inheritance-diagram:: synthcity.plugins.time_series.plugin_fflows.FourierFlowsPlugin
+        :parts: 1
+
+
+    Synthetic time series generation using FourierFlows.
 
     Args:
+        n_iter: int
+            Number of training iterations
+        batch_size: int
+            Batch size
+        lr: float
+            Learning rate
+        n_iter_print: int
+            Number of iterations to print the validation loss
+        n_units_hidden: int
+            Number of hidden nodes
+        n_flows: int
+            Number of flows to use(default = 10)
+        FFT: bool
+            Use Fourier transform(default = True)
+        flip: bool
+            Flip the data in the SpectralFilter
+        normalize: bool
+            Scale the data(default = False)
+        static_model: str = "ctgan",
+            The model to use for generating the static data.
+        device: Any = DEVICE
+            torch device to use for training(cpu/cuda)
+        encoder_max_clusters: int = 10
+            Number of clusters used for tabular encoding
+        # Core Plugin arguments
+        workspace: Path.
+            Optional Path for caching intermediary results.
+        compress_dataset: bool. Default = False.
+            Drop redundant features before training the generator.
+        sampling_patience: int.
+            Max inference iterations to wait for the generated data to match the training schema.
 
     Example:
         >>> from synthcity.plugins import Plugins
         >>> from synthcity.utils.datasets.time_series.google_stocks import GoogleStocksDataloader
         >>> from synthcity.plugins.core.dataloader import TimeSeriesDataLoader
-        >>>
-        >>> plugin = Plugins().get("fflows")
-        >>> static, temporal, outcome = GoogleStocksDataloader(as_numpy=True).load()
+        >>> static, temporal, horizons, outcome = GoogleStocksDataloader().load()
         >>> loader = TimeSeriesDataLoader(
-        >>>             temporal_data=temporal_data,
-        >>>             static_data=static_data,
+        >>>             temporal_data=temporal,
+        >>>             observation_times=horizons,
+        >>>             static_data=static,
         >>>             outcome=outcome,
         >>> )
+        >>>
+        >>> plugin = Plugins().get("fflows", n_iter = 50)
         >>> plugin.fit(loader)
-        >>> plugin.generate()
+        >>>
+        >>> plugin.generate(count = 10)
+
+
     """
 
     def __init__(
@@ -62,9 +103,20 @@ class FourierFlowsPlugin(Plugin):
         static_model: str = "ctgan",
         device: Any = DEVICE,
         encoder_max_clusters: int = 10,
-        **kwargs: Any
+        # core plugin arguments
+        random_state: int = 0,
+        workspace: Path = Path("workspace"),
+        compress_dataset: bool = False,
+        sampling_patience: int = 500,
+        **kwargs: Any,
     ) -> None:
-        super().__init__()
+        super().__init__(
+            device=device,
+            random_state=random_state,
+            sampling_patience=sampling_patience,
+            workspace=workspace,
+            compress_dataset=compress_dataset,
+        )
         self.static_model_name = static_model
         self.device = device
 
@@ -117,24 +169,25 @@ class FourierFlowsPlugin(Plugin):
         ]
 
     def _fit(self, X: DataLoader, *args: Any, **kwargs: Any) -> "FourierFlowsPlugin":
-        assert X.type() in ["time_series", "time_series_survival"]
+        if X.type() not in ["time_series", "time_series_survival"]:
+            raise ValueError(f"Invalid data type = {X.type()}")
 
         if X.type() == "time_series":
-            static, temporal, temporal_horizons, outcome = X.unpack(pad=True)
+            static, temporal, observation_times, outcome = X.unpack(pad=True)
         elif X.type() == "time_series_survival":
-            static, temporal, temporal_horizons, T, E = X.unpack(pad=True)
+            static, temporal, observation_times, T, E = X.unpack(pad=True)
             outcome = pd.concat([pd.Series(T), pd.Series(E)], axis=1)
             outcome.columns = ["time_to_event", "event"]
 
         # Train static generator
-        self.temporal_encoder.fit_temporal(temporal, temporal_horizons)
+        self.temporal_encoder.fit_temporal(temporal, observation_times)
         (
             temporal_enc,
-            temporal_horizons_enc,
-        ) = self.temporal_encoder.transform_temporal(temporal, temporal_horizons)
+            observation_times_enc,
+        ) = self.temporal_encoder.transform_temporal(temporal, observation_times)
 
         static_data_with_horizons = np.concatenate(
-            [np.asarray(static), np.asarray(temporal_horizons)], axis=1
+            [np.asarray(static), np.asarray(observation_times)], axis=1
         )
         self.static_model.fit(pd.DataFrame(static_data_with_horizons))
 
@@ -163,7 +216,7 @@ class FourierFlowsPlugin(Plugin):
         self.outcome_model.fit(
             np.asarray(static),
             np.asarray(temporal),
-            np.asarray(temporal_horizons),
+            np.asarray(observation_times),
             np.asarray(outcome_enc),
         )
 
@@ -181,7 +234,7 @@ class FourierFlowsPlugin(Plugin):
                 static_data_with_horizons[:, : len(self.static_columns)],
                 columns=self.static_columns,
             )
-            temporal_horizons_enc = static_data_with_horizons[
+            observation_times_enc = static_data_with_horizons[
                 :, len(self.static_columns) :
             ]
 
@@ -196,9 +249,9 @@ class FourierFlowsPlugin(Plugin):
             # Decoding
             (
                 temporal_raw,
-                temporal_horizons,
+                observation_times,
             ) = self.temporal_encoder.inverse_transform_temporal(
-                temporal_enc, temporal_horizons_enc.tolist()
+                temporal_enc, observation_times_enc.tolist()
             )
 
             temporal = []
@@ -212,7 +265,7 @@ class FourierFlowsPlugin(Plugin):
                 self.outcome_model.predict(
                     np.asarray(static),
                     np.asarray(temporal_raw),
-                    np.asarray(temporal_horizons),
+                    np.asarray(observation_times),
                 ),
                 columns=self.outcome_encoded_columns,
             )
@@ -223,12 +276,12 @@ class FourierFlowsPlugin(Plugin):
             static = pd.DataFrame(static, columns=self.data_info["static_features"])
 
             if self.data_info["data_type"] == "time_series":
-                return static, temporal, temporal_horizons, outcome
+                return static, temporal, observation_times, outcome
             elif self.data_info["data_type"] == "time_series_survival":
                 return (
                     static,
                     temporal,
-                    temporal_horizons,
+                    observation_times,
                     outcome[self.data_info["time_to_event_column"]],
                     outcome[self.data_info["event_column"]],
                 )

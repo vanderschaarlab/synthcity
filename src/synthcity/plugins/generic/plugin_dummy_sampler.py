@@ -12,15 +12,25 @@ from synthcity.plugins.core.schema import Schema
 
 
 class DummySamplerPlugin(Plugin):
-    """Dummy plugin for debugging.
+    """
+    .. inheritance-diagram:: synthcity.plugins.generic.plugin_dummy_sampler.DummySamplerPlugin
+        :parts: 1
+
+    Dummy sampling plugin for debugging.
 
     Example:
-        >>> from synthcity.plugins import Plugins
-        >>> plugin = Plugins().get("dummy_sampler")
         >>> from sklearn.datasets import load_iris
-        >>> X = load_iris()
+        >>> from synthcity.plugins import Plugins
+        >>>
+        >>> X, y = load_iris(as_frame = True, return_X_y = True)
+        >>> X["target"] = y
+        >>>
+        >>> plugin = Plugins().get("dummy_sampler")
         >>> plugin.fit(X)
-        >>> plugin.generate()
+        >>>
+        >>> plugin.generate(50)
+
+
     """
 
     def __init__(self, **kwargs: Any) -> None:
@@ -48,6 +58,11 @@ class DummySamplerPlugin(Plugin):
             constraints = syn_schema.as_constraints()
 
             baseline = constraints.match(baseline)
+            if len(baseline) == 0:
+                raise ValueError("Cannot generate data")
+
+            if len(baseline) <= count:
+                return baseline.sample(frac=1)
 
             return baseline.sample(count, replace=True).reset_index(drop=True)
 

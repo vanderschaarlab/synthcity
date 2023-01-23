@@ -1,4 +1,5 @@
 # stdlib
+import sys
 from typing import Any
 
 # third party
@@ -45,12 +46,12 @@ def test_plugin_fit() -> None:
     (
         static_data,
         temporal_data,
-        temporal_horizons,
+        observation_times,
         outcome,
     ) = GoogleStocksDataloader().load()
     data = TimeSeriesDataLoader(
         temporal_data=temporal_data,
-        temporal_horizons=temporal_horizons,
+        observation_times=observation_times,
         static_data=static_data,
         outcome=outcome,
     )
@@ -71,10 +72,10 @@ def test_plugin_fit() -> None:
 )
 @pytest.mark.slow
 def test_plugin_generate(source: Any) -> None:
-    static_data, temporal_data, temporal_horizons, outcome = source.load()
+    static_data, temporal_data, observation_times, outcome = source.load()
     data = TimeSeriesDataLoader(
         temporal_data=temporal_data,
-        temporal_horizons=temporal_horizons,
+        observation_times=observation_times,
         static_data=static_data,
         outcome=outcome,
     )
@@ -96,7 +97,10 @@ def test_sample_hyperparams() -> None:
         assert plugin(**args) is not None
 
 
-@pytest.mark.slow
+@pytest.mark.skipif(
+    sys.version_info < (3, 9), reason="test only with python3.9 or higher"
+)
+@pytest.mark.skipif(sys.platform != "linux", reason="Linux only for faster results")
 def test_plugin_generate_survival() -> None:
     (
         static_surv,
@@ -111,7 +115,7 @@ def test_plugin_generate_survival() -> None:
 
     survival_data = TimeSeriesSurvivalDataLoader(
         temporal_data=temporal_surv,
-        temporal_horizons=temporal_surv_horizons,
+        observation_times=temporal_surv_horizons,
         static_data=static_surv,
         T=T,
         E=E,

@@ -1,5 +1,6 @@
 # stdlib
 import copy
+import platform
 from typing import Any, Dict, Tuple
 
 # third party
@@ -43,7 +44,11 @@ from synthcity.utils.serialization import load_from_file, save_to_file
 
 
 class PerformanceEvaluator(MetricEvaluator):
-    """Evaluating synthetic data based on downstream performance.
+    """
+    .. inheritance-diagram:: synthcity.metrics.eval_performance.PerformanceEvaluator
+        :parts: 1
+
+    Evaluating synthetic data based on downstream performance.
 
     This implements the train-on-synthetic test-on-real methodology for evaluation.
     """
@@ -156,7 +161,7 @@ class PerformanceEvaluator(MetricEvaluator):
         """
         cache_file = (
             self._workspace
-            / f"sc_metric_cache_{self.type()}_{self.name()}_{X_gt.hash()}_{X_syn.hash()}_{self._reduction}.bkp"
+            / f"sc_metric_cache_{self.type()}_{self.name()}_{X_gt.hash()}_{X_syn.hash()}_{self._reduction}_{platform.python_version()}_{platform.python_version()}.bkp"
         )
         if self.use_cache(cache_file):
             return load_from_file(cache_file)
@@ -227,12 +232,14 @@ class PerformanceEvaluator(MetricEvaluator):
         Returns:
             gt and syn performance scores
         """
-        assert X_gt.type() == "survival_analysis"
-        assert X_syn.type() == "survival_analysis"
+        if X_gt.type() != "survival_analysis" or X_syn.type() != "survival_analysis":
+            raise ValueError(
+                f"Invalid data types. gt = {X_gt.type()} syn = {X_syn.type()}"
+            )
 
         cache_file = (
             self._workspace
-            / f"sc_metric_cache_{self.type()}_{self.name()}_{X_gt.hash()}_{X_syn.hash()}_{self._reduction}.bkp"
+            / f"sc_metric_cache_{self.type()}_{self.name()}_{X_gt.hash()}_{X_syn.hash()}_{self._reduction}_{platform.python_version()}_{platform.python_version()}.bkp"
         )
         if self.use_cache(cache_file):
             return load_from_file(cache_file)
@@ -332,12 +339,14 @@ class PerformanceEvaluator(MetricEvaluator):
         Returns:
             gt and syn performance scores
         """
-        assert X_gt.type() == "time_series"
-        assert X_syn.type() == "time_series"
+        if X_gt.type() != "time_series" or X_syn.type() != "time_series":
+            raise ValueError(
+                f"Invalid data type gt = {X_gt.type()} syn = {X_syn.type()}"
+            )
 
         cache_file = (
             self._workspace
-            / f"sc_metric_cache_{self.type()}_{self.name()}_{X_gt.hash()}_{X_syn.hash()}_{self._reduction}.bkp"
+            / f"sc_metric_cache_{self.type()}_{self.name()}_{X_gt.hash()}_{X_syn.hash()}_{self._reduction}_{platform.python_version()}_{platform.python_version()}.bkp"
         )
         if self.use_cache(cache_file):
             return load_from_file(cache_file)
@@ -345,16 +354,16 @@ class PerformanceEvaluator(MetricEvaluator):
         (
             id_static_gt,
             id_temporal_gt,
-            id_temporal_horizons_gt,
+            id_observation_times_gt,
             id_outcome_gt,
         ) = X_gt.train().unpack(as_numpy=True)
         (
             ood_static_gt,
             ood_temporal_gt,
-            ood_temporal_horizons_gt,
+            ood_observation_times_gt,
             ood_outcome_gt,
         ) = X_gt.test().unpack(as_numpy=True)
-        static_syn, temporal_syn, temporal_horizons_syn, outcome_syn = X_syn.unpack(
+        static_syn, temporal_syn, observation_times_syn, outcome_syn = X_syn.unpack(
             as_numpy=True
         )
 
@@ -369,19 +378,19 @@ class PerformanceEvaluator(MetricEvaluator):
         def ts_eval_cbk(
             static_train: np.ndarray,
             temporal_train: np.ndarray,
-            temporal_horizons_train: np.ndarray,
+            observation_times_train: np.ndarray,
             outcome_train: np.ndarray,
             static_test: np.ndarray,
             temporal_test: np.ndarray,
-            temporal_horizons_test: np.ndarray,
+            observation_times_test: np.ndarray,
             outcome_test: np.ndarray,
         ) -> float:
             try:
                 estimator = model(**model_args).fit(
-                    static_train, temporal_train, temporal_horizons_train, outcome_train
+                    static_train, temporal_train, observation_times_train, outcome_train
                 )
                 preds = estimator.predict(
-                    static_test, temporal_test, temporal_horizons_test
+                    static_test, temporal_test, observation_times_test
                 )
 
                 score = r2_score(outcome_test, preds)
@@ -394,42 +403,42 @@ class PerformanceEvaluator(MetricEvaluator):
         for train_idx, test_idx in skf.split(id_static_gt):
             static_train_data = id_static_gt[train_idx]
             temporal_train_data = id_temporal_gt[train_idx]
-            temporal_horizons_train_data = id_temporal_horizons_gt[train_idx]
+            observation_times_train_data = id_observation_times_gt[train_idx]
             outcome_train_data = id_outcome_gt[train_idx]
 
             static_test_data = id_static_gt[test_idx]
             temporal_test_data = id_temporal_gt[test_idx]
-            temporal_horizons_test_data = id_temporal_horizons_gt[test_idx]
+            observation_times_test_data = id_observation_times_gt[test_idx]
             outcome_test_data = id_outcome_gt[test_idx]
 
             real_score = ts_eval_cbk(
                 static_train_data,
                 temporal_train_data,
-                temporal_horizons_train_data,
+                observation_times_train_data,
                 outcome_train_data,
                 static_test_data,
                 temporal_test_data,
-                temporal_horizons_test_data,
+                observation_times_test_data,
                 outcome_test_data,
             )
             synth_score_id = ts_eval_cbk(
                 static_syn,
                 temporal_syn,
-                temporal_horizons_syn,
+                observation_times_syn,
                 outcome_syn,
                 static_test_data,
                 temporal_test_data,
-                temporal_horizons_test_data,
+                observation_times_test_data,
                 outcome_test_data,
             )
             synth_score_ood = ts_eval_cbk(
                 static_syn,
                 temporal_syn,
-                temporal_horizons_syn,
+                observation_times_syn,
                 outcome_syn,
                 ood_static_gt,
                 ood_temporal_gt,
-                ood_temporal_horizons_gt,
+                ood_observation_times_gt,
                 ood_outcome_gt,
             )
 
@@ -460,12 +469,17 @@ class PerformanceEvaluator(MetricEvaluator):
         Returns:
             gt and syn performance scores
         """
-        assert X_gt.type() == "time_series_survival"
-        assert X_syn.type() == "time_series_survival"
+        if (
+            X_gt.type() != "time_series_survival"
+            or X_syn.type() != "time_series_survival"
+        ):
+            raise ValueError(
+                f"Invalid data type gt = {X_gt.type()} syn = {X_syn.type()}"
+            )
 
         cache_file = (
             self._workspace
-            / f"sc_metric_cache_{self.type()}_{self.name()}_{X_gt.hash()}_{X_syn.hash()}_{self._reduction}.bkp"
+            / f"sc_metric_cache_{self.type()}_{self.name()}_{X_gt.hash()}_{X_syn.hash()}_{self._reduction}_{platform.python_version()}_{platform.python_version()}.bkp"
         )
         if self.use_cache(cache_file):
             return load_from_file(cache_file)
@@ -476,21 +490,21 @@ class PerformanceEvaluator(MetricEvaluator):
         (
             id_X_static_gt,
             id_X_temporal_gt,
-            id_X_temporal_horizons_gt,
+            id_X_observation_times_gt,
             id_T_gt,
             id_E_gt,
         ) = X_gt.train().unpack(as_numpy=True)
         (
             ood_X_static_gt,
             ood_X_temporal_gt,
-            ood_X_temporal_horizons_gt,
+            ood_X_observation_times_gt,
             ood_T_gt,
             ood_E_gt,
         ) = X_gt.test().unpack(as_numpy=True)
         (
             iter_X_static_syn,
             iter_X_temporal_syn,
-            iter_X_temporal_horizons_syn,
+            iter_X_observation_times_syn,
             iter_T_syn,
             iter_E_syn,
         ) = X_syn.unpack(as_numpy=True)
@@ -503,7 +517,7 @@ class PerformanceEvaluator(MetricEvaluator):
             predictor_gt,
             id_X_static_gt,
             id_X_temporal_gt,
-            id_X_temporal_horizons_gt,
+            id_X_observation_times_gt,
             id_T_gt,
             id_E_gt,
             metrics=["c_index", "brier_score"],
@@ -523,7 +537,7 @@ class PerformanceEvaluator(MetricEvaluator):
             predictor_syn.fit(
                 iter_X_static_syn,
                 iter_X_temporal_syn,
-                iter_X_temporal_horizons_syn,
+                iter_X_observation_times_syn,
                 iter_T_syn,
                 iter_E_syn,
             )
@@ -531,7 +545,7 @@ class PerformanceEvaluator(MetricEvaluator):
                 [predictor_syn] * self._n_folds,
                 id_X_static_gt,
                 id_X_temporal_gt,
-                id_X_temporal_horizons_gt,
+                id_X_observation_times_gt,
                 id_T_gt,
                 id_E_gt,
                 metrics=["c_index", "brier_score"],
@@ -551,7 +565,7 @@ class PerformanceEvaluator(MetricEvaluator):
             predictor_syn.fit(
                 iter_X_static_syn,
                 iter_X_temporal_syn,
-                iter_X_temporal_horizons_syn,
+                iter_X_observation_times_syn,
                 iter_T_syn,
                 iter_E_syn,
             )
@@ -559,7 +573,7 @@ class PerformanceEvaluator(MetricEvaluator):
                 [predictor_syn] * self._n_folds,
                 ood_X_static_gt,
                 ood_X_temporal_gt,
-                ood_X_temporal_horizons_gt,
+                ood_X_observation_times_gt,
                 ood_T_gt,
                 ood_E_gt,
                 metrics=["c_index", "brier_score"],
@@ -606,7 +620,12 @@ class PerformanceEvaluator(MetricEvaluator):
 
 
 class PerformanceEvaluatorXGB(PerformanceEvaluator):
-    """Train an XGBoost classifier or regressor on the synthetic data and evaluate the performance on real test data.
+    """
+    .. inheritance-diagram:: synthcity.metrics.eval_performance.PerformanceEvaluatorXGB
+        :parts: 1
+
+
+    Train an XGBoost classifier or regressor on the synthetic data and evaluate the performance on real test data.
 
     Returns the average performance discrepancy between training on real data vs on synthetic data.
 
@@ -632,7 +651,7 @@ class PerformanceEvaluatorXGB(PerformanceEvaluator):
                     "n_jobs": 2,
                     "verbosity": 0,
                     "depth": 3,
-                    "strategy": "debiased_bce",  # "weibull", "debiased_bce"
+                    "strategy": "weibull",  # "weibull", "debiased_bce"
                     "random_state": self._random_state,
                 },
                 X_gt,
@@ -663,7 +682,7 @@ class PerformanceEvaluatorXGB(PerformanceEvaluator):
                     "n_jobs": 2,
                     "verbosity": 0,
                     "depth": 3,
-                    "strategy": "debiased_bce",  # "weibull", "debiased_bce"
+                    "strategy": "weibull",  # "weibull", "debiased_bce"
                     "random_state": self._random_state,
                 },
                 X_gt,
@@ -674,7 +693,11 @@ class PerformanceEvaluatorXGB(PerformanceEvaluator):
 
 
 class PerformanceEvaluatorLinear(PerformanceEvaluator):
-    """Train a Linear classifier or regressor on the synthetic data and evaluate the performance on real test data.
+    """
+    .. inheritance-diagram:: synthcity.metrics.eval_performance.PerformanceEvaluatorLinear
+        :parts: 1
+
+    Train a Linear classifier or regressor on the synthetic data and evaluate the performance on real test data.
 
     Returns the average performance discrepancy between training on real data vs on synthetic data.
 
@@ -705,7 +728,7 @@ class PerformanceEvaluatorLinear(PerformanceEvaluator):
                 X_syn,
             )
         elif self._task_type == "time_series_survival":
-            static, temporal, temporal_horizons, T, E = X_gt.unpack()
+            static, temporal, observation_times, T, E = X_gt.unpack()
 
             args: dict = {}
             log.info(f"Performance evaluation using CoxTimeSeriesSurvival and {args}")
@@ -717,7 +740,11 @@ class PerformanceEvaluatorLinear(PerformanceEvaluator):
 
 
 class PerformanceEvaluatorMLP(PerformanceEvaluator):
-    """Train a Neural Net classifier or regressor on the synthetic data and evaluate the performance on real test data.
+    """
+    .. inheritance-diagram:: synthcity.metrics.eval_performance.PerformanceEvaluatorMLP
+        :parts: 1
+
+    Train a Neural Net classifier or regressor on the synthetic data and evaluate the performance on real test data.
 
     Returns the average performance discrepancy between training on real data vs on synthetic data.
 
@@ -773,7 +800,7 @@ class PerformanceEvaluatorMLP(PerformanceEvaluator):
                 TimeSeriesModel, args, X_gt, X_syn
             )
         elif self._task_type == "time_series_survival":
-            static, temporal, temporal_horizons, T, E = X_gt.unpack()
+            static, temporal, observation_times, T, E = X_gt.unpack()
 
             info = X_gt.info()
 
@@ -790,7 +817,11 @@ class PerformanceEvaluatorMLP(PerformanceEvaluator):
 
 
 class FeatureImportanceRankDistance(MetricEvaluator):
-    """Train an XGBoost classifier or regressor on the synthetic data and evaluate the feature importance.
+    """
+    .. inheritance-diagram:: synthcity.metrics.eval_performance.FeatureImportanceRankDistance
+        :parts: 1
+
+    Train an XGBoost classifier or regressor on the synthetic data and evaluate the feature importance.
     Train an XGBoost model on the real data and evaluate the feature importance.
 
     Returns the rank distance between the feature importance
@@ -805,7 +836,9 @@ class FeatureImportanceRankDistance(MetricEvaluator):
     def __init__(self, distance: str = "kendall", **kwargs: Any) -> None:
         super().__init__(**kwargs)
 
-        assert distance in ["kendall", "spearman"]
+        if distance not in ["kendall", "spearman"]:
+            raise ValueError(f"Invalid feature distance {distance}")
+
         self._distance = distance
 
     @staticmethod
@@ -836,7 +869,7 @@ class FeatureImportanceRankDistance(MetricEvaluator):
     ) -> Dict:
         cache_file = (
             self._workspace
-            / f"sc_metric_cache_{self.type()}_{self.name()}_{X_gt.hash()}_{X_syn.hash()}.bkp"
+            / f"sc_metric_cache_{self.type()}_{self.name()}_{X_gt.hash()}_{X_syn.hash()}_{platform.python_version()}.bkp"
         )
         if self.use_cache(cache_file):
             results = load_from_file(cache_file)
@@ -872,7 +905,8 @@ class FeatureImportanceRankDistance(MetricEvaluator):
 
             syn_xai = np.mean(np.abs(syn_shap), axis=0)  # [n_features]
             gt_xai = np.mean(np.abs(gt_shap), axis=0)  # [n_features]
-            assert len(syn_xai) == len(columns)
+            if len(syn_xai) != len(columns):
+                raise RuntimeError("Invalid xai features")
 
             corr, pvalue = self.distance(syn_xai, gt_xai)
             corr = np.mean(np.nan_to_num(corr))

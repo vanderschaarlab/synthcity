@@ -1,3 +1,8 @@
+# stdlib
+import random
+import sys
+from datetime import datetime, timedelta
+
 # third party
 import numpy as np
 import pandas as pd
@@ -74,20 +79,14 @@ def test_plugin_generate(test_plugin: Plugin, serialize: bool) -> None:
 @pytest.mark.parametrize(
     "test_plugin", generate_fixtures(plugin_name, plugin, plugin_args)
 )
-def test_plugin_generate_constraints(test_plugin: Plugin) -> None:
-    X = pd.DataFrame(load_iris()["data"])
+def test_plugin_generate_constraints_ctgan(test_plugin: Plugin) -> None:
+    X, y = load_iris(as_frame=True, return_X_y=True)
+    X["target"] = y
     test_plugin.fit(GenericDataLoader(X))
 
     constraints = Constraints(
         rules=[
-            ("0", "le", 6),
-            ("0", "ge", 4.3),
-            ("1", "le", 4.4),
-            ("1", "ge", 3),
-            ("2", "le", 5.5),
-            ("2", "ge", 1.0),
-            ("3", "le", 2),
-            ("3", "ge", 0.1),
+            ("target", "eq", 1),
         ]
     )
 
@@ -95,6 +94,7 @@ def test_plugin_generate_constraints(test_plugin: Plugin) -> None:
     assert len(X_gen) == len(X)
     assert test_plugin.schema_includes(X_gen)
     assert constraints.filter(X_gen).sum() == len(X_gen)
+    assert (X_gen["target"] == 1).all()
 
     X_gen = test_plugin.generate(count=50, constraints=constraints).dataframe()
     assert len(X_gen) == 50
@@ -119,7 +119,10 @@ def test_eval_performance_ctgan(compress_dataset: bool) -> None:
     X = GenericDataLoader(Xraw)
 
     for retry in range(2):
-        test_plugin = plugin(n_iter=5000, compress_dataset=compress_dataset)
+        test_plugin = plugin(
+            n_iter=5000,
+            compress_dataset=compress_dataset,
+        )
         evaluator = PerformanceEvaluatorXGB()
 
         test_plugin.fit(X)
@@ -127,5 +130,51 @@ def test_eval_performance_ctgan(compress_dataset: bool) -> None:
 
         results.append(evaluator.evaluate(X, X_syn)["syn_id"])
 
-    print(plugin.name(), results)
+    print(plugin.name(), compress_dataset, results)
     assert np.mean(results) > 0.7
+
+
+@pytest.mark.skipif(sys.platform != "linux", reason="Linux only for faster results")
+def test_plugin_conditional_ctgan() -> None:
+    test_plugin = plugin(generator_n_units_hidden=5)
+    Xraw, y = load_iris(as_frame=True, return_X_y=True)
+    Xraw["target"] = y
+
+    X = GenericDataLoader(Xraw)
+    test_plugin.fit(X, cond=y)
+
+    X_gen = test_plugin.generate(2 * len(X))
+    assert len(X_gen) == 2 * len(X)
+    assert test_plugin.schema_includes(X_gen)
+
+    count = 10
+    X_gen = test_plugin.generate(count, cond=np.ones(count))
+    assert len(X_gen) == count
+
+    assert (X_gen["target"] == 1).sum() >= 0.8 * count
+
+
+def gen_datetime(min_year: int = 2000, max_year: int = datetime.now().year) -> datetime:
+    # generate a datetime in format yyyy-mm-dd hh:mm:ss.000000
+    start = datetime(min_year, 1, 1, 00, 00, 00)
+    years = max_year - min_year + 1
+    end = start + timedelta(days=365 * years)
+    return start + (end - start) * random.random()
+
+
+def test_plugin_encoding() -> None:
+    data = [[gen_datetime(), i % 2 == 0, i] for i in range(1000)]
+
+    df = pd.DataFrame(data, columns=["date", "bool", "int"])
+    test_plugin = plugin(generator_n_units_hidden=5)
+    test_plugin.fit(df)
+
+    syn = test_plugin.generate(10)
+
+    assert len(syn) == 10
+    assert test_plugin.schema_includes(syn)
+
+    syn_df = syn.dataframe()
+
+    assert syn_df["date"].infer_objects().dtype.kind == "M"
+    assert syn_df["bool"].infer_objects().dtype.kind == "b"

@@ -1,4 +1,5 @@
 # stdlib
+from pathlib import Path
 from typing import Any, List, Optional
 
 # third party
@@ -18,10 +19,15 @@ from synthcity.plugins.core.models.flows import NormalizingFlows
 from synthcity.plugins.core.models.tabular_flows import TabularFlows
 from synthcity.plugins.core.plugin import Plugin
 from synthcity.plugins.core.schema import Schema
+from synthcity.utils.constants import DEVICE
 
 
 class NormalizingFlowsPlugin(Plugin):
-    """Normalizing Flows methods.
+    """
+    .. inheritance-diagram:: synthcity.plugins.generic.plugin_nflow.NormalizingFlowsPlugin
+        :parts: 1
+
+    Normalizing Flows methods.
 
     Normalizing Flows are generative models which produce tractable distributions where both sampling and density evaluation can be efficient and exact.
 
@@ -75,9 +81,30 @@ class NormalizingFlowsPlugin(Plugin):
         n_iter_min: int
             Minimum number of iterations to go through before starting early stopping
         patience: int
-            Max number of iterations without any improvement before early stopping is trigged.
+            Max number of iterations without any improvement before training early stopping is trigged.
         patience_metric: Optional[WeightedMetrics]
-            If not None, the metric is used for evaluation the criterion for early stopping.
+            If not None, the metric is used for evaluation the criterion for training early stopping.
+        # Core Plugin arguments
+        workspace: Path.
+            Optional Path for caching intermediary results.
+        compress_dataset: bool. Default = False.
+            Drop redundant features before training the generator.
+        sampling_patience: int.
+            Max inference iterations to wait for the generated data to match the training schema.
+        random_state: int
+            random seed to use
+    Example:
+        >>> from sklearn.datasets import load_iris
+        >>> from synthcity.plugins import Plugins
+        >>>
+        >>> X, y = load_iris(as_frame = True, return_X_y = True)
+        >>> X["target"] = y
+        >>>
+        >>> plugin = Plugins().get("nflow", n_iter = 100)
+        >>> plugin.fit(X)
+        >>>
+        >>> plugin.generate(50)
+
     """
 
     @validate_arguments(config=dict(arbitrary_types_allowed=True))
@@ -103,12 +130,30 @@ class NormalizingFlowsPlugin(Plugin):
         n_iter_min: int = 100,
         n_iter_print: int = 50,
         patience: int = 5,
-        patience_metric: Optional[WeightedMetrics] = WeightedMetrics(
-            metrics=[("detection", "detection_mlp")], weights=[1]
-        ),
+        patience_metric: Optional[WeightedMetrics] = None,
+        # core plugin arguments
+        workspace: Path = Path("workspace"),
+        compress_dataset: bool = False,
+        sampling_patience: int = 500,
+        random_state: int = 0,
+        device: Any = DEVICE,
         **kwargs: Any,
     ) -> None:
-        super().__init__(**kwargs)
+        super().__init__(
+            device=device,
+            random_state=random_state,
+            sampling_patience=sampling_patience,
+            workspace=workspace,
+            compress_dataset=compress_dataset,
+            **kwargs,
+        )
+
+        if patience_metric is None:
+            patience_metric = WeightedMetrics(
+                metrics=[("detection", "detection_mlp")],
+                weights=[1],
+                workspace=workspace,
+            )
 
         self.n_iter = n_iter
         self.n_layers_hidden = n_layers_hidden
@@ -193,6 +238,7 @@ class NormalizingFlowsPlugin(Plugin):
                 n_iter_print=self.n_iter_print,
                 patience=self.patience,
                 patience_metric=self.patience_metric,
+                device=self.device,
             )
         else:
             self.model = NormalizingFlows(
@@ -214,6 +260,7 @@ class NormalizingFlowsPlugin(Plugin):
                 n_iter_print=self.n_iter_print,
                 patience=self.patience,
                 patience_metric=self.patience_metric,
+                device=self.device,
             )
 
         self.model.fit(X.dataframe())

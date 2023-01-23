@@ -1,4 +1,5 @@
 # stdlib
+import sys
 from typing import Tuple
 
 # third party
@@ -8,7 +9,9 @@ from helpers import get_airfoil_dataset
 from sklearn.datasets import load_iris
 
 # synthcity absolute
+from synthcity.metrics.eval_statistical import AlphaPrecision
 from synthcity.metrics.weighted_metrics import WeightedMetrics
+from synthcity.plugins.core.dataloader import GenericDataLoader
 from synthcity.plugins.core.models.tabular_gan import TabularGAN
 
 
@@ -112,8 +115,8 @@ def test_gan_conditional() -> None:
 
     model = TabularGAN(
         X,
+        cond=y,
         n_units_latent=50,
-        n_units_conditional=1,
         generator_n_iter=10,
     )
     model.fit(X, cond=y)
@@ -125,6 +128,7 @@ def test_gan_conditional() -> None:
     assert generated.shape == (5, X.shape[1])
 
 
+@pytest.mark.skipif(sys.platform != "linux", reason="Linux only for faster results")
 def test_gan_generation_with_dp() -> None:
     X = get_airfoil_dataset()
 
@@ -168,3 +172,34 @@ def test_gan_generation_with_early_stopping(patience_metric: Tuple[str, str]) ->
 
     assert (X.columns == generated.columns).all()
     assert generated.shape == (10, X.shape[1])
+
+
+@pytest.mark.slow
+def test_gan_sampling_adjustment() -> None:
+    X = get_airfoil_dataset()
+
+    model = TabularGAN(
+        X,
+        n_units_latent=50,
+        encoder_max_clusters=5,
+        adjust_inference_sampling=False,
+    )
+    model.fit(X)
+    assert model._adjust_inference_sampling is False
+    assert model.sample_prob is None
+
+    generated = model.generate(len(X))
+    metrics_before = AlphaPrecision().evaluate(
+        GenericDataLoader(X), GenericDataLoader(generated)
+    )
+
+    model.adjust_inference_sampling(True)
+    assert model._adjust_inference_sampling is True
+    assert model.sample_prob is not None  # type: ignore
+
+    generated = model.generate(len(X))
+    metrics_after = AlphaPrecision().evaluate(
+        GenericDataLoader(X), GenericDataLoader(generated)
+    )
+
+    assert metrics_before["authenticity_OC"] < metrics_after["authenticity_OC"]

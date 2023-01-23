@@ -10,9 +10,9 @@ from synthcity.plugins.core.plugin import Plugin, PluginLoader  # noqa: F401,E40
 
 def_categories = [
     "generic",
+    "privacy",
     "survival_analysis",
     "time_series",
-    "fairness",
     "domain_adaptation",
 ]
 plugins = {}

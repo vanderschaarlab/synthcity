@@ -63,10 +63,25 @@ def verify_serialization(model: Any, generate: bool = False) -> None:
 
 def test_serialization_sanity() -> None:
     generic_data = pd.DataFrame(load_iris()["data"])
-    plugins = Plugins(categories=["generic"])
+    plugins = Plugins(categories=["privacy"])
 
     # pre-training
     syn_model = plugins.get("adsgan", strict=False, n_iter=10)
+    verify_serialization(syn_model)
+
+    # post-training
+    syn_model.fit(generic_data)
+    verify_serialization(syn_model, generate=True)
+
+
+@pytest.mark.parametrize("plugin", Plugins(categories=["privacy"]).list())
+@pytest.mark.slow
+def test_serialization_privacy_plugins(plugin: str) -> None:
+    generic_data = pd.DataFrame(load_iris()["data"])
+    plugins = Plugins(categories=["privacy"])
+
+    # pre-training
+    syn_model = plugins.get(plugin, strict=False)
     verify_serialization(syn_model)
 
     # post-training
@@ -95,12 +110,12 @@ def test_serialization_ts_plugins(plugin: str) -> None:
     (
         static_data,
         temporal_data,
-        temporal_horizons,
+        observation_times,
         outcome,
     ) = GoogleStocksDataloader().load()
     ts_data = TimeSeriesDataLoader(
         temporal_data=temporal_data,
-        temporal_horizons=temporal_horizons,
+        observation_times=observation_times,
         static_data=static_data,
         outcome=outcome,
     )

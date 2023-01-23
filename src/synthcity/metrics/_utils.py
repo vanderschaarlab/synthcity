@@ -44,7 +44,8 @@ def get_frequency(
             if val not in gt or gt[val] == 0:
                 gt[val] = 1e-11
 
-        assert gt.keys() == synth.keys()
+        if gt.keys() != synth.keys():
+            raise ValueError(f"Invalid features. {gt.keys()}. syn = {synth.keys()}")
         res[col] = (list(gt.values()), list(synth.values()))
 
     return res

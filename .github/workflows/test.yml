@@ -1,0 +1,63 @@
+name: Tests Python
+
+on:
+  push:
+    branches: [main, release]
+  pull_request:
+    types: [opened, synchronize, reopened]
+  schedule:
+    - cron:  '4 2 * * 3'
+
+
+jobs:
+  Linter:
+    runs-on: ${{ matrix.os }}
+    strategy:
+      matrix:
+        python-version: [3.8]
+        os: [ubuntu-latest]
+    steps:
+      - uses: actions/checkout@v2
+        with:
+          submodules: true
+      - name: Set up Python ${{ matrix.python-version }}
+        uses: actions/setup-python@v4
+        with:
+          python-version: ${{ matrix.python-version }}
+      - name: Install dependencies
+        run: |
+            pip install bandit pre-commit
+      - name: pre-commit validation
+        run: pre-commit run --all
+      - name: Security checks
+        run: |
+            bandit -r src/synthcity/*
+
+  Library:
+    needs: [Linter]
+    runs-on: ${{ matrix.os }}
+    strategy:
+      matrix:
+        python-version: ['3.7', '3.8', '3.9', '3.10']
+        os: [macos-latest, ubuntu-latest, windows-latest]
+    steps:
+      - uses: actions/checkout@v2
+        with:
+          submodules: true
+      - name: Set up Python ${{ matrix.python-version }}
+        uses: actions/setup-python@v4
+        with:
+          python-version: ${{ matrix.python-version }}
+          cache: 'pip' # caching pip dependencies
+      - name: Install MacOS dependencies
+        run: |
+            brew install libomp
+        if: ${{ matrix.os == 'macos-latest' }}
+      - name: Install dependencies
+        run: |
+            pip install -r prereq.txt
+
+            pip install --upgrade pip
+            pip install .[testing]
+      - name: Test with pytest
+        run: pytest -vvvsx -m "not slow" --durations=50

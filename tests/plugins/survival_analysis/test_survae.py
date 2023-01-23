@@ -1,3 +1,6 @@
+# stdlib
+import sys
+
 # third party
 import pytest
 from lifelines.datasets import load_rossi
@@ -80,6 +83,7 @@ def test_plugin_fit(dataloader_sampling_strategy: str, tte_strategy: str) -> Non
 
 
 @pytest.mark.parametrize("strategy", ["uncensoring", "survival_function"])
+@pytest.mark.skipif(sys.platform != "linux", reason="Linux only for faster results")
 def test_plugin_generate(strategy: str) -> None:
     test_plugin = plugin(tte_strategy=strategy, **plugins_args)
 
@@ -124,3 +128,23 @@ def test_sample_hyperparams() -> None:
         args = plugin.sample_hyperparameters()
 
         assert plugin(**args) is not None
+
+
+@pytest.mark.skipif(sys.platform != "linux", reason="Linux only for faster results")
+def test_plugin_generate_with_conditional_survae() -> None:
+    bin_conditional = X["wexp"]
+
+    test_plugin = plugin()
+
+    test_plugin.fit(data, cond=bin_conditional)
+
+    # generate using training conditional
+    X_gen = test_plugin.generate(2 * len(X))
+    assert len(X_gen) == 2 * len(X)
+    assert test_plugin.schema_includes(X_gen)
+
+    # generate using custom conditional
+    count = 100
+    gen_cond = [1] * count
+    X_gen = test_plugin.generate(count, cond=gen_cond)
+    assert X_gen["wexp"].sum() > 80  # at least 80% samples respect the conditional

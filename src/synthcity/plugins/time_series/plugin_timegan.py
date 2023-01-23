@@ -1,7 +1,8 @@
 """
-Implementation for the paper "Time-series Generative Adversarial Networks", Jinsung Yoon, Daniel Jarrett, Mihaela van der Schaar
+Reference: "Time-series Generative Adversarial Networks", Jinsung Yoon, Daniel Jarrett, Mihaela van der Schaar
 """
 # stdlib
+from pathlib import Path
 from typing import Any, Callable, List, Optional, Tuple, Union
 
 # third party
@@ -27,13 +28,16 @@ from synthcity.utils.samplers import ImbalancedDatasetSampler
 
 
 class TimeGANPlugin(Plugin):
-    """Synthetic time series generation using TimeGAN.
+    """
+    .. inheritance-diagram:: synthcity.plugins.time_series.plugin_timegan.TimeGANPlugin
+        :parts: 1
+
+
+    Synthetic time series generation using TimeGAN.
 
     Args:
         n_iter: int
             Maximum number of iterations in the Generator.
-        n_units_conditional: int = 0,
-            Number of conditional units
         n_units_in: int
             Number of features
         generator_n_layers_hidden: int
@@ -72,39 +76,65 @@ class TimeGANPlugin(Plugin):
             random_state used
         clipping_value: int, default 0
             Gradients clipping value
-        encoder_max_clusters: int
-            The max number of clusters to create for continuous columns when encoding
-        encoder:
-            Pre-trained tabular encoder. If None, a new encoder is trained.
-        device:
-            Device to use for computation
         gamma_penalty
             Latent representation penalty
         moments_penalty: float = 100
             Moments(var and mean) penalty
         embedding_penalty: float = 10
             Embedding representation penalty
+        mode: str = "RNN"
+            Core neural net architecture.
+            Available models:
+                - "LSTM"
+                - "GRU"
+                - "RNN"
+                - "Transformer"
+                - "MLSTM_FCN"
+                - "TCN"
+                - "InceptionTime"
+                - "InceptionTimePlus"
+                - "XceptionTime"
+                - "ResCNN"
+                - "OmniScaleCNN"
+                - "XCM"
+        device
+            The device used by PyTorch. cpu/cuda
+        use_horizon_condition: bool. Default = True
+            Whether to condition the covariate generation on the observation times or not.
+        encoder_max_clusters: int
+            The max number of clusters to create for continuous columns when encoding
+        encoder:
+            Pre-trained tabular encoder. If None, a new encoder is trained.
+        # Core Plugin arguments
+        workspace: Path.
+            Optional Path for caching intermediary results.
+        compress_dataset: bool. Default = False.
+            Drop redundant features before training the generator.
+        sampling_patience: int.
+            Max inference iterations to wait for the generated data to match the training schema.
 
     Example:
         >>> from synthcity.plugins import Plugins
         >>> from synthcity.utils.datasets.time_series.google_stocks import GoogleStocksDataloader
         >>> from synthcity.plugins.core.dataloader import TimeSeriesDataLoader
-        >>>
-        >>> plugin = Plugins().get("timegan")
-        >>> static, temporal, outcome = GoogleStocksDataloader(as_numpy=True).load()
+        >>> static, temporal, horizons, outcome = GoogleStocksDataloader().load()
         >>> loader = TimeSeriesDataLoader(
-        >>>             temporal_data=temporal_data,
-        >>>             static_data=static_data,
+        >>>             temporal_data=temporal,
+        >>>             observation_times=horizons,
+        >>>             static_data=static,
         >>>             outcome=outcome,
         >>> )
+        >>>
+        >>> plugin = Plugins().get("timegan", n_iter = 50)
         >>> plugin.fit(loader)
-        >>> plugin.generate()
+        >>>
+        >>> plugin.generate(count = 10)
+
     """
 
     def __init__(
         self,
         n_iter: int = 1000,
-        n_units_conditional: int = 0,
         generator_n_layers_hidden: int = 2,
         generator_n_units_hidden: int = 150,
         generator_nonlin: str = "leaky_relu",
@@ -127,7 +157,6 @@ class TimeGANPlugin(Plugin):
         discriminator_weight_decay: float = 1e-3,
         batch_size: int = 64,
         n_iter_print: int = 10,
-        random_state: int = 0,
         clipping_value: int = 0,
         encoder_max_clusters: int = 20,
         encoder: Any = None,
@@ -138,15 +167,25 @@ class TimeGANPlugin(Plugin):
         embedding_penalty: float = 10,
         use_horizon_condition: bool = True,
         dataloader_sampling_strategy: str = "imbalanced_time_censoring",  # none, imbalanced_censoring, imbalanced_time_censoring
+        # core plugin arguments
+        random_state: int = 0,
+        workspace: Path = Path("workspace"),
+        compress_dataset: bool = False,
+        sampling_patience: int = 500,
         **kwargs: Any,
     ) -> None:
-        super().__init__()
+        super().__init__(
+            device=device,
+            random_state=random_state,
+            sampling_patience=sampling_patience,
+            workspace=workspace,
+            compress_dataset=compress_dataset,
+        )
 
         log.info(
             f"""TimeGAN: mode = {mode} dataloader_sampling_strategy = {dataloader_sampling_strategy}"""
         )
         self.n_iter = n_iter
-        self.n_units_conditional = n_units_conditional
         self.generator_n_layers_hidden = generator_n_layers_hidden
         self.generator_n_units_hidden = generator_n_units_hidden
         self.generator_nonlin = generator_nonlin
@@ -224,21 +263,20 @@ class TimeGANPlugin(Plugin):
         ]
 
     def _fit(self, X: DataLoader, *args: Any, **kwargs: Any) -> "TimeGANPlugin":
-        assert X.type() in ["time_series", "time_series_survival"]
+        if X.type() not in ["time_series", "time_series_survival"]:
+            raise ValueError(f"Invalid data type = {X.type()}")
 
         cond: Optional[Union[pd.DataFrame, pd.Series]] = None
         sampler: Optional[ImbalancedDatasetSampler] = None
 
-        if self.n_units_conditional > 0:
-            if "cond" not in kwargs:
-                raise ValueError("expecting 'cond' for training")
+        if "cond" in kwargs:
             cond = kwargs["cond"]
 
         # Static and temporal generation
         if X.type() == "time_series":
-            static, temporal, temporal_horizons, outcome = X.unpack(pad=True)
+            static, temporal, observation_times, outcome = X.unpack(pad=True)
         elif X.type() == "time_series_survival":
-            static, temporal, temporal_horizons, T, E = X.unpack(pad=True)
+            static, temporal, observation_times, T, E = X.unpack(pad=True)
             outcome = pd.concat([pd.Series(T), pd.Series(E)], axis=1)
             outcome.columns = ["time_to_event", "event"]
 
@@ -258,9 +296,9 @@ class TimeGANPlugin(Plugin):
         self.cov_model = TimeSeriesTabularGAN(
             static_data=static,
             temporal_data=temporal,
-            temporal_horizons=temporal_horizons,
+            observation_times=observation_times,
+            cond=cond,
             generator_n_iter=self.n_iter,
-            n_units_conditional=self.n_units_conditional,
             generator_n_layers_hidden=self.generator_n_layers_hidden,
             generator_n_units_hidden=self.generator_n_units_hidden,
             generator_nonlin=self.generator_nonlin,
@@ -295,7 +333,7 @@ class TimeGANPlugin(Plugin):
             use_horizon_condition=self.use_horizon_condition,
             dataloader_sampler=sampler,
         )
-        self.cov_model.fit(static, temporal, temporal_horizons, cond=cond)
+        self.cov_model.fit(static, temporal, observation_times, cond=cond)
 
         # Outcome generation
         self.outcome_encoder.fit(outcome)
@@ -330,7 +368,7 @@ class TimeGANPlugin(Plugin):
         self.outcome_model.fit(
             np.asarray(static),
             np.asarray(temporal),
-            np.asarray(temporal_horizons),
+            np.asarray(observation_times),
             np.asarray(outcome_enc),
         )
 
@@ -339,42 +377,42 @@ class TimeGANPlugin(Plugin):
     def _generate(self, count: int, syn_schema: Schema, **kwargs: Any) -> pd.DataFrame:
         cond: Optional[Union[pd.DataFrame, pd.Series]] = None
         static_data_cond: Optional[pd.DataFrame] = None
-        temporal_horizons_cond: Optional[list] = None
+        observation_times_cond: Optional[list] = None
 
         if "cond" in kwargs:
             cond = kwargs["cond"]
         if "static_data" in kwargs:
             static_data_cond = kwargs["static_data"]
-        if "temporal_horizons" in kwargs:
-            temporal_horizons_cond = kwargs["temporal_horizons"]
+        if "observation_times" in kwargs:
+            observation_times_cond = kwargs["observation_times"]
 
         def _sample(count: int) -> Tuple:
             local_cond: Optional[Union[pd.DataFrame, pd.Series]] = None
             local_static_data: Optional[pd.DataFrame] = None
-            local_temporal_horizons: Optional[list] = None
+            local_observation_times: Optional[list] = None
             if cond is not None:
                 local_cond = cond.sample(count, replace=True)
             if static_data_cond is not None:
                 local_static_data = static_data_cond.sample(count, replace=True)
-            if temporal_horizons_cond is not None:
-                ids = list(range(len(temporal_horizons_cond)))
+            if observation_times_cond is not None:
+                ids = list(range(len(observation_times_cond)))
                 local_ids = np.random.choice(ids, count, replace=True)
-                local_temporal_horizons = np.asarray(temporal_horizons_cond)[
+                local_observation_times = np.asarray(observation_times_cond)[
                     local_ids
                 ].tolist()
 
-            static, temporal, temporal_horizons = self.cov_model.generate(
+            static, temporal, observation_times = self.cov_model.generate(
                 count,
                 cond=local_cond,
                 static_data=local_static_data,
-                temporal_horizons=local_temporal_horizons,
+                observation_times=local_observation_times,
             )
 
             outcome_enc = pd.DataFrame(
                 self.outcome_model.predict(
                     np.asarray(static),
                     np.asarray(temporal),
-                    np.asarray(temporal_horizons),
+                    np.asarray(observation_times),
                 ),
                 columns=self.outcome_encoded_columns,
             )
@@ -384,12 +422,12 @@ class TimeGANPlugin(Plugin):
             )
 
             if self.data_info["data_type"] == "time_series":
-                return static, temporal, temporal_horizons, outcome
+                return static, temporal, observation_times, outcome
             elif self.data_info["data_type"] == "time_series_survival":
                 return (
                     static,
                     temporal,
-                    temporal_horizons,
+                    observation_times,
                     outcome[self.data_info["time_to_event_column"]],
                     outcome[self.data_info["event_column"]],
                 )

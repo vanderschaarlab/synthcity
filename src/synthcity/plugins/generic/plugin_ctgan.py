@@ -1,9 +1,13 @@
-"""Conditional GAN implementation
 """
+Reference: "Modeling Tabular Data using Conditional GAN", Xu, Lei et al.
+"""
+
 # stdlib
+from pathlib import Path
 from typing import Any, List, Optional, Union
 
 # third party
+import numpy as np
 import pandas as pd
 
 # Necessary packages
@@ -26,7 +30,12 @@ from synthcity.utils.constants import DEVICE
 
 
 class CTGANPlugin(Plugin):
-    """CTGAN plugin.
+    """
+    .. inheritance-diagram:: synthcity.plugins.generic.plugin_ctgan.CTGANPlugin
+        :parts: 1
+
+
+    Conditional Tabular GAN implementation.
 
     Args:
         generator_n_layers_hidden: int
@@ -61,6 +70,8 @@ class CTGANPlugin(Plugin):
             Gradients clipping value. Zero disables the feature
         encoder_max_clusters: int
             The max number of clusters to create for continuous columns when encoding
+        adjust_inference_sampling: bool
+            Adjust the marginal probabilities in the synthetic data to closer match the training set. Active only with the ConditionalSampler
         # early stopping
         n_iter_print: int
             Number of iterations after which to print updates and check the validation loss.
@@ -70,21 +81,31 @@ class CTGANPlugin(Plugin):
             Max number of iterations without any improvement before early stopping is trigged.
         patience_metric: Optional[WeightedMetrics]
             If not None, the metric is used for evaluation the criterion for early stopping.
-
+        # Core Plugin arguments
+        workspace: Path.
+            Optional Path for caching intermediary results.
+        compress_dataset: bool. Default = False.
+            Drop redundant features before training the generator.
+        sampling_patience: int.
+            Max inference iterations to wait for the generated data to match the training schema.
     Example:
-        >>> from synthcity.plugins import Plugins
-        >>> plugin = Plugins().get("ctgan")
         >>> from sklearn.datasets import load_iris
-        >>> X = load_iris()
+        >>> from synthcity.plugins import Plugins
+        >>>
+        >>> X, y = load_iris(as_frame = True, return_X_y = True)
+        >>> X["target"] = y
+        >>>
+        >>> plugin = Plugins().get("ctgan", n_iter = 100)
         >>> plugin.fit(X)
-        >>> plugin.generate()
+        >>>
+        >>> plugin.generate(50)
+
     """
 
     @validate_arguments(config=dict(arbitrary_types_allowed=True))
     def __init__(
         self,
         n_iter: int = 2000,
-        n_units_conditional: int = 0,
         generator_n_layers_hidden: int = 2,
         generator_n_units_hidden: int = 500,
         generator_nonlin: str = "relu",
@@ -107,14 +128,30 @@ class CTGANPlugin(Plugin):
         dataloader_sampler: Optional[sampler.Sampler] = None,
         device: Any = DEVICE,
         patience: int = 5,
-        patience_metric: Optional[WeightedMetrics] = WeightedMetrics(
-            metrics=[("detection", "detection_mlp")], weights=[1]
-        ),
+        patience_metric: Optional[WeightedMetrics] = None,
         n_iter_print: int = 50,
         n_iter_min: int = 100,
+        adjust_inference_sampling: bool = False,
+        # core plugin arguments
+        workspace: Path = Path("workspace"),
+        compress_dataset: bool = False,
+        sampling_patience: int = 500,
         **kwargs: Any
     ) -> None:
-        super().__init__(**kwargs)
+        super().__init__(
+            device=device,
+            random_state=random_state,
+            sampling_patience=sampling_patience,
+            workspace=workspace,
+            compress_dataset=compress_dataset,
+            **kwargs
+        )
+        if patience_metric is None:
+            patience_metric = WeightedMetrics(
+                metrics=[("detection", "detection_mlp")],
+                weights=[1],
+                workspace=workspace,
+            )
         self.generator_n_layers_hidden = generator_n_layers_hidden
         self.generator_n_units_hidden = generator_n_units_hidden
         self.generator_nonlin = generator_nonlin
@@ -135,7 +172,6 @@ class CTGANPlugin(Plugin):
         self.clipping_value = clipping_value
         self.lambda_gradient_penalty = lambda_gradient_penalty
 
-        self.n_units_conditional = n_units_conditional
         self.encoder_max_clusters = encoder_max_clusters
         self.encoder = encoder
         self.dataloader_sampler = dataloader_sampler
@@ -145,6 +181,7 @@ class CTGANPlugin(Plugin):
         self.patience_metric = patience_metric
         self.n_iter_min = n_iter_min
         self.n_iter_print = n_iter_print
+        self.adjust_inference_sampling = adjust_inference_sampling
 
     @staticmethod
     def name() -> str:
@@ -182,17 +219,27 @@ class CTGANPlugin(Plugin):
             IntegerDistribution(name="encoder_max_clusters", low=2, high=20),
         ]
 
+    def _prepare_cond(
+        self, cond: Optional[Union[pd.DataFrame, pd.Series, np.ndarray, list]]
+    ) -> Optional[np.ndarray]:
+        if cond is None:
+            return None
+
+        cond = np.asarray(cond)
+        if len(cond.shape) == 1:
+            cond = cond.reshape(-1, 1)
+
+        return cond
+
     def _fit(self, X: DataLoader, *args: Any, **kwargs: Any) -> "CTGANPlugin":
         cond: Optional[Union[pd.DataFrame, pd.Series]] = None
-        if self.n_units_conditional > 0:
-            if "cond" not in kwargs:
-                raise ValueError("expecting 'cond' for training")
-            cond = kwargs["cond"]
+        if "cond" in kwargs:
+            cond = self._prepare_cond(kwargs["cond"])
 
         self.model = TabularGAN(
             X.dataframe(),
+            cond=cond,
             n_units_latent=self.generator_n_units_hidden,
-            n_units_conditional=self.n_units_conditional,
             batch_size=self.batch_size,
             generator_n_layers_hidden=self.generator_n_layers_hidden,
             generator_n_units_hidden=self.generator_n_units_hidden,
@@ -226,6 +273,7 @@ class CTGANPlugin(Plugin):
             patience_metric=self.patience_metric,
             n_iter_min=self.n_iter_min,
             n_iter_print=self.n_iter_print,
+            adjust_inference_sampling=self.adjust_inference_sampling,
         )
         self.model.fit(X.dataframe(), cond=cond)
 
@@ -234,7 +282,7 @@ class CTGANPlugin(Plugin):
     def _generate(self, count: int, syn_schema: Schema, **kwargs: Any) -> DataLoader:
         cond: Optional[Union[pd.DataFrame, pd.Series]] = None
         if "cond" in kwargs:
-            cond = kwargs["cond"]
+            cond = self._prepare_cond(kwargs["cond"])
 
         return self._safe_generate(self.model.generate, count, syn_schema, cond=cond)
 

@@ -32,7 +32,12 @@ class GoogleStocksDataloader:
 
         # Flip the data to make chronological data
         df = pd.DataFrame(df.values[::-1], columns=df.columns)
-        T = pd.to_datetime(df["Date"], infer_datetime_format=True).astype(int) / 10**9
+        T = (
+            pd.to_datetime(df["Date"], infer_datetime_format=True)
+            .astype(np.int64)
+            .astype(np.float64)
+            / 10**9
+        )
         T = pd.Series(MinMaxScaler().fit_transform(T.values.reshape(-1, 1)).squeeze())
 
         df = df.drop(columns=["Date"])
@@ -57,22 +62,22 @@ class GoogleStocksDataloader:
         idx = np.random.permutation(len(dataX))
 
         temporal_data = []
-        temporal_horizons = []
+        observation_times = []
         for i in range(len(dataX)):
             temporal_data.append(dataX[idx[i]])
-            temporal_horizons.append(dataT[idx[i]])
+            observation_times.append(dataT[idx[i]])
 
         if self.as_numpy:
             return (
                 np.zeros((len(temporal_data), 0)),
                 np.asarray(temporal_data, dtype=np.float32),
-                np.asarray(temporal_horizons),
+                np.asarray(observation_times),
                 np.asarray(outcome, dtype=np.float32),
             )
 
         return (
             pd.DataFrame(np.zeros((len(temporal_data), 0))),
             temporal_data,
-            temporal_horizons,
+            observation_times,
             pd.DataFrame(outcome, columns=["Open_next"]),
         )

@@ -20,6 +20,7 @@ module_parent_path = module_path.parent
 
 class Serializable:
     """Utility class for model persistence."""
+
     def __init__(self, *args: Any, **kwargs: Any) -> None:
         derived_module_path: Optional[Path] = None
 

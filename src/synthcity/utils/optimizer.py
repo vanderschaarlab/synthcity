@@ -10,7 +10,7 @@ from sklearn.model_selection import train_test_split
 # synthcity absolute
 import synthcity.logger as log
 from synthcity.metrics.eval_detection import SyntheticDetectionMLP
-from synthcity.utils.redis_wrapper import backend
+from synthcity.utils.redis_wrapper import RedisBackend
 from synthcity.utils.serialization import (
     dataframe_cols_hash,
     load_from_file,
@@ -126,7 +126,7 @@ class EarlyStoppingExceeded(optuna.exceptions.OptunaError):
 
 
 class ParamRepeatPruner:
-    """Prunes reapeated trials, which means trials with the same paramters won't waste time/resources."""
+    """Prunes reapeated trials, which means trials with the same parameters won't waste time/resources."""
 
     def __init__(
         self,
@@ -208,7 +208,12 @@ def create_study(
 
     storage_obj = None
     if storage_type == "redis":
-        storage_obj = backend.optuna()
+        try:
+            backend = RedisBackend()
+            storage_obj = backend.optuna()
+        except BaseException:
+            log.error("Failed to load Redis backed.")
+            storage_obj = None
 
     try:
         study = optuna.create_study(

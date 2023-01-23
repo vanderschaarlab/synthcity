@@ -1,4 +1,5 @@
 # stdlib
+import platform
 from typing import Any, Dict
 
 # third party
@@ -19,7 +20,12 @@ from synthcity.utils.serialization import load_from_file, save_to_file
 
 
 class DetectionEvaluator(MetricEvaluator):
-    """Train a SKLearn classifier to detect the synthetic data from real data.
+    """
+    .. inheritance-diagram:: synthcity.metrics.eval_detection.DetectionEvaluator
+        :parts: 1
+
+
+    Train a SKLearn classifier to detect the synthetic data from real data.
 
     Synthetic and real data are combined to form a new dataset.
     K-fold cross validation is performed to see how well a classifier can distinguish real from synthetic.
@@ -53,7 +59,7 @@ class DetectionEvaluator(MetricEvaluator):
     ) -> Dict:
         cache_file = (
             self._workspace
-            / f"sc_metric_cache_{self.type()}_{self.name()}_{X_gt.hash()}_{X_syn.hash()}_{self._reduction}.bkp"
+            / f"sc_metric_cache_{self.type()}_{self.name()}_{X_gt.hash()}_{X_syn.hash()}_{self._reduction}_{platform.python_version()}.bkp"
         )
         if self.use_cache(cache_file):
             results = load_from_file(cache_file)
@@ -106,7 +112,11 @@ class DetectionEvaluator(MetricEvaluator):
 
 
 class SyntheticDetectionXGB(DetectionEvaluator):
-    """Train a XGBoostclassifier to detect the synthetic data.
+    """
+    .. inheritance-diagram:: synthcity.metrics.eval_detection.SyntheticDetectionXGB
+        :parts: 1
+
+    Train a XGBoostclassifier to detect the synthetic data.
 
     Returns:
         The average AUCROC score for detecting synthetic data.
@@ -115,6 +125,9 @@ class SyntheticDetectionXGB(DetectionEvaluator):
         0: The datasets are indistinguishable.
         1: The datasets are totally distinguishable.
     """
+
+    def __init__(self, **kwargs: Any) -> None:
+        super().__init__(**kwargs)
 
     @staticmethod
     def name() -> str:
@@ -134,7 +147,11 @@ class SyntheticDetectionXGB(DetectionEvaluator):
 
 
 class SyntheticDetectionMLP(DetectionEvaluator):
-    """Train a MLP classifier to detect the synthetic data.
+    """
+    .. inheritance-diagram:: synthcity.metrics.eval_detection.SyntheticDetectionMLP
+        :parts: 1
+
+    Train a MLP classifier to detect the synthetic data.
 
     Returns:
         The average AUCROC score for detecting synthetic data.
@@ -143,6 +160,9 @@ class SyntheticDetectionMLP(DetectionEvaluator):
         0: The datasets are indistinguishable.
         1: The datasets are totally distinguishable.
     """
+
+    def __init__(self, **kwargs: Any) -> None:
+        super().__init__(**kwargs)
 
     @staticmethod
     def name() -> str:
@@ -165,7 +185,11 @@ class SyntheticDetectionMLP(DetectionEvaluator):
 
 
 class SyntheticDetectionLinear(DetectionEvaluator):
-    """Train a LogisticRegression classifier to detect the synthetic data.
+    """
+    .. inheritance-diagram:: synthcity.metrics.eval_detection.SyntheticDetectionLinear
+        :parts: 1
+
+    Train a LogisticRegression classifier to detect the synthetic data.
 
     Returns:
         The average AUCROC score for detecting synthetic data.
@@ -174,6 +198,9 @@ class SyntheticDetectionLinear(DetectionEvaluator):
         0: The datasets are indistinguishable.
         1: The datasets are totally distinguishable.
     """
+
+    def __init__(self, **kwargs: Any) -> None:
+        super().__init__(**kwargs)
 
     @staticmethod
     def name() -> str:
@@ -195,7 +222,11 @@ class SyntheticDetectionLinear(DetectionEvaluator):
 
 
 class SyntheticDetectionGMM(DetectionEvaluator):
-    """Train a GaussianMixture model to detect synthetic data.
+    """
+    .. inheritance-diagram:: synthcity.metrics.eval_detection.SyntheticDetectionGMM
+        :parts: 1
+
+    Train a GaussianMixture model to detect synthetic data.
 
     Returns:
         The average score for detecting synthetic data.
@@ -204,6 +235,9 @@ class SyntheticDetectionGMM(DetectionEvaluator):
         0: The datasets are indistinguishable.
         1: The datasets are totally distinguishable.
     """
+
+    def __init__(self, **kwargs: Any) -> None:
+        super().__init__(**kwargs)
 
     @staticmethod
     def name() -> str:
@@ -216,7 +250,7 @@ class SyntheticDetectionGMM(DetectionEvaluator):
         X_syn: DataLoader,
     ) -> Dict:
         model_args = {
-            "n_components": min(100, len(X_gt)),
+            "n_components": min(10, len(X_gt)),
             "random_state": self._random_state,
         }
         return self._evaluate_detection(

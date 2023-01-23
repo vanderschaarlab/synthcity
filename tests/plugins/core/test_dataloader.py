@@ -1,8 +1,10 @@
 # stdlib
+from datetime import datetime
 from typing import Any
 
 # third party
 import numpy as np
+import pandas as pd
 import pytest
 from lifelines.datasets import load_rossi
 from sklearn.datasets import load_breast_cancer
@@ -49,6 +51,35 @@ def test_generic_dataloader_sanity() -> None:
 
     loader = GenericDataLoader(X, target_column="target", train_size=0.5)
     assert abs(len(loader.train()) - len(loader.test())) < 2
+
+
+def test_generic_dataloader_encoder() -> None:
+    def _get_dtypes(df: pd.DataFrame) -> list:
+        return list(df.infer_objects().dtypes)
+
+    test = pd.DataFrame(
+        [
+            [0, 0.344, "cat1", datetime.now()],
+            [1, 0.444, "cat1", datetime.now()],
+            [0, 0.544, "cat2", datetime.now()],
+        ]
+    )
+    loader = GenericDataLoader(test)
+    dtypes = _get_dtypes(test)
+
+    encoded, encoders = loader.encode()
+    encoded_dtypes = _get_dtypes(encoded.dataframe())
+    for dt in encoded_dtypes:
+        assert dt in ["float64", "int64", "float", "int"]
+
+    assert (encoded.columns == test.columns).all()
+
+    decoded = encoded.decode(encoders)
+    decoded_dtypes = _get_dtypes(decoded.dataframe())
+
+    assert (decoded.columns == test.columns).all()
+    for idx, dt in enumerate(dtypes):
+        assert dt == decoded_dtypes[idx]
 
 
 def test_generic_dataloader_info() -> None:
@@ -257,11 +288,11 @@ def test_survival_dataloader_compression() -> None:
 
 @pytest.mark.parametrize("source", [SineDataloader, GoogleStocksDataloader])
 def test_time_series_dataloader_sanity(source: Any) -> None:
-    static_data, temporal_data, temporal_horizons, outcome = source().load()
+    static_data, temporal_data, observation_times, outcome = source().load()
 
     loader = TimeSeriesDataLoader(
         temporal_data=temporal_data,
-        temporal_horizons=temporal_horizons,
+        observation_times=observation_times,
         static_data=static_data,
         outcome=outcome,
         train_size=0.8,
@@ -298,11 +329,11 @@ def test_time_series_dataloader_sanity(source: Any) -> None:
 
 @pytest.mark.parametrize("source", [SineDataloader, GoogleStocksDataloader])
 def test_time_series_dataloader_info(source: Any) -> None:
-    static_data, temporal_data, temporal_horizons, outcome = source().load()
+    static_data, temporal_data, observation_times, outcome = source().load()
 
     loader = TimeSeriesDataLoader(
         temporal_data=temporal_data,
-        temporal_horizons=temporal_horizons,
+        observation_times=observation_times,
         static_data=static_data,
         outcome=outcome,
         train_size=0.8,
@@ -340,11 +371,11 @@ def test_time_series_dataloader_info(source: Any) -> None:
 )
 @pytest.mark.parametrize("repack", [True, False])
 def test_time_series_pack_unpack(source: Any, repack: bool) -> None:
-    static_data, temporal_data, temporal_horizons, outcome = source.load()
+    static_data, temporal_data, observation_times, outcome = source.load()
 
     loader = TimeSeriesDataLoader(
         temporal_data=temporal_data,
-        temporal_horizons=temporal_horizons,
+        observation_times=observation_times,
         static_data=static_data,
         outcome=outcome,
     )
@@ -353,14 +384,14 @@ def test_time_series_pack_unpack(source: Any, repack: bool) -> None:
         (
             unp_static_data,
             unp_temporal,
-            unp_temporal_horizons,
+            unp_observation_times,
             unp_out,
         ) = TimeSeriesDataLoader.unpack_raw_data(
             loader.dataframe(),
             loader.info(),
         )
     else:
-        unp_static_data, unp_temporal, unp_temporal_horizons, unp_out = loader.unpack()
+        unp_static_data, unp_temporal, unp_observation_times, unp_out = loader.unpack()
 
     if static_data is not None:
         assert unp_static_data.shape == static_data.shape
@@ -379,19 +410,19 @@ def test_time_series_pack_unpack(source: Any, repack: bool) -> None:
     assert len(unp_temporal) == len(temporal_data)
     for idx, item in enumerate(temporal_data):
         assert unp_temporal[idx].shape == item.shape
-        assert len(unp_temporal_horizons[idx]) == len(temporal_horizons[idx])
+        assert len(unp_observation_times[idx]) == len(observation_times[idx])
         assert sorted(unp_temporal[idx].columns) == sorted(item.columns)
         cols = list(unp_temporal[idx].columns)
         assert (unp_temporal[idx].values == item[cols].values).all()
 
 
 def test_time_series_survival_dataloader_sanity() -> None:
-    static_data, temporal_data, temporal_horizons, outcome = PBCDataloader().load()
+    static_data, temporal_data, observation_times, outcome = PBCDataloader().load()
     T, E = outcome
 
     loader = TimeSeriesSurvivalDataLoader(
         temporal_data=temporal_data,
-        temporal_horizons=temporal_horizons,
+        observation_times=observation_times,
         static_data=static_data,
         T=T,
         E=E,
@@ -424,12 +455,12 @@ def test_time_series_survival_dataloader_sanity() -> None:
 
 
 def test_time_series_survival_dataloader_info() -> None:
-    static_data, temporal_data, temporal_horizons, outcome = PBCDataloader().load()
+    static_data, temporal_data, observation_times, outcome = PBCDataloader().load()
     T, E = outcome
 
     loader = TimeSeriesSurvivalDataLoader(
         temporal_data=temporal_data,
-        temporal_horizons=temporal_horizons,
+        observation_times=observation_times,
         static_data=static_data,
         T=T,
         E=E,
@@ -467,12 +498,12 @@ def test_time_series_survival_dataloader_info() -> None:
 
 
 def test_time_series_survival_create_from_info() -> None:
-    static_data, temporal_data, temporal_horizons, outcome = PBCDataloader().load()
+    static_data, temporal_data, observation_times, outcome = PBCDataloader().load()
     T, E = outcome
 
     loader = TimeSeriesSurvivalDataLoader(
         temporal_data=temporal_data,
-        temporal_horizons=temporal_horizons,
+        observation_times=observation_times,
         static_data=static_data,
         T=T,
         E=E,
@@ -486,26 +517,26 @@ def test_time_series_survival_create_from_info() -> None:
 
 
 def test_time_series_survival_pack_unpack() -> None:
-    static_data, temporal_data, temporal_horizons, outcome = PBCDataloader().load()
+    static_data, temporal_data, observation_times, outcome = PBCDataloader().load()
     T, E = outcome
 
     loader = TimeSeriesSurvivalDataLoader(
         temporal_data=temporal_data,
-        temporal_horizons=temporal_horizons,
+        observation_times=observation_times,
         static_data=static_data,
         T=T,
         E=E,
     )
 
-    _, unp_temporal, unp_temporal_horizons, _, _ = loader.unpack()
+    _, unp_temporal, unp_observation_times, _, _ = loader.unpack()
     for idx, item in enumerate(unp_temporal):
         assert len(unp_temporal[idx]) == len(temporal_data[idx])
-        assert len(unp_temporal_horizons[idx]) == len(temporal_data[idx])
+        assert len(unp_observation_times[idx]) == len(temporal_data[idx])
 
     (
         unp_static_data,
         unp_temporal,
-        unp_temporal_horizons,
+        unp_observation_times,
         unp_out,
     ) = TimeSeriesSurvivalDataLoader.unpack_raw_data(
         loader.dataframe(),
@@ -532,28 +563,28 @@ def test_time_series_survival_pack_unpack() -> None:
     assert len(unp_temporal) == len(temporal_data)
     for idx, item in enumerate(temporal_data):
         assert unp_temporal[idx].shape == (len(item), len(item.columns))
-        assert len(unp_temporal_horizons[idx]) == len(item)
+        assert len(unp_observation_times[idx]) == len(item)
         assert sorted(unp_temporal[idx].columns) == sorted(item.columns)
 
 
 def test_time_series_survival_pack_unpack_numpy() -> None:
-    static_data, temporal_data, temporal_horizons, outcome = PBCDataloader().load()
+    static_data, temporal_data, observation_times, outcome = PBCDataloader().load()
     T, E = outcome
 
     loader = TimeSeriesSurvivalDataLoader(
         temporal_data=temporal_data,
-        temporal_horizons=temporal_horizons,
+        observation_times=observation_times,
         static_data=static_data,
         T=T,
         E=E,
     )
 
-    unp_static, unp_temporal, unp_temporal_horizons, unp_T, unp_E = loader.unpack(
+    unp_static, unp_temporal, unp_observation_times, unp_T, unp_E = loader.unpack(
         as_numpy=True
     )
     for idx, item in enumerate(unp_temporal):
         assert len(unp_temporal[idx]) == len(temporal_data[idx])
-        assert len(unp_temporal_horizons[idx]) == len(temporal_data[idx])
+        assert len(unp_observation_times[idx]) == len(temporal_data[idx])
 
     assert isinstance(unp_static, np.ndarray)
     assert unp_static.shape == static_data.shape
@@ -563,12 +594,12 @@ def test_time_series_survival_pack_unpack_numpy() -> None:
 
 @pytest.mark.parametrize("as_numpy", [True, False])
 def test_time_series_survival_pack_unpack_padding(as_numpy: bool) -> None:
-    static_data, temporal_data, temporal_horizons, outcome = PBCDataloader().load()
+    static_data, temporal_data, observation_times, outcome = PBCDataloader().load()
     T, E = outcome
 
     loader = TimeSeriesSurvivalDataLoader(
         temporal_data=temporal_data,
-        temporal_horizons=temporal_horizons,
+        observation_times=observation_times,
         static_data=static_data,
         T=T,
         E=E,
@@ -577,7 +608,7 @@ def test_time_series_survival_pack_unpack_padding(as_numpy: bool) -> None:
     max_window_len = max([len(t) for t in temporal_data])
     temporal_features = TimeSeriesDataLoader.unique_temporal_features(temporal_data)
 
-    unp_static, unp_temporal, unp_temporal_horizons, unp_T, unp_E = loader.unpack(
+    unp_static, unp_temporal, unp_observation_times, unp_T, unp_E = loader.unpack(
         pad=True,
         as_numpy=as_numpy,
     )
@@ -588,9 +619,9 @@ def test_time_series_survival_pack_unpack_padding(as_numpy: bool) -> None:
     )
     assert len(unp_temporal) == len(temporal_data)
     assert unp_temporal[0].shape == (max_window_len, 2 * len(temporal_features))
-    assert len(unp_temporal_horizons) == len(temporal_data)
-    assert len(unp_temporal_horizons[0]) == max_window_len
+    assert len(unp_observation_times) == len(temporal_data)
+    assert len(unp_observation_times[0]) == max_window_len
 
     for idx, item in enumerate(unp_temporal):
         assert len(unp_temporal[idx]) == max_window_len
-        assert len(unp_temporal_horizons[idx]) == max_window_len
+        assert len(unp_observation_times[idx]) == max_window_len

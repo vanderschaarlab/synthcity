@@ -1,4 +1,5 @@
 # stdlib
+import platform
 from abc import abstractmethod
 from collections import Counter
 from typing import Any, Dict
@@ -21,6 +22,11 @@ from .core import MetricEvaluator
 
 
 class PrivacyEvaluator(MetricEvaluator):
+    """
+    .. inheritance-diagram:: synthcity.metrics.eval_privacy.PrivacyEvaluator
+        :parts: 1
+    """
+
     def __init__(self, **kwargs: Any) -> None:
         super().__init__(**kwargs)
 
@@ -36,7 +42,7 @@ class PrivacyEvaluator(MetricEvaluator):
     def evaluate(self, X_gt: DataLoader, X_syn: DataLoader) -> Dict:
         cache_file = (
             self._workspace
-            / f"sc_metric_cache_{self.type()}_{self.name()}_{X_gt.hash()}_{X_syn.hash()}_{self._reduction}.bkp"
+            / f"sc_metric_cache_{self.type()}_{self.name()}_{X_gt.hash()}_{X_syn.hash()}_{self._reduction}_{platform.python_version()}.bkp"
         )
         if self.use_cache(cache_file):
             return load_from_file(cache_file)
@@ -55,7 +61,11 @@ class PrivacyEvaluator(MetricEvaluator):
 
 
 class kAnonymization(PrivacyEvaluator):
-    """Returns the k-anon ratio between the real data and the synthetic data.
+    """
+    .. inheritance-diagram:: synthcity.metrics.eval_privacy.kAnonymization
+        :parts: 1
+
+    Returns the k-anon ratio between the real data and the synthetic data.
     For each dataset, it is computed the value k which satisfies the k-anonymity rule: each record is similar to at least another k-1 other records on the potentially identifying variables.
     """
 
@@ -96,7 +106,11 @@ class kAnonymization(PrivacyEvaluator):
 
 
 class lDiversityDistinct(PrivacyEvaluator):
-    """Returns the distinct l-diversity ratio between the real data and the synthetic data.
+    """
+    .. inheritance-diagram:: synthcity.metrics.eval_privacy.lDiversityDistinct
+        :parts: 1
+
+    Returns the distinct l-diversity ratio between the real data and the synthetic data.
 
     For each dataset, it computes the minimum value l which satisfies the distinct l-diversity rule: every generalized block has to contain at least l different sensitive values.
 
@@ -142,7 +156,11 @@ class lDiversityDistinct(PrivacyEvaluator):
 
 
 class kMap(PrivacyEvaluator):
-    """Returns the minimum value k that satisfies the k-map rule.
+    """
+    .. inheritance-diagram:: synthcity.metrics.eval_privacy.kMap
+        :parts: 1
+
+    Returns the minimum value k that satisfies the k-map rule.
 
     The data satisfies k-map if every combination of values for the quasi-identifiers appears at least k times in the reidentification(synthetic) dataset.
     """
@@ -180,7 +198,11 @@ class kMap(PrivacyEvaluator):
 
 
 class DeltaPresence(PrivacyEvaluator):
-    """Returns the maximum re-identification probability on the real dataset from the synthetic dataset.
+    """
+    .. inheritance-diagram:: synthcity.metrics.eval_privacy.DeltaPresence
+        :parts: 1
+
+    Returns the maximum re-identification probability on the real dataset from the synthetic dataset.
 
     For each dataset partition, we report the maximum ratio of unique sensitive information between the real dataset and in the synthetic dataset.
     """
@@ -225,7 +247,11 @@ class DeltaPresence(PrivacyEvaluator):
 
 
 class IdentifiabilityScore(PrivacyEvaluator):
-    """Returns the re-identification score on the real dataset from the synthetic dataset.
+    """
+    .. inheritance-diagram:: synthcity.metrics.eval_privacy.IdentifiabilityScore
+        :parts: 1
+
+    Returns the re-identification score on the real dataset from the synthetic dataset.
 
     We estimate the risk of re-identifying any real data point using synthetic data.
     Intuitively, if the synthetic data are very close to the real data, the re-identification risk would be high.
@@ -286,7 +312,8 @@ class IdentifiabilityScore(PrivacyEvaluator):
             X_gt_ = self._oneclass_predict(oneclass_model, X_gt_)
             X_syn_ = self._oneclass_predict(oneclass_model, X_syn_)
         else:
-            assert emb == "", emb
+            if emb != "":
+                raise RuntimeError(f" Invalid emb {emb}")
 
         # Entropy computation
         def compute_entropy(labels: np.ndarray) -> np.ndarray:

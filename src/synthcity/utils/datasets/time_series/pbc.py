@@ -95,9 +95,17 @@ class PBCDataloader:
             SimpleImputer(missing_values=np.nan, strategy="mean").fit_transform(x),
             columns=x.columns,
         )
+        scaled_cols = []
+        for col in x.columns:
+            if len(x[col].unique()) < 15:
+                continue
+            scaled_cols.append(col)
 
-        x_ = pd.DataFrame(
-            StandardScaler().fit_transform(x), columns=x.columns, index=data.index
+        x_ = x.copy()
+        x_[scaled_cols] = pd.DataFrame(
+            StandardScaler().fit_transform(x[scaled_cols]),
+            columns=scaled_cols,
+            index=data.index,
         )
 
         x_static, x_temporal, t, e = [], [], [], []

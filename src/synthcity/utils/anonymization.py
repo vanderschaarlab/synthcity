@@ -143,7 +143,10 @@ class DatasetAnonymization:
                 axis=1,
             )
 
-            assert set(grouped_columns.columns) == set(X_part.columns)
+            if set(grouped_columns.columns) != set(X_part.columns):
+                raise RuntimeError(
+                    f"Invalid columns {set(grouped_columns.columns)} != {set(X_part.columns)}"
+                )
             grouped_columns = grouped_columns[X_part.columns]
 
             sensitive_counts = X_part.groupby(sensitive_column).agg(

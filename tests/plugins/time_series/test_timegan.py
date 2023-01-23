@@ -1,4 +1,5 @@
 # stdlib
+import sys
 from typing import Any
 
 # third party
@@ -45,12 +46,12 @@ def test_plugin_fit() -> None:
     (
         static_data,
         temporal_data,
-        temporal_horizons,
+        observation_times,
         outcome,
     ) = GoogleStocksDataloader().load()
     data = TimeSeriesDataLoader(
         temporal_data=temporal_data,
-        temporal_horizons=temporal_horizons,
+        observation_times=observation_times,
         static_data=static_data,
         outcome=outcome,
     )
@@ -69,10 +70,10 @@ def test_plugin_fit() -> None:
     ],
 )
 def test_plugin_generate(source: Any) -> None:
-    static_data, temporal_data, temporal_horizons, outcome = source.load()
+    static_data, temporal_data, observation_times, outcome = source.load()
     data = TimeSeriesDataLoader(
         temporal_data=temporal_data,
-        temporal_horizons=temporal_horizons,
+        observation_times=observation_times,
         static_data=static_data,
         outcome=outcome,
     )
@@ -95,10 +96,10 @@ def test_plugin_generate(source: Any) -> None:
     ],
 )
 def test_plugin_generate_static_cond(source: Any) -> None:
-    static_data, temporal_data, temporal_horizons, outcome = source.load()
+    static_data, temporal_data, observation_times, outcome = source.load()
     data = TimeSeriesDataLoader(
         temporal_data=temporal_data,
-        temporal_horizons=temporal_horizons,
+        observation_times=observation_times,
         static_data=static_data,
         outcome=outcome,
     )
@@ -127,14 +128,14 @@ def test_plugin_generate_static_cond(source: Any) -> None:
     ],
 )
 def test_plugin_generate_horizons_cond(source: Any) -> None:
-    static_data, temporal_data, temporal_horizons, outcome = source.load()
+    static_data, temporal_data, observation_times, outcome = source.load()
     data = TimeSeriesDataLoader(
         temporal_data=temporal_data,
-        temporal_horizons=temporal_horizons,
+        observation_times=observation_times,
         static_data=static_data,
         outcome=outcome,
     )
-    _, _, temporal_horizons, _ = data.unpack(pad=True)
+    _, _, observation_times, _ = data.unpack(pad=True)
     test_plugin = plugin(
         n_iter=10,
     )
@@ -143,9 +144,9 @@ def test_plugin_generate_horizons_cond(source: Any) -> None:
     cnt = 50
     horizon_seed = []
     for r in range(cnt):
-        horizon_seed.append(temporal_horizons[0])
+        horizon_seed.append(observation_times[0])
 
-    X_gen = test_plugin.generate(cnt, temporal_horizons=horizon_seed)
+    X_gen = test_plugin.generate(cnt, observation_times=horizon_seed)
     assert len(X_gen.ids()) == cnt
     assert test_plugin.schema_includes(X_gen)
     assert list(X_gen.columns) == list(data.columns)
@@ -173,7 +174,7 @@ def test_timegan_plugin_generate_survival() -> None:
 
     survival_data = TimeSeriesSurvivalDataLoader(
         temporal_data=temporal_surv,
-        temporal_horizons=temporal_surv_horizons,
+        observation_times=temporal_surv_horizons,
         static_data=static_surv,
         T=T,
         E=E,
@@ -197,7 +198,10 @@ def test_timegan_plugin_generate_survival() -> None:
 @pytest.mark.parametrize(
     "sampling_strategy", ["none", "imbalanced_censoring", "imbalanced_time_censoring"]
 )
-@pytest.mark.slow
+@pytest.mark.skipif(
+    sys.version_info < (3, 9), reason="test only with python3.9 or higher"
+)
+@pytest.mark.skipif(sys.platform != "linux", reason="Linux only for faster results")
 def test_plugin_generate_survival_sampler(sampling_strategy: str) -> None:
     (
         static_surv,
@@ -212,7 +216,7 @@ def test_plugin_generate_survival_sampler(sampling_strategy: str) -> None:
 
     survival_data = TimeSeriesSurvivalDataLoader(
         temporal_data=temporal_surv,
-        temporal_horizons=temporal_surv_horizons,
+        observation_times=temporal_surv_horizons,
         static_data=static_surv,
         T=T,
         E=E,

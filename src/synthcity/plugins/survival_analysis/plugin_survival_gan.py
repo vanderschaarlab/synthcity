@@ -1,7 +1,13 @@
+"""
+Reference: "SurvivalGAN: Generating time-to-event Data for Survival Analysis", B. Cebere*, A. Norcliffe*, F. Imrie, M. van der Schaar, AISTATS 2023
+"""
+
 # stdlib
-from typing import Any, List, Optional
+from pathlib import Path
+from typing import Any, List, Optional, Union
 
 # third party
+import numpy as np
 import pandas as pd
 
 # Necessary packages
@@ -21,20 +27,51 @@ from synthcity.utils.samplers import ImbalancedDatasetSampler
 
 
 class SurvivalGANPlugin(Plugin):
-    """Survival GAN plugin.
+    """
+    .. inheritance-diagram:: synthcity.plugins.survival_analysis.plugin_survival_gan.SurvivalGANPlugin
+        :parts: 1
+
+    Survival Analysis Pipeline based on AdsGAN.
+
+    Args:
+        uncensoring_model: str
+            The time-to-event model: "survival_function_regression".
+        dataloader_sampling_strategy: str, default = imbalanced_time_censoring
+            Training sampling strategy: none, imbalanced_censoring, imbalanced_time_censoring
+        tte_strategy: str
+            The time-to-event generation strategy: survival_function, uncensoring.
+        censoring_strategy: str
+            For the generated data, how to censor subjects: "random" or "covariate_dependent"
+        device:
+            torch device to use for training(cpu/cuda)
+        kwargs: Any
+            "adsgan" additional args, like n_iter = 100 etc.
+        # Core Plugin arguments
+        workspace: Path.
+            Optional Path for caching intermediary results.
+        compress_dataset: bool. Default = False.
+            Drop redundant features before training the generator.
+        sampling_patience: int.
+            Max inference iterations to wait for the generated data to match the training schema.
+
 
     Example:
+        >>> from lifelines.datasets import load_rossi
         >>> from synthcity.plugins import Plugins
         >>> from synthcity.plugins.core.dataloader import SurvivalAnalysisDataLoader
+        >>>
         >>> X = load_rossi()
         >>> data = SurvivalAnalysisDataLoader(
         >>>        X,
         >>>        target_column="arrest",
         >>>        time_to_event_column="week",
         >>> )
+        >>>
         >>> plugin = Plugins().get("survival_gan")
         >>> plugin.fit(data)
-        >>> plugin.generate()
+        >>>
+        >>> plugin.generate(count = 50)
+
     """
 
     @validate_arguments(config=dict(arbitrary_types_allowed=True))
@@ -45,15 +82,27 @@ class SurvivalGANPlugin(Plugin):
         tte_strategy: str = "survival_function",
         censoring_strategy: str = "random",  # "covariate_dependent"
         device: Any = DEVICE,
-        use_conditional: bool = True,
+        use_survival_conditional: bool = True,
+        # core plugin arguments
+        workspace: Path = Path("workspace"),
+        random_state: int = 0,
+        compress_dataset: bool = False,
+        sampling_patience: int = 500,
         **kwargs: Any,
     ) -> None:
-        super().__init__()
+        super().__init__(
+            device=device,
+            random_state=random_state,
+            sampling_patience=sampling_patience,
+            workspace=workspace,
+            compress_dataset=compress_dataset,
+        )
 
-        assert censoring_strategy in [
+        if censoring_strategy not in [
             "random",
             "covariate_dependent",
-        ], f"Invalid censoring strategy {censoring_strategy}"
+        ]:
+            raise ValueError(f"Invalid censoring strategy {censoring_strategy}")
         valid_sampling_strategies = [
             "none",
             "imbalanced_censoring",
@@ -68,8 +117,12 @@ class SurvivalGANPlugin(Plugin):
         self.censoring_strategy = censoring_strategy
         self.uncensoring_model = uncensoring_model
         self.device = device
-        self.use_conditional = use_conditional
+        self.use_survival_conditional = use_survival_conditional
         self.kwargs = kwargs
+        self.random_state = random_state
+        self.workspace = workspace
+        self.compress_dataset = compress_dataset
+        self.sampling_patience = sampling_patience
 
         log.info(
             f"""
@@ -94,8 +147,15 @@ class SurvivalGANPlugin(Plugin):
     def hyperparameter_space(**kwargs: Any) -> List[Distribution]:
         return plugins.Plugins().get_type("adsgan").hyperparameter_space()
 
-    def _fit(self, X: DataLoader, *args: Any, **kwargs: Any) -> "SurvivalGANPlugin":
-        assert X.type() == "survival_analysis"
+    def _fit(
+        self,
+        X: DataLoader,
+        *args: Any,
+        cond: Optional[Union[pd.DataFrame, pd.Series, np.ndarray, list]] = None,
+        **kwargs: Any,
+    ) -> "SurvivalGANPlugin":
+        if X.type() != "survival_analysis":
+            raise ValueError(f"Invalid data type = {X.type()}")
 
         sampler: Optional[ImbalancedDatasetSampler] = None
         sampling_labels: Optional[list] = None
@@ -112,16 +172,20 @@ class SurvivalGANPlugin(Plugin):
         if sampling_labels is not None:
             sampler = ImbalancedDatasetSampler(sampling_labels)
 
-        if self.use_conditional:
+        if cond is not None:
+            cond = pd.DataFrame(cond)
+
+        train_conditional = cond
+        if self.use_survival_conditional and cond is not None:
+            log.warning(
+                "[SurvivalGAN] Using a user conditional will disable to built-in SurvivalGAN conditional"
+            )
+        if self.use_survival_conditional and cond is None:
             important_feats = X.important_features
             precond = pd.concat(
                 [T.to_frame(), E.to_frame(), X[important_feats]], axis=1
             )
-            self.conditional = BinEncoder().fit_transform(precond)
-            n_units_conditional = self.conditional.shape[1]
-        else:
-            self.conditional = None
-            n_units_conditional = 0
+            train_conditional = BinEncoder().fit_transform(precond)
 
         self.model = SurvivalPipeline(
             "adsgan",
@@ -129,22 +193,24 @@ class SurvivalGANPlugin(Plugin):
             uncensoring_model=self.uncensoring_model,
             censoring_strategy=self.censoring_strategy,
             dataloader_sampler=sampler,
-            n_units_conditional=n_units_conditional,
             device=self.device,
+            random_state=self.random_state,
+            workspace=self.workspace,
+            compress_dataset=self.compress_dataset,
+            sampling_patience=self.sampling_patience,
             **self.kwargs,
         )
-        self.model.fit(X, cond=self.conditional, *args, **kwargs)
+        self.model.fit(X, cond=train_conditional, *args, **kwargs)
 
         return self
 
-    def _generate(self, count: int, syn_schema: Schema, **kwargs: Any) -> pd.DataFrame:
-        cond = None
-        if self.use_conditional:
-            cond = self.conditional
-            while len(cond) < count:
-                cond = pd.concat([cond, self.conditional])
-            cond = cond.head(count)
-
+    def _generate(
+        self,
+        count: int,
+        syn_schema: Schema,
+        cond: Optional[Union[pd.DataFrame, pd.Series, np.ndarray, list]] = None,
+        **kwargs: Any,
+    ) -> pd.DataFrame:
         return self.model._generate(
             count,
             syn_schema=syn_schema,

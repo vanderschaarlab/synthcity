@@ -1,5 +1,6 @@
 # stdlib
 from abc import ABCMeta, abstractmethod
+from datetime import datetime, timedelta
 from typing import Any, Dict, List, Optional
 
 # third party
@@ -12,7 +13,12 @@ from synthcity.plugins.core.constraints import Constraints
 
 
 class Distribution(BaseModel, metaclass=ABCMeta):
-    """ Base class of all Distributions.
+    """
+    .. inheritance-diagram:: synthcity.plugins.core.distribution.Distribution
+        :parts: 1
+
+
+    Base class of all Distributions.
 
     The Distribution class characterizes the **empirical** marginal distribution of the feature.
     Each derived class must implement the following methods:
@@ -28,6 +34,7 @@ class Distribution(BaseModel, metaclass=ABCMeta):
 
     Examples of derived classes include CategoricalDistribution, FloatDistribution, and IntegerDistribution.
     """
+
     name: str
     data: Optional[pd.Series] = None
     random_state: int = 0
@@ -122,6 +129,11 @@ class Distribution(BaseModel, metaclass=ABCMeta):
 
 
 class CategoricalDistribution(Distribution):
+    """
+    .. inheritance-diagram:: synthcity.plugins.core.distribution.CategoricalDistribution
+        :parts: 1
+    """
+
     choices: list = []
 
     @validator("choices", always=True)
@@ -192,8 +204,13 @@ class CategoricalDistribution(Distribution):
 
 
 class FloatDistribution(Distribution):
-    low: float = np.iinfo(np.int32).min
-    high: float = np.iinfo(np.int32).max
+    """
+    .. inheritance-diagram:: synthcity.plugins.core.distribution.FloatDistribution
+        :parts: 1
+    """
+
+    low: float = np.iinfo(np.int64).min
+    high: float = np.iinfo(np.int64).max
 
     @validator("low", always=True)
     def _validate_low_thresh(cls: Any, v: float, values: Dict) -> float:
@@ -257,8 +274,13 @@ class FloatDistribution(Distribution):
 
 
 class IntegerDistribution(Distribution):
-    low: int = np.iinfo(np.int32).min
-    high: int = np.iinfo(np.int32).max
+    """
+    .. inheritance-diagram:: synthcity.plugins.core.distribution.IntegerDistribution
+        :parts: 1
+    """
+
+    low: int = np.iinfo(np.int64).min
+    high: int = np.iinfo(np.int64).max
     step: int = 1
 
     @validator("low", always=True)
@@ -323,8 +345,92 @@ class IntegerDistribution(Distribution):
         return "int"
 
 
+OFFSET = 120
+
+
+class DatetimeDistribution(Distribution):
+    """
+    .. inheritance-diagram:: synthcity.plugins.core.distribution.DatetimeDistribution
+        :parts: 1
+    """
+
+    low: datetime = datetime.utcfromtimestamp(0)
+    high: datetime = datetime.now()
+
+    @validator("low", always=True)
+    def _validate_low_thresh(cls: Any, v: datetime, values: Dict) -> datetime:
+        mkey = "marginal_distribution"
+        if mkey in values and values[mkey] is not None:
+            v = values[mkey].index.min()
+
+        return v - timedelta(seconds=OFFSET)
+
+    @validator("high", always=True)
+    def _validate_high_thresh(cls: Any, v: datetime, values: Dict) -> datetime:
+        mkey = "marginal_distribution"
+        if mkey in values and values[mkey] is not None:
+            v = values[mkey].index.max()
+
+        return v + timedelta(seconds=OFFSET)
+
+    def get(self) -> List[Any]:
+        return [self.name, self.low, self.high]
+
+    def sample(self, count: int = 1) -> Any:
+        np.random.seed(self.random_state)
+        msamples = self.sample_marginal(count)
+        if msamples is not None:
+            return msamples
+
+        samples = np.random.uniform(
+            datetime.timestamp(self.low), datetime.timestamp(self.high), count
+        )
+
+        samples_dt = []
+        for s in samples:
+            samples_dt.append(datetime.fromtimestamp(s))
+
+        return samples_dt
+
+    def has(self, val: datetime) -> bool:
+        return self.low <= val and val <= self.high
+
+    def includes(self, other: "Distribution") -> bool:
+        return self.min() - timedelta(
+            seconds=OFFSET
+        ) <= other.min() and other.max() <= self.max() + timedelta(seconds=OFFSET)
+
+    def as_constraint(self) -> Constraints:
+        return Constraints(
+            rules=[
+                (self.name, "le", self.high),
+                (self.name, "ge", self.low),
+                (self.name, "dtype", "datetime"),
+            ]
+        )
+
+    def min(self) -> Any:
+        return self.low
+
+    def max(self) -> Any:
+        return self.high
+
+    def __eq__(self, other: Any) -> bool:
+        if not isinstance(other, DatetimeDistribution):
+            return False
+
+        return (
+            self.name == other.name
+            and self.low == other.low
+            and self.high == other.high
+        )
+
+    def dtype(self) -> str:
+        return "datetime"
+
+
 def constraint_to_distribution(constraints: Constraints, feature: str) -> Distribution:
-    """ Infer Distribution from Constraints.
+    """Infer Distribution from Constraints.
 
     Args:
         constraints: Constraints
@@ -341,6 +447,8 @@ def constraint_to_distribution(constraints: Constraints, feature: str) -> Distri
         dist_template = CategoricalDistribution
     elif dist_name == "integer":
         dist_template = IntegerDistribution
+    elif dist_name == "datetime":
+        dist_template = DatetimeDistribution
     else:
         dist_template = FloatDistribution
 

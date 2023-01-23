@@ -12,8 +12,6 @@ from sklearn.datasets import load_iris
 from synthcity.metrics.eval_statistical import (
     AlphaPrecision,
     ChiSquaredTest,
-    FeatureCorrelation,
-    InverseCDFDistance,
     InverseKLDivergence,
     JensenShannonDistance,
     KolmogorovSmirnovTest,
@@ -142,27 +140,6 @@ def test_evaluate_maximum_mean_discrepancy(kernel: str, test_plugin: Plugin) -> 
 
 
 @pytest.mark.parametrize("test_plugin", [Plugins().get("dummy_sampler")])
-def test_evaluate_inv_cdf_function(test_plugin: Plugin) -> None:
-    X, y = load_iris(return_X_y=True, as_frame=True)
-    X["target"] = y
-    Xloader = GenericDataLoader(X)
-
-    test_plugin.fit(Xloader)
-    X_gen = test_plugin.generate(1000)
-
-    syn_score, rnd_score = _eval_plugin(InverseCDFDistance, Xloader, X_gen)
-
-    for key in syn_score:
-        assert syn_score[key] > 0
-        assert rnd_score[key] > 0
-        assert syn_score[key] < rnd_score[key]
-
-    assert InverseCDFDistance.name() == "inv_cdf_dist"
-    assert InverseCDFDistance.type() == "stats"
-    assert InverseCDFDistance.direction() == "minimize"
-
-
-@pytest.mark.parametrize("test_plugin", [Plugins().get("dummy_sampler")])
 def test_evaluate_avg_jensenshannon_distance(test_plugin: Plugin) -> None:
     X, y = load_iris(return_X_y=True, as_frame=True)
     X["target"] = y
@@ -181,27 +158,6 @@ def test_evaluate_avg_jensenshannon_distance(test_plugin: Plugin) -> None:
     assert JensenShannonDistance.name() == "jensenshannon_dist"
     assert JensenShannonDistance.type() == "stats"
     assert JensenShannonDistance.direction() == "minimize"
-
-
-@pytest.mark.parametrize("test_plugin", [Plugins().get("dummy_sampler")])
-def test_evaluate_feature_correlation(test_plugin: Plugin) -> None:
-    X, y = load_iris(return_X_y=True, as_frame=True)
-    X["target"] = y
-    Xloader = GenericDataLoader(X)
-
-    test_plugin.fit(Xloader)
-    X_gen = test_plugin.generate(1000)
-
-    syn_score, rnd_score = _eval_plugin(FeatureCorrelation, Xloader, X_gen)
-
-    for key in syn_score:
-        assert syn_score[key] > 0
-        assert rnd_score[key] > 0
-        assert syn_score[key] < rnd_score[key]
-
-    assert FeatureCorrelation.name() == "feature_corr"
-    assert FeatureCorrelation.type() == "stats"
-    assert FeatureCorrelation.direction() == "minimize"
 
 
 @pytest.mark.parametrize("test_plugin", [Plugins().get("dummy_sampler")])
@@ -225,7 +181,7 @@ def test_evaluate_wasserstein_distance(test_plugin: Plugin) -> None:
     assert WassersteinDistance.direction() == "minimize"
 
 
-@pytest.mark.parametrize("test_plugin", [Plugins().get("dummy_sampler")])
+@pytest.mark.parametrize("test_plugin", [Plugins().get("ctgan")])
 def test_evaluate_prdc(test_plugin: Plugin) -> None:
     X, y = load_iris(return_X_y=True, as_frame=True)
     X["target"] = y

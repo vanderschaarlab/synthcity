@@ -33,12 +33,12 @@ def test_encoder_fit_no_discrete_param(max_clusters: int) -> None:
     layout = net.layout()
 
     for column in layout:
-        assert column.column_type in ["discrete", "continuous"]
-        if column.column_type == "discrete":
-            assert len(X[column.column_name].unique()) < 20
-            assert column.output_dimensions == len(X[column.column_name].unique())
+        assert column.feature_type in ["discrete", "continuous"]
+        if column.feature_type == "discrete":
+            assert len(X[column.name].unique()) < 20
+            assert column.output_dimensions == len(X[column.name].unique())
         else:
-            assert len(X[column.column_name].unique()) > 10
+            assert len(X[column.name].unique()) > 10
             assert column.output_dimensions <= 1 + max_clusters
 
 
@@ -52,12 +52,12 @@ def test_encoder_fit_discrete_param(max_clusters: int) -> None:
     layout = net.layout()
 
     for column in layout:
-        assert column.column_type in ["discrete", "continuous"]
-        if column.column_type == "discrete":
-            assert len(X[column.column_name].unique()) < 20
-            assert column.output_dimensions == len(X[column.column_name].unique())
+        assert column.feature_type in ["discrete", "continuous"]
+        if column.feature_type == "discrete":
+            assert len(X[column.name].unique()) < 20
+            assert column.output_dimensions == len(X[column.name].unique())
         else:
-            assert len(X[column.column_name].unique()) > 10
+            assert len(X[column.name].unique()) > 10
             assert column.output_dimensions <= 1 + max_clusters
 
 
@@ -72,18 +72,19 @@ def test_encoder_fit_transform(max_clusters: int) -> None:
     assert (X.index == encoded.index).all()
 
     for column in layout:
-        if column.column_type == "discrete":
-            for val in X[column.column_name].unique():
-                assert f"{column.column_name}_{val}" in encoded.columns
-                assert set(encoded[f"{column.column_name}_{val}"].unique()) == set(
-                    [0, 1]
+        if column.feature_type == "discrete":
+            for val in X[column.name].unique():
+                assert f"{column.name}_{val}" in encoded.columns
+                assert set(encoded[f"{column.name}_{val}"].unique()).issubset(
+                    set([0, 1])
                 )
 
         else:
-            assert f"{column.column_name}.normalized" in encoded.columns
+            assert f"{column.name}.value" in encoded.columns
             for enc_col in encoded.columns:
-                if column.column_name in enc_col and "normalized" not in enc_col:
-                    assert set(encoded[enc_col].unique()) == set([0, 1])
+                if column.name in enc_col and "value" not in enc_col:
+                    print(enc_col, encoded[enc_col])
+                    assert set(encoded[enc_col].unique()).issubset(set([0, 1]))
 
 
 @pytest.mark.parametrize("max_clusters", [20, 50])
@@ -116,7 +117,7 @@ def test_encoder_activation_layout() -> None:
     act_step = 0
 
     for col_info in layout:
-        if col_info.column_type == "continuous":
+        if col_info.feature_type == "continuous":
             assert act_layout[act_step] == ("tanh", 1)
             assert act_layout[act_step + 1] == (
                 "softmax",
@@ -144,31 +145,29 @@ def test_bin_encoder() -> None:
 def test_ts_encoder_fit(source: Any) -> None:
     max_clusters = 5
     categorical_limit = 10
-    static, temporal, temporal_horizons, _ = source().load()
+    static, temporal, observation_times, _ = source().load()
     net = TimeSeriesTabularEncoder(
         max_clusters=max_clusters, categorical_limit=categorical_limit
-    ).fit(static, temporal, temporal_horizons)
+    ).fit(static, temporal, observation_times)
 
     static_layout, temporal_layout = net.layout()
 
     for column in static_layout:
-        assert column.column_type in ["discrete", "continuous"]
-        if column.column_type == "discrete":
-            assert len(static[column.column_name].unique()) < categorical_limit
-            assert column.output_dimensions == len(static[column.column_name].unique())
+        assert column.feature_type in ["discrete", "continuous"]
+        if column.feature_type == "discrete":
+            assert len(static[column.name].unique()) < categorical_limit
+            assert column.output_dimensions == len(static[column.name].unique())
         else:
-            assert len(static[column.column_name].unique()) >= categorical_limit
+            assert len(static[column.name].unique()) >= categorical_limit
             assert column.output_dimensions <= 1 + max_clusters
 
     for column in temporal_layout:
-        assert column.column_type in ["discrete", "continuous"]
-        if column.column_type == "discrete":
-            assert len(temporal[0][column.column_name].unique()) < categorical_limit
-            assert column.output_dimensions == len(
-                temporal[0][column.column_name].unique()
-            )
+        assert column.feature_type in ["discrete", "continuous"]
+        if column.feature_type == "discrete":
+            assert len(temporal[0][column.name].unique()) < categorical_limit
+            assert column.output_dimensions == len(temporal[0][column.name].unique())
         else:
-            assert len(temporal[0][column.column_name].unique()) > 0
+            assert len(temporal[0][column.name].unique()) > 0
             assert column.output_dimensions <= 1 + max_clusters
 
 
@@ -176,29 +175,29 @@ def test_ts_encoder_fit(source: Any) -> None:
 def test_ts_encoder_fit_transform(source: Any) -> None:
     max_clusters = 5
     categorical_limit = 10
-    static, temporal, temporal_horizons, _ = source().load()
+    static, temporal, observation_times, _ = source().load()
     net = TimeSeriesTabularEncoder(
         max_clusters=max_clusters, categorical_limit=categorical_limit
-    ).fit(static, temporal, temporal_horizons)
+    ).fit(static, temporal, observation_times)
 
     static_layout, temporal_layout = net.layout()
     static_encoded, temporal_encoded, horizons_encoded = net.fit_transform(
-        static, temporal, temporal_horizons
+        static, temporal, observation_times
     )
 
     assert (static.index == static_encoded.index).all()
     for column in static_layout:
-        if column.column_type == "discrete":
-            for val in static[column.column_name].unique():
-                assert f"{column.column_name}_{val}" in static_encoded.columns
-                assert set(
-                    static_encoded[f"{column.column_name}_{val}"].unique()
-                ) == set([0, 1])
+        if column.feature_type == "discrete":
+            for val in static[column.name].unique():
+                assert f"{column.name}_{val}" in static_encoded.columns
+                assert set(static_encoded[f"{column.name}_{val}"].unique()) == set(
+                    [0, 1]
+                )
 
         else:
-            assert f"{column.column_name}.normalized" in static_encoded.columns
+            assert f"{column.name}.value" in static_encoded.columns
             for enc_col in static_encoded.columns:
-                if column.column_name in enc_col and "normalized" not in enc_col:
+                if column.name in enc_col and "value" not in enc_col:
                     assert set(static_encoded[enc_col].unique().astype(int)).issubset(
                         set([0, 1])
                     )
@@ -208,17 +207,15 @@ def test_ts_encoder_fit_transform(source: Any) -> None:
     for idx, item in enumerate(temporal_encoded):
         assert len(item) == len(horizons_encoded[idx])
         for column in temporal_layout:
-            if column.column_type == "discrete":
-                for val in temporal[0][column.column_name].unique():
-                    assert f"{column.column_name}_{val}" in item.columns
-                    assert set(item[f"{column.column_name}_{val}"].unique()) == set(
-                        [0, 1]
-                    )
+            if column.feature_type == "discrete":
+                for val in temporal[0][column.name].unique():
+                    assert f"{column.name}_{val}" in item.columns
+                    assert set(item[f"{column.name}_{val}"].unique()) == set([0, 1])
 
             else:
-                assert f"{column.column_name}.normalized" in item.columns
+                assert f"{column.name}.value" in item.columns
                 for enc_col in item.columns:
-                    if column.column_name in enc_col and "normalized" not in enc_col:
+                    if column.name in enc_col and "value" not in enc_col:
                         assert set(item[enc_col].unique().astype(int)).issubset(
                             set([0, 1])
                         )
@@ -228,14 +225,14 @@ def test_ts_encoder_fit_transform(source: Any) -> None:
 def test_ts_encoder_inverse_transform(source: Any) -> None:
     max_clusters = 5
     categorical_limit = 10
-    static, temporal, temporal_horizons, _ = source().load()
+    static, temporal, observation_times, _ = source().load()
     net = TimeSeriesTabularEncoder(
         max_clusters=max_clusters, categorical_limit=categorical_limit
-    ).fit(static, temporal, temporal_horizons)
+    ).fit(static, temporal, observation_times)
 
     static_layout, temporal_layout = net.layout()
     static_encoded, temporal_encoded, horizons_encoded = net.fit_transform(
-        static, temporal, temporal_horizons
+        static, temporal, observation_times
     )
     static_reversed, temporal_reversed, horizons_reversed = net.inverse_transform(
         static_encoded, temporal_encoded, horizons_encoded
@@ -245,7 +242,7 @@ def test_ts_encoder_inverse_transform(source: Any) -> None:
     assert static_reversed.shape == static.shape
     assert (static_reversed.columns == static.columns).all()
     assert (
-        np.abs(np.asarray(temporal_horizons) - np.asarray(horizons_reversed))
+        np.abs(np.asarray(observation_times) - np.asarray(horizons_reversed))
         .sum()
         .sum()
         < 1
@@ -278,7 +275,7 @@ def test_ts_encoder_activation_layout(source: Any) -> None:
 
     act_step = 0
     for col_info in static_layout:
-        if col_info.column_type == "continuous":
+        if col_info.feature_type == "continuous":
             assert static_act_layout[act_step] == ("tanh", 1)
             assert static_act_layout[act_step + 1] == (
                 "softmax",
@@ -294,7 +291,7 @@ def test_ts_encoder_activation_layout(source: Any) -> None:
 
     act_step = 0
     for col_info in temporal_layout:
-        if col_info.column_type == "continuous":
+        if col_info.feature_type == "continuous":
             assert temporal_act_layout[act_step] == ("tanh", 1)
             assert temporal_act_layout[act_step + 1] == (
                 "softmax",

@@ -21,7 +21,7 @@ class TimeSeriesSurvivalPlugin(Serializable, metaclass=ABCMeta):
         self,
         static: Optional[np.ndarray],
         temporal: np.ndarray,
-        temporal_horizons: np.ndarray,
+        observation_times: np.ndarray,
         T: np.ndarray,
         Y: np.ndarray,
     ) -> Any:
@@ -34,7 +34,7 @@ class TimeSeriesSurvivalPlugin(Serializable, metaclass=ABCMeta):
         self,
         static: Optional[np.ndarray],
         temporal: np.ndarray,
-        temporal_horizons: np.ndarray,
+        observation_times: np.ndarray,
         time_horizons: List,
     ) -> np.ndarray:
         "Predict risk"

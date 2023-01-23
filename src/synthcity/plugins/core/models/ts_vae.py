@@ -48,7 +48,7 @@ class LatentODE(nn.Module):
             device=device,
         ).to(self.device)
 
-    def forward(self, temporal_horizons: torch.Tensor, temporal: Tensor) -> Tensor:
+    def forward(self, observation_times: torch.Tensor, temporal: Tensor) -> Tensor:
         return self.model(temporal)
 
 
@@ -117,12 +117,12 @@ class TimeSeriesEncoder(nn.Module):
         self,
         static: Tensor,
         temporal: Tensor,
-        temporal_horizons: Tensor,
+        observation_times: Tensor,
     ) -> Tuple[Tensor, Tensor, Tensor, Tensor, Tensor, Tensor]:
         static_mu, static_logvar = self.static_encoder(static)
-        horizons_mu, horizons_logvar = self.horizons_encoder(temporal_horizons)
+        horizons_mu, horizons_logvar = self.horizons_encoder(observation_times)
 
-        temporal_embs = self.temporal_encoder(static, temporal, temporal_horizons)
+        temporal_embs = self.temporal_encoder(static, temporal, observation_times)
         temporal_mu, temporal_logvar = (
             temporal_embs[:, 0, :].squeeze(),
             temporal_embs[:, 1, :].squeeze(),
@@ -214,15 +214,109 @@ class TimeSeriesDecoder(nn.Module):
         self, static_embs: Tensor, temporal_embs: Tensor, horizon_embs: Tensor
     ) -> Tensor:
         static_decoded = self.static_decoder(static_embs)
-        temporal_horizons = self.horizons_decoder(horizon_embs)
+        observation_times = self.horizons_decoder(horizon_embs)
 
         temporal_decoded = self.temporal_decoder(
-            static_decoded, temporal_embs, temporal_horizons
+            static_decoded, temporal_embs, observation_times
         )
-        return static_decoded, temporal_decoded, temporal_horizons
+        return static_decoded, temporal_decoded, observation_times
 
 
-class TimeSeriesAutoEncoder(nn.Module):
+class TimeSeriesVAE(nn.Module):
+    """
+    .. inheritance-diagram:: synthcity.plugins.core.models.ts_vae.TimeSeriesVAE
+        :parts: 1
+
+    Basic Time-Series Variational AutoEncoder
+
+    Args:
+        n_static_units: int
+            Number of input static units.
+        n_static_units_embedding: int.
+            Number of latent static units.
+        n_temporal_units: int.
+            Number of input temporal units.
+        n_temporal_window: int
+            The length of time series sequences.
+        n_temporal_units_embedding: int.
+            Number of latent temporal units.
+        batch_size: int. Default = 100
+            Batch size.
+        n_iter: int. Default = 500
+            Number of epochs
+        n_iter_print: int = 10.
+            Frequency of printing the training loss.
+        random_state: int = 0
+            Random seed
+        clipping_value: int = 1
+            Gradients clipping value. Zero disables the feature
+        lr: float = 2e-4,
+            Learning rate
+        weight_decay: float = 1e-3,
+            l2 (ridge) penalty for the weights.
+        loss_factor: int. Default = 2
+            Reconstruction loss weight.
+        decoder_n_layers_hidden: int. Default = 2
+            Number of hidden layer in the decoder
+        decoder_n_units_hidden: int. Decoder = 250.
+            Number of hidden units in the decoder
+        decoder_nonlin: str. Decoder = "leaky_relu"
+            Activation for the hidden layers. Can be relu, elu, leaky_relu, selu.
+        decoder_static_nonlin_out: Optional[List[Tuple[str, int]]] = None
+            (Optional) Activations to use in the output layer of the decoder for static features.
+        decoder_temporal_nonlin_out: Optional[List[Tuple[str, int]]] = None,
+            (Optional) Activations to use in the output layer of the decoder for temporal features.
+        decoder_batch_norm: bool. Default = False
+            Decoder batch norm
+        decoder_dropout: float. Default = 0
+            Decoder dropout
+        decoder_residual: bool. Default = True
+            Use residual connections in the decoder
+        decoder_mode: str. Default = "LSTM"
+            Core neural net architecture for the decoder.
+            Available models:
+                - "LSTM"
+                - "GRU"
+                - "RNN"
+                - "Transformer"
+                - "MLSTM_FCN"
+                - "TCN"
+                - "InceptionTime"
+                - "InceptionTimePlus"
+                - "XceptionTime"
+                - "ResCNN"
+                - "OmniScaleCNN"
+                - "XCM"
+        encoder_n_layers_hidden: int. Default = 3
+            Number of hidden layers in the encoder
+        encoder_n_units_hidden. Default int = 300
+            Number of hidden units in the encoder
+        encoder_nonlin: str. Default = "leaky_relu"
+            Activations for the hidden layers in the encoder.
+        encoder_batch_norm: bool. Default = False,
+            Encoder batch norm.
+        encoder_dropout: float. Default = 0.1
+            Encoder dropout.
+        encoder_mode: str. Default = "LSTM"
+            Core neural net architecture for the encoder.
+            Available models:
+                - "LSTM"
+                - "GRU"
+                - "RNN"
+                - "Transformer"
+                - "MLSTM_FCN"
+                - "TCN"
+                - "InceptionTime"
+                - "InceptionTimePlus"
+                - "XceptionTime"
+                - "ResCNN"
+                - "OmniScaleCNN"
+                - "XCM"
+                - "Transformer"
+        device
+            PyTorch device: cpu/cuda.
+    """
+
     def __init__(
         self,
         n_static_units: int,
@@ -257,7 +351,7 @@ class TimeSeriesAutoEncoder(nn.Module):
         encoder_mode: str = "LSTM",
         device: Any = DEVICE,
     ):
-        super(TimeSeriesAutoEncoder, self).__init__()
+        super(TimeSeriesVAE, self).__init__()
 
         self.device = device
         self.batch_size = batch_size
@@ -314,11 +408,11 @@ class TimeSeriesAutoEncoder(nn.Module):
         ).to(device)
 
     def fit(
-        self, static: np.ndarray, temporal: np.ndarray, temporal_horizons: np.ndarray
+        self, static: np.ndarray, temporal: np.ndarray, observation_times: np.ndarray
     ) -> Any:
         static_t = self._check_tensor(static).float()
         temporal_t = self._check_tensor(temporal).float()
-        horizons_t = self._check_tensor(temporal_horizons).float()
+        horizons_t = self._check_tensor(observation_times).float()
 
         self._train(static_t, temporal_t, horizons_t)
 
@@ -377,7 +471,7 @@ class TimeSeriesAutoEncoder(nn.Module):
         return eps * std + mu
 
     def _train_step(
-        self, static: Tensor, temporal: Tensor, temporal_horizons: Tensor
+        self, static: Tensor, temporal: Tensor, observation_times: Tensor
     ) -> Tensor:
         # Encode
         (
@@ -387,7 +481,7 @@ class TimeSeriesAutoEncoder(nn.Module):
             temporal_logvar,
             horizons_mu,
             horizons_logvar,
-        ) = self.encoder.forward(static, temporal, temporal_horizons)
+        ) = self.encoder.forward(static, temporal, observation_times)
         static_embedding = self._reparameterize(static_mu, static_logvar)
         temporal_embedding = self._reparameterize(temporal_mu, temporal_logvar)
         horizons_embedding = self._reparameterize(horizons_mu, horizons_logvar)
@@ -408,12 +502,13 @@ class TimeSeriesAutoEncoder(nn.Module):
             self.temporal_nonlin_out,
         )
         horizons_loss = self._loss_function(
-            horizons_recon, temporal_horizons, horizons_mu, horizons_logvar
+            horizons_recon, observation_times, horizons_mu, horizons_logvar
         )
 
         loss = static_loss + temporal_loss + horizons_loss
 
-        assert not torch.isnan(loss)
+        if torch.isnan(loss):
+            raise RuntimeError("The loss contains NaNs")
 
         loss.backward()
 
@@ -421,9 +516,9 @@ class TimeSeriesAutoEncoder(nn.Module):
 
     @validate_arguments(config=dict(arbitrary_types_allowed=True))
     def _train(
-        self, static: Tensor, temporal: Tensor, temporal_horizons: Tensor
+        self, static: Tensor, temporal: Tensor, observation_times: Tensor
     ) -> Any:
-        loader = self._dataloader(static, temporal, temporal_horizons)
+        loader = self._dataloader(static, temporal, observation_times)
 
         optimizer = Adam(
             self.parameters(),
@@ -453,9 +548,9 @@ class TimeSeriesAutoEncoder(nn.Module):
             return torch.from_numpy(np.asarray(X)).to(self.device)
 
     def _dataloader(
-        self, static: Tensor, temporal: Tensor, temporal_horizons: Tensor
+        self, static: Tensor, temporal: Tensor, observation_times: Tensor
     ) -> DataLoader:
-        dataset = TensorDataset(static, temporal, temporal_horizons)
+        dataset = TensorDataset(static, temporal, observation_times)
         return DataLoader(
             dataset,
             batch_size=self.batch_size,

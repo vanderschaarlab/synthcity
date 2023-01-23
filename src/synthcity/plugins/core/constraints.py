@@ -11,7 +11,12 @@ import synthcity.logger as log
 
 
 class Constraints(BaseModel):
-    """Constraints on data.
+    """
+    .. inheritance-diagram:: synthcity.plugins.core.constraints.Constraints
+        :parts: 1
+
+
+    Constraints on data.
 
     The Constraints class allows users to specify constraints on the features. Examples include the feature value range, allowed item set, and data type.
     These constraints can be used to filter out invalid values in synthetic datasets.
@@ -66,9 +71,12 @@ class Constraints(BaseModel):
                     f"Invalid operation {op}. Supported ops: {supported_ops}"
                 )
             if op in ["in"]:
-                assert isinstance(thresh, list)
+                if not isinstance(thresh, list):
+                    raise ValueError("Invalid type for threshold = {type(thresh)}")
             elif op in ["dtype"]:
-                assert isinstance(thresh, str)
+                if not isinstance(thresh, str):
+                    raise ValueError("Invalid type for threshold = {type(thresh)}")
+
         return rules
 
     @validate_arguments(config=dict(arbitrary_types_allowed=True))
@@ -97,7 +105,7 @@ class Constraints(BaseModel):
         elif op == "in":
             return (X[feature].isin(operand)) | X[feature].isna()
         elif op == "dtype":
-            return X[feature].dtype == operand
+            return operand in str(X[feature])
         else:
             raise RuntimeError("unsupported operation", op)
 
@@ -156,7 +164,7 @@ class Constraints(BaseModel):
                 thresh,
             )
             if res.sum() < prev:
-                log.error(
+                log.info(
                     f"[{feature}] quality loss for constraints {op} = {thresh}. Remaining {res.sum()}. prev length {prev}. Original dtype {X[feature].dtype}.",
                 )
         return res
@@ -240,7 +248,7 @@ class Constraints(BaseModel):
         return results
 
     def feature_params(self, feature: str) -> Tuple:
-        """ Provide the parameters of Distribution from the Constraint
+        """Provide the parameters of Distribution from the Constraint
 
         This is to be used with the constraint_to_distribution function in distribution module.
 
@@ -258,7 +266,7 @@ class Constraints(BaseModel):
         rules = self.feature_constraints(feature)
 
         dist_template = "float"
-        dist_args = {"low": np.iinfo(np.int32).min, "high": np.iinfo(np.int32).max}
+        dist_args = {"low": np.iinfo(np.int64).min, "high": np.iinfo(np.int64).max}
 
         for op, value in rules:
             if op == "in":
@@ -268,18 +276,35 @@ class Constraints(BaseModel):
                     continue
                 dist_args["choices"] = [v for v in value if v in dist_args["choices"]]
 
-            elif op == "dtype" and value == "int":
+            elif op == "dtype" and value in ["int", "int32", "int64", "integer"]:
                 dist_template = "integer"
             elif (op == "le" or op == "<=") and value < dist_args["high"]:
                 dist_args["high"] = value
+                if "choices" in dist_args:
+                    dist_args["choices"] = [
+                        v for v in dist_args["choices"] if v <= value
+                    ]
             elif (op == "lt" or op == "<") and value < dist_args["high"]:
                 dist_args["high"] = value - 1
+                if "choices" in dist_args:
+                    dist_args["choices"] = [
+                        v for v in dist_args["choices"] if v < value
+                    ]
             elif (op == "ge" or op == ">=") and dist_args["low"] < value:
                 dist_args["low"] = value
+                if "choices" in dist_args:
+                    dist_args["choices"] = [
+                        v for v in dist_args["choices"] if v >= value
+                    ]
             elif (op == "gt" or op == ">") and dist_args["low"] < value:
                 dist_args["low"] = value + 1
+                if "choices" in dist_args:
+                    dist_args["choices"] = [
+                        v for v in dist_args["choices"] if v > value
+                    ]
             elif op == "eq" or op == "==":
                 dist_args["low"] = value
                 dist_args["high"] = value
+                dist_args["choices"] = [value]
 
         return dist_template, dist_args

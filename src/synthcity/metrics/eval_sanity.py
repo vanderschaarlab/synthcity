@@ -13,6 +13,11 @@ from synthcity.plugins.core.dataloader import DataLoader
 
 
 class BasicMetricEvaluator(MetricEvaluator):
+    """
+    .. inheritance-diagram:: synthcity.metrics.eval_sanity.BasicMetricEvaluator
+        :parts: 1
+    """
+
     def __init__(self, **kwargs: Any) -> None:
         super().__init__(**kwargs)
 
@@ -39,7 +44,11 @@ class BasicMetricEvaluator(MetricEvaluator):
 
 
 class DataMismatchScore(BasicMetricEvaluator):
-    """Basic sanity score. Compares the data types between the column of the ground truth and the synthetic data.
+    """
+    .. inheritance-diagram:: synthcity.metrics.eval_sanity.DataMismatchScore
+        :parts: 1
+
+    Basic sanity score. Compares the data types between the column of the ground truth and the synthetic data.
 
     Score:
         0: no datatype mismatch.
@@ -73,7 +82,11 @@ class DataMismatchScore(BasicMetricEvaluator):
 
 
 class CommonRowsProportion(BasicMetricEvaluator):
-    """Returns the proportion of rows in the real dataset leaked in the synthetic dataset.
+    """
+    .. inheritance-diagram:: synthcity.metrics.eval_sanity.CommonRowsProportion
+        :parts: 1
+
+    Returns the proportion of rows in the real dataset leaked in the synthetic dataset.
 
     Score:
         0: there are no common rows between the real and synthetic datasets.
@@ -105,7 +118,11 @@ class CommonRowsProportion(BasicMetricEvaluator):
 
 
 class NearestSyntheticNeighborDistance(BasicMetricEvaluator):
-    """Computes the <reduction>(distance) from the real data to the closest neighbor in the synthetic data"""
+    """
+    .. inheritance-diagram:: synthcity.metrics.eval_sanity.NearestSyntheticNeighborDistance
+        :parts: 1
+
+    Computes the <reduction>(distance) from the real data to the closest neighbor in the synthetic data"""
 
     @staticmethod
     def name() -> str:
@@ -127,7 +144,11 @@ class NearestSyntheticNeighborDistance(BasicMetricEvaluator):
 
 
 class CloseValuesProbability(BasicMetricEvaluator):
-    """Compute the probability of close values between the real and synthetic data.
+    """
+    .. inheritance-diagram:: synthcity.metrics.eval_sanity.CloseValuesProbability
+        :parts: 1
+
+    Compute the probability of close values between the real and synthetic data.
 
     Score:
         0 means there is no chance to have synthetic rows similar to the real.
@@ -159,7 +180,11 @@ class CloseValuesProbability(BasicMetricEvaluator):
 
 
 class DistantValuesProbability(BasicMetricEvaluator):
-    """Compute the probability of distant values between the real and synthetic data.
+    """
+    .. inheritance-diagram:: synthcity.metrics.eval_sanity.DistantValuesProbability
+        :parts: 1
+
+    Compute the probability of distant values between the real and synthetic data.
 
     Score:
         0 means there is no chance to have rows in the synthetic far away from the real data.

@@ -23,6 +23,9 @@ from .mlp import MLP
 
 class GAN(nn.Module):
     """
+    .. inheritance-diagram:: synthcity.plugins.core.models.gan.GAN
+        :parts: 1
+
     Basic GAN implementation.
 
     Args:
@@ -165,9 +168,8 @@ class GAN(nn.Module):
 
         extra_penalty_list = ["identifiability_penalty"]
         for penalty in generator_extra_penalties:
-            assert (
-                penalty in extra_penalty_list
-            ), f"Unsupported generator penalty {penalty}"
+            if penalty not in extra_penalty_list:
+                raise ValueError(f"Unsupported generator penalty {penalty}")
 
         log.info(f"Training GAN on device {device}. features = {n_features}")
         self.device = device
@@ -264,7 +266,7 @@ class GAN(nn.Module):
                 cond = cond.reshape(-1, 1)
             if cond.shape[1] != self.n_units_conditional:
                 raise ValueError(
-                    "Expecting conditional with n_units = {self.n_units_conditional}"
+                    f"Expecting conditional with n_units = {self.n_units_conditional}, got {cond.shape}"
                 )
             if cond.shape[0] != X.shape[0]:
                 raise ValueError(
@@ -378,7 +380,8 @@ class GAN(nn.Module):
             )
         self.generator.optimizer.step()
 
-        assert not torch.isnan(errG)
+        if torch.isnan(errG):
+            raise RuntimeError("NaNs detected in the generator loss")
 
         # Return loss
         return errG.item()
@@ -460,7 +463,8 @@ class GAN(nn.Module):
 
             errors.append(errD.item())
 
-        assert not np.isnan(np.mean(errors))
+        if np.isnan(np.mean(errors)):
+            raise RuntimeError("NaNs detected in the discriminator loss")
 
         return np.mean(errors)
 

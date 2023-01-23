@@ -1,9 +1,7 @@
-"""RadialGAN  PyTorch implementation
-
+"""
 Reference: Yoon, Jinsung and Jordon, James and van der Schaar, Mihaela
     "RadialGAN: Leveraging multiple datasets to improve target-specific predictive models using Generative Adversarial Networks"
 
-Original implementation: https://github.com/vanderschaarlab/mlforhealthlabpub/blob/main/alg/RadialGAN/RadialGAN.py
 """
 # stdlib
 from typing import Any, Dict, List, Optional, Tuple
@@ -38,13 +36,19 @@ from synthcity.utils.reproducibility import clear_cache, enable_reproducible_res
 
 class RadialGAN(nn.Module):
     """
-    Basic RadialGAN implementation.
+    .. inheritance-diagram:: synthcity.plugins.domain_adaptation.plugin_radialgan.RadialGAN
+        :parts: 1
+
+
+    RadialGAN implementation: Leveraging multiple datasets to improve target-specific predictive models using Generative Adversarial Networks.
 
     Args:
-        n_domains: int
-            number of domains
-        n_units_in: int
+        domains: List[int]
+            List of domains
+        n_features: int
             Number of features
+        n_units_latent: int
+            Number of hidden units
         generator_n_layers_hidden: int
             Number of hidden layers in the generator
         generator_n_units_hidden: int
@@ -113,7 +117,8 @@ class RadialGAN(nn.Module):
         super(RadialGAN, self).__init__()
 
         self.domains = list(np.unique(domains))
-        assert len(self.domains) > 0
+        if len(self.domains) == 0:
+            raise ValueError("Expected a positive number of domains")
 
         log.info(f"Training RadialGAN on device {device}. features = {n_features}")
         self.device = device
@@ -247,7 +252,8 @@ class RadialGAN(nn.Module):
         if domains is None:
             domains = self.domains
 
-        assert self.domain_weights is not None
+        if self.domain_weights is None:
+            raise ValueError("Invalid domain weights")
 
         batch_per_domain = count // len(domains) + 1
         out = torch.tensor([]).to(self.device)
@@ -319,7 +325,8 @@ class RadialGAN(nn.Module):
             )
         self.mappers[domain].optimizer.step()
 
-        assert not torch.isnan(errM)
+        if torch.isnan(errM):
+            raise RuntimeError("NaNs detected in the mapper loss")
 
         # Return loss
         return errM.item()
@@ -362,7 +369,8 @@ class RadialGAN(nn.Module):
             )
         self.generators[domain].optimizer.step()
 
-        assert not torch.isnan(errG)
+        if torch.isnan(errG):
+            raise RuntimeError("NaNs detected in the generator loss")
 
         # Return loss
         return errG.item()
@@ -447,7 +455,8 @@ class RadialGAN(nn.Module):
 
             errors.append(errD.item())
 
-        assert not np.isnan(np.mean(errors))
+        if np.isnan(np.mean(errors)):
+            raise RuntimeError("NaNs detected in the discriminator loss")
 
         return np.mean(errors)
 
@@ -715,7 +724,13 @@ class TabularRadialGAN(torch.nn.Module):
 
 
 class RadialGANPlugin(Plugin):
-    """RadialGAN plugin.
+    """
+    .. inheritance-diagram:: synthcity.plugins.domain_adaptation.plugin_radialgan.RadialGANPlugin
+        :parts: 1
+
+
+    RadialGAN PyTorch implementation: Leveraging multiple datasets to improve target-specific predictive models using Generative Adversarial Networks.
+
 
     Args:
         generator_n_layers_hidden: int
@@ -752,12 +767,21 @@ class RadialGANPlugin(Plugin):
             The max number of clusters to create for continuous columns when encoding
 
     Example:
-        >>> from synthcity.plugins import Plugins
-        >>> plugin = Plugins().get("radialgan")
+        >>> import numpy as np
         >>> from sklearn.datasets import load_iris
-        >>> X = load_iris()
-        >>> plugin.fit(X)
-        >>> plugin.generate()
+        >>> from synthcity.plugins import Plugins
+        >>> from synthcity.plugins.core.dataloader import GenericDataLoader
+        >>>
+        >>> X, y = load_iris(as_frame = True, return_X_y = True)
+        >>> X["target"] = y
+        >>> X["domain"] = np.random.choice([0, 1], len(X)) # simulate domains
+        >>> dataloader = GenericDataLoader(X, domain_column="domain")
+        >>>
+        >>> plugin = Plugins().get("radialgan", n_iter = 100)
+        >>> plugin.fit(dataloader)
+        >>>
+        >>> plugin.generate(50)
+
     """
 
     @validate_arguments(config=dict(arbitrary_types_allowed=True))
