@@ -21,7 +21,7 @@ class BaseSampler(torch.utils.data.sampler.Sampler):
         return None
 
     @validate_arguments(config=dict(arbitrary_types_allowed=True))
-    def sample_conditional(self, batch: int) -> Optional[Tuple]:
+    def sample_conditional(self, batch: int, **kwargs: Any) -> Optional[Tuple]:
         return None
 
     @validate_arguments(config=dict(arbitrary_types_allowed=True))
