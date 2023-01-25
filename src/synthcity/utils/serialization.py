@@ -17,6 +17,12 @@ def load(buff: bytes) -> Any:
 
 
 def save_to_file(path: Union[str, Path], model: Any) -> Any:
+    path = Path(path)
+    ppath = path.absolute().parent
+
+    if not ppath.exists():
+        ppath.mkdir(parents=True, exist_ok=True)
+
     with open(path, "wb") as f:
         return cloudpickle.dump(model, f)
 
