@@ -211,6 +211,8 @@ class Plugin(Serializable, metaclass=ABCMeta):
         if "cond" in kwargs and kwargs["cond"] is not None:
             self.expecting_conditional = True
 
+        enable_reproducible_results(self.random_state)
+
         self.data_info = X.info()
 
         self._schema = Schema(
@@ -262,6 +264,7 @@ class Plugin(Serializable, metaclass=ABCMeta):
         self,
         count: Optional[int] = None,
         constraints: Optional[Constraints] = None,
+        random_state: Optional[int] = None,
         **kwargs: Any,
     ) -> DataLoader:
         """Synthetic data generation method.
@@ -301,6 +304,9 @@ class Plugin(Serializable, metaclass=ABCMeta):
                     >>>
                     >>> assert (syn_data["InterestingFeature"] == 0).all()
 
+            random_state: optional int.
+                Optional random seed to use.
+
         Returns:
             <count> synthetic samples
         """
@@ -309,6 +315,9 @@ class Plugin(Serializable, metaclass=ABCMeta):
 
         if self._schema is None:
             raise RuntimeError("Fit the model first")
+
+        if random_state is not None:
+            enable_reproducible_results(random_state)
 
         has_gen_cond = "cond" in kwargs and kwargs["cond"] is not None
         if has_gen_cond and not self.expecting_conditional:

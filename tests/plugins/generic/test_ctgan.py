@@ -75,6 +75,13 @@ def test_plugin_generate(test_plugin: Plugin, serialize: bool) -> None:
     assert len(X_gen) == 50
     assert test_plugin.schema_includes(X_gen)
 
+    # generate with random seed
+    X_gen1 = test_plugin.generate(50, random_state=0)
+    X_gen2 = test_plugin.generate(50, random_state=0)
+    X_gen3 = test_plugin.generate(50)
+    assert (X_gen1.numpy() == X_gen2.numpy()).all()
+    assert (X_gen1.numpy() != X_gen3.numpy()).any()
+
 
 @pytest.mark.parametrize(
     "test_plugin", generate_fixtures(plugin_name, plugin, plugin_args)
