@@ -71,7 +71,7 @@ class Serializable:
             "module_relative_path": self.module_relative_path,
         }
 
-    def save(self) -> dict:
+    def save(self) -> bytes:
         return serialize(self.save_dict())
 
     @validate_arguments
@@ -98,6 +98,8 @@ class Serializable:
             spec = importlib.util.spec_from_file_location(
                 representation["module_name"], module_path
             )
+            if spec is None:
+                raise RuntimeError("Invalid spec")
 
             if not isinstance(spec.loader, Loader):
                 raise RuntimeError("invalid synthcity object type")

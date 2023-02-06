@@ -101,10 +101,12 @@ class DataLoader(metaclass=ABCMeta):
         return self.data_type
 
     @property
+    @abstractmethod
     def shape(self) -> tuple:
         ...
 
     @property
+    @abstractmethod
     def columns(self) -> list:
         ...
 
