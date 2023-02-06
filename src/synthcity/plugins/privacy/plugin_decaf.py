@@ -133,7 +133,7 @@ class DECAFPlugin(Plugin):
         discriminator_dropout: float = 0.1,
         discriminator_opt_betas: tuple = (0.5, 0.999),
         lr: float = 1e-3,
-        batch_size: int = 500,
+        batch_size: int = 200,
         random_state: int = 0,
         clipping_value: int = 1,
         lambda_gradient_penalty: float = 10,
