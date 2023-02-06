@@ -113,7 +113,7 @@ class NormalizingFlowsPlugin(Plugin):
         n_iter: int = 1000,
         n_layers_hidden: int = 1,
         n_units_hidden: int = 100,
-        batch_size: int = 500,
+        batch_size: int = 200,
         num_transform_blocks: int = 1,
         dropout: float = 0.1,
         batch_norm: bool = False,

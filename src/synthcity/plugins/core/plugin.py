@@ -558,6 +558,8 @@ class PluginLoader:
                     mod = sys.modules[module_name]
                 else:
                     spec = importlib.util.spec_from_file_location(module_name, plugin)
+                    if spec is None:
+                        raise RuntimeError("invalid spec")
                     if not isinstance(spec.loader, Loader):
                         raise RuntimeError("invalid plugin type")
 
@@ -566,7 +568,7 @@ class PluginLoader:
                         sys.modules[module_name] = mod
 
                     spec.loader.exec_module(mod)
-                cls = mod.plugin  # type: ignore
+                cls = mod.plugin
                 failed = False
                 break
             except BaseException as e:
