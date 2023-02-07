@@ -95,7 +95,7 @@ class RTVAEPlugin(Plugin):
         n_units_embedding: int = 500,
         lr: float = 1e-3,
         weight_decay: float = 1e-5,
-        batch_size: int = 500,
+        batch_size: int = 200,
         random_state: int = 0,
         decoder_n_layers_hidden: int = 3,
         decoder_n_units_hidden: int = 500,
