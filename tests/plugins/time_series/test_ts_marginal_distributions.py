@@ -91,9 +91,7 @@ def test_plugin_generate_survival() -> None:
         time_horizons=time_horizons,
     )
 
-    test_plugin = plugin(
-        n_iter=10,
-    )
+    test_plugin = plugin()
     test_plugin.fit(survival_data)
 
     X_gen = test_plugin.generate(10)
