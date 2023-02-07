@@ -34,9 +34,7 @@ class MarginalDistributionPlugin(Plugin):
     """
 
     def __init__(self, **kwargs: Any) -> None:
-        super().__init__(
-            sampling_strategy="marginal", **kwargs
-        )
+        super().__init__(sampling_strategy="marginal", **kwargs)
 
     @staticmethod
     def name() -> str:
