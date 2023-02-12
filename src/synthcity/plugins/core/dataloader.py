@@ -624,6 +624,23 @@ class TimeSeriesDataLoader(DataLoader):
     """
     .. inheritance-diagram:: synthcity.plugins.core.dataloader.TimeSeriesDataLoader
         :parts: 1
+        
+    Constructor Args:
+        temporal_data: List[pd.DataFrame]
+            The temporal data. A list of pandas DataFrames.
+        observation_times: List,
+            List of arrays mapping directly to index of each dataframe in temporal_data
+        outcome: Optional[pd.DataFrame] = None
+            pandas DataFrame that can be anything (eg, labels, regression outcome)
+        static_data: Optional[pd.DataFrane] = None
+            pandas DataFrame of static features for each subject
+        sensitive_features: List[str]
+            Name of sensitive features.
+        important_features: List[str]
+            Default: None. Only relevant for SurvivalGAN method.
+        random_state: int
+            Defaults to zero.
+    
     """
 
     @validate_arguments(config=dict(arbitrary_types_allowed=True))
@@ -1262,6 +1279,24 @@ class TimeSeriesSurvivalDataLoader(TimeSeriesDataLoader):
     """
     .. inheritance-diagram:: synthcity.plugins.core.dataloader.TimeSeriesSurvivalDataLoader
         :parts: 1
+        
+    Constructor Args:
+        temporal_data: List[pd.DataFrame]
+            The temporal data. A list of pandas DataFrames.
+        observation_times: List,
+            List of arrays mapping directly to index of each dataframe in temporal_data
+        T: Union[pd.Series, np.ndarray, pd.Series]
+            Time-to-event data
+        E: Union[pd.Series, np.ndarray, pd.Series]
+            E is censored/event data
+        static_data: Optional[pd.DataFrane] = None
+            pandas DataFrame of static features for each subject
+        sensitive_features: List[str]
+            Name of sensitive features.
+        important_features: List[str]
+            Default: None. Only relevant for SurvivalGAN method.
+        random_state: int
+            Defaults to zero.
     """
 
     @validate_arguments(config=dict(arbitrary_types_allowed=True))
