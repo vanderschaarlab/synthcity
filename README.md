@@ -190,6 +190,20 @@ reloaded = load(buff)
 assert syn_model.name() == reloaded.name()
 ```
 
+* Saving and loading models from disk
+
+```python
+from synthcity.utils.serialization import save_to_file, load_from_file
+from synthcity.plugins import Plugins
+
+syn_model = Plugins().get("adsgan")
+
+save_to_file('./adsgan_10_epochs.pkl', syn_model)
+reloaded = load_from_file('./adsgan_10_epochs.pkl')
+
+assert syn_model.name() == reloaded.name()
+```
+
 * Using the Serializable interface
 
 ```python
