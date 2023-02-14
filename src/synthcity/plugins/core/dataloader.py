@@ -624,23 +624,25 @@ class TimeSeriesDataLoader(DataLoader):
     """
     .. inheritance-diagram:: synthcity.plugins.core.dataloader.TimeSeriesDataLoader
         :parts: 1
-        
+
+    Data Loader for Time Series Data
+
     Constructor Args:
-        temporal_data: List[pd.DataFrame]
-            The temporal data. A list of pandas DataFrames.
-        observation_times: List,
+        temporal data: List[pd.DataFrame]
+            The temporal data. A list of pandas DataFrames
+        observation times: List
             List of arrays mapping directly to index of each dataframe in temporal_data
         outcome: Optional[pd.DataFrame] = None
-            pandas DataFrame that can be anything (eg, labels, regression outcome)
-        static_data: Optional[pd.DataFrane] = None
-            pandas DataFrame of static features for each subject
+            pandas DataFrame thatn can be anything (eg, labels, regression outcome)
+        static_data: Optional[pd.DataFrame] = None
+            pandas DataFrame mapping directly to index of each dataframe in temporal_data
         sensitive_features: List[str]
-            Name of sensitive features.
-        important_features: List[str]
-            Default: None. Only relevant for SurvivalGAN method.
+            Name of sensitive features
+        important_features List[str]
+            Default: None. Only relevant for SurvivalGAN method
         random_state: int
             Defaults to zero.
-    
+
     """
 
     @validate_arguments(config=dict(arbitrary_types_allowed=True))
@@ -1279,24 +1281,27 @@ class TimeSeriesSurvivalDataLoader(TimeSeriesDataLoader):
     """
     .. inheritance-diagram:: synthcity.plugins.core.dataloader.TimeSeriesSurvivalDataLoader
         :parts: 1
-        
+
+    Data loader for Time series survival data
+
     Constructor Args:
-        temporal_data: List[pd.DataFrame]
+        temporal_data: List[pd.DataFrame}
             The temporal data. A list of pandas DataFrames.
-        observation_times: List,
+        observation_times: List
             List of arrays mapping directly to index of each dataframe in temporal_data
         T: Union[pd.Series, np.ndarray, pd.Series]
             Time-to-event data
         E: Union[pd.Series, np.ndarray, pd.Series]
             E is censored/event data
-        static_data: Optional[pd.DataFrane] = None
+        static_data Optional[pd.DataFrame] = None
             pandas DataFrame of static features for each subject
         sensitive_features: List[str]
-            Name of sensitive features.
-        important_features: List[str]
+            Name of sensitive features
+        important_features: List[str}
             Default: None. Only relevant for SurvivalGAN method.
-        random_state: int
+        random_state. int
             Defaults to zero.
+
     """
 
     @validate_arguments(config=dict(arbitrary_types_allowed=True))
