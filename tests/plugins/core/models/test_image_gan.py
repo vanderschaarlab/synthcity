@@ -8,6 +8,7 @@ from torchvision import datasets, transforms
 
 # synthcity absolute
 from synthcity.plugins.core.models.image_gan import ImageGAN
+from synthcity.utils.constants import DEVICE
 
 IMG_SIZE = 28
 data_transform = transforms.Compose(
@@ -131,8 +132,8 @@ def test_gan_generation(generator_extra_penalties: list) -> None:
     out_dim = 100
 
     model = ImageGAN(
-        image_generator=Generator(noise_dim=noise_dim, gen_dim=out_dim),
-        image_discriminator=Discriminator(disc_dim=out_dim),
+        image_generator=Generator(noise_dim=noise_dim, gen_dim=out_dim).to(DEVICE),
+        image_discriminator=Discriminator(disc_dim=out_dim).to(DEVICE),
         n_units_latent=noise_dim,
         generator_n_iter=10,
         generator_extra_penalties=generator_extra_penalties,

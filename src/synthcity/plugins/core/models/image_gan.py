@@ -2,6 +2,7 @@
 from typing import Any, Callable, List, Optional, Tuple
 
 # third party
+import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
 import torch
@@ -16,6 +17,25 @@ import synthcity.logger as log
 from synthcity.metrics.weighted_metrics import WeightedMetrics
 from synthcity.utils.constants import DEVICE
 from synthcity.utils.reproducibility import clear_cache, enable_reproducible_results
+
+
+def display(imgs: List[np.ndarray]) -> None:
+    for i in range(len(imgs)):
+        plt.subplot(1, len(imgs), i + 1)
+        plt.tight_layout()
+        plt.imshow(imgs[i][0], cmap="gray", interpolation="none")
+        plt.xticks([])
+        plt.yticks([])
+
+    plt.show()
+
+
+def weights_init(m: nn.Module) -> None:
+    if isinstance(m, nn.Conv2d) or isinstance(m, nn.ConvTranspose2d):
+        torch.nn.init.normal_(m.weight, mean=0.0, std=0.02)
+    if isinstance(m, nn.BatchNorm2d):
+        torch.nn.init.normal_(m.weight, mean=0.0, std=0.02)
+        torch.nn.init.constant_(m.bias, val=0)
 
 
 class ImageGAN(nn.Module):
@@ -92,12 +112,12 @@ class ImageGAN(nn.Module):
         image_generator: nn.Module,
         image_discriminator: nn.Module,
         n_units_latent: int,
+        n_channels: int,
         n_units_conditional: int = 0,
         # generator
         generator_n_iter: int = 500,
         generator_lr: float = 2e-4,
         generator_weight_decay: float = 1e-3,
-        generator_residual: bool = True,
         generator_opt_betas: tuple = (0.9, 0.999),
         generator_extra_penalties: list = [],  # "identifiability_penalty"
         generator_extra_penalty_cbks: List[Callable] = [],
@@ -107,9 +127,9 @@ class ImageGAN(nn.Module):
         discriminator_weight_decay: float = 1e-3,
         discriminator_opt_betas: tuple = (0.9, 0.999),
         # training
-        batch_size: int = 64,
+        batch_size: int = 100,
         random_state: int = 0,
-        clipping_value: int = 0,
+        clipping_value: int = 1,
         lambda_gradient_penalty: float = 10,
         lambda_identifiability_penalty: float = 0.1,
         device: Any = DEVICE,
@@ -139,9 +159,11 @@ class ImageGAN(nn.Module):
 
         self.n_units_conditional = n_units_conditional
 
-        self.generator = image_generator
-        self.discriminator = image_discriminator
+        self.generator = image_generator.apply(weights_init)
+        self.discriminator = image_discriminator.apply(weights_init)
+
         self.n_units_latent = n_units_latent
+        self.n_channels = n_channels
 
         # training
         self.generator_n_iter = generator_n_iter
@@ -149,7 +171,7 @@ class ImageGAN(nn.Module):
             self.generator.parameters(),
             lr=generator_lr,
             weight_decay=generator_weight_decay,
-            betas=generator_opt_betas,
+            # betas=generator_opt_betas,
         )
 
         self.discriminator_n_iter = discriminator_n_iter
@@ -157,7 +179,7 @@ class ImageGAN(nn.Module):
             self.discriminator.parameters(),
             lr=discriminator_lr,
             weight_decay=discriminator_weight_decay,
-            betas=discriminator_opt_betas,
+            # betas=discriminator_opt_betas,
         )
 
         self.n_iter_print = n_iter_print
@@ -190,6 +212,17 @@ class ImageGAN(nn.Module):
         self.dp_max_grad_norm = dp_max_grad_norm
         self.dp_secure_mode = dp_secure_mode
 
+    def _get_noise(self, n_samples: int) -> torch.Tensor:
+        """
+        Generate noise vectors from the random normal distribution with dimensions (n_samples, noise_dim),
+        where
+            n_samples: the number of samples to generate based on  batch_size
+        """
+
+        return torch.randn(
+            n_samples, self.n_units_latent, self.n_channels, 1, device=self.device
+        )
+
     def fit(
         self,
         X: torch.utils.data.Dataset,
@@ -205,7 +238,7 @@ class ImageGAN(nn.Module):
             if cond is None:
                 raise ValueError("Expecting valid conditional for training")
             if len(cond.shape) == 1:
-                cond = cond.reshape(-1, 1, 1)
+                cond = cond.reshape(-1, 1, 1, 1).repeat(1, self.n_channels, 1, 1)
             if cond.shape[1] != self.n_units_conditional:
                 raise ValueError(
                     f"Expecting conditional with n_units = {self.n_units_conditional}, got {cond.shape}"
@@ -250,12 +283,12 @@ class ImageGAN(nn.Module):
             cond = self._original_cond[cond_idxs]
 
         if cond is not None and len(cond.shape) == 1:
-            cond = cond.reshape(-1, 1, 1)
+            cond = cond.reshape(-1, 1, 1, 1).repeat(1, self.n_channels, 1, 1)
 
         if cond is not None and len(cond) != count:
             raise ValueError("cond length must match count")
 
-        fixed_noise = torch.randn(count, self.n_units_latent, 1, 1, device=self.device)
+        fixed_noise = self._get_noise(count)
         fixed_noise = self._append_optional_cond(fixed_noise, cond)
 
         return self.generator(fixed_noise)
@@ -268,7 +301,7 @@ class ImageGAN(nn.Module):
             dataset,
             batch_size=self.batch_size,
             sampler=self.dataloader_sampler,
-            pin_memory=False,
+            shuffle=True,
         )
 
     def _train_epoch_generator(
@@ -280,13 +313,12 @@ class ImageGAN(nn.Module):
     ) -> float:
         # Update the G network
         self.generator.train()
-        self.generator_optimizer.zero_grad()
 
         real_X_raw = X.to(self.device)
         real_X = self._append_optional_cond(real_X_raw, cond)
         batch_size = len(real_X)
 
-        noise = torch.randn(batch_size, self.n_units_latent, 1, 1, device=self.device)
+        noise = self._get_noise(batch_size)
         noise = self._append_optional_cond(noise, cond)
 
         fake_raw = self.generator(noise)
@@ -310,13 +342,14 @@ class ImageGAN(nn.Module):
         )
 
         # Calculate gradients for G
+        self.generator_optimizer.zero_grad()
         errG.backward()
 
         # Update G
-        if self.clipping_value > 0:
-            torch.nn.utils.clip_grad_norm_(
-                self.generator.parameters(), self.clipping_value
-            )
+        #         if self.clipping_value > 0:
+        #             torch.nn.utils.clip_grad_norm_(
+        #                 self.generator.parameters(), self.clipping_value
+        #             )
         self.generator_optimizer.step()
 
         if torch.isnan(errG):
@@ -374,7 +407,6 @@ class ImageGAN(nn.Module):
             penalty = self._loss_gradient_penalty(
                 real_samples=real_X,
                 fake_samples=fake,
-                batch_size=batch_size,
             )
             errD = -errD_real + errD_fake
 
@@ -392,7 +424,7 @@ class ImageGAN(nn.Module):
                 self.discriminator.enable_hooks()
                 errD_real.backward()  # HACK: calling bkwd without zero_grad() accumulates param gradients
             else:
-                penalty.backward(retain_graph=True)
+                errD += penalty
                 errD.backward()
 
             # Update D
@@ -561,6 +593,8 @@ class ImageGAN(nn.Module):
             )
             # Check how the generator is doing by saving G's output on fixed_noise
             if (i + 1) % self.n_iter_print == 0:
+                display(self.generate(5))
+
                 log.debug(
                     f"[{i}/{self.generator_n_iter}]\tLoss_D: {d_loss}\tLoss_G: {g_loss} Patience score: {patience_score} Patience : {patience}"
                 )
@@ -611,33 +645,32 @@ class ImageGAN(nn.Module):
         return err
 
     def _loss_gradient_penalty(
-        self,
-        real_samples: torch.tensor,
-        fake_samples: torch.Tensor,
-        batch_size: int,
+        self, real_samples: torch.Tensor, fake_samples: torch.Tensor
     ) -> torch.Tensor:
-        """Calculates the gradient penalty loss for WGAN GP"""
-        # Random weight term for interpolation between real and fake samples
-        alpha = torch.rand([batch_size, 1, 1, 1]).to(self.device)
-        # Get random interpolation between real and fake samples
-        interpolated = (
-            alpha * real_samples + ((1 - alpha) * fake_samples)
-        ).requires_grad_(True)
-        d_interpolated = self.discriminator(interpolated).squeeze()
-        labels = torch.ones((len(interpolated),), device=self.device)
+        batch_size, channel, height, width = real_samples.shape
+        # alpha is selected randomly between 0 and 1
+        alpha = (
+            torch.rand(batch_size, 1, 1, 1)
+            .repeat(1, channel, height, width)
+            .to(self.device)
+        )
+        # interpolated image=randomly weighted average between a real and fake image
+        interpolatted_samples = (alpha * real_samples) + (1 - alpha) * fake_samples
 
-        # Get gradient w.r.t. interpolates
-        gradients = torch.autograd.grad(
-            outputs=d_interpolated,
-            inputs=interpolated,
-            grad_outputs=labels,
-            create_graph=True,
+        # calculate the critic score on the interpolated image
+        interpolated_score = self.discriminator(interpolatted_samples)
+
+        # take the gradient of the score wrt to the interpolated image
+        gradient = torch.autograd.grad(
+            inputs=interpolatted_samples,
+            outputs=interpolated_score,
             retain_graph=True,
-            only_inputs=True,
-            allow_unused=True,
+            create_graph=True,
+            grad_outputs=torch.ones_like(interpolated_score),
         )[0]
-        gradients = gradients.view(gradients.size(0), -1)
-        gradient_penalty = ((gradients.norm(2, dim=-1) - 1) ** 2).mean()
+        gradient = gradient.view(gradient.shape[0], -1)
+        gradient_norm = gradient.norm(2, dim=1)
+        gradient_penalty = torch.mean((gradient_norm - 1) ** 2)
         return self.lambda_gradient_penalty * gradient_penalty
 
     def _loss_identifiability_penalty(

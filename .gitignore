@@ -65,3 +65,4 @@ data
 checkpoints
 lightning_logs
 generated
+MNIST
