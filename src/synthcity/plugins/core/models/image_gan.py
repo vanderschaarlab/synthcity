@@ -19,13 +19,16 @@ from synthcity.utils.constants import DEVICE
 from synthcity.utils.reproducibility import clear_cache, enable_reproducible_results
 
 
+def imshow(img: np.ndarray) -> None:
+    img = img / 2 + 0.5  # unnormalize
+    plt.imshow(np.transpose(img, (1, 2, 0)))
+
+
 def display(imgs: List[np.ndarray]) -> None:
     for i in range(len(imgs)):
         plt.subplot(1, len(imgs), i + 1)
         plt.tight_layout()
-        plt.imshow(imgs[i][0], cmap="gray", interpolation="none")
-        plt.xticks([])
-        plt.yticks([])
+        imshow(imgs[i])
 
     plt.show()
 
@@ -301,6 +304,7 @@ class ImageGAN(nn.Module):
             dataset,
             batch_size=self.batch_size,
             sampler=self.dataloader_sampler,
+            pin_memory=False,
             shuffle=True,
         )
 
@@ -381,9 +385,7 @@ class ImageGAN(nn.Module):
             real_output = self.discriminator(real_X).squeeze().float()
 
             # Train with all-fake batch
-            noise = torch.randn(
-                batch_size, self.n_units_latent, 1, 1, device=self.device
-            )
+            noise = self._get_noise(batch_size)
             noise = self._append_optional_cond(noise, cond)
 
             fake_raw = self.generator(noise)
