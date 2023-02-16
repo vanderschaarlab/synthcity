@@ -19,17 +19,12 @@ from synthcity.utils.constants import DEVICE
 from synthcity.utils.reproducibility import clear_cache, enable_reproducible_results
 
 
-def imshow(img: np.ndarray) -> None:
-    img = img / 2 + 0.5  # unnormalize
-    plt.imshow(np.transpose(img, (1, 2, 0)))
-
-
-def display(imgs: List[np.ndarray]) -> None:
+def display_imgs(imgs: List[np.ndarray]) -> None:
     for i in range(len(imgs)):
         plt.subplot(1, len(imgs), i + 1)
         plt.tight_layout()
-        imshow(imgs[i])
-
+        imgs[i] = imgs[i] / 2 + 0.5  # unnormalize
+        plt.imshow(np.transpose(imgs[i], (1, 2, 0)))
     plt.show()
 
 
@@ -138,6 +133,7 @@ class ImageGAN(nn.Module):
         device: Any = DEVICE,
         n_iter_min: int = 100,
         n_iter_print: int = 1,
+        plot_progress: int = False,
         patience: int = 20,
         patience_metric: Optional[WeightedMetrics] = None,
         dataloader_sampler: Optional[sampler.Sampler] = None,
@@ -167,6 +163,7 @@ class ImageGAN(nn.Module):
 
         self.n_units_latent = n_units_latent
         self.n_channels = n_channels
+        self.plot_progress = plot_progress
 
         # training
         self.generator_n_iter = generator_n_iter
@@ -595,7 +592,8 @@ class ImageGAN(nn.Module):
             )
             # Check how the generator is doing by saving G's output on fixed_noise
             if (i + 1) % self.n_iter_print == 0:
-                display(self.generate(5))
+                if self.plot_progress:
+                    display_imgs(self.generate(5))
 
                 log.debug(
                     f"[{i}/{self.generator_n_iter}]\tLoss_D: {d_loss}\tLoss_G: {g_loss} Patience score: {patience_score} Patience : {patience}"

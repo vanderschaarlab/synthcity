@@ -2,6 +2,7 @@
 import numpy as np
 import pytest
 from monai.networks.nets import Discriminator, Generator
+from torch import nn
 from torch.utils.data import Subset
 from torchvision import datasets, transforms
 
@@ -9,7 +10,7 @@ from torchvision import datasets, transforms
 from synthcity.plugins.core.models.image_gan import ImageGAN
 from synthcity.utils.constants import DEVICE
 
-IMG_SIZE = 28
+IMG_SIZE = 32
 data_transform = transforms.Compose(
     [
         transforms.Resize(IMG_SIZE),
@@ -25,25 +26,27 @@ dataset = Subset(dataset, np.arange(len(dataset))[:100])
 
 def generator(latent_size: int) -> Generator:
     # upsampling
-
-    return Generator(
-        latent_shape=latent_size,
-        start_shape=(64, 7, 7),
-        channels=[128, 64, 1],
-        strides=[2, 2, 1],
-        kernel_size=3,
-        bias=False,
+    return nn.Sequential(
+        Generator(
+            latent_shape=(latent_size, 1),
+            start_shape=(64, 4, 4),
+            channels=[64, 32, 16, 1],
+            strides=[2, 2, 2, 1],
+            kernel_size=3,
+            dropout=0.2,
+        ),
+        nn.Tanh(),
     ).to(DEVICE)
 
 
 def discriminator() -> Discriminator:
     return Discriminator(
         in_shape=(1, IMG_SIZE, IMG_SIZE),
-        channels=[32, 64, 128, 1],
+        channels=[16, 32, 64, 1],
         strides=[2, 2, 2, 2],
         kernel_size=3,
         last_act=None,
-        bias=False,
+        dropout=0.2,
     ).to(DEVICE)
 
 
@@ -72,7 +75,7 @@ def test_network_config() -> None:
         lambda_identifiability_penalty=3,
     )
 
-    assert isinstance(net.generator, Generator)
+    assert isinstance(net.generator[0], Generator)
     assert isinstance(net.discriminator, Discriminator)
     assert net.batch_size == 64
     assert net.generator_n_iter == 1001
@@ -106,7 +109,7 @@ def test_basic_network(
 
 
 @pytest.mark.parametrize("generator_extra_penalties", [[], ["identifiability_penalty"]])
-def test_gan_generation(generator_extra_penalties: list) -> None:
+def test_image_gan_generation(generator_extra_penalties: list) -> None:
     noise_dim = 123
 
     model = ImageGAN(
