@@ -346,10 +346,10 @@ class ImageGAN(nn.Module):
         errG.backward()
 
         # Update G
-        #         if self.clipping_value > 0:
-        #             torch.nn.utils.clip_grad_norm_(
-        #                 self.generator.parameters(), self.clipping_value
-        #             )
+        if self.clipping_value > 0:
+            torch.nn.utils.clip_grad_norm_(
+                self.generator.parameters(), self.clipping_value
+            )
         self.generator_optimizer.step()
 
         if torch.isnan(errG):
