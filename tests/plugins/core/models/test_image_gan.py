@@ -1,8 +1,7 @@
 # third party
 import numpy as np
 import pytest
-import torch
-import torch.nn as nn
+from monai.networks.nets import Discriminator, Generator
 from torch.utils.data import Subset
 from torchvision import datasets, transforms
 
@@ -24,57 +23,37 @@ dataset = datasets.MNIST(".", download=True, transform=data_transform)
 dataset = Subset(dataset, np.arange(len(dataset))[:100])
 
 
-class Generator(nn.Module):
-    def __init__(
-        self, no_of_channels: int = 1, noise_dim: int = 100, gen_dim: int = 32
-    ) -> None:
-        super(Generator, self).__init__()
-        self.network = nn.Sequential(
-            nn.ConvTranspose2d(noise_dim, gen_dim * 4, 4, 1, 0, bias=False),
-            nn.BatchNorm2d(gen_dim * 4),
-            nn.ReLU(True),
-            nn.ConvTranspose2d(gen_dim * 4, gen_dim * 2, 3, 2, 1, bias=False),
-            nn.BatchNorm2d(gen_dim * 2),
-            nn.ReLU(True),
-            nn.ConvTranspose2d(gen_dim * 2, gen_dim, 4, 2, 1, bias=False),
-            nn.BatchNorm2d(gen_dim),
-            nn.ReLU(True),
-            nn.ConvTranspose2d(gen_dim, no_of_channels, 4, 2, 1, bias=False),
-            nn.Tanh(),
-        )
+def generator(latent_size: int) -> Generator:
+    # upsampling
 
-    def forward(self, X: torch.Tensor) -> torch.Tensor:
-        output = self.network(X)
-        return output
+    return Generator(
+        latent_shape=latent_size,
+        start_shape=(64, 7, 7),
+        channels=[128, 64, 1],
+        strides=[2, 2, 1],
+        kernel_size=3,
+        bias=False,
+    ).to(DEVICE)
 
 
-class Discriminator(nn.Module):
-    def __init__(self, no_of_channels: int = 1, disc_dim: int = 32) -> None:
-        super(Discriminator, self).__init__()
-        self.network = nn.Sequential(
-            nn.Conv2d(no_of_channels, disc_dim, 4, 2, 1, bias=False),
-            nn.LeakyReLU(0.2, inplace=True),
-            nn.Conv2d(disc_dim, disc_dim * 2, 4, 2, 1, bias=False),
-            nn.InstanceNorm2d(disc_dim * 2, affine=True),
-            nn.LeakyReLU(0.2, inplace=True),
-            nn.Conv2d(disc_dim * 2, disc_dim * 4, 3, 2, 1, bias=False),
-            nn.InstanceNorm2d(disc_dim * 4, affine=True),
-            nn.LeakyReLU(0.2, inplace=True),
-            nn.Conv2d(disc_dim * 4, 1, 4, 1, 0, bias=False),
-        )
-
-    def forward(self, X: torch.Tensor) -> torch.Tensor:
-        output = self.network(X)
-        return output
+def discriminator() -> Discriminator:
+    return Discriminator(
+        in_shape=(1, IMG_SIZE, IMG_SIZE),
+        channels=[32, 64, 128, 1],
+        strides=[2, 2, 2, 2],
+        kernel_size=3,
+        last_act=None,
+        bias=False,
+    ).to(DEVICE)
 
 
 def test_network_config() -> None:
     noise_dim = 123
-    out_dim = 100
     net = ImageGAN(
-        image_generator=Generator(noise_dim=noise_dim, gen_dim=out_dim),
-        image_discriminator=Discriminator(disc_dim=out_dim),
+        image_generator=generator(noise_dim),
+        image_discriminator=discriminator(),
         n_units_latent=noise_dim,
+        n_channels=1,
         # Generator
         generator_n_iter=1001,
         generator_lr=1e-3,
@@ -110,12 +89,12 @@ def test_basic_network(
     lr: float,
 ) -> None:
     noise_dim = 123
-    out_dim = 100
 
     net = ImageGAN(
-        image_generator=Generator(noise_dim=noise_dim, gen_dim=out_dim),
-        image_discriminator=Discriminator(disc_dim=out_dim),
+        image_generator=generator(noise_dim),
+        image_discriminator=discriminator(),
         n_units_latent=noise_dim,
+        n_channels=1,
         generator_n_iter=n_iter,
         discriminator_n_iter=n_iter,
         generator_lr=lr,
@@ -129,11 +108,10 @@ def test_basic_network(
 @pytest.mark.parametrize("generator_extra_penalties", [[], ["identifiability_penalty"]])
 def test_gan_generation(generator_extra_penalties: list) -> None:
     noise_dim = 123
-    out_dim = 100
 
     model = ImageGAN(
-        image_generator=Generator(noise_dim=noise_dim, gen_dim=out_dim).to(DEVICE),
-        image_discriminator=Discriminator(disc_dim=out_dim).to(DEVICE),
+        image_generator=generator(noise_dim).to(DEVICE),
+        image_discriminator=discriminator().to(DEVICE),
         n_units_latent=noise_dim,
         n_channels=1,
         generator_n_iter=10,
