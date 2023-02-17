@@ -6,6 +6,7 @@ from typing import Any, Dict, List, Optional, Tuple, Union
 # third party
 import numpy as np
 import pandas as pd
+import torch
 from pydantic import validate_arguments
 from sklearn.model_selection import train_test_split
 from sklearn.preprocessing import LabelEncoder
@@ -66,7 +67,7 @@ class DataLoader(metaclass=ABCMeta):
         self,
         data_type: str,
         data: Any,
-        static_features: List[str],
+        static_features: List[str] = [],
         temporal_features: List[str] = [],
         sensitive_features: List[str] = [],
         important_features: List[str] = [],
@@ -447,6 +448,30 @@ class SurvivalAnalysisDataLoader(DataLoader):
     .. inheritance-diagram:: synthcity.plugins.core.dataloader.SurvivalAnalysisDataLoader
         :parts: 1
 
+    Data Loader for Survival Analysis Data
+
+    Constructor Args:
+        data: Union[pd.DataFrame, list, np.ndarray]
+            The dataset. Either a Pandas DataFrame or a Numpy Array.
+        time_to_event_column: str
+            Survival Analysis specific time-to-event feature
+        target_column: str
+            The outcome: event or censoring.
+        sensitive_features: List[str]
+            Name of sensitive features.
+        important_features: List[str]
+            Default: None. Only relevant for SurvivalGAN method.
+        target_column: str
+            The feature name that provides labels for downstream tasks.
+        domain_column: Optional[str]
+            Optional domain label, used for domain adaptation algorithms.
+        random_state: int
+            Defaults to zero.
+        train_size: float
+            The ratio to use for train splits.
+
+    Example:
+        >>> TODO
     """
 
     @validate_arguments(config=dict(arbitrary_types_allowed=True))
@@ -643,6 +668,8 @@ class TimeSeriesDataLoader(DataLoader):
         random_state: int
             Defaults to zero.
 
+    Example:
+        >>> TODO
     """
 
     @validate_arguments(config=dict(arbitrary_types_allowed=True))
@@ -1302,6 +1329,9 @@ class TimeSeriesSurvivalDataLoader(TimeSeriesDataLoader):
         random_state. int
             Defaults to zero.
 
+    Example:
+        >>> TODO
+
     """
 
     @validate_arguments(config=dict(arbitrary_types_allowed=True))
@@ -1480,3 +1510,148 @@ def create_from_info(data: pd.DataFrame, info: dict) -> "DataLoader":
         return TimeSeriesSurvivalDataLoader.from_info(data, info)
     else:
         raise RuntimeError(f"invalid datatype {info}")
+
+
+class ImageDataLoader(DataLoader):
+    """
+    .. inheritance-diagram:: synthcity.plugins.core.dataloader.ImageDataLoader
+        :parts: 1
+
+    Data loader for generic image data.
+
+    Constructor Args:
+        data: torch.utils.data.Dataset
+            The image dataset
+        random_state: int
+            Defaults to zero.
+
+    Example:
+        >>> TODO
+    """
+
+    @validate_arguments(config=dict(arbitrary_types_allowed=True))
+    def __init__(
+        self,
+        data: torch.utils.data.Dataset,
+        random_state: int = 0,
+        train_size: float = 0.8,
+        **kwargs: Any,
+    ) -> None:
+        if not isinstance(data, pd.DataFrame):
+            data = pd.DataFrame(data)
+
+        data.columns = data.columns.astype(str)
+
+        super().__init__(
+            data_type="image",
+            data=data,
+            random_state=random_state,
+            train_size=train_size,
+            **kwargs,
+        )
+
+    @property
+    def shape(self) -> tuple:
+        return self.data.dataset.shape
+
+    @property
+    def columns(self) -> list:
+        return list(self.data.columns)
+
+    def compression_protected_features(self) -> list:
+        return []
+
+    def unpack(self, as_numpy: bool = False, pad: bool = False) -> Any:
+        raise NotImplementedError()
+
+    def dataframe(self) -> pd.DataFrame:
+        raise NotImplementedError()
+
+    def numpy(self) -> np.ndarray:
+        raise NotImplementedError()
+
+    def info(self) -> dict:
+        return {
+            "data_type": self.data_type,
+            "len": len(self),
+            "train_size": self.train_size,
+        }
+
+    def __len__(self) -> int:
+        return len(self.data)
+
+    def decorate(self, data: Any) -> "DataLoader":
+        return ImageDataLoader(
+            data,
+            random_state=self.random_state,
+            train_size=self.train_size,
+        )
+
+    def satisfies(self, constraints: Constraints) -> bool:
+        raise NotImplementedError()
+
+    def match(self, constraints: Constraints) -> "DataLoader":
+        raise NotImplementedError()
+
+    def sample(self, count: int, random_state: int = 0) -> "DataLoader":
+        raise NotImplementedError()
+
+    def drop(self, columns: list = []) -> "DataLoader":
+        raise NotImplementedError()
+
+    @staticmethod
+    def from_info(data: pd.DataFrame, info: dict) -> "GenericDataLoader":
+        if not isinstance(data, pd.DataFrame):
+            raise ValueError(f"Invalid data type {type(data)}")
+
+        return GenericDataLoader(
+            data,
+            train_size=info["train_size"],
+        )
+
+    def __getitem__(self, feature: Union[str, list]) -> Any:
+        raise NotImplementedError()
+
+    def __setitem__(self, feature: str, val: Any) -> None:
+        raise NotImplementedError()
+
+    def _train_test_split(self) -> Tuple:
+        raise NotImplementedError()
+
+    def train(self) -> "DataLoader":
+        raise NotImplementedError()
+
+    def test(self) -> "DataLoader":
+        raise NotImplementedError()
+
+    def fillna(self, value: Any) -> "DataLoader":
+        raise NotImplementedError()
+
+    def hash(self) -> str:
+        raise NotImplementedError()
+
+    def __repr__(self, *args: Any, **kwargs: Any) -> str:
+        raise NotImplementedError()
+
+    def _repr_html_(self, *args: Any, **kwargs: Any) -> Any:
+        raise NotImplementedError()
+
+    def compress(
+        self,
+    ) -> Tuple["DataLoader", Dict]:
+        return self, {}
+
+    def decompress(self, context: Dict) -> "DataLoader":
+        return self
+
+    def encode(
+        self,
+        encoders: Optional[Dict[str, Any]] = None,
+    ) -> Tuple["DataLoader", Dict]:
+        return self, {}
+
+    def decode(
+        self,
+        encoders: Dict[str, Any],
+    ) -> "DataLoader":
+        return self
