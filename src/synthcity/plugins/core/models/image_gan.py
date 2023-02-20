@@ -6,6 +6,8 @@ import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
 import torch
+from monai.networks.layers.factories import Act
+from monai.networks.nets import Discriminator, Generator
 from opacus import PrivacyEngine
 from pydantic import validate_arguments
 from torch import nn
@@ -612,3 +614,91 @@ class ImageGAN(nn.Module):
             -self.lambda_identifiability_penalty
             * (real_samples - fake_samples).square().sum(dim=-1).sqrt().mean()
         )
+
+
+def map_nonlin(nonlin: str) -> Act:
+    if nonlin == "relu":
+        return Act.RELU
+    elif nonlin == "elu":
+        return Act.ELU
+    elif nonlin == "prelu":
+        return Act.PRELU
+    elif nonlin == "leaky_relu":
+        return Act.LEAKYRELU
+
+    raise ValueError(f"Unknown activation {nonlin}")
+
+
+def suggest_image_generator_discriminator(
+    n_units_latent: int,
+    n_channels: int,
+    height: int,
+    width: int,
+    generator_dropout: float = 0.2,
+    generator_nonlin: str = "prelu",
+    generator_n_residual_units: int = 2,
+    discriminator_dropout: float = 0.2,
+    discriminator_nonlin: str = "prelu",
+    discriminator_n_residual_units: int = 2,
+    device: Any = DEVICE,
+    strategy: str = "predefined",
+) -> Tuple[nn.Module, nn.Module]:
+    """Helper for selecting compatible architecture for image generators and discriminators.
+
+    Args:
+        n_units_latent: int,
+            Input size for the generator
+        n_channels: int
+            Number of channels in the image
+        height: int
+            Image height
+        width: int
+            Image width
+        generator_dropout: float = 0.2
+            Dropout value for the generator
+        generator_nonlin: str
+            name of the activation activation layers in the generator. Can be relu, elu, prelu or leaky_relu
+        generator_n_residual_units: int
+             integer stating number of convolutions in residual units for the generator, 0 means no residual units
+        discriminator_dropout: float = 0.2
+            Dropout value for the discriminator
+        discriminator_nonlin: str
+            name of the activation activation layers in the discriminator. Can be relu, elu, prelu or leaky_relu
+        discriminator_n_residual_units: int
+             integer stating number of convolutions in residual units for the discriminator, 0 means no residual units
+        device: str
+            PyTorch device. cpu, cuda
+        strategy: str
+            Which suggestion to use. Options:
+                - predefined: a few hardcoded architectures for certain image shapes.
+                - ...
+    """
+    if strategy == "predefined":
+        if height == 32 and width == 32:
+            generator = nn.Sequential(
+                Generator(
+                    latent_shape=(n_units_latent, 1),
+                    start_shape=(64, 4, 4),
+                    channels=[64, 32, 16, n_channels],
+                    strides=[2, 2, 2, 1],
+                    kernel_size=3,
+                    dropout=generator_dropout,
+                    act=map_nonlin(generator_nonlin),
+                    num_res_units=generator_n_residual_units,
+                ),
+                nn.Tanh(),
+            ).to(device)
+            discriminator = Discriminator(
+                in_shape=(n_channels, height, width),
+                channels=[16, 32, 64, 1],
+                strides=[2, 2, 2, 2],
+                kernel_size=3,
+                last_act=None,
+                dropout=discriminator_dropout,
+                act=map_nonlin(generator_nonlin),
+                num_res_units=discriminator_n_residual_units,
+            ).to(device)
+
+            return generator, discriminator
+
+    raise ValueError(f"unsupported image arch : ({n_channels}, {height}, {width})")

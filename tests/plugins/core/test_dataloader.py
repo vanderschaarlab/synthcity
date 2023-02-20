@@ -634,10 +634,10 @@ def test_time_series_survival_pack_unpack_padding(as_numpy: bool) -> None:
         assert len(unp_observation_times[idx]) == max_window_len
 
 
-@pytest.mark.parametrize("height", [32, 64])
-@pytest.mark.parametrize("width", [32, 64])
+@pytest.mark.parametrize("height", [55, 64])
+@pytest.mark.parametrize("width", [32, 22])
 def test_image_dataloader_sanity(height: int, width: int) -> None:
-    dataset = datasets.CIFAR10(".", download=True)
+    dataset = datasets.MNIST(".", download=True)
 
     loader = ImageDataLoader(
         data=dataset,
@@ -645,7 +645,7 @@ def test_image_dataloader_sanity(height: int, width: int) -> None:
         height=height,
         width=width,
     )
-    channels = 3
+    channels = 1
 
     assert loader.shape == (len(dataset), channels, height, width)
     assert loader.info()["height"] == height
@@ -664,11 +664,20 @@ def test_image_dataloader_sanity(height: int, width: int) -> None:
 
     assert loader.train().shape == (0.8 * len(dataset), channels, height, width)
     assert loader.test().shape == (0.2 * len(dataset), channels, height, width)
-    print(loader.info())
+
+    x_np, y_np = loader.numpy()
+    assert x_np.shape == (len(dataset), channels, height, width)
+    assert y_np.shape == (len(dataset),)
+    assert isinstance(x_np, np.ndarray)
+    assert isinstance(y_np, np.ndarray)
+
+    df = loader.dataframe()
+    assert df.shape == (len(dataset), channels * height * width + 1)
+    assert isinstance(df, pd.DataFrame)
 
 
 def test_image_dataloader_create_from_info() -> None:
-    dataset = datasets.CIFAR10(".", download=True)
+    dataset = datasets.MNIST(".", download=True)
 
     loader = ImageDataLoader(
         data=dataset,

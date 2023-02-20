@@ -1512,24 +1512,6 @@ class TimeSeriesSurvivalDataLoader(TimeSeriesDataLoader):
         return self.unpack_and_decorate(self.filter_ids(test_ids))
 
 
-@validate_arguments(config=dict(arbitrary_types_allowed=True))
-def create_from_info(
-    data: Union[pd.DataFrame, torch.utils.data.Dataset], info: dict
-) -> "DataLoader":
-    if info["data_type"] == "generic":
-        return GenericDataLoader.from_info(data, info)
-    elif info["data_type"] == "survival_analysis":
-        return SurvivalAnalysisDataLoader.from_info(data, info)
-    elif info["data_type"] == "time_series":
-        return TimeSeriesDataLoader.from_info(data, info)
-    elif info["data_type"] == "time_series_survival":
-        return TimeSeriesSurvivalDataLoader.from_info(data, info)
-    elif info["data_type"] == "image":
-        return ImageDataLoader.from_info(data, info)
-    else:
-        raise RuntimeError(f"invalid datatype {info}")
-
-
 class TransformDataset(torch.utils.data.Dataset):
     def __init__(
         self,
@@ -1537,32 +1519,47 @@ class TransformDataset(torch.utils.data.Dataset):
         transform: Optional[torch.nn.Module] = None,
         indices: Optional[list] = None,
     ) -> None:
+        super().__init__()
+
         if indices is None:
             indices = np.arange(len(data))
 
-        self._indices = indices
-        self._data = data
-        self._transform = transform
+        self.indices = indices
+        self.data = data
+        self.transform = transform
+        self.tensors: Optional[Tuple[torch.Tensor, torch.Tensor]] = None
 
     def __getitem__(self, index: int) -> Tuple[torch.Tensor, torch.Tensor]:
-        x, y = self._data[self._indices[index]]
-        if self._transform:
-            x = self._transform(x)
+        x, y = self.data[self.indices[index]]
+        if self.transform:
+            x = self.transform(x)
         return x, y
 
     def __len__(self) -> int:
-        return len(self._indices)
+        return len(self.indices)
 
     def shape(self) -> Tuple:
-        x, _ = self[self._indices[0]]
+        x, _ = self[self.indices[0]]
 
         return (len(self), *x.shape)
 
-    def hash(self) -> str:
-        x = self._data.data
+    def numpy(self) -> Tuple[np.ndarray, np.ndarray]:
+        if self.tensors is not None:
+            x, y = self.tensors
+            return x, y
 
-        # TODO: find better tensor hashing
-        return str(x.sum().item())
+        x_buff = []
+        y_buff = []
+        for idx in self.indices:
+            x_local, y_local = self[idx]
+            x_buff.append(x_local.unsqueeze(0).cpu().numpy())
+            y_buff.append(y_local)
+
+        x = np.concatenate(x_buff, axis=0)
+        y = np.asarray(y_buff)
+
+        self.tensors = (x, y)
+        return x, y
 
 
 class ImageDataLoader(DataLoader):
@@ -1573,11 +1570,16 @@ class ImageDataLoader(DataLoader):
     Data loader for generic image data.
 
     Constructor Args:
-        data: torch.utils.data.Dataset
+        data: torch.utils.data.Dataset or torch.Tensor
             The image dataset
         random_state: int
             Defaults to zero.
-
+        height: int
+            Height to use internally
+        width: Optional[int]
+            Optional width to use internally. If None, it is used the same value as height.
+        train_size: float = 0.8
+            Train dataset ratio.
     Example:
         >>> TODO
     """
@@ -1585,26 +1587,23 @@ class ImageDataLoader(DataLoader):
     @validate_arguments(config=dict(arbitrary_types_allowed=True))
     def __init__(
         self,
-        data: torch.utils.data.Dataset,
-        height: Optional[int] = None,
+        data: Union[torch.utils.data.Dataset],
+        height: int = 32,
         width: Optional[int] = None,
         random_state: int = 0,
         train_size: float = 0.8,
         **kwargs: Any,
     ) -> None:
-        if height is not None and width is None:
+        if width is None:
             width = height
-        if width is not None and height is None:
-            height = width
 
         self.data_transform = None
-        if height is not None:
-            self.data_transform = transforms.Compose(
-                [
-                    transforms.Resize((height, width)),
-                    transforms.ToTensor(),
-                ]
-            )
+        self.data_transform = transforms.Compose(
+            [
+                transforms.Resize((height, width)),
+                transforms.ToTensor(),
+            ]
+        )
         data = TransformDataset(data, transform=self.data_transform)
 
         self.height = height
@@ -1624,10 +1623,23 @@ class ImageDataLoader(DataLoader):
         return self.data.shape()
 
     def unpack(self, as_numpy: bool = False, pad: bool = False) -> Any:
-        return self.data._data
+        return self.data
 
     def numpy(self) -> np.ndarray:
-        raise NotImplementedError("not supported")
+        x, y = self.data.numpy()
+
+        return x, y
+
+    def dataframe(self) -> pd.DataFrame:
+        x, y = self.numpy()
+        x = x.reshape(len(self), -1)
+
+        x = pd.DataFrame(x)
+        x.columns = x.columns.astype(str)
+
+        x["target"] = y
+
+        return x
 
     def info(self) -> dict:
         return {
@@ -1654,7 +1666,7 @@ class ImageDataLoader(DataLoader):
 
     def sample(self, count: int, random_state: int = 0) -> "DataLoader":
         idxs = np.random.choice(len(self), count, replace=False)
-        subset = TransformDataset(self.data._data, indices=idxs)
+        subset = TransformDataset(self.data.data, indices=idxs)
         return self.decorate(subset)
 
     @staticmethod
@@ -1684,22 +1696,13 @@ class ImageDataLoader(DataLoader):
 
     def train(self) -> "DataLoader":
         train_idx, _ = self._train_test_split()
-        subset = TransformDataset(self.data._data, indices=train_idx)
+        subset = TransformDataset(self.data.data, indices=train_idx)
         return self.decorate(subset)
 
     def test(self) -> "DataLoader":
         _, test_idx = self._train_test_split()
-        subset = TransformDataset(self.data._data, indices=test_idx)
+        subset = TransformDataset(self.data.data, indices=test_idx)
         return self.decorate(subset)
-
-    def hash(self) -> str:
-        return self.data.hash()
-
-    def __repr__(self, *args: Any, **kwargs: Any) -> str:
-        raise NotImplementedError()
-
-    def _repr_html_(self, *args: Any, **kwargs: Any) -> Any:
-        raise NotImplementedError()
 
     def compress(
         self,
@@ -1731,9 +1734,6 @@ class ImageDataLoader(DataLoader):
     def compression_protected_features(self) -> list:
         raise NotImplementedError("Images do not support the compression call")
 
-    def dataframe(self) -> pd.DataFrame:
-        raise NotImplementedError("Images do not support the dataframe representation")
-
     def satisfies(self, constraints: Constraints) -> bool:
         raise NotImplementedError()
 
@@ -1748,3 +1748,21 @@ class ImageDataLoader(DataLoader):
 
     def fillna(self, value: Any) -> "DataLoader":
         raise NotImplementedError()
+
+
+@validate_arguments(config=dict(arbitrary_types_allowed=True))
+def create_from_info(
+    data: Union[pd.DataFrame, torch.utils.data.Dataset], info: dict
+) -> "DataLoader":
+    if info["data_type"] == "generic":
+        return GenericDataLoader.from_info(data, info)
+    elif info["data_type"] == "survival_analysis":
+        return SurvivalAnalysisDataLoader.from_info(data, info)
+    elif info["data_type"] == "time_series":
+        return TimeSeriesDataLoader.from_info(data, info)
+    elif info["data_type"] == "time_series_survival":
+        return TimeSeriesSurvivalDataLoader.from_info(data, info)
+    elif info["data_type"] == "image":
+        return ImageDataLoader.from_info(data, info)
+    else:
+        raise RuntimeError(f"invalid datatype {info}")
