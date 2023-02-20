@@ -214,31 +214,33 @@ class Plugin(Serializable, metaclass=ABCMeta):
         enable_reproducible_results(self.random_state)
 
         self.data_info = X.info()
+        self.is_tabular = X.is_tabular()
 
-        self._schema = Schema(
-            data=X,
-            sampling_strategy=self.sampling_strategy,
-            random_state=self.random_state,
-        )
-
-        X, self._data_encoders = X.encode()
-        if self.compress_dataset:
-            X_hash = X.hash()
-            bkp_file = (
-                self.workspace
-                / f"compressed_df_{X_hash}_{platform.python_version()}.bkp"
+        if X.is_tabular():
+            self._schema = Schema(
+                data=X,
+                sampling_strategy=self.sampling_strategy,
+                random_state=self.random_state,
             )
-            if not bkp_file.exists():
-                X_compressed_context = X.compress()
-                save_to_file(bkp_file, X_compressed_context)
 
-            X, self.compress_context = load_from_file(bkp_file)
+            X, self._data_encoders = X.encode()
+            if self.compress_dataset:
+                X_hash = X.hash()
+                bkp_file = (
+                    self.workspace
+                    / f"compressed_df_{X_hash}_{platform.python_version()}.bkp"
+                )
+                if not bkp_file.exists():
+                    X_compressed_context = X.compress()
+                    save_to_file(bkp_file, X_compressed_context)
 
-        self._training_schema = Schema(
-            data=X,
-            sampling_strategy=self.sampling_strategy,
-            random_state=self.random_state,
-        )
+                X, self.compress_context = load_from_file(bkp_file)
+
+            self._training_schema = Schema(
+                data=X,
+                sampling_strategy=self.sampling_strategy,
+                random_state=self.random_state,
+            )
 
         output = self._fit(X, *args, **kwargs)
         self.fitted = True
@@ -482,11 +484,16 @@ class Plugin(Serializable, metaclass=ABCMeta):
             bool, if the schema includes the dataset or not.
 
         """
+        if not self.is_tabular:
+            raise RuntimeError("schema_includes not supported for non-tabular data")
         other_schema = Schema(data=other)
         return self.schema().includes(other_schema)
 
     def schema(self) -> Schema:
         """The reference schema"""
+        if not self.is_tabular:
+            raise RuntimeError("schema not supported for non-tabular data")
+
         if self._schema is None:
             raise RuntimeError("Fit the model first")
 
@@ -494,6 +501,9 @@ class Plugin(Serializable, metaclass=ABCMeta):
 
     def training_schema(self) -> Schema:
         """The internal schema"""
+        if not self.is_tabular:
+            raise RuntimeError("schema not supported for non-tabular data")
+
         if self._training_schema is None:
             raise RuntimeError("Fit the model first")
 
@@ -518,6 +528,9 @@ class Plugin(Serializable, metaclass=ABCMeta):
         Returns:
             self
         """
+        if not self.is_tabular:
+            raise RuntimeError("plot not supported for non-tabular data")
+
         X_syn = self.generate(count=count, **kwargs)
 
         if "marginal" in plots:

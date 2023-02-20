@@ -32,6 +32,7 @@ def test_generic_dataloader_sanity() -> None:
 
     loader = GenericDataLoader(X, target_column="target")
 
+    assert loader.is_tabular()
     assert loader.raw().shape == X.shape
     assert loader.type() == "generic"
     assert loader.shape == X.shape
@@ -163,6 +164,7 @@ def test_survival_dataloader_sanity() -> None:
     assert (loader.dataframe().values == df.values).all()
     assert loader.raw().shape == df.shape
 
+    assert loader.is_tabular()
     assert loader.type() == "survival_analysis"
     assert loader.shape == df.shape
     assert sorted(list(loader.dataframe().columns)) == sorted(list(df.columns))
@@ -302,6 +304,8 @@ def test_time_series_dataloader_sanity(source: Any) -> None:
     )
 
     assert len(loader.raw()) == 5
+    assert loader.is_tabular()
+
     feat_cnt = temporal_data[0].shape[1] + 2  # id, time_id
     if static_data is not None:
         feat_cnt += static_data.shape[1]
@@ -633,7 +637,7 @@ def test_time_series_survival_pack_unpack_padding(as_numpy: bool) -> None:
 @pytest.mark.parametrize("height", [32, 64])
 @pytest.mark.parametrize("width", [32, 64])
 def test_image_dataloader_sanity(height: int, width: int) -> None:
-    dataset = datasets.MNIST(".", download=True)
+    dataset = datasets.CIFAR10(".", download=True)
 
     loader = ImageDataLoader(
         data=dataset,
@@ -641,26 +645,30 @@ def test_image_dataloader_sanity(height: int, width: int) -> None:
         height=height,
         width=width,
     )
+    channels = 3
 
-    assert loader.shape == (len(dataset), height, width)
+    assert loader.shape == (len(dataset), channels, height, width)
     assert loader.info()["height"] == height
     assert loader.info()["width"] == width
+    assert loader.info()["channels"] == channels
     assert loader.info()["len"] == len(dataset)
+    assert not loader.is_tabular()
 
     assert isinstance(loader.unpack(), torch.utils.data.Dataset)
 
-    assert loader.sample(5).shape == (5, height, width)
+    assert loader.sample(5).shape == (5, channels, height, width)
 
-    assert loader[0][0].shape == (1, height, width)
+    assert loader[0][0].shape == (channels, height, width)
 
     assert loader.hash() != ""
 
-    assert loader.train().shape == (0.8 * len(dataset), height, width)
-    assert loader.test().shape == (0.2 * len(dataset), height, width)
+    assert loader.train().shape == (0.8 * len(dataset), channels, height, width)
+    assert loader.test().shape == (0.2 * len(dataset), channels, height, width)
+    print(loader.info())
 
 
 def test_image_dataloader_create_from_info() -> None:
-    dataset = datasets.MNIST(".", download=True)
+    dataset = datasets.CIFAR10(".", download=True)
 
     loader = ImageDataLoader(
         data=dataset,

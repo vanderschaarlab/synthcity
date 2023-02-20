@@ -257,6 +257,10 @@ class DataLoader(metaclass=ABCMeta):
 
         return self.from_info(decoded, self.info())
 
+    @abstractmethod
+    def is_tabular(self) -> bool:
+        ...
+
 
 class GenericDataLoader(DataLoader):
     """
@@ -442,6 +446,9 @@ class GenericDataLoader(DataLoader):
     def fillna(self, value: Any) -> "DataLoader":
         self.data = self.data.fillna(value)
         return self
+
+    def is_tabular(self) -> bool:
+        return True
 
 
 class SurvivalAnalysisDataLoader(DataLoader):
@@ -644,6 +651,9 @@ class SurvivalAnalysisDataLoader(DataLoader):
     def fillna(self, value: Any) -> "DataLoader":
         self.data = self.data.fillna(value)
         return self
+
+    def is_tabular(self) -> bool:
+        return True
 
 
 class TimeSeriesDataLoader(DataLoader):
@@ -1304,6 +1314,9 @@ class TimeSeriesDataLoader(DataLoader):
 
         return static_df, temporal_data, observation_times, outcome_df
 
+    def is_tabular(self) -> bool:
+        return True
+
 
 class TimeSeriesSurvivalDataLoader(TimeSeriesDataLoader):
     """
@@ -1543,7 +1556,7 @@ class TransformDataset(torch.utils.data.Dataset):
     def shape(self) -> Tuple:
         x, _ = self[self._indices[0]]
 
-        return (len(self), *x.shape[1:])
+        return (len(self), *x.shape)
 
     def hash(self) -> str:
         x = self._data.data
@@ -1596,6 +1609,7 @@ class ImageDataLoader(DataLoader):
 
         self.height = height
         self.width = width
+        self.channels = data.shape()[1]
 
         super().__init__(
             data_type="image",
@@ -1622,6 +1636,7 @@ class ImageDataLoader(DataLoader):
             "train_size": self.train_size,
             "height": self.height,
             "width": self.width,
+            "channels": self.channels,
             "random_state": self.random_state,
         }
 
@@ -1705,6 +1720,9 @@ class ImageDataLoader(DataLoader):
         encoders: Dict[str, Any],
     ) -> "DataLoader":
         return self
+
+    def is_tabular(self) -> bool:
+        return False
 
     @property
     def columns(self) -> list:
