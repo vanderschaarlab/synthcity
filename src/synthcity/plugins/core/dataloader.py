@@ -10,6 +10,7 @@ import torch
 from pydantic import validate_arguments
 from sklearn.model_selection import train_test_split
 from sklearn.preprocessing import LabelEncoder
+from torchvision import transforms
 
 # synthcity absolute
 from synthcity.plugins.core.constraints import Constraints
@@ -410,7 +411,7 @@ class GenericDataLoader(DataLoader):
             train_size=info["train_size"],
         )
 
-    def __getitem__(self, feature: Union[str, list]) -> Any:
+    def __getitem__(self, feature: Union[str, list, int]) -> Any:
         return self.data[feature]
 
     def __setitem__(self, feature: str, val: Any) -> None:
@@ -613,7 +614,7 @@ class SurvivalAnalysisDataLoader(DataLoader):
             time_horizons=info["time_horizons"],
         )
 
-    def __getitem__(self, feature: Union[str, list]) -> Any:
+    def __getitem__(self, feature: Union[str, list, int]) -> Any:
         return self.data[feature]
 
     def __setitem__(self, feature: str, val: Any) -> None:
@@ -888,7 +889,7 @@ class TimeSeriesDataLoader(DataLoader):
             outcome,
         )
 
-    def __getitem__(self, feature: Union[str, list]) -> Any:
+    def __getitem__(self, feature: Union[str, list, int]) -> Any:
         return self.data["seq_data"][feature]
 
     def __setitem__(self, feature: str, val: Any) -> None:
@@ -1499,7 +1500,9 @@ class TimeSeriesSurvivalDataLoader(TimeSeriesDataLoader):
 
 
 @validate_arguments(config=dict(arbitrary_types_allowed=True))
-def create_from_info(data: pd.DataFrame, info: dict) -> "DataLoader":
+def create_from_info(
+    data: Union[pd.DataFrame, torch.utils.data.Dataset], info: dict
+) -> "DataLoader":
     if info["data_type"] == "generic":
         return GenericDataLoader.from_info(data, info)
     elif info["data_type"] == "survival_analysis":
@@ -1508,8 +1511,45 @@ def create_from_info(data: pd.DataFrame, info: dict) -> "DataLoader":
         return TimeSeriesDataLoader.from_info(data, info)
     elif info["data_type"] == "time_series_survival":
         return TimeSeriesSurvivalDataLoader.from_info(data, info)
+    elif info["data_type"] == "image":
+        return ImageDataLoader.from_info(data, info)
     else:
         raise RuntimeError(f"invalid datatype {info}")
+
+
+class TransformDataset(torch.utils.data.Dataset):
+    def __init__(
+        self,
+        data: torch.utils.data.Dataset,
+        transform: Optional[torch.nn.Module] = None,
+        indices: Optional[list] = None,
+    ) -> None:
+        if indices is None:
+            indices = np.arange(len(data))
+
+        self._indices = indices
+        self._data = data
+        self._transform = transform
+
+    def __getitem__(self, index: int) -> Tuple[torch.Tensor, torch.Tensor]:
+        x, y = self._data[self._indices[index]]
+        if self._transform:
+            x = self._transform(x)
+        return x, y
+
+    def __len__(self) -> int:
+        return len(self._indices)
+
+    def shape(self) -> Tuple:
+        x, _ = self[self._indices[0]]
+
+        return (len(self), *x.shape[1:])
+
+    def hash(self) -> str:
+        x = self._data.data
+
+        # TODO: find better tensor hashing
+        return str(x.sum().item())
 
 
 class ImageDataLoader(DataLoader):
@@ -1533,14 +1573,29 @@ class ImageDataLoader(DataLoader):
     def __init__(
         self,
         data: torch.utils.data.Dataset,
+        height: Optional[int] = None,
+        width: Optional[int] = None,
         random_state: int = 0,
         train_size: float = 0.8,
         **kwargs: Any,
     ) -> None:
-        if not isinstance(data, pd.DataFrame):
-            data = pd.DataFrame(data)
+        if height is not None and width is None:
+            width = height
+        if width is not None and height is None:
+            height = width
 
-        data.columns = data.columns.astype(str)
+        self.data_transform = None
+        if height is not None:
+            self.data_transform = transforms.Compose(
+                [
+                    transforms.Resize((height, width)),
+                    transforms.ToTensor(),
+                ]
+            )
+        data = TransformDataset(data, transform=self.data_transform)
+
+        self.height = height
+        self.width = width
 
         super().__init__(
             data_type="image",
@@ -1552,29 +1607,22 @@ class ImageDataLoader(DataLoader):
 
     @property
     def shape(self) -> tuple:
-        return self.data.dataset.shape
-
-    @property
-    def columns(self) -> list:
-        return list(self.data.columns)
-
-    def compression_protected_features(self) -> list:
-        return []
+        return self.data.shape()
 
     def unpack(self, as_numpy: bool = False, pad: bool = False) -> Any:
-        raise NotImplementedError()
-
-    def dataframe(self) -> pd.DataFrame:
-        raise NotImplementedError()
+        return self.data._data
 
     def numpy(self) -> np.ndarray:
-        raise NotImplementedError()
+        raise NotImplementedError("not supported")
 
     def info(self) -> dict:
         return {
             "data_type": self.data_type,
             "len": len(self),
             "train_size": self.train_size,
+            "height": self.height,
+            "width": self.width,
+            "random_state": self.random_state,
         }
 
     def __len__(self) -> int:
@@ -1585,50 +1633,52 @@ class ImageDataLoader(DataLoader):
             data,
             random_state=self.random_state,
             train_size=self.train_size,
+            height=self.height,
+            width=self.width,
         )
-
-    def satisfies(self, constraints: Constraints) -> bool:
-        raise NotImplementedError()
-
-    def match(self, constraints: Constraints) -> "DataLoader":
-        raise NotImplementedError()
 
     def sample(self, count: int, random_state: int = 0) -> "DataLoader":
-        raise NotImplementedError()
-
-    def drop(self, columns: list = []) -> "DataLoader":
-        raise NotImplementedError()
+        idxs = np.random.choice(len(self), count, replace=False)
+        subset = TransformDataset(self.data._data, indices=idxs)
+        return self.decorate(subset)
 
     @staticmethod
-    def from_info(data: pd.DataFrame, info: dict) -> "GenericDataLoader":
-        if not isinstance(data, pd.DataFrame):
+    def from_info(data: torch.utils.data.Dataset, info: dict) -> "ImageDataLoader":
+        if not isinstance(data, torch.utils.data.Dataset):
             raise ValueError(f"Invalid data type {type(data)}")
 
-        return GenericDataLoader(
+        return ImageDataLoader(
             data,
             train_size=info["train_size"],
+            height=info["height"],
+            width=info["width"],
+            random_state=info["random_state"],
         )
 
-    def __getitem__(self, feature: Union[str, list]) -> Any:
-        raise NotImplementedError()
-
-    def __setitem__(self, feature: str, val: Any) -> None:
-        raise NotImplementedError()
+    def __getitem__(self, index: Union[list, int, str]) -> Any:
+        return self.data[index]
 
     def _train_test_split(self) -> Tuple:
-        raise NotImplementedError()
+        indices = np.arange(len(self.data))
+
+        return train_test_split(
+            indices,
+            train_size=self.train_size,
+            random_state=self.random_state,
+        )
 
     def train(self) -> "DataLoader":
-        raise NotImplementedError()
+        train_idx, _ = self._train_test_split()
+        subset = TransformDataset(self.data._data, indices=train_idx)
+        return self.decorate(subset)
 
     def test(self) -> "DataLoader":
-        raise NotImplementedError()
-
-    def fillna(self, value: Any) -> "DataLoader":
-        raise NotImplementedError()
+        _, test_idx = self._train_test_split()
+        subset = TransformDataset(self.data._data, indices=test_idx)
+        return self.decorate(subset)
 
     def hash(self) -> str:
-        raise NotImplementedError()
+        return self.data.hash()
 
     def __repr__(self, *args: Any, **kwargs: Any) -> str:
         raise NotImplementedError()
@@ -1655,3 +1705,28 @@ class ImageDataLoader(DataLoader):
         encoders: Dict[str, Any],
     ) -> "DataLoader":
         return self
+
+    @property
+    def columns(self) -> list:
+        raise NotImplementedError("Images do not support the columns call")
+
+    def compression_protected_features(self) -> list:
+        raise NotImplementedError("Images do not support the compression call")
+
+    def dataframe(self) -> pd.DataFrame:
+        raise NotImplementedError("Images do not support the dataframe representation")
+
+    def satisfies(self, constraints: Constraints) -> bool:
+        raise NotImplementedError()
+
+    def match(self, constraints: Constraints) -> "DataLoader":
+        raise NotImplementedError()
+
+    def drop(self, columns: list = []) -> "DataLoader":
+        raise NotImplementedError()
+
+    def __setitem__(self, feature: str, val: Any) -> None:
+        raise NotImplementedError()
+
+    def fillna(self, value: Any) -> "DataLoader":
+        raise NotImplementedError()

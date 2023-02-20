@@ -6,12 +6,15 @@ from typing import Any
 import numpy as np
 import pandas as pd
 import pytest
+import torch
 from lifelines.datasets import load_rossi
 from sklearn.datasets import load_breast_cancer
+from torchvision import datasets
 
 # synthcity absolute
 from synthcity.plugins.core.dataloader import (
     GenericDataLoader,
+    ImageDataLoader,
     SurvivalAnalysisDataLoader,
     TimeSeriesDataLoader,
     TimeSeriesSurvivalDataLoader,
@@ -625,3 +628,49 @@ def test_time_series_survival_pack_unpack_padding(as_numpy: bool) -> None:
     for idx, item in enumerate(unp_temporal):
         assert len(unp_temporal[idx]) == max_window_len
         assert len(unp_observation_times[idx]) == max_window_len
+
+
+@pytest.mark.parametrize("height", [32, 64])
+@pytest.mark.parametrize("width", [32, 64])
+def test_image_dataloader_sanity(height: int, width: int) -> None:
+    dataset = datasets.MNIST(".", download=True)
+
+    loader = ImageDataLoader(
+        data=dataset,
+        train_size=0.8,
+        height=height,
+        width=width,
+    )
+
+    assert loader.shape == (len(dataset), height, width)
+    assert loader.info()["height"] == height
+    assert loader.info()["width"] == width
+    assert loader.info()["len"] == len(dataset)
+
+    assert isinstance(loader.unpack(), torch.utils.data.Dataset)
+
+    assert loader.sample(5).shape == (5, height, width)
+
+    assert loader[0][0].shape == (1, height, width)
+
+    assert loader.hash() != ""
+
+    assert loader.train().shape == (0.8 * len(dataset), height, width)
+    assert loader.test().shape == (0.2 * len(dataset), height, width)
+
+
+def test_image_dataloader_create_from_info() -> None:
+    dataset = datasets.MNIST(".", download=True)
+
+    loader = ImageDataLoader(
+        data=dataset,
+        train_size=0.8,
+        height=32,
+    )
+
+    data = loader.unpack()
+
+    reloaded = create_from_info(data, loader.info())
+
+    for key in loader.info():
+        assert reloaded.info()[key] == loader.info()[key]
