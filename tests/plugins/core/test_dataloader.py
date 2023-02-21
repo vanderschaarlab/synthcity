@@ -9,15 +9,17 @@ import pytest
 import torch
 from lifelines.datasets import load_rossi
 from sklearn.datasets import load_breast_cancer
-from torchvision import datasets
+from torchvision import datasets, transforms
 
 # synthcity absolute
 from synthcity.plugins.core.dataloader import (
+    GeneratedDataset,
     GenericDataLoader,
     ImageDataLoader,
     SurvivalAnalysisDataLoader,
     TimeSeriesDataLoader,
     TimeSeriesSurvivalDataLoader,
+    TransformDataset,
     create_from_info,
 )
 from synthcity.utils.datasets.time_series.google_stocks import GoogleStocksDataloader
@@ -693,3 +695,35 @@ def test_image_dataloader_create_from_info() -> None:
 
     for key in loader.info():
         assert reloaded.info()[key] == loader.info()[key]
+
+
+def test_image_datasets() -> None:
+    size = 100
+    X = torch.rand(size, 10, 10)
+    y = torch.rand(size)
+
+    gen_dataset = GeneratedDataset(images=X, targets=y)
+    assert (gen_dataset[0][0] == X[0]).all()
+    assert (gen_dataset[0][1] == y[0]).all()
+
+    img_transform = transforms.Compose(
+        [
+            transforms.ToPILImage(),
+            transforms.Resize((20, 20)),
+            transforms.ToTensor(),
+        ]
+    )
+
+    transform_dataset = TransformDataset(gen_dataset, transform=img_transform)
+    assert transform_dataset.shape() == (size, 1, 20, 20)
+    assert transform_dataset[0][0].shape == (1, 20, 20)
+    assert transform_dataset[0][1] == y[0]
+
+    gen_dataset = GeneratedDataset(images=X, targets=None)
+    assert (gen_dataset[0][0] == X[0]).all()
+    assert gen_dataset[0][1] is None
+
+    transform_dataset = TransformDataset(gen_dataset, transform=img_transform)
+    assert transform_dataset.shape() == (size, 1, 20, 20)
+    assert transform_dataset[0][0].shape == (1, 20, 20)
+    assert transform_dataset[0][1] is None

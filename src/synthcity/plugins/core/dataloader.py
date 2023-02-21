@@ -1514,6 +1514,8 @@ class TimeSeriesSurvivalDataLoader(TimeSeriesDataLoader):
 
 
 class TransformDataset(torch.utils.data.Dataset):
+    """Helper dataset wrapper for manipulating another dataset"""
+
     def __init__(
         self,
         data: torch.utils.data.Dataset,
@@ -1568,6 +1570,41 @@ class TransformDataset(torch.utils.data.Dataset):
             labels.append(y)
 
         return np.asarray(labels)
+
+
+class GeneratedDataset(torch.utils.data.Dataset):
+    """Helper dataset for wrapping existing tensors"""
+
+    def __init__(
+        self,
+        images: torch.Tensor,
+        targets: Optional[torch.Tensor],
+    ) -> None:
+        super().__init__()
+
+        if targets is not None and len(targets) != len(images):
+            raise ValueError("Invalid input")
+
+        self.images = images
+        self.targets = targets
+
+    def __getitem__(self, index: int) -> Tuple[torch.Tensor, Optional[torch.Tensor]]:
+        y: Optional[torch.Tensor] = None
+        x = self.images[index]
+
+        if self.targets is not None:
+            y = self.targets[index]
+
+        return x, y
+
+    def __len__(self) -> int:
+        return len(self.images)
+
+    def labels(self) -> Optional[np.ndarray]:
+        if self.targets is None:
+            return None
+
+        return self.targets.cpu().numpy()
 
 
 class ImageDataLoader(DataLoader):
