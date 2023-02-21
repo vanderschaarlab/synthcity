@@ -36,6 +36,35 @@ def weights_init(m: nn.Module) -> None:
         torch.nn.init.constant_(m.bias, val=0)
 
 
+class ConditionalDataset(torch.utils.data.Dataset):
+    """Helper dataset for wrapping existing datasets"""
+
+    def __init__(
+        self,
+        data: torch.utils.data.Dataset,
+        cond: Optional[torch.Tensor],
+    ) -> None:
+        super().__init__()
+
+        if cond is not None and len(cond) != len(data):
+            raise ValueError("Invalid input")
+
+        self.data = data
+        self.cond = cond
+
+    def __getitem__(self, index: int) -> Tuple[torch.Tensor, Optional[torch.Tensor]]:
+        cond: Optional[torch.Tensor] = None
+        x = self.data[index][0]
+
+        if self.cond is not None:
+            cond = self.cond[index]
+
+        return x, cond
+
+    def __len__(self) -> int:
+        return len(self.data)
+
+
 class ImageGAN(nn.Module):
     """
     .. inheritance-diagram:: synthcity.plugins.core.models.image_gan.ImageGAN
@@ -227,6 +256,11 @@ class ImageGAN(nn.Module):
     ) -> "ImageGAN":
         clear_cache()
 
+        self.with_conditional = False
+        if cond is not None:
+            cond = self._check_tensor(cond)
+            self.with_conditional = True
+
         self._train(
             X,
             cond=cond,
@@ -243,7 +277,6 @@ class ImageGAN(nn.Module):
     ) -> torch.Tensor:
         clear_cache()
         self.generator.eval()
-
         with torch.no_grad():
             return self(count, cond=cond).detach()
 
@@ -255,11 +288,26 @@ class ImageGAN(nn.Module):
     ) -> torch.Tensor:
         fixed_noise = self._get_noise(count)
 
-        return self.generator(fixed_noise)
+        if cond is not None:
+            cond = self._check_tensor(cond)
 
-    def dataloader(self, dataset: torch.utils.data.Dataset) -> DataLoader:
+        return self.generator(fixed_noise, cond=cond)
+
+    def dataloader(
+        self, dataset: torch.utils.data.Dataset, cond: Optional[torch.Tensor] = None
+    ) -> DataLoader:
+        if cond is None:
+            return DataLoader(
+                dataset,
+                batch_size=self.batch_size,
+                sampler=self.dataloader_sampler,
+                pin_memory=False,
+                shuffle=True,
+            )
+
+        cond_dataset = ConditionalDataset(dataset, cond)
         return DataLoader(
-            dataset,
+            cond_dataset,
             batch_size=self.batch_size,
             sampler=self.dataloader_sampler,
             pin_memory=False,
@@ -271,6 +319,7 @@ class ImageGAN(nn.Module):
         X: torch.Tensor,
         fake_labels_generator: Callable,
         true_labels_generator: Callable,
+        cond: Optional[torch.Tensor] = None,
     ) -> float:
         # Update the G network
         self.generator.train()
@@ -280,9 +329,9 @@ class ImageGAN(nn.Module):
 
         noise = self._get_noise(batch_size)
 
-        fake = self.generator(noise)
+        fake = self.generator(noise, cond=cond)
 
-        output = self.discriminator(fake).squeeze().float()
+        output = self.discriminator(fake, cond=cond).squeeze().float()
         # Calculate G's loss based on this output
         errG = -torch.mean(output)
         for extra_loss in self.generator_extra_penalty_cbks:
@@ -320,6 +369,7 @@ class ImageGAN(nn.Module):
         X: torch.Tensor,
         fake_labels_generator: Callable,
         true_labels_generator: Callable,
+        cond: Optional[torch.Tensor] = None,
     ) -> float:
         # Update the D network
         self.discriminator.train()
@@ -333,15 +383,15 @@ class ImageGAN(nn.Module):
             real_X = X.to(self.device)
 
             real_labels = true_labels_generator(X).to(self.device).squeeze()
-            real_output = self.discriminator(real_X).squeeze().float()
+            real_output = self.discriminator(real_X, cond=cond).squeeze().float()
 
             # Train with all-fake batch
             noise = self._get_noise(batch_size)
 
-            fake = self.generator(noise)
+            fake = self.generator(noise, cond=cond)
 
             fake_labels = fake_labels_generator(fake).to(self.device).squeeze().float()
-            fake_output = self.discriminator(fake.detach()).squeeze()
+            fake_output = self.discriminator(fake.detach(), cond=cond).squeeze()
 
             # Compute errors. Some fake inputs might be marked as real for privacy guarantees.
 
@@ -356,6 +406,7 @@ class ImageGAN(nn.Module):
             penalty = self._loss_gradient_penalty(
                 real_samples=real_X,
                 fake_samples=fake,
+                cond=cond,
             )
             errD = -errD_real + errD_fake
 
@@ -405,13 +456,18 @@ class ImageGAN(nn.Module):
         D_losses = []
 
         for i, data in enumerate(loader):
-            X = data[0]
+            cond: Optional[torch.Tensor] = None
+            if self.with_conditional:
+                X, cond = data
+            else:
+                X = data[0]
 
             D_losses.append(
                 self._train_epoch_discriminator(
                     X,
                     fake_labels_generator=fake_labels_generator,
                     true_labels_generator=true_labels_generator,
+                    cond=cond,
                 )
             )
             G_losses.append(
@@ -419,6 +475,7 @@ class ImageGAN(nn.Module):
                     X,
                     fake_labels_generator=fake_labels_generator,
                     true_labels_generator=true_labels_generator,
+                    cond=cond,
                 )
             )
 
@@ -436,6 +493,7 @@ class ImageGAN(nn.Module):
     def _evaluate_patience_metric(
         self,
         X: torch.Tensor,
+        cond: Optional[torch.Tensor],
         prev_score: float,
         patience: int,
     ) -> Tuple[float, int, bool]:
@@ -443,7 +501,7 @@ class ImageGAN(nn.Module):
         if self.patience_metric is None:
             return prev_score, patience, save
 
-        X_syn = self.generate(len(X))
+        X_syn = self.generate(len(X), cond=cond)
         new_score = self.patience_metric.evaluate(
             pd.DataFrame(X.detach().cpu().numpy()),
             pd.DataFrame(X_syn),
@@ -466,9 +524,11 @@ class ImageGAN(nn.Module):
 
         return score, patience, save
 
-    def _train_test_split(self, X: torch.utils.data.Dataset) -> Tuple:
+    def _train_test_split(
+        self, X: torch.utils.data.Dataset, cond: Optional[torch.Tensor] = None
+    ) -> Tuple:
         if self.patience_metric is None:
-            return X, None
+            return X, cond, None, None
 
         if self.dataloader_sampler is not None:
             train_idx, test_idx = self.dataloader_sampler.train_test()
@@ -479,7 +539,10 @@ class ImageGAN(nn.Module):
             train_idx, test_idx = total[:split], total[split:]
 
         X_train, X_val = X[train_idx], X[test_idx]
-        return X_train, X_val
+        cond_train, cond_val = None, None
+        if cond is not None:
+            cond_train, cond_val = cond[train_idx], cond[test_idx]
+        return X_train, cond_train, X_val, cond_val
 
     def _train(
         self,
@@ -489,10 +552,10 @@ class ImageGAN(nn.Module):
         true_labels_generator: Optional[Callable] = None,
     ) -> "ImageGAN":
 
-        X, X_val = self._train_test_split(X)
+        X, cond, X_val, cond_val = self._train_test_split(X, cond)
 
         # Load Dataset
-        loader = self.dataloader(X)
+        loader = self.dataloader(X, cond)
 
         # Privacy
         if self.dp_enabled:
@@ -542,7 +605,7 @@ class ImageGAN(nn.Module):
 
                 if self.patience_metric is not None:
                     patience_score, patience, save = self._evaluate_patience_metric(
-                        X_val, patience_score, patience
+                        X_val, cond_val, patience_score, patience
                     )
                     if save:
                         best_state_dict = self.state_dict()
@@ -582,7 +645,10 @@ class ImageGAN(nn.Module):
         return err
 
     def _loss_gradient_penalty(
-        self, real_samples: torch.Tensor, fake_samples: torch.Tensor
+        self,
+        real_samples: torch.Tensor,
+        fake_samples: torch.Tensor,
+        cond: Optional[torch.Tensor] = None,
     ) -> torch.Tensor:
         batch_size, channel, height, width = real_samples.shape
         # alpha is selected randomly between 0 and 1
@@ -595,7 +661,7 @@ class ImageGAN(nn.Module):
         interpolatted_samples = (alpha * real_samples) + (1 - alpha) * fake_samples
 
         # calculate the critic score on the interpolated image
-        interpolated_score = self.discriminator(interpolatted_samples)
+        interpolated_score = self.discriminator(interpolatted_samples, cond=cond)
 
         # take the gradient of the score wrt to the interpolated image
         gradient = torch.autograd.grad(

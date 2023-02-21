@@ -1,12 +1,17 @@
 # third party
 import numpy as np
 import pytest
-from monai.networks.nets import Discriminator, Generator
-from torch import nn
+import torch
 from torch.utils.data import Subset
 from torchvision import datasets, transforms
 
 # synthcity absolute
+from synthcity.plugins.core.dataloader import TransformDataset
+from synthcity.plugins.core.models.convnet import (
+    ConditionalDiscriminator,
+    ConditionalGenerator,
+    suggest_image_generator_discriminator_arch,
+)
 from synthcity.plugins.core.models.image_gan import ImageGAN
 from synthcity.utils.constants import DEVICE
 
@@ -22,39 +27,26 @@ data_transform = transforms.Compose(
 batch_size = 128
 dataset = datasets.MNIST(".", download=True, transform=data_transform)
 dataset = Subset(dataset, np.arange(len(dataset))[:100])
-
-
-def generator(latent_size: int) -> Generator:
-    # upsampling
-    return nn.Sequential(
-        Generator(
-            latent_shape=(latent_size, 1),
-            start_shape=(64, 4, 4),
-            channels=[64, 32, 16, 1],
-            strides=[2, 2, 2, 1],
-            kernel_size=3,
-            dropout=0.2,
-        ),
-        nn.Tanh(),
-    ).to(DEVICE)
-
-
-def discriminator() -> Discriminator:
-    return Discriminator(
-        in_shape=(1, IMG_SIZE, IMG_SIZE),
-        channels=[16, 32, 64, 1],
-        strides=[2, 2, 2, 2],
-        kernel_size=3,
-        last_act=None,
-        dropout=0.2,
-    ).to(DEVICE)
+dataset = TransformDataset(dataset)
 
 
 def test_network_config() -> None:
     noise_dim = 123
+    (
+        image_generator,
+        image_discriminator,
+    ) = suggest_image_generator_discriminator_arch(
+        n_units_latent=noise_dim,
+        n_channels=1,
+        height=IMG_SIZE,
+        width=IMG_SIZE,
+        device=DEVICE,
+        generator_dropout=0.2,
+    )
+
     net = ImageGAN(
-        image_generator=generator(noise_dim),
-        image_discriminator=discriminator(),
+        image_generator=image_generator,
+        image_discriminator=image_discriminator,
         n_units_latent=noise_dim,
         n_channels=1,
         # Generator
@@ -75,8 +67,8 @@ def test_network_config() -> None:
         lambda_identifiability_penalty=3,
     )
 
-    assert isinstance(net.generator[0], Generator)
-    assert isinstance(net.discriminator, Discriminator)
+    assert isinstance(net.generator, ConditionalGenerator)
+    assert isinstance(net.discriminator, ConditionalDiscriminator)
     assert net.batch_size == 64
     assert net.generator_n_iter == 1001
     assert net.discriminator_n_iter == 1002
@@ -92,10 +84,20 @@ def test_basic_network(
     lr: float,
 ) -> None:
     noise_dim = 123
-
+    (
+        image_generator,
+        image_discriminator,
+    ) = suggest_image_generator_discriminator_arch(
+        n_units_latent=noise_dim,
+        n_channels=1,
+        height=IMG_SIZE,
+        width=IMG_SIZE,
+        device=DEVICE,
+        generator_dropout=0.2,
+    )
     net = ImageGAN(
-        image_generator=generator(noise_dim),
-        image_discriminator=discriminator(),
+        image_generator=image_generator,
+        image_discriminator=image_discriminator,
         n_units_latent=noise_dim,
         n_channels=1,
         generator_n_iter=n_iter,
@@ -111,10 +113,20 @@ def test_basic_network(
 @pytest.mark.parametrize("generator_extra_penalties", [[], ["identifiability_penalty"]])
 def test_image_gan_generation(generator_extra_penalties: list) -> None:
     noise_dim = 123
-
+    (
+        image_generator,
+        image_discriminator,
+    ) = suggest_image_generator_discriminator_arch(
+        n_units_latent=noise_dim,
+        n_channels=1,
+        height=IMG_SIZE,
+        width=IMG_SIZE,
+        device=DEVICE,
+        generator_dropout=0.2,
+    )
     model = ImageGAN(
-        image_generator=generator(noise_dim).to(DEVICE),
-        image_discriminator=discriminator().to(DEVICE),
+        image_generator=image_generator,
+        image_discriminator=image_discriminator,
         n_units_latent=noise_dim,
         n_channels=1,
         generator_n_iter=10,
@@ -123,5 +135,35 @@ def test_image_gan_generation(generator_extra_penalties: list) -> None:
     model.fit(dataset)
 
     generated = model.generate(10)
+
+    assert generated.shape == (10, 1, IMG_SIZE, IMG_SIZE)
+
+
+def test_image_gan_conditional_generation() -> None:
+    noise_dim = 123
+    cond = dataset.labels()
+    (
+        image_generator,
+        image_discriminator,
+    ) = suggest_image_generator_discriminator_arch(
+        n_units_latent=noise_dim,
+        n_channels=1,
+        height=IMG_SIZE,
+        width=IMG_SIZE,
+        device=DEVICE,
+        generator_dropout=0.2,
+    )
+
+    model = ImageGAN(
+        image_generator=image_generator,
+        image_discriminator=image_discriminator,
+        n_units_latent=noise_dim,
+        n_channels=1,
+        generator_n_iter=10,
+    )
+    model.fit(dataset, cond=cond)
+
+    cnt = 10
+    generated = model.generate(cnt, cond=torch.ones(cnt).to(DEVICE))
 
     assert generated.shape == (10, 1, IMG_SIZE, IMG_SIZE)

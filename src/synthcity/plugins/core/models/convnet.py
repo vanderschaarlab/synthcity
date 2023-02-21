@@ -1,5 +1,5 @@
 # stdlib
-from typing import Any, Tuple
+from typing import Any, Optional, Tuple
 
 # third party
 import numpy as np
@@ -13,6 +13,25 @@ from torch import nn
 import synthcity.logger as log
 from synthcity.utils.constants import DEVICE
 from synthcity.utils.reproducibility import enable_reproducible_results
+
+
+def map_nonlin(nonlin: str) -> Act:
+    if nonlin == "relu":
+        return Act.RELU
+    elif nonlin == "elu":
+        return Act.ELU
+    elif nonlin == "prelu":
+        return Act.PRELU
+    elif nonlin == "leaky_relu":
+        return Act.LEAKYRELU
+    elif nonlin == "sigmoid":
+        return Act.SIGMOID
+    elif nonlin == "softmax":
+        return Act.SOFTMAX
+    elif nonlin == "tanh":
+        return Act.TANH
+
+    raise ValueError(f"Unknown activation {nonlin}")
 
 
 class ConvNet(nn.Module):
@@ -217,23 +236,28 @@ class ConvNet(nn.Module):
         return len(self.model)
 
 
-def map_nonlin(nonlin: str) -> Act:
-    if nonlin == "relu":
-        return Act.RELU
-    elif nonlin == "elu":
-        return Act.ELU
-    elif nonlin == "prelu":
-        return Act.PRELU
-    elif nonlin == "leaky_relu":
-        return Act.LEAKYRELU
-    elif nonlin == "sigmoid":
-        return Act.SIGMOID
-    elif nonlin == "softmax":
-        return Act.SOFTMAX
-    elif nonlin == "tanh":
-        return Act.TANH
+class ConditionalGenerator(nn.Module):
+    def __init__(self, model: nn.Module, cond: Optional[torch.Tensor] = None) -> None:
+        super(ConditionalGenerator, self).__init__()
 
-    raise ValueError(f"Unknown activation {nonlin}")
+        self.model = model
+        self.label_conditioned_generator: Optional[nn.Module] = None
+
+    def forward(
+        self, noise: torch.Tensor, cond: Optional[torch.Tensor] = None
+    ) -> torch.Tensor:
+        return self.model(noise)
+
+
+class ConditionalDiscriminator(nn.Module):
+    def __init__(self, model: nn.Module, cond: Optional[torch.Tensor] = None) -> None:
+        super(ConditionalDiscriminator, self).__init__()
+        self.model = model
+
+    def forward(
+        self, X: torch.Tensor, cond: Optional[torch.Tensor] = None
+    ) -> torch.Tensor:
+        return self.model(X)
 
 
 def suggest_image_generator_discriminator_arch(
@@ -249,7 +273,8 @@ def suggest_image_generator_discriminator_arch(
     discriminator_n_residual_units: int = 2,
     device: Any = DEVICE,
     strategy: str = "predefined",
-) -> Tuple[nn.Module, nn.Module]:
+    cond: Optional[torch.Tensor] = None,
+) -> Tuple[ConditionalGenerator, ConditionalDiscriminator]:
     """Helper for selecting compatible architecture for image generators and discriminators.
 
     Args:
@@ -338,7 +363,9 @@ def suggest_image_generator_discriminator_arch(
             num_res_units=discriminator_n_residual_units,
         ).to(device)
 
-        return generator, discriminator
+        return ConditionalGenerator(
+            model=generator, cond=cond
+        ), ConditionalDiscriminator(discriminator)
 
     raise ValueError(f"unsupported image arch : ({n_channels}, {height}, {width})")
 
