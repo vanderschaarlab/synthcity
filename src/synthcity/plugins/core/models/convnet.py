@@ -237,26 +237,87 @@ class ConvNet(nn.Module):
 
 
 class ConditionalGenerator(nn.Module):
-    def __init__(self, model: nn.Module, cond: Optional[torch.Tensor] = None) -> None:
+    def __init__(
+        self,
+        model: nn.Module,
+        n_channels: int,
+        n_units_latent: int,
+        cond: Optional[torch.Tensor] = None,
+        cond_embedding_n_units_hidden: int = 100,
+    ) -> None:
         super(ConditionalGenerator, self).__init__()
 
         self.model = model
+        self.cond = cond
+        self.n_channels = n_channels
+        self.n_units_latent = n_units_latent
+
         self.label_conditioned_generator: Optional[nn.Module] = None
+        if cond is not None:
+            classes = torch.unique(self.cond)
+            self.label_conditioned_generator = nn.Sequential(
+                nn.Embedding(len(classes), cond_embedding_n_units_hidden),
+                nn.Linear(cond_embedding_n_units_hidden, n_channels * n_units_latent),
+            )
 
     def forward(
         self, noise: torch.Tensor, cond: Optional[torch.Tensor] = None
     ) -> torch.Tensor:
+        if cond is None and self.cond is not None:
+            perm = torch.randperm(self.cond.size(0))
+            cond = self.cond[perm[: len(noise)]]
+
+        if self.label_conditioned_generator is not None and cond is not None:
+            cond_emb = self.label_conditioned_generator(cond.long()).view(
+                -1, self.n_units_latent, self.n_channels, 1
+            )
+            noise = torch.cat(
+                (noise, cond_emb), dim=2
+            )  # add another channel with the conditional
         return self.model(noise)
 
 
 class ConditionalDiscriminator(nn.Module):
-    def __init__(self, model: nn.Module, cond: Optional[torch.Tensor] = None) -> None:
+    def __init__(
+        self,
+        model: nn.Module,
+        n_channels: int,
+        height: int,
+        width: int,
+        cond: Optional[torch.Tensor] = None,
+        cond_embedding_n_units_hidden: int = 100,
+    ) -> None:
         super(ConditionalDiscriminator, self).__init__()
         self.model = model
+        self.cond = cond
+
+        self.n_channels = n_channels
+        self.height = height
+        self.width = width
+
+        self.label_conditioned_generator: Optional[nn.Module] = None
+        if cond is not None:
+            classes = torch.unique(self.cond)
+            self.label_conditioned_generator = nn.Sequential(
+                nn.Embedding(len(classes), cond_embedding_n_units_hidden),
+                nn.Linear(cond_embedding_n_units_hidden, n_channels * height * width),
+            )
 
     def forward(
         self, X: torch.Tensor, cond: Optional[torch.Tensor] = None
     ) -> torch.Tensor:
+        if cond is None and self.cond is not None:
+            perm = torch.randperm(self.cond.size(0))
+            cond = self.cond[perm[: len(X)]]
+
+        if self.label_conditioned_generator is not None and cond is not None:
+            cond_emb = self.label_conditioned_generator(cond.long()).view(
+                -1, self.n_channels, self.height, self.width
+            )
+            X = torch.cat(
+                (X, cond_emb), dim=1
+            )  # add another channel with the conditional
+
         return self.model(X)
 
 
@@ -274,6 +335,7 @@ def suggest_image_generator_discriminator_arch(
     device: Any = DEVICE,
     strategy: str = "predefined",
     cond: Optional[torch.Tensor] = None,
+    cond_embedding_n_units_hidden: int = 100,
 ) -> Tuple[ConditionalGenerator, ConditionalDiscriminator]:
     """Helper for selecting compatible architecture for image generators and discriminators.
 
@@ -327,6 +389,7 @@ def suggest_image_generator_discriminator_arch(
             Enable/disable early stopping
 
     """
+    cond_weight = 1 if cond is None else 2
     if strategy == "predefined":
         if height == 32 and width == 32:
             start_shape_gen = 4
@@ -343,7 +406,7 @@ def suggest_image_generator_discriminator_arch(
             )
 
         generator = Generator(
-            latent_shape=(n_units_latent, n_channels),
+            latent_shape=(n_units_latent, cond_weight * n_channels),
             start_shape=(64, start_shape_gen, start_shape_gen),
             channels=[64, 32, 16, n_channels],
             strides=[2, 2, 2, 1],
@@ -353,7 +416,7 @@ def suggest_image_generator_discriminator_arch(
             num_res_units=generator_n_residual_units,
         ).to(device)
         discriminator = Discriminator(
-            in_shape=(n_channels, height, width),
+            in_shape=(cond_weight * n_channels, height, width),
             channels=[16, 32, 64, 1],
             strides=[start_stride_disc, 2, 2, 2],
             kernel_size=3,
@@ -364,8 +427,19 @@ def suggest_image_generator_discriminator_arch(
         ).to(device)
 
         return ConditionalGenerator(
-            model=generator, cond=cond
-        ), ConditionalDiscriminator(discriminator)
+            model=generator,
+            n_channels=n_channels,
+            n_units_latent=n_units_latent,
+            cond=cond,
+            cond_embedding_n_units_hidden=cond_embedding_n_units_hidden,
+        ), ConditionalDiscriminator(
+            discriminator,
+            n_channels=n_channels,
+            height=height,
+            width=width,
+            cond=cond,
+            cond_embedding_n_units_hidden=cond_embedding_n_units_hidden,
+        )
 
     raise ValueError(f"unsupported image arch : ({n_channels}, {height}, {width})")
 

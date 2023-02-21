@@ -1,4 +1,5 @@
 # third party
+import numpy as np
 import pytest
 from img_helpers import generate_fixtures
 from torchvision import datasets
@@ -42,7 +43,7 @@ def test_plugin_fit() -> None:
 
 
 def test_plugin_generate() -> None:
-    test_plugin = plugin(n_iter=10)
+    test_plugin = plugin(n_iter=10, n_units_latent=13)
 
     X = ImageDataLoader(dataset).sample(100)
 
@@ -54,6 +55,20 @@ def test_plugin_generate() -> None:
 
     X_gen = test_plugin.generate(50)
     assert len(X_gen) == 50
+
+
+def test_plugin_generate_with_conditional() -> None:
+    test_plugin = plugin(n_iter=10, n_units_latent=13)
+
+    X = ImageDataLoader(dataset).sample(100)
+    cond = X.unpack().labels()
+
+    test_plugin.fit(X, cond=cond)
+
+    cnt = 50
+    X_gen = test_plugin.generate(cnt, cond=np.ones(cnt))
+    assert len(X_gen) == 50
+    print(X_gen.unpack().labels())
 
 
 def test_sample_hyperparams() -> None:

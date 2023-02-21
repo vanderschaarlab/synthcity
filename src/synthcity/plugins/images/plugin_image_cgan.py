@@ -181,7 +181,9 @@ class ImageCGANPlugin(Plugin):
 
         cond = labels
         if "cond" in kwargs:
-            cond = self._prepare_cond(kwargs["cond"])
+            cond = kwargs["cond"]
+
+        cond = self._prepare_cond(cond)
 
         print(self.classes)
 
@@ -202,6 +204,8 @@ class ImageCGANPlugin(Plugin):
             discriminator_n_residual_units=self.discriminator_n_residual_units,
             device=self.device,
             strategy="predefined",
+            cond=cond,
+            cond_embedding_n_units_hidden=self.n_units_latent,
         )
 
         log.debug("Training the image generator")
