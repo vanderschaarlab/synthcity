@@ -6,6 +6,7 @@ from typing import Any, Dict, List, Optional, Tuple, Union
 # third party
 import numpy as np
 import pandas as pd
+import PIL
 import torch
 from pydantic import validate_arguments
 from sklearn.model_selection import train_test_split
@@ -1527,7 +1528,7 @@ class TransformDataset(torch.utils.data.Dataset):
         self.indices = indices
         self.data = data
         self.transform = transform
-        self.tensors: Optional[Tuple[torch.Tensor, torch.Tensor]] = None
+        self.ndarrays: Optional[Tuple[torch.Tensor, torch.Tensor]] = None
 
     def __getitem__(self, index: int) -> Tuple[torch.Tensor, torch.Tensor]:
         x, y = self.data[self.indices[index]]
@@ -1544,9 +1545,8 @@ class TransformDataset(torch.utils.data.Dataset):
         return (len(self), *x.shape)
 
     def numpy(self) -> Tuple[np.ndarray, np.ndarray]:
-        if self.tensors is not None:
-            x, y = self.tensors
-            return x, y
+        if self.ndarrays is not None:
+            return self.ndarrays
 
         x_buff = []
         y_buff = []
@@ -1558,8 +1558,16 @@ class TransformDataset(torch.utils.data.Dataset):
         x = np.concatenate(x_buff, axis=0)
         y = np.asarray(y_buff)
 
-        self.tensors = (x, y)
+        self.ndarrays = (x, y)
         return x, y
+
+    def labels(self) -> np.ndarray:
+        labels = []
+        for idx in self.indices:
+            _, y = self.data[idx]
+            labels.append(y)
+
+        return np.asarray(labels)
 
 
 class ImageDataLoader(DataLoader):
@@ -1598,12 +1606,19 @@ class ImageDataLoader(DataLoader):
             width = height
 
         self.data_transform = None
-        self.data_transform = transforms.Compose(
+
+        dummy, _ = data[0]
+        img_transform = []
+        if not isinstance(dummy, PIL.Image.Image):
+            img_transform = [transforms.ToPILImage()]
+        img_transform.extend(
             [
                 transforms.Resize((height, width)),
                 transforms.ToTensor(),
             ]
         )
+
+        self.data_transform = transforms.Compose(img_transform)
         data = TransformDataset(data, transform=self.data_transform)
 
         self.height = height

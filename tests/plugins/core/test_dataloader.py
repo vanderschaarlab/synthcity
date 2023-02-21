@@ -675,6 +675,8 @@ def test_image_dataloader_sanity(height: int, width: int) -> None:
     assert df.shape == (len(dataset), channels * height * width + 1)
     assert isinstance(df, pd.DataFrame)
 
+    assert loader.unpack().labels().shape == (len(loader),)
+
 
 def test_image_dataloader_create_from_info() -> None:
     dataset = datasets.MNIST(".", download=True)
