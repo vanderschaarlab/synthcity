@@ -14,10 +14,10 @@ from synthcity.plugins.core.distribution import (
     Distribution,
     FloatDistribution,
 )
-from synthcity.plugins.core.models.image_gan import (
-    ImageGAN,
-    suggest_image_generator_discriminator,
+from synthcity.plugins.core.models.convnet import (
+    suggest_image_generator_discriminator_arch,
 )
+from synthcity.plugins.core.models.image_gan import ImageGAN
 from synthcity.plugins.core.plugin import Plugin
 from synthcity.plugins.core.schema import Schema
 from synthcity.utils.constants import DEVICE
@@ -164,7 +164,10 @@ class ImageGANPlugin(Plugin):
         if X.type() != "image":
             raise RuntimeError("Invalid dataloader type for image generators")
 
-        image_generator, image_discriminator = suggest_image_generator_discriminator(
+        (
+            image_generator,
+            image_discriminator,
+        ) = suggest_image_generator_discriminator_arch(
             n_units_latent=self.n_units_latent,
             n_channels=X.info()["channels"],
             height=X.info()["height"],
