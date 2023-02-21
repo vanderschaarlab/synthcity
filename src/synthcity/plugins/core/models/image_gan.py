@@ -221,6 +221,7 @@ class ImageGAN(nn.Module):
     def fit(
         self,
         X: torch.utils.data.Dataset,
+        cond: Optional[torch.Tensor] = None,
         fake_labels_generator: Optional[Callable] = None,
         true_labels_generator: Optional[Callable] = None,
     ) -> "ImageGAN":
@@ -228,23 +229,29 @@ class ImageGAN(nn.Module):
 
         self._train(
             X,
+            cond=cond,
             fake_labels_generator=fake_labels_generator,
             true_labels_generator=true_labels_generator,
         )
 
         return self
 
-    def generate(self, count: int) -> torch.Tensor:
+    def generate(
+        self,
+        count: int,
+        cond: Optional[torch.Tensor] = None,
+    ) -> torch.Tensor:
         clear_cache()
         self.generator.eval()
 
         with torch.no_grad():
-            return self(count).detach().cpu().numpy()
+            return self(count, cond=cond).detach()
 
     @validate_arguments(config=dict(arbitrary_types_allowed=True))
     def forward(
         self,
         count: int,
+        cond: Optional[torch.Tensor] = None,
     ) -> torch.Tensor:
         fixed_noise = self._get_noise(count)
 
@@ -477,6 +484,7 @@ class ImageGAN(nn.Module):
     def _train(
         self,
         X: torch.utils.data.Dataset,
+        cond: Optional[torch.Tensor] = None,
         fake_labels_generator: Optional[Callable] = None,
         true_labels_generator: Optional[Callable] = None,
     ) -> "ImageGAN":

@@ -1781,16 +1781,16 @@ class ImageDataLoader(DataLoader):
 
     @property
     def columns(self) -> list:
-        raise NotImplementedError("Images do not support the columns call")
+        return list(self.dataframe().columns)
+
+    def satisfies(self, constraints: Constraints) -> bool:
+        return True
+
+    def match(self, constraints: Constraints) -> "DataLoader":
+        return self
 
     def compression_protected_features(self) -> list:
         raise NotImplementedError("Images do not support the compression call")
-
-    def satisfies(self, constraints: Constraints) -> bool:
-        raise NotImplementedError()
-
-    def match(self, constraints: Constraints) -> "DataLoader":
-        raise NotImplementedError()
 
     def drop(self, columns: list = []) -> "DataLoader":
         raise NotImplementedError()

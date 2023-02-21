@@ -474,7 +474,7 @@ class Plugin(Serializable, metaclass=ABCMeta):
         return create_from_info(data_synth, data_info)
 
     @validate_arguments(config=dict(arbitrary_types_allowed=True))
-    def _safe_generate_image(
+    def _safe_generate_images(
         self, gen_cbk: Callable, count: int, syn_schema: Schema, **kwargs: Any
     ) -> DataLoader:
         data_synth = gen_cbk(count, **kwargs)

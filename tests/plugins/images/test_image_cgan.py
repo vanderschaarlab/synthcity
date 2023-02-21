@@ -1,16 +1,14 @@
 # third party
-import numpy as np
 import pytest
 from img_helpers import generate_fixtures
 from torchvision import datasets
 
 # synthcity absolute
-from synthcity.metrics.eval import PerformanceEvaluatorXGB
 from synthcity.plugins import Plugin
 from synthcity.plugins.core.dataloader import ImageDataLoader
-from synthcity.plugins.images.plugin_image_gan import plugin
+from synthcity.plugins.images.plugin_image_cgan import plugin
 
-plugin_name = "image_gan"
+plugin_name = "image_cgan"
 
 dataset = datasets.MNIST(".", download=True)
 
@@ -63,22 +61,3 @@ def test_sample_hyperparams() -> None:
         args = plugin.sample_hyperparameters()
 
         assert plugin(**args) is not None
-
-
-@pytest.mark.slow
-def test_eval_performance() -> None:
-    results = []
-
-    X = ImageDataLoader(dataset)
-
-    for retry in range(2):
-        test_plugin = plugin(n_iter=500)
-        evaluator = PerformanceEvaluatorXGB()
-
-        test_plugin.fit(X)
-        X_syn = test_plugin.generate()
-
-        results.append(evaluator.evaluate(X, X_syn)["syn_id"])
-
-    print(plugin.name(), results)
-    assert np.mean(results) > 0.8

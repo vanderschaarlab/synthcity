@@ -3,18 +3,24 @@ from pathlib import Path
 from typing import Any, List, Optional
 
 # third party
+import numpy as np
+import torch
+
 # Necessary packages
 from pydantic import validate_arguments
+from torch import nn
 
 # synthcity absolute
+import synthcity.logger as log
 from synthcity.metrics.weighted_metrics import WeightedMetrics
-from synthcity.plugins.core.dataloader import DataLoader
+from synthcity.plugins.core.dataloader import DataLoader, GeneratedDataset
 from synthcity.plugins.core.distribution import (
     CategoricalDistribution,
     Distribution,
     FloatDistribution,
 )
 from synthcity.plugins.core.models.convnet import (
+    suggest_image_classifier_arch,
     suggest_image_generator_discriminator_arch,
 )
 from synthcity.plugins.core.models.image_gan import ImageGAN
@@ -23,9 +29,9 @@ from synthcity.plugins.core.schema import Schema
 from synthcity.utils.constants import DEVICE
 
 
-class ImageGANPlugin(Plugin):
+class ImageCGANPlugin(Plugin):
     """
-    .. inheritance-diagram:: synthcity.plugins.images.plugin_image_gan.ImageGANPlugin
+    .. inheritance-diagram:: synthcity.plugins.images.plugin_image_gan.ImageCGANPlugin
         :parts: 1
 
     Image (Conditional) GAN
@@ -77,9 +83,11 @@ class ImageGANPlugin(Plugin):
         n_iter: int = 1000,
         generator_nonlin: str = "relu",
         generator_dropout: float = 0.1,
+        generator_n_residual_units: int = 2,
         discriminator_nonlin: str = "leaky_relu",
         discriminator_n_iter: int = 5,
         discriminator_dropout: float = 0.1,
+        discriminator_n_residual_units: int = 2,
         # training
         lr: float = 2e-4,
         weight_decay: float = 1e-3,
@@ -95,6 +103,7 @@ class ImageGANPlugin(Plugin):
         n_iter_print: int = 50,
         n_iter_min: int = 100,
         plot_progress: int = False,
+        early_stopping: bool = True,
         # core plugin arguments
         workspace: Path = Path("workspace"),
         sampling_patience: int = 500,
@@ -113,12 +122,14 @@ class ImageGANPlugin(Plugin):
             pass
 
         self.n_units_latent = n_units_latent
-        self.generator_nonlin = generator_nonlin
         self.n_iter = n_iter
+        self.generator_nonlin = generator_nonlin
         self.generator_dropout = generator_dropout
+        self.generator_n_residual_units = generator_n_residual_units
         self.discriminator_nonlin = discriminator_nonlin
         self.discriminator_n_iter = discriminator_n_iter
         self.discriminator_dropout = discriminator_dropout
+        self.discriminator_n_residual_units = discriminator_n_residual_units
 
         self.lr = lr
         self.weight_decay = weight_decay
@@ -132,13 +143,14 @@ class ImageGANPlugin(Plugin):
         self.device = device
         self.patience = patience
         self.patience_metric = patience_metric
+        self.early_stopping = early_stopping
         self.n_iter_min = n_iter_min
         self.n_iter_print = n_iter_print
         self.plot_progress = plot_progress
 
     @staticmethod
     def name() -> str:
-        return "image_gan"
+        return "image_cgan"
 
     @staticmethod
     def type() -> str:
@@ -160,10 +172,20 @@ class ImageGANPlugin(Plugin):
             CategoricalDistribution(name="weight_decay", choices=[1e-3, 1e-4]),
         ]
 
-    def _fit(self, X: DataLoader, *args: Any, **kwargs: Any) -> "ImageGANPlugin":
+    def _fit(self, X: DataLoader, *args: Any, **kwargs: Any) -> "ImageCGANPlugin":
         if X.type() != "image":
             raise RuntimeError("Invalid dataloader type for image generators")
 
+        labels = X.unpack().labels()
+        self.classes = np.unique(labels)
+
+        cond = labels
+        if "cond" in kwargs:
+            cond = self._prepare_cond(kwargs["cond"])
+
+        print(self.classes)
+
+        # synthetic images
         (
             image_generator,
             image_discriminator,
@@ -174,15 +196,16 @@ class ImageGANPlugin(Plugin):
             width=X.info()["width"],
             generator_dropout=self.generator_dropout,
             generator_nonlin=self.generator_nonlin,
-            generator_n_residual_units=2,
+            generator_n_residual_units=self.generator_n_residual_units,
             discriminator_dropout=self.discriminator_dropout,
             discriminator_nonlin=self.discriminator_nonlin,
-            discriminator_n_residual_units=2,
+            discriminator_n_residual_units=self.discriminator_n_residual_units,
             device=self.device,
             strategy="predefined",
         )
 
-        self.model = ImageGAN(
+        log.debug("Training the image generator")
+        self.image_generator = ImageGAN(
             image_generator=image_generator,
             image_discriminator=image_discriminator,
             n_units_latent=self.n_units_latent,
@@ -210,12 +233,68 @@ class ImageGANPlugin(Plugin):
             patience=self.patience,
             patience_metric=self.patience_metric,
         )
-        self.model.fit(X.unpack())
+        self.image_generator.fit(X.unpack(), cond=cond)
+
+        # synthetic labels
+        self.label_generator: Optional[nn.Module] = None
+
+        if labels is not None:  # TODO: handle regression
+            log.debug("Training the labels generator")
+            self.label_generator = suggest_image_classifier_arch(
+                n_channels=X.info()["channels"],
+                height=X.info()["height"],
+                width=X.info()["width"],
+                classes=len(np.unique(labels)),
+                n_residual_units=self.generator_n_residual_units,
+                nonlin=self.generator_nonlin,
+                dropout=self.generator_dropout,
+                last_nonlin="softmax",
+                device=self.device,
+                strategy="predefined",
+                # training
+                lr=self.lr,
+                weight_decay=self.weight_decay,
+                opt_betas=self.opt_betas,
+                n_iter=self.n_iter,
+                batch_size=self.batch_size,
+                n_iter_print=self.n_iter_print,
+                random_state=self.random_state,
+                patience=self.patience,
+                n_iter_min=self.n_iter_min,
+                clipping_value=self.clipping_value,
+                early_stopping=self.early_stopping,
+            )
+            self.label_generator.fit(X.unpack())
 
         return self
 
     def _generate(self, count: int, syn_schema: Schema, **kwargs: Any) -> DataLoader:
-        return self.model.generate(count)
+        def _sample(count: int) -> GeneratedDataset:
+            cond: Optional[torch.Tensor] = None
+            if "cond" in kwargs:
+                cond = self._prepare_cond(kwargs["cond"])
+            elif self.classes is not None:
+                cond = np.random.choice(self.classes, count)
+                cond = torch.from_numpy(cond).to(self.device)
+
+            sampled_images = self.image_generator.generate(count, cond=cond)
+            sampled_labels: Optional[torch.Tensor] = None
+            if self.label_generator is not None:
+                sampled_labels = self.label_generator.predict(sampled_images)
+
+            return GeneratedDataset(images=sampled_images, targets=sampled_labels)
+
+        return self._safe_generate_images(_sample, count, syn_schema)
+
+    def _prepare_cond(self, cond: Any) -> Optional[torch.Tensor]:
+        if cond is None:
+            return None
+
+        cond = np.asarray(cond)
+        if len(cond.shape) == 1:
+            cond = cond.reshape(-1, 1)
+
+        return torch.from_numpy(cond).to(self.device)
 
 
-plugin = ImageGANPlugin
+plugin = ImageCGANPlugin
