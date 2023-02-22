@@ -660,7 +660,7 @@ def test_image_dataloader_sanity(height: int, width: int) -> None:
 
     assert loader.sample(5).shape == (5, channels, height, width)
 
-    assert loader[0][0].shape == (channels, height, width)
+    assert loader[0].shape == (channels, height, width)
 
     assert loader.hash() != ""
 
