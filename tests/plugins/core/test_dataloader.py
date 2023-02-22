@@ -667,14 +667,12 @@ def test_image_dataloader_sanity(height: int, width: int) -> None:
     assert loader.train().shape == (0.8 * len(dataset), channels, height, width)
     assert loader.test().shape == (0.2 * len(dataset), channels, height, width)
 
-    x_np, y_np = loader.numpy()
+    x_np = loader.numpy()
     assert x_np.shape == (len(dataset), channels, height, width)
-    assert y_np.shape == (len(dataset),)
     assert isinstance(x_np, np.ndarray)
-    assert isinstance(y_np, np.ndarray)
 
     df = loader.dataframe()
-    assert df.shape == (len(dataset), channels * height * width + 1)
+    assert df.shape == (len(dataset), channels * height * width)
     assert isinstance(df, pd.DataFrame)
 
     assert loader.unpack().labels().shape == (len(loader),)
