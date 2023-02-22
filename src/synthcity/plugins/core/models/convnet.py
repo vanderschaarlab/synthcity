@@ -145,6 +145,7 @@ class ConvNet(nn.Module):
             if self.early_stopping or i % self.n_iter_print == 0:
                 with torch.no_grad():
                     X_val, y_val = next(iter(test_loader))
+                    y_val = y_val.long()
 
                     preds = self.forward(X_val).squeeze()
                     val_loss = self.loss(preds, y_val)
