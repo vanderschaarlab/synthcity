@@ -694,6 +694,20 @@ def test_image_dataloader_create_from_info() -> None:
         assert reloaded.info()[key] == loader.info()[key]
 
 
+def test_image_dataloader_create_from_tensor() -> None:
+    X = torch.randn((100, 10, 10))
+    y = torch.randn((100,))
+
+    loader = ImageDataLoader(
+        data=(X, y),
+        train_size=0.8,
+        height=32,
+    )
+
+    assert len(loader) == len(X)
+    assert loader.shape == (100, 1, 32, 32)
+
+
 def test_image_datasets() -> None:
     size = 100
     X = torch.rand(size, 10, 10)

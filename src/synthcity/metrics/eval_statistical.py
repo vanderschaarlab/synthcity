@@ -6,7 +6,6 @@ from typing import Any, Dict, Optional, Tuple
 # third party
 import numpy as np
 import pandas as pd
-import synthicty.logger as log
 import torch
 from geomloss import SamplesLoss
 from pydantic import validate_arguments
@@ -19,6 +18,7 @@ from sklearn.neighbors import NearestNeighbors
 from sklearn.preprocessing import MinMaxScaler
 
 # synthcity absolute
+import synthcity.logger as log
 from synthcity.metrics._utils import get_frequency
 from synthcity.metrics.core import MetricEvaluator
 from synthcity.plugins.core.dataloader import DataLoader

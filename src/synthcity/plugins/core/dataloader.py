@@ -15,7 +15,7 @@ from torchvision import transforms
 
 # synthcity absolute
 from synthcity.plugins.core.constraints import Constraints
-from synthcity.plugins.core.dataset import FlexibleDataset
+from synthcity.plugins.core.dataset import FlexibleDataset, TensorDataset
 from synthcity.plugins.core.models.data_encoder import DatetimeEncoder
 from synthcity.utils.compression import compress_dataset, decompress_dataset
 from synthcity.utils.serialization import dataframe_hash
@@ -1533,13 +1533,21 @@ class ImageDataLoader(DataLoader):
         train_size: float = 0.8
             Train dataset ratio.
     Example:
-        >>> TODO
+        >>> dataset = datasets.MNIST(".", download=True)
+        >>>
+        >>> loader = ImageDataLoader(
+        >>>     data=dataset,
+        >>>     train_size=0.8,
+        >>>     height=32,
+        >>>     width=w32,
+        >>> )
+
     """
 
     @validate_arguments(config=dict(arbitrary_types_allowed=True))
     def __init__(
         self,
-        data: Union[torch.utils.data.Dataset],
+        data: Union[torch.utils.data.Dataset, Tuple[torch.Tensor, torch.Tensor]],
         height: int = 32,
         width: Optional[int] = None,
         random_state: int = 0,
@@ -1548,6 +1556,10 @@ class ImageDataLoader(DataLoader):
     ) -> None:
         if width is None:
             width = height
+
+        if isinstance(data, tuple):
+            X, y = data
+            data = TensorDataset(images=X, targets=y)
 
         self.data_transform = None
 

@@ -10,7 +10,15 @@ from synthcity.utils.constants import DEVICE
 
 
 class FlexibleDataset(torch.utils.data.Dataset):
-    """Helper dataset wrapper for manipulating another dataset"""
+    """Helper dataset wrapper for post-processing or transforming another dataset
+
+    The class supports adding custom transforms to existing datasets, and to subsample a set of indices.
+
+    Args:
+        data: torch.Dataset
+        transform: An optional list of transforms
+        indices: An optional list of indices to subsample
+    """
 
     def __init__(
         self,
@@ -79,7 +87,12 @@ class FlexibleDataset(torch.utils.data.Dataset):
 
 
 class TensorDataset(torch.utils.data.Dataset):
-    """Helper dataset for wrapping existing tensors"""
+    """Helper dataset for wrapping existing tensors
+
+    Args:
+        images: Tensor
+        targets: Tensor
+    """
 
     def __init__(
         self,
@@ -114,7 +127,12 @@ class TensorDataset(torch.utils.data.Dataset):
 
 
 class ConditionalDataset(torch.utils.data.Dataset):
-    """Helper dataset for wrapping existing datasets"""
+    """Helper dataset for wrapping existing datasets with custom tensors
+
+    Args:
+        data: torch.Dataset
+        cond: Optional Tensor
+    """
 
     def __init__(
         self,
@@ -143,6 +161,12 @@ class ConditionalDataset(torch.utils.data.Dataset):
 
 
 class NumpyDataset(torch.utils.data.Dataset):
+    """Helper class for wrapping Numpy arrays in torch Datasets
+    Args:
+        X: np.ndarray
+        y: np.ndarray
+    """
+
     def __init__(self, X: np.ndarray, y: np.ndarray) -> None:
         super().__init__()
 
