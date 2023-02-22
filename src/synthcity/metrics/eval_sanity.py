@@ -24,12 +24,11 @@ class BasicMetricEvaluator(MetricEvaluator):
     @staticmethod
     def _helper_nearest_neighbor(X_gt: DataLoader, X_syn: DataLoader) -> np.ndarray:
         try:
-            size = len(X_gt)
             estimator = NearestNeighbors(n_neighbors=5).fit(
-                X_syn.numpy().reshape(size, -1)
+                X_syn.numpy().reshape(len(X_syn), -1)
             )
             dist, _ = estimator.kneighbors(
-                X_gt.numpy().reshape(size, -1), 1, return_distance=True
+                X_gt.numpy().reshape(len(X_gt), -1), 1, return_distance=True
             )
             return dist.squeeze()
         except BaseException:

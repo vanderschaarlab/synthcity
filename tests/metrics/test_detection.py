@@ -6,6 +6,7 @@ import numpy as np
 import pandas as pd
 import pytest
 from sklearn.datasets import load_iris
+from torchvision import datasets
 
 # synthcity absolute
 from synthcity.metrics.eval_detection import (
@@ -15,7 +16,11 @@ from synthcity.metrics.eval_detection import (
     SyntheticDetectionXGB,
 )
 from synthcity.plugins import Plugin, Plugins
-from synthcity.plugins.core.dataloader import GenericDataLoader, TimeSeriesDataLoader
+from synthcity.plugins.core.dataloader import (
+    GenericDataLoader,
+    ImageDataLoader,
+    TimeSeriesDataLoader,
+)
 from synthcity.utils.datasets.time_series.google_stocks import GoogleStocksDataloader
 
 
@@ -147,3 +152,22 @@ def test_detect_synth_timeseries(test_plugin: Plugin, evaluator_t: Type) -> None
 
     assert evaluator.type() == "detection"
     assert evaluator.direction() == "minimize"
+
+
+def test_image_support_detection() -> None:
+    dataset = datasets.MNIST(".", download=True)
+
+    X1 = ImageDataLoader(dataset).sample(100)
+    X2 = ImageDataLoader(dataset).sample(100)
+
+    for evaluator in [
+        SyntheticDetectionGMM,
+        SyntheticDetectionLinear,
+        SyntheticDetectionXGB,
+        SyntheticDetectionMLP,
+    ]:
+        score = evaluator().evaluate(X1, X2)
+        assert isinstance(score, dict)
+        for k in score:
+            assert score[k] >= 0
+            assert not np.isnan(score[k])

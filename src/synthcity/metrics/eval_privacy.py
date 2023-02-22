@@ -316,7 +316,7 @@ class IdentifiabilityScore(PrivacyEvaluator):
             WD_value: Wasserstein distance
         """
         X_gt_ = X_gt.numpy().reshape(len(X_gt), -1)
-        X_syn_ = X_syn.numpy().reshape(len(X_gt), -1)
+        X_syn_ = X_syn.numpy().reshape(len(X_syn), -1)
 
         if emb == "OC":
             emb = f"_{emb}"

@@ -1,9 +1,10 @@
 # stdlib
 import platform
-from typing import Any, Dict
+from typing import Any, Dict, Tuple
 
 # third party
 import numpy as np
+import torch
 from pydantic import validate_arguments
 from sklearn.linear_model import LogisticRegression
 from sklearn.metrics import roc_auc_score
@@ -15,7 +16,9 @@ from xgboost import XGBClassifier
 import synthcity.logger as log
 from synthcity.metrics.core import MetricEvaluator
 from synthcity.plugins.core.dataloader import DataLoader
+from synthcity.plugins.core.models.convnet import suggest_image_classifier_arch
 from synthcity.plugins.core.models.mlp import MLP
+from synthcity.utils.constants import DEVICE
 from synthcity.utils.serialization import load_from_file, save_to_file
 
 
@@ -49,8 +52,16 @@ class DetectionEvaluator(MetricEvaluator):
     def direction() -> str:
         return "minimize"
 
+    @staticmethod
+    def name() -> str:
+        raise NotImplementedError()
+
     @validate_arguments(config=dict(arbitrary_types_allowed=True))
-    def _evaluate_detection(
+    def evaluate(self, X_gt: DataLoader, X_syn: DataLoader) -> Dict:
+        raise NotImplementedError()
+
+    @validate_arguments(config=dict(arbitrary_types_allowed=True))
+    def _evaluate_detection_generic(
         self,
         model_template: Any,
         X_gt: DataLoader,
@@ -66,10 +77,10 @@ class DetectionEvaluator(MetricEvaluator):
             log.info(f" Detection eval for {self.name()} : {results}")
             return results
 
-        arr_gt = X_gt.numpy()
+        arr_gt = X_gt.numpy().reshape(len(X_gt), -1)
         labels_gt = np.asarray([0] * len(X_gt))
 
-        arr_syn = X_syn.numpy()
+        arr_syn = X_syn.numpy().reshape(len(X_syn), -1)
         labels_syn = np.asarray([1] * len(X_syn))
 
         data = np.concatenate([arr_gt, arr_syn])
@@ -143,7 +154,9 @@ class SyntheticDetectionXGB(DetectionEvaluator):
             "random_state": self._random_state,
         }
 
-        return self._evaluate_detection(model_template, X_gt, X_syn, **model_args)
+        return self._evaluate_detection_generic(
+            model_template, X_gt, X_syn, **model_args
+        )
 
 
 class SyntheticDetectionMLP(DetectionEvaluator):
@@ -169,14 +182,82 @@ class SyntheticDetectionMLP(DetectionEvaluator):
         return "detection_mlp"
 
     @validate_arguments(config=dict(arbitrary_types_allowed=True))
+    def _evaluate_image_detection(self, X_gt: DataLoader, X_syn: DataLoader) -> Dict:
+        cache_file = (
+            self._workspace
+            / f"sc_metric_cache_{self.type()}_{self.name()}_{X_gt.hash()}_{X_syn.hash()}_{self._reduction}_{platform.python_version()}.bkp"
+        )
+        if self.use_cache(cache_file):
+            results = load_from_file(cache_file)
+            log.info(f" Detection eval for {self.name()} : {results}")
+            return results
+
+        data_gt = X_gt.numpy()
+        data_syn = X_syn.numpy()
+        data = np.concatenate([data_gt, data_syn], axis=0)
+
+        labels_gt = np.asarray([0] * len(X_gt))
+        labels_syn = np.asarray([1] * len(X_syn))
+        labels = np.concatenate([labels_gt, labels_syn])
+
+        class EvaluationDataset(torch.utils.data.Dataset):
+            def __init__(self, X: np.ndarray, y: np.ndarray) -> None:
+                super().__init__()
+
+                self.X = X
+                self.y = y
+
+            def __getitem__(self, index: int) -> Tuple[torch.Tensor, torch.Tensor]:
+                x = self.X[index]
+                y = self.y[index]
+
+                return torch.from_numpy(x).to(DEVICE), y
+
+            def __len__(self) -> int:
+                return len(self.X)
+
+        skf = StratifiedKFold(
+            n_splits=self._n_folds, shuffle=True, random_state=self._random_state
+        )
+        res = []
+        for train_idx, test_idx in skf.split(data, labels):
+            train_X = data[train_idx]
+            train_y = labels[train_idx]
+            test_X = data[test_idx]
+            test_y = labels[test_idx]
+
+            clf = suggest_image_classifier_arch(
+                n_channels=X_gt.info()["channels"],
+                height=X_gt.info()["height"],
+                width=X_gt.info()["width"],
+                classes=2,
+            )
+            train_dataset = EvaluationDataset(train_X, train_y)
+
+            clf.fit(train_dataset)
+            test_pred = clf.predict_proba(torch.from_numpy(test_X))[:, 1].cpu().numpy()
+
+            score = roc_auc_score(test_y, test_pred)
+            res.append(score)
+
+        results = {self._reduction: float(self.reduction()(res))}
+        log.info(f" Detection eval for {self.name()} : {results}")
+
+        # save_to_file(cache_file, results)
+        return results
+
+    @validate_arguments(config=dict(arbitrary_types_allowed=True))
     def evaluate(self, X_gt: DataLoader, X_syn: DataLoader) -> Dict:
+        if X_gt.type() == "image":
+            return self._evaluate_image_detection(X_gt, X_syn)
+
         model_args = {
             "task_type": "classification",
             "n_units_in": X_gt.shape[1],
             "n_units_out": 2,
             "random_state": self._random_state,
         }
-        return self._evaluate_detection(
+        return self._evaluate_detection_generic(
             MLP,
             X_gt,
             X_syn,
@@ -213,7 +294,7 @@ class SyntheticDetectionLinear(DetectionEvaluator):
             "n_jobs": -1,
             "max_iter": 10000,
         }
-        return self._evaluate_detection(
+        return self._evaluate_detection_generic(
             LogisticRegression,
             X_gt,
             X_syn,
@@ -253,7 +334,7 @@ class SyntheticDetectionGMM(DetectionEvaluator):
             "n_components": min(10, len(X_gt)),
             "random_state": self._random_state,
         }
-        return self._evaluate_detection(
+        return self._evaluate_detection_generic(
             GaussianMixture,
             X_gt,
             X_syn,

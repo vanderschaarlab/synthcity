@@ -238,13 +238,13 @@ class MaximumMeanDiscrepancy(StatisticalEvaluator):
                 gamma,
             )
             YY = metrics.pairwise.rbf_kernel(
-                X_syn.numpy().reshape(len(X_gt), -1),
-                X_syn.numpy().reshape(len(X_gt), -1),
+                X_syn.numpy().reshape(len(X_syn), -1),
+                X_syn.numpy().reshape(len(X_syn), -1),
                 gamma,
             )
             XY = metrics.pairwise.rbf_kernel(
                 X_gt.numpy().reshape(len(X_gt), -1),
-                X_syn.numpy().reshape(len(X_gt), -1),
+                X_syn.numpy().reshape(len(X_syn), -1),
                 gamma,
             )
             score = XX.mean() + YY.mean() - 2 * XY.mean()
@@ -263,15 +263,15 @@ class MaximumMeanDiscrepancy(StatisticalEvaluator):
                 coef0,
             )
             YY = metrics.pairwise.polynomial_kernel(
-                X_syn.numpy().reshape(len(X_gt), -1),
-                X_syn.numpy().reshape(len(X_gt), -1),
+                X_syn.numpy().reshape(len(X_syn), -1),
+                X_syn.numpy().reshape(len(X_syn), -1),
                 degree,
                 gamma,
                 coef0,
             )
             XY = metrics.pairwise.polynomial_kernel(
                 X_gt.numpy().reshape(len(X_gt), -1),
-                X_syn.numpy().reshape(len(X_gt), -1),
+                X_syn.numpy().reshape(len(X_syn), -1),
                 degree,
                 gamma,
                 coef0,
@@ -376,7 +376,7 @@ class WassersteinDistance(StatisticalEvaluator):
         X_syn: DataLoader,
     ) -> Dict:
         X_ = X.numpy().reshape(len(X), -1)
-        X_syn_ = X_syn.numpy().reshape(len(X), -1)
+        X_syn_ = X_syn.numpy().reshape(len(X_syn), -1)
 
         if len(X_) > len(X_syn_):
             X_syn_ = np.concatenate(
@@ -427,7 +427,7 @@ class PRDCScore(StatisticalEvaluator):
         X_syn: DataLoader,
     ) -> Dict:
         X_ = X.numpy().reshape(len(X), -1)
-        X_syn_ = X_syn.numpy().reshape(len(X), -1)
+        X_syn_ = X_syn.numpy().reshape(len(X_syn), -1)
 
         # Default representation
         results = self._compute_prdc(X_, X_syn_)
@@ -657,7 +657,7 @@ class AlphaPrecision(StatisticalEvaluator):
         results = {}
 
         X_ = X.numpy().reshape(len(X), -1)
-        X_syn_ = X_syn.numpy().reshape(len(X), -1)
+        X_syn_ = X_syn.numpy().reshape(len(X_syn), -1)
 
         # OneClass representation
         emb = "_OC"
@@ -840,7 +840,7 @@ class FrechetInceptionDistance(StatisticalEvaluator):
             )
 
         X1 = X.numpy().reshape(len(X), -1)
-        X2 = X_syn.numpy().reshape(len(X), -1)
+        X2 = X_syn.numpy().reshape(len(X_syn), -1)
 
         mu1, cov1 = self._fit_gaussian(X1)
         mu2, cov2 = self._fit_gaussian(X2)

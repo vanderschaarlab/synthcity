@@ -157,6 +157,7 @@ class ConvNet(nn.Module):
                             patience += 1
 
                         if patience > self.patience and i > self.n_iter_min:
+                            print(patience, self.patience, i, self.n_iter_min)
                             break
 
                     if i % self.n_iter_print == 0:
