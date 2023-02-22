@@ -15,8 +15,8 @@ from xgboost import XGBClassifier
 # synthcity absolute
 import synthcity.logger as log
 from synthcity.metrics.core import MetricEvaluator
-from synthcity.metrics.helpers import EvaluationDataset
 from synthcity.plugins.core.dataloader import DataLoader
+from synthcity.plugins.core.dataset import NumpyDataset
 from synthcity.plugins.core.models.convnet import suggest_image_classifier_arch
 from synthcity.plugins.core.models.mlp import MLP
 from synthcity.utils.serialization import load_from_file, save_to_file
@@ -216,7 +216,7 @@ class SyntheticDetectionMLP(DetectionEvaluator):
                 width=X_gt.info()["width"],
                 classes=2,
             )
-            train_dataset = EvaluationDataset(train_X, train_y)
+            train_dataset = NumpyDataset(train_X, train_y)
 
             clf.fit(train_dataset)
             test_pred = clf.predict_proba(torch.from_numpy(test_X))[:, 1].cpu().numpy()

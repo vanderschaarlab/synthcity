@@ -13,7 +13,8 @@ from torch import nn
 # synthcity absolute
 import synthcity.logger as log
 from synthcity.metrics.weighted_metrics import WeightedMetrics
-from synthcity.plugins.core.dataloader import DataLoader, GeneratedDataset
+from synthcity.plugins.core.dataloader import DataLoader
+from synthcity.plugins.core.dataset import TensorDataset
 from synthcity.plugins.core.distribution import (
     CategoricalDistribution,
     Distribution,
@@ -286,7 +287,7 @@ class ImageCGANPlugin(Plugin):
         return self
 
     def _generate(self, count: int, syn_schema: Schema, **kwargs: Any) -> DataLoader:
-        def _sample(count: int) -> GeneratedDataset:
+        def _sample(count: int) -> TensorDataset:
             cond: Optional[torch.Tensor] = None
             if "cond" in kwargs:
                 cond = self._prepare_cond(kwargs["cond"])
@@ -299,7 +300,7 @@ class ImageCGANPlugin(Plugin):
             if self.label_generator is not None:
                 sampled_labels = self.label_generator.predict(sampled_images)
 
-            return GeneratedDataset(images=sampled_images, targets=sampled_labels)
+            return TensorDataset(images=sampled_images, targets=sampled_labels)
 
         return self._safe_generate_images(_sample, count, syn_schema)
 

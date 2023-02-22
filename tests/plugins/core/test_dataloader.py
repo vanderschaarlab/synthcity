@@ -13,15 +13,14 @@ from torchvision import datasets, transforms
 
 # synthcity absolute
 from synthcity.plugins.core.dataloader import (
-    GeneratedDataset,
     GenericDataLoader,
     ImageDataLoader,
     SurvivalAnalysisDataLoader,
     TimeSeriesDataLoader,
     TimeSeriesSurvivalDataLoader,
-    TransformDataset,
     create_from_info,
 )
+from synthcity.plugins.core.dataset import FlexibleDataset, TensorDataset
 from synthcity.utils.datasets.time_series.google_stocks import GoogleStocksDataloader
 from synthcity.utils.datasets.time_series.pbc import PBCDataloader
 from synthcity.utils.datasets.time_series.sine import SineDataloader
@@ -700,7 +699,7 @@ def test_image_datasets() -> None:
     X = torch.rand(size, 10, 10)
     y = torch.rand(size)
 
-    gen_dataset = GeneratedDataset(images=X, targets=y)
+    gen_dataset = TensorDataset(images=X, targets=y)
     assert (gen_dataset[0][0] == X[0]).all()
     assert (gen_dataset[0][1] == y[0]).all()
 
@@ -712,16 +711,16 @@ def test_image_datasets() -> None:
         ]
     )
 
-    transform_dataset = TransformDataset(gen_dataset, transform=img_transform)
+    transform_dataset = FlexibleDataset(gen_dataset, transform=img_transform)
     assert transform_dataset.shape() == (size, 1, 20, 20)
     assert transform_dataset[0][0].shape == (1, 20, 20)
     assert transform_dataset[0][1] == y[0]
 
-    gen_dataset = GeneratedDataset(images=X, targets=None)
+    gen_dataset = TensorDataset(images=X, targets=None)
     assert (gen_dataset[0][0] == X[0]).all()
     assert gen_dataset[0][1] is None
 
-    transform_dataset = TransformDataset(gen_dataset, transform=img_transform)
+    transform_dataset = FlexibleDataset(gen_dataset, transform=img_transform)
     assert transform_dataset.shape() == (size, 1, 20, 20)
     assert transform_dataset[0][0].shape == (1, 20, 20)
     assert transform_dataset[0][1] is None

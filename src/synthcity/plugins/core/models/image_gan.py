@@ -14,7 +14,8 @@ from tqdm import tqdm
 # synthcity absolute
 import synthcity.logger as log
 from synthcity.metrics.weighted_metrics import WeightedMetrics
-from synthcity.plugins.core.dataloader import ImageDataLoader, TransformDataset
+from synthcity.plugins.core.dataloader import ImageDataLoader
+from synthcity.plugins.core.dataset import ConditionalDataset, FlexibleDataset
 from synthcity.utils.constants import DEVICE
 from synthcity.utils.reproducibility import clear_cache, enable_reproducible_results
 
@@ -34,35 +35,6 @@ def weights_init(m: nn.Module) -> None:
     if isinstance(m, nn.BatchNorm2d):
         torch.nn.init.normal_(m.weight, mean=0.0, std=0.02)
         torch.nn.init.constant_(m.bias, val=0)
-
-
-class ConditionalDataset(torch.utils.data.Dataset):
-    """Helper dataset for wrapping existing datasets"""
-
-    def __init__(
-        self,
-        data: torch.utils.data.Dataset,
-        cond: Optional[torch.Tensor] = None,
-    ) -> None:
-        super().__init__()
-
-        if cond is not None and len(cond) != len(data):
-            raise ValueError("Invalid input")
-
-        self.data = data
-        self.cond = cond
-
-    def __getitem__(self, index: int) -> Tuple[torch.Tensor, Optional[torch.Tensor]]:
-        cond: Optional[torch.Tensor] = None
-        x = self.data[index][0]
-
-        if self.cond is not None:
-            cond = self.cond[index]
-
-        return x, cond
-
-    def __len__(self) -> int:
-        return len(self.data)
 
 
 class ImageGAN(nn.Module):
@@ -249,7 +221,7 @@ class ImageGAN(nn.Module):
 
     def fit(
         self,
-        X: TransformDataset,
+        X: FlexibleDataset,
         cond: Optional[torch.Tensor] = None,
         fake_labels_generator: Optional[Callable] = None,
         true_labels_generator: Optional[Callable] = None,
@@ -525,7 +497,7 @@ class ImageGAN(nn.Module):
         return score, patience, save
 
     def _train_test_split(
-        self, X: TransformDataset, cond: Optional[torch.Tensor] = None
+        self, X: FlexibleDataset, cond: Optional[torch.Tensor] = None
     ) -> Tuple:
         if self.patience_metric is None:
             return X, cond, None, None
@@ -546,7 +518,7 @@ class ImageGAN(nn.Module):
 
     def _train(
         self,
-        X: TransformDataset,
+        X: FlexibleDataset,
         cond: Optional[torch.Tensor] = None,
         fake_labels_generator: Optional[Callable] = None,
         true_labels_generator: Optional[Callable] = None,

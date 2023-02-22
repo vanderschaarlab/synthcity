@@ -6,6 +6,7 @@ from typing import Any, Dict, Optional, Tuple
 # third party
 import numpy as np
 import pandas as pd
+import synthicty.logger as log
 import torch
 from geomloss import SamplesLoss
 from pydantic import validate_arguments
@@ -177,6 +178,7 @@ class ChiSquaredTest(StatisticalEvaluator):
                 if np.isnan(pvalue):
                     pvalue = 0
             except BaseException:
+                log.error("chisquare failed")
                 pvalue = 0
 
             res.append(pvalue)

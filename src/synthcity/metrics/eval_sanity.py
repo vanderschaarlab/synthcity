@@ -8,6 +8,7 @@ from pydantic import validate_arguments
 from sklearn.neighbors import NearestNeighbors
 
 # synthcity absolute
+import synthcity.logger as log
 from synthcity.metrics.core import MetricEvaluator
 from synthcity.plugins.core.dataloader import DataLoader
 
@@ -32,6 +33,7 @@ class BasicMetricEvaluator(MetricEvaluator):
             )
             return dist.squeeze()
         except BaseException:
+            log.error("NearestNeighbors failed")
             return np.asarray([999])
 
     @staticmethod

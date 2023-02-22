@@ -6,7 +6,7 @@ from torch.utils.data import Subset
 from torchvision import datasets, transforms
 
 # synthcity absolute
-from synthcity.plugins.core.dataloader import TransformDataset
+from synthcity.plugins.core.dataloader import FlexibleDataset
 from synthcity.plugins.core.models.convnet import (
     ConditionalDiscriminator,
     ConditionalGenerator,
@@ -27,7 +27,7 @@ data_transform = transforms.Compose(
 batch_size = 128
 dataset = datasets.MNIST(".", download=True, transform=data_transform)
 dataset = Subset(dataset, np.arange(len(dataset))[:100])
-dataset = TransformDataset(dataset)
+dataset = FlexibleDataset(dataset)
 
 
 def test_network_config() -> None:

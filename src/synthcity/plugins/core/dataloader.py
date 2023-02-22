@@ -15,6 +15,7 @@ from torchvision import transforms
 
 # synthcity absolute
 from synthcity.plugins.core.constraints import Constraints
+from synthcity.plugins.core.dataset import FlexibleDataset
 from synthcity.plugins.core.models.data_encoder import DatetimeEncoder
 from synthcity.utils.compression import compress_dataset, decompress_dataset
 from synthcity.utils.serialization import dataframe_hash
@@ -1513,110 +1514,6 @@ class TimeSeriesSurvivalDataLoader(TimeSeriesDataLoader):
         return self.unpack_and_decorate(self.filter_ids(test_ids))
 
 
-class TransformDataset(torch.utils.data.Dataset):
-    """Helper dataset wrapper for manipulating another dataset"""
-
-    def __init__(
-        self,
-        data: torch.utils.data.Dataset,
-        transform: Optional[torch.nn.Module] = None,
-        indices: Optional[list] = None,
-    ) -> None:
-        super().__init__()
-
-        if indices is None:
-            indices = np.arange(len(data))
-
-        self.indices = np.asarray(indices)
-        self.data = data
-        self.transform = transform
-        self.ndarrays: Optional[Tuple[torch.Tensor, torch.Tensor]] = None
-
-    def __getitem__(self, index: int) -> Tuple[torch.Tensor, torch.Tensor]:
-        x, y = self.data[self.indices[index]]
-        if self.transform:
-            x = self.transform(x)
-        return x, y
-
-    def __len__(self) -> int:
-        return len(self.indices)
-
-    def shape(self) -> Tuple:
-        x, _ = self[self.indices[0]]
-
-        return (len(self), *x.shape)
-
-    def numpy(self) -> Tuple[np.ndarray, np.ndarray]:
-        if self.ndarrays is not None:
-            return self.ndarrays
-
-        x_buff = []
-        y_buff = []
-        for idx in range(len(self)):
-            x_local, y_local = self[idx]
-            x_buff.append(x_local.unsqueeze(0).cpu().numpy())
-            y_buff.append(y_local)
-
-        x = np.concatenate(x_buff, axis=0)
-        y = np.asarray(y_buff)
-
-        self.ndarrays = (x, y)
-        return x, y
-
-    def labels(self) -> np.ndarray:
-        labels = []
-        for idx in self.indices:
-            _, y = self.data[idx]
-            labels.append(y)
-
-        return np.asarray(labels)
-
-    def filter_indices(self, indices: List[int]) -> "TransformDataset":
-        for idx in indices:
-            if idx >= len(self.indices):
-                raise ValueError(
-                    "Invalid filtering list. {idx} not found in the current list of indices"
-                )
-        return TransformDataset(
-            data=self.data, transform=self.transform, indices=self.indices[indices]
-        )
-
-
-class GeneratedDataset(torch.utils.data.Dataset):
-    """Helper dataset for wrapping existing tensors"""
-
-    def __init__(
-        self,
-        images: torch.Tensor,
-        targets: Optional[torch.Tensor],
-    ) -> None:
-        super().__init__()
-
-        if targets is not None and len(targets) != len(images):
-            raise ValueError("Invalid input")
-
-        self.images = images
-        self.targets = targets
-
-    def __getitem__(self, index: int) -> Tuple[torch.Tensor, Optional[torch.Tensor]]:
-        y: Optional[torch.Tensor] = None
-        x = self.images[index]
-
-        if self.targets is not None:
-            y = self.targets[index]
-
-        return x, y
-
-    def __len__(self) -> int:
-        return len(self.images)
-
-    def labels(self) -> Optional[np.ndarray]:
-        if self.targets is None:
-            return None
-
-        return self.targets.cpu().numpy()
-
-
 class ImageDataLoader(DataLoader):
     """
     .. inheritance-diagram:: synthcity.plugins.core.dataloader.ImageDataLoader
@@ -1666,7 +1563,7 @@ class ImageDataLoader(DataLoader):
         )
 
         self.data_transform = transforms.Compose(img_transform)
-        data = TransformDataset(data, transform=self.data_transform)
+        data = FlexibleDataset(data, transform=self.data_transform)
 
         self.height = height
         self.width = width
@@ -1725,7 +1622,7 @@ class ImageDataLoader(DataLoader):
 
     def sample(self, count: int, random_state: int = 0) -> "DataLoader":
         idxs = np.random.choice(len(self), count, replace=False)
-        subset = TransformDataset(self.data.data, indices=idxs)
+        subset = FlexibleDataset(self.data.data, indices=idxs)
         return self.decorate(subset)
 
     @staticmethod
@@ -1760,12 +1657,12 @@ class ImageDataLoader(DataLoader):
 
     def train(self) -> "DataLoader":
         train_idx, _ = self._train_test_split()
-        subset = TransformDataset(self.data.data, indices=train_idx)
+        subset = FlexibleDataset(self.data.data, indices=train_idx)
         return self.decorate(subset)
 
     def test(self) -> "DataLoader":
         _, test_idx = self._train_test_split()
-        subset = TransformDataset(self.data.data, indices=test_idx)
+        subset = FlexibleDataset(self.data.data, indices=test_idx)
         return self.decorate(subset)
 
     def compress(
