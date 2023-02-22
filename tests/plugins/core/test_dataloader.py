@@ -727,3 +727,15 @@ def test_image_datasets() -> None:
     assert transform_dataset.shape() == (size, 1, 20, 20)
     assert transform_dataset[0][0].shape == (1, 20, 20)
     assert transform_dataset[0][1] is None
+
+    transform_dataset = transform_dataset.filter_indices([0, 1, 2])
+    assert len(transform_dataset) == 3
+    assert (transform_dataset.indices == [0, 1, 2]).all()
+
+    transform_dataset = transform_dataset.filter_indices([1, 2])
+    assert len(transform_dataset) == 2
+    assert (transform_dataset.indices == [1, 2]).all()
+
+    transform_dataset = transform_dataset.filter_indices([0])
+    assert len(transform_dataset) == 1
+    assert (transform_dataset.indices == [1]).all()

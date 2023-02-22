@@ -68,7 +68,19 @@ def test_plugin_generate_with_conditional() -> None:
     cnt = 50
     X_gen = test_plugin.generate(cnt, cond=np.ones(cnt))
     assert len(X_gen) == 50
-    print(X_gen.unpack().labels())
+
+
+def test_plugin_generate_with_stop_conditional() -> None:
+    test_plugin = plugin(n_iter=10, n_units_latent=13, n_iter_print=2)
+
+    X = ImageDataLoader(dataset).sample(100)
+    cond = X.unpack().labels()
+
+    test_plugin.fit(X, cond=cond)
+
+    cnt = 50
+    X_gen = test_plugin.generate(cnt, cond=np.ones(cnt))
+    assert len(X_gen) == 50
 
 
 def test_sample_hyperparams() -> None:

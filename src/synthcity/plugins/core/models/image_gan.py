@@ -4,7 +4,6 @@ from typing import Any, Callable, List, Optional, Tuple
 # third party
 import matplotlib.pyplot as plt
 import numpy as np
-import pandas as pd
 import torch
 from opacus import PrivacyEngine
 from pydantic import validate_arguments
@@ -15,6 +14,7 @@ from tqdm import tqdm
 # synthcity absolute
 import synthcity.logger as log
 from synthcity.metrics.weighted_metrics import WeightedMetrics
+from synthcity.plugins.core.dataloader import ImageDataLoader, TransformDataset
 from synthcity.utils.constants import DEVICE
 from synthcity.utils.reproducibility import clear_cache, enable_reproducible_results
 
@@ -42,7 +42,7 @@ class ConditionalDataset(torch.utils.data.Dataset):
     def __init__(
         self,
         data: torch.utils.data.Dataset,
-        cond: Optional[torch.Tensor],
+        cond: Optional[torch.Tensor] = None,
     ) -> None:
         super().__init__()
 
@@ -249,7 +249,7 @@ class ImageGAN(nn.Module):
 
     def fit(
         self,
-        X: torch.utils.data.Dataset,
+        X: TransformDataset,
         cond: Optional[torch.Tensor] = None,
         fake_labels_generator: Optional[Callable] = None,
         true_labels_generator: Optional[Callable] = None,
@@ -503,8 +503,8 @@ class ImageGAN(nn.Module):
 
         X_syn = self.generate(len(X), cond=cond)
         new_score = self.patience_metric.evaluate(
-            pd.DataFrame(X.detach().cpu().numpy()),
-            pd.DataFrame(X_syn),
+            ImageDataLoader(ConditionalDataset(X)),
+            ImageDataLoader(ConditionalDataset(X_syn)),
         )
         score = prev_score
         if self.patience_metric.direction() == "minimize":
@@ -525,7 +525,7 @@ class ImageGAN(nn.Module):
         return score, patience, save
 
     def _train_test_split(
-        self, X: torch.utils.data.Dataset, cond: Optional[torch.Tensor] = None
+        self, X: TransformDataset, cond: Optional[torch.Tensor] = None
     ) -> Tuple:
         if self.patience_metric is None:
             return X, cond, None, None
@@ -538,7 +538,7 @@ class ImageGAN(nn.Module):
             split = int(len(total) * 0.8)
             train_idx, test_idx = total[:split], total[split:]
 
-        X_train, X_val = X[train_idx], X[test_idx]
+        X_train, X_val = X.filter_indices(train_idx), X.filter_indices(test_idx)
         cond_train, cond_val = None, None
         if cond is not None:
             cond_train, cond_val = cond[train_idx], cond[test_idx]
@@ -546,7 +546,7 @@ class ImageGAN(nn.Module):
 
     def _train(
         self,
-        X: torch.utils.data.Dataset,
+        X: TransformDataset,
         cond: Optional[torch.Tensor] = None,
         fake_labels_generator: Optional[Callable] = None,
         true_labels_generator: Optional[Callable] = None,
@@ -605,7 +605,10 @@ class ImageGAN(nn.Module):
 
                 if self.patience_metric is not None:
                     patience_score, patience, save = self._evaluate_patience_metric(
-                        X_val, cond_val, patience_score, patience
+                        torch.from_numpy(X_val.numpy()[0]),
+                        cond_val,
+                        patience_score,
+                        patience,
                     )
                     if save:
                         best_state_dict = self.state_dict()

@@ -24,8 +24,13 @@ class BasicMetricEvaluator(MetricEvaluator):
     @staticmethod
     def _helper_nearest_neighbor(X_gt: DataLoader, X_syn: DataLoader) -> np.ndarray:
         try:
-            estimator = NearestNeighbors(n_neighbors=5).fit(X_syn.numpy())
-            dist, _ = estimator.kneighbors(X_gt.numpy(), 1, return_distance=True)
+            size = len(X_gt)
+            estimator = NearestNeighbors(n_neighbors=5).fit(
+                X_syn.numpy().reshape(size, -1)
+            )
+            dist, _ = estimator.kneighbors(
+                X_gt.numpy().reshape(size, -1), 1, return_distance=True
+            )
             return dist.squeeze()
         except BaseException:
             return np.asarray([999])
@@ -41,6 +46,22 @@ class BasicMetricEvaluator(MetricEvaluator):
         X_syn: DataLoader,
     ) -> float:
         return self.evaluate(X_gt, X_syn)[self._default_metric]
+
+    @staticmethod
+    def name() -> str:
+        raise NotImplementedError()
+
+    @staticmethod
+    def direction() -> str:
+        raise NotImplementedError()
+
+    @validate_arguments(config=dict(arbitrary_types_allowed=True))
+    def evaluate(
+        self,
+        X_gt: DataLoader,
+        X_syn: DataLoader,
+    ) -> float:
+        raise NotImplementedError()
 
 
 class DataMismatchScore(BasicMetricEvaluator):
@@ -68,6 +89,12 @@ class DataMismatchScore(BasicMetricEvaluator):
 
     @validate_arguments(config=dict(arbitrary_types_allowed=True))
     def evaluate(self, X_gt: DataLoader, X_syn: DataLoader) -> Dict:
+        if X_gt.type() != X_syn.type():
+            raise ValueError("Incompatible dataloader")
+
+        if X_gt.type() == "image":
+            return {"score": 0}
+
         if len(X_gt.columns) != len(X_syn.columns):
             raise ValueError(f"Incompatible dataframe {X_gt.shape} and {X_syn.shape}")
 

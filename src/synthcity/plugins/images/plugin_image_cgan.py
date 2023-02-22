@@ -31,7 +31,7 @@ from synthcity.utils.constants import DEVICE
 
 class ImageCGANPlugin(Plugin):
     """
-    .. inheritance-diagram:: synthcity.plugins.images.plugin_image_gan.ImageCGANPlugin
+    .. inheritance-diagram:: synthcity.plugins.images.plugin_image_cgan.ImageCGANPlugin
         :parts: 1
 
     Image (Conditional) GAN
@@ -73,7 +73,19 @@ class ImageCGANPlugin(Plugin):
             Optional Path for caching intermediary results.
 
     Example:
-        >>> # TODO
+        >>> from torchvision import datasets
+        >>> from synthcity.plugins import Plugins
+        >>> from synthcity.plugins.core.dataloader import ImageDataLoader
+        >>>
+        >>> model = Plugins().get("image_cgan", n_iter = 10)
+        >>>
+        >>> dataset = datasets.MNIST(".", download=True)
+        >>> dataloader = ImageDataLoader(dataset).sample(100)
+        >>>
+        >>> model.fit(dataloader)
+        >>>
+        >>> X_gen = model.generate(50)
+        >>> assert len(X_gen) == 50
     """
 
     @validate_arguments(config=dict(arbitrary_types_allowed=True))
@@ -118,8 +130,11 @@ class ImageCGANPlugin(Plugin):
             **kwargs
         )
         if patience_metric is None:
-            # TODO: Use something image specific
-            pass
+            patience_metric = WeightedMetrics(
+                metrics=[("detection", "detection_mlp")],
+                weights=[1],
+                workspace=workspace,
+            )
 
         self.n_units_latent = n_units_latent
         self.n_iter = n_iter
@@ -184,8 +199,6 @@ class ImageCGANPlugin(Plugin):
             cond = kwargs["cond"]
 
         cond = self._prepare_cond(cond)
-
-        print(self.classes)
 
         # synthetic images
         (

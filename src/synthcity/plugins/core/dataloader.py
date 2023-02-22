@@ -1527,7 +1527,7 @@ class TransformDataset(torch.utils.data.Dataset):
         if indices is None:
             indices = np.arange(len(data))
 
-        self.indices = indices
+        self.indices = np.asarray(indices)
         self.data = data
         self.transform = transform
         self.ndarrays: Optional[Tuple[torch.Tensor, torch.Tensor]] = None
@@ -1552,7 +1552,7 @@ class TransformDataset(torch.utils.data.Dataset):
 
         x_buff = []
         y_buff = []
-        for idx in self.indices:
+        for idx in range(len(self)):
             x_local, y_local = self[idx]
             x_buff.append(x_local.unsqueeze(0).cpu().numpy())
             y_buff.append(y_local)
@@ -1570,6 +1570,16 @@ class TransformDataset(torch.utils.data.Dataset):
             labels.append(y)
 
         return np.asarray(labels)
+
+    def filter_indices(self, indices: List[int]) -> "TransformDataset":
+        for idx in indices:
+            if idx >= len(self.indices):
+                raise ValueError(
+                    "Invalid filtering list. {idx} not found in the current list of indices"
+                )
+        return TransformDataset(
+            data=self.data, transform=self.transform, indices=self.indices[indices]
+        )
 
 
 class GeneratedDataset(torch.utils.data.Dataset):
@@ -1678,18 +1688,15 @@ class ImageDataLoader(DataLoader):
         return self.data
 
     def numpy(self) -> np.ndarray:
-        x, y = self.data.numpy()
+        x, _ = self.data.numpy()
 
-        return x, y
+        return x
 
     def dataframe(self) -> pd.DataFrame:
-        x, y = self.numpy()
-        x = x.reshape(len(self), -1)
+        x = self.numpy().reshape(len(self), -1)
 
         x = pd.DataFrame(x)
         x.columns = x.columns.astype(str)
-
-        x["target"] = y
 
         return x
 
