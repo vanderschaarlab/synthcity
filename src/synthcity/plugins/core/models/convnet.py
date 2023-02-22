@@ -157,7 +157,6 @@ class ConvNet(nn.Module):
                             patience += 1
 
                         if patience > self.patience and i > self.n_iter_min:
-                            print(patience, self.patience, i, self.n_iter_min)
                             break
 
                     if i % self.n_iter_print == 0:
@@ -209,6 +208,8 @@ class ConvNet(nn.Module):
             self.optimizer.zero_grad()
 
             X_next, y_next = sample
+            y_next = y_next.long()
+
             if len(X_next) < 2:
                 continue
 

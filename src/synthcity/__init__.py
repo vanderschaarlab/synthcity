@@ -23,4 +23,4 @@ logging.getLogger("tensorflow_hub").setLevel(logging.CRITICAL)
 
 warnings.simplefilter(action="ignore")
 
-logger.add(sink=sys.stderr, level="ERROR")
+logger.add(sink=sys.stderr, level="DEBUG")

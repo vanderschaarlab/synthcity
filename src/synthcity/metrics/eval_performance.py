@@ -7,6 +7,7 @@ from typing import Any, Dict, Tuple
 import numpy as np
 import pandas as pd
 import shap
+import torch
 from pydantic import validate_arguments
 from scipy.stats import kendalltau, spearmanr
 from sklearn.linear_model import LinearRegression, LogisticRegression
@@ -20,6 +21,7 @@ import synthcity.logger as log
 from synthcity.metrics._utils import evaluate_auc
 from synthcity.metrics.core import MetricEvaluator
 from synthcity.plugins.core.dataloader import DataLoader
+from synthcity.plugins.core.models.convnet import suggest_image_classifier_arch
 from synthcity.plugins.core.models.mlp import MLP
 from synthcity.plugins.core.models.survival_analysis import (
     CoxPHSurvivalAnalysis,
@@ -159,6 +161,9 @@ class PerformanceEvaluator(MetricEvaluator):
         Returns:
             gt and syn performance scores
         """
+        if X_gt.type() == "image":
+            raise ValueError("Standard evaluation not supported for images")
+
         cache_file = (
             self._workspace
             / f"sc_metric_cache_{self.type()}_{self.name()}_{X_gt.hash()}_{X_syn.hash()}_{self._reduction}_{platform.python_version()}_{platform.python_version()}.bkp"
@@ -232,6 +237,9 @@ class PerformanceEvaluator(MetricEvaluator):
         Returns:
             gt and syn performance scores
         """
+        if X_gt.type() == "image":
+            raise ValueError("Survival analysis evaluation not supported for images")
+
         if X_gt.type() != "survival_analysis" or X_syn.type() != "survival_analysis":
             raise ValueError(
                 f"Invalid data types. gt = {X_gt.type()} syn = {X_syn.type()}"
@@ -339,6 +347,9 @@ class PerformanceEvaluator(MetricEvaluator):
         Returns:
             gt and syn performance scores
         """
+        if X_gt.type() == "image":
+            raise ValueError("Time series evaluation not supported for images")
+
         if X_gt.type() != "time_series" or X_syn.type() != "time_series":
             raise ValueError(
                 f"Invalid data type gt = {X_gt.type()} syn = {X_syn.type()}"
@@ -758,6 +769,82 @@ class PerformanceEvaluatorMLP(PerformanceEvaluator):
         return "mlp"
 
     @validate_arguments(config=dict(arbitrary_types_allowed=True))
+    def _evaluate_image_clf(
+        self,
+        train_data: torch.utils.data.Dataset,
+        test_data: torch.utils.data.Dataset,
+        input_info: Dict,
+    ) -> float:
+        _, train_Y = train_data.numpy()
+        test_X, test_Y = test_data.numpy()
+
+        clf = suggest_image_classifier_arch(
+            n_channels=input_info["channels"],
+            height=input_info["height"],
+            width=input_info["width"],
+            classes=len(np.unique(train_Y)),
+        )
+
+        clf.fit(train_data)
+        test_pred = clf.predict_proba(torch.from_numpy(test_X)).cpu().numpy()
+
+        score, _ = evaluate_auc(test_Y, test_pred)
+        return score
+
+    @validate_arguments(config=dict(arbitrary_types_allowed=True))
+    def _evaluate_images(
+        self,
+        X_gt: DataLoader,
+        X_syn: DataLoader,
+    ) -> Dict:
+        cache_file = (
+            self._workspace
+            / f"sc_metric_cache_{self.type()}_{self.name()}_{X_gt.hash()}_{X_syn.hash()}_{self._reduction}_{platform.python_version()}_{platform.python_version()}.bkp"
+        )
+        if self.use_cache(cache_file):
+            return load_from_file(cache_file)
+
+        id_gt = X_gt.train().unpack()
+        id_X_gt, id_y_gt = id_gt.numpy()
+
+        ood_gt = X_gt.test().unpack()
+        iter_syn = X_syn.unpack()
+
+        skf = StratifiedKFold(
+            n_splits=self._n_folds, shuffle=True, random_state=self._random_state
+        )
+
+        real_scores = []
+        syn_scores_id = []
+        syn_scores_ood = []
+
+        for train_idx, test_idx in skf.split(id_X_gt, id_y_gt):
+            train_data = id_gt.filter_indices(train_idx)
+            test_data = id_gt.filter_indices(test_idx)
+
+            real_score = self._evaluate_image_clf(train_data, test_data, X_gt.info())
+            synth_score_id = self._evaluate_image_clf(
+                iter_syn, test_data, X_syn.info()
+            )  # data seen by the generator
+            synth_score_ood = self._evaluate_image_clf(
+                iter_syn, ood_gt, X_syn.info()
+            )  # data not seen by the generator
+
+            real_scores.append(real_score)
+            syn_scores_id.append(synth_score_id)
+            syn_scores_ood.append(synth_score_ood)
+
+        results = {
+            "gt": float(self.reduction()(real_scores)),
+            "syn_id": float(self.reduction()(syn_scores_id)),
+            "syn_ood": float(self.reduction()(syn_scores_ood)),
+        }
+
+        save_to_file(cache_file, results)
+
+        return results
+
+    @validate_arguments(config=dict(arbitrary_types_allowed=True))
     def evaluate(
         self,
         X_gt: DataLoader,
@@ -769,6 +856,9 @@ class PerformanceEvaluatorMLP(PerformanceEvaluator):
             )
 
         elif self._task_type == "classification" or self._task_type == "regression":
+            if X_gt.type() == "image":
+                return self._evaluate_images(X_gt, X_syn)
+
             mlp_args = {
                 "n_units_in": X_gt.shape[1] - 1,
                 "n_units_out": 1,

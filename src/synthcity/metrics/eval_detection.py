@@ -1,6 +1,6 @@
 # stdlib
 import platform
-from typing import Any, Dict, Tuple
+from typing import Any, Dict
 
 # third party
 import numpy as np
@@ -15,10 +15,10 @@ from xgboost import XGBClassifier
 # synthcity absolute
 import synthcity.logger as log
 from synthcity.metrics.core import MetricEvaluator
+from synthcity.metrics.helpers import EvaluationDataset
 from synthcity.plugins.core.dataloader import DataLoader
 from synthcity.plugins.core.models.convnet import suggest_image_classifier_arch
 from synthcity.plugins.core.models.mlp import MLP
-from synthcity.utils.constants import DEVICE
 from synthcity.utils.serialization import load_from_file, save_to_file
 
 
@@ -199,22 +199,6 @@ class SyntheticDetectionMLP(DetectionEvaluator):
         labels_gt = np.asarray([0] * len(X_gt))
         labels_syn = np.asarray([1] * len(X_syn))
         labels = np.concatenate([labels_gt, labels_syn])
-
-        class EvaluationDataset(torch.utils.data.Dataset):
-            def __init__(self, X: np.ndarray, y: np.ndarray) -> None:
-                super().__init__()
-
-                self.X = X
-                self.y = y
-
-            def __getitem__(self, index: int) -> Tuple[torch.Tensor, torch.Tensor]:
-                x = self.X[index]
-                y = self.y[index]
-
-                return torch.from_numpy(x).to(DEVICE), y
-
-            def __len__(self) -> int:
-                return len(self.X)
 
         skf = StratifiedKFold(
             n_splits=self._n_folds, shuffle=True, random_state=self._random_state

@@ -1746,11 +1746,13 @@ class ImageDataLoader(DataLoader):
 
     def _train_test_split(self) -> Tuple:
         indices = np.arange(len(self.data))
+        _, stratify = self.data.numpy()
 
         return train_test_split(
             indices,
             train_size=self.train_size,
             random_state=self.random_state,
+            stratify=stratify,
         )
 
     def train(self) -> "DataLoader":
