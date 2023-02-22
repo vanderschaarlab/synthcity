@@ -43,6 +43,7 @@ from .eval_sanity import (
 from .eval_statistical import (
     AlphaPrecision,
     ChiSquaredTest,
+    FrechetInceptionDistance,
     InverseKLDivergence,
     JensenShannonDistance,
     KolmogorovSmirnovTest,
@@ -70,6 +71,7 @@ standard_metrics = [
     PRDCScore,
     AlphaPrecision,
     SurvivalKMDistance,
+    FrechetInceptionDistance,
     # performance tests
     PerformanceEvaluatorLinear,
     PerformanceEvaluatorMLP,

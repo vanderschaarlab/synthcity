@@ -7,11 +7,13 @@ import pandas as pd
 import pytest
 from lifelines.datasets import load_rossi
 from sklearn.datasets import load_iris
+from torchvision import datasets
 
 # synthcity absolute
 from synthcity.metrics.eval_statistical import (
     AlphaPrecision,
     ChiSquaredTest,
+    FrechetInceptionDistance,
     InverseKLDivergence,
     JensenShannonDistance,
     KolmogorovSmirnovTest,
@@ -24,6 +26,7 @@ from synthcity.plugins import Plugin, Plugins
 from synthcity.plugins.core.dataloader import (
     DataLoader,
     GenericDataLoader,
+    ImageDataLoader,
     SurvivalAnalysisDataLoader,
     create_from_info,
 )
@@ -263,3 +266,28 @@ def test_evaluate_survival_km_distance(test_plugin: Plugin) -> None:
     assert SurvivalKMDistance.name() == "survival_km_distance"
     assert SurvivalKMDistance.type() == "stats"
     assert SurvivalKMDistance.direction() == "minimize"
+
+
+def test_image_support() -> None:
+    dataset = datasets.MNIST(".", download=True)
+
+    X1 = ImageDataLoader(dataset).sample(100)
+    X2 = ImageDataLoader(dataset).sample(100)
+
+    for evaluator in [
+        AlphaPrecision,
+        ChiSquaredTest,
+        InverseKLDivergence,
+        JensenShannonDistance,
+        KolmogorovSmirnovTest,
+        MaximumMeanDiscrepancy,
+        PRDCScore,
+        WassersteinDistance,
+        FrechetInceptionDistance,
+    ]:
+        score = evaluator().evaluate(X1, X2)
+        print(score)
+        assert isinstance(score, dict), evaluator
+        for k in score:
+            assert score[k] >= 0, evaluator
+            assert not np.isnan(score[k]), evaluator

@@ -9,6 +9,7 @@ import pandas as pd
 import torch
 from geomloss import SamplesLoss
 from pydantic import validate_arguments
+from scipy import linalg
 from scipy.spatial.distance import jensenshannon
 from scipy.special import kl_div
 from scipy.stats import chisquare, ks_2samp
@@ -173,6 +174,8 @@ class ChiSquaredTest(StatisticalEvaluator):
             gt_freq, synth_freq = freqs[col]
             try:
                 _, pvalue = chisquare(gt_freq, synth_freq)
+                if np.isnan(pvalue):
+                    pvalue = 0
             except BaseException:
                 pvalue = 0
 
@@ -229,9 +232,21 @@ class MaximumMeanDiscrepancy(StatisticalEvaluator):
             MMD using rbf (gaussian) kernel (i.e., k(x,y) = exp(-gamma * ||x-y||^2 / 2))
             """
             gamma = 1.0
-            XX = metrics.pairwise.rbf_kernel(X_gt.numpy(), X_gt.numpy(), gamma)
-            YY = metrics.pairwise.rbf_kernel(X_syn.numpy(), X_syn.numpy(), gamma)
-            XY = metrics.pairwise.rbf_kernel(X_gt.numpy(), X_syn.numpy(), gamma)
+            XX = metrics.pairwise.rbf_kernel(
+                X_gt.numpy().reshape(len(X_gt), -1),
+                X_gt.numpy().reshape(len(X_gt), -1),
+                gamma,
+            )
+            YY = metrics.pairwise.rbf_kernel(
+                X_syn.numpy().reshape(len(X_gt), -1),
+                X_syn.numpy().reshape(len(X_gt), -1),
+                gamma,
+            )
+            XY = metrics.pairwise.rbf_kernel(
+                X_gt.numpy().reshape(len(X_gt), -1),
+                X_syn.numpy().reshape(len(X_gt), -1),
+                gamma,
+            )
             score = XX.mean() + YY.mean() - 2 * XY.mean()
         elif self.kernel == "polynomial":
             """
@@ -241,13 +256,25 @@ class MaximumMeanDiscrepancy(StatisticalEvaluator):
             gamma = 1
             coef0 = 0
             XX = metrics.pairwise.polynomial_kernel(
-                X_gt.numpy(), X_gt.numpy(), degree, gamma, coef0
+                X_gt.numpy().reshape(len(X_gt), -1),
+                X_gt.numpy().reshape(len(X_gt), -1),
+                degree,
+                gamma,
+                coef0,
             )
             YY = metrics.pairwise.polynomial_kernel(
-                X_syn.numpy(), X_syn.numpy(), degree, gamma, coef0
+                X_syn.numpy().reshape(len(X_gt), -1),
+                X_syn.numpy().reshape(len(X_gt), -1),
+                degree,
+                gamma,
+                coef0,
             )
             XY = metrics.pairwise.polynomial_kernel(
-                X_gt.numpy(), X_syn.numpy(), degree, gamma, coef0
+                X_gt.numpy().reshape(len(X_gt), -1),
+                X_syn.numpy().reshape(len(X_gt), -1),
+                degree,
+                gamma,
+                coef0,
             )
             score = XX.mean() + YY.mean() - 2 * XY.mean()
         else:
@@ -348,8 +375,9 @@ class WassersteinDistance(StatisticalEvaluator):
         X: DataLoader,
         X_syn: DataLoader,
     ) -> Dict:
-        X_ = X.numpy()
-        X_syn_ = X_syn.numpy()
+        X_ = X.numpy().reshape(len(X), -1)
+        X_syn_ = X_syn.numpy().reshape(len(X), -1)
+
         if len(X_) > len(X_syn_):
             X_syn_ = np.concatenate(
                 [X_syn_, np.zeros((len(X_) - len(X_syn_), X_.shape[1]))]
@@ -398,8 +426,8 @@ class PRDCScore(StatisticalEvaluator):
         X: DataLoader,
         X_syn: DataLoader,
     ) -> Dict:
-        X_ = X.numpy()
-        X_syn_ = X_syn.numpy()
+        X_ = X.numpy().reshape(len(X), -1)
+        X_syn_ = X_syn.numpy().reshape(len(X), -1)
 
         # Default representation
         results = self._compute_prdc(X_, X_syn_)
@@ -628,8 +656,8 @@ class AlphaPrecision(StatisticalEvaluator):
 
         results = {}
 
-        X_ = X.numpy()
-        X_syn_ = X_syn.numpy()
+        X_ = X.numpy().reshape(len(X), -1)
+        X_syn_ = X_syn.numpy().reshape(len(X), -1)
 
         # OneClass representation
         emb = "_OC"
@@ -698,4 +726,126 @@ class SurvivalKMDistance(StatisticalEvaluator):
             "optimism": optimism,
             "abs_optimism": abs_optimism,
             "sightedness": sightedness,
+        }
+
+
+class FrechetInceptionDistance(StatisticalEvaluator):
+    """
+    .. inheritance-diagram:: synthcity.metrics.eval_statistical.FrechetInceptionDistance
+        :parts: 1
+
+    Calculates the Frechet Inception Distance (FID) to evalulate GANs.
+
+    Paper: GANs Trained by a Two Time-Scale Update Rule Converge to a Local Nash Equilibrium.
+
+    The FID metric calculates the distance between two distributions of images.
+    Typically, we have summary statistics (mean & covariance matrix) of one of these distributions, while the 2nd distribution is given by a GAN.
+
+    Adapted by Boris van Breugel(bv292@cam.ac.uk)
+    """
+
+    def __init__(self, **kwargs: Any) -> None:
+        super().__init__(**kwargs)
+
+    @staticmethod
+    def name() -> str:
+        return "fid"
+
+    @staticmethod
+    def direction() -> str:
+        return "minimize"
+
+    def _fit_gaussian(self, act: np.ndarray) -> Tuple[np.ndarray, np.ndarray]:
+        """Calculation of the statistics used by the FID.
+        Params:
+        -- act   : activations
+        Returns:
+        -- mu    : The mean over samples of the activations
+        -- sigma : The covariance matrix of the activations
+        """
+        mu = np.mean(act, axis=0)
+        sigma = np.cov(act.T)
+        return mu, sigma
+
+    def _calculate_frechet_distance(
+        self,
+        mu1: np.ndarray,
+        sigma1: np.ndarray,
+        mu2: np.ndarray,
+        sigma2: np.ndarray,
+        eps: float = 1e-6,
+    ) -> float:
+        """Numpy implementation of the Frechet Distance.
+        The Frechet distance between two multivariate Gaussians X_1 ~ N(mu_1, C_1)
+        and X_2 ~ N(mu_2, C_2) is
+                d^2 = ||mu_1 - mu_2||^2 + Tr(C_1 + C_2 - 2*sqrt(C_1*C_2)).
+
+        Stable version by Dougal J. Sutherland.
+        Params:
+        -- mu1 : Numpy array containing the activations of the pool_3 layer of the
+                 inception net ( like returned by the function 'get_predictions')
+                 for generated samples.
+        -- mu2   : The sample mean over activations of the pool_3 layer, precalcualted
+                   on an representive data set.
+        -- sigma1: The covariance matrix over activations of the pool_3 layer for
+                   generated samples.
+        -- sigma2: The covariance matrix over activations of the pool_3 layer,
+                   precalcualted on an representive data set.
+        Returns:
+        --   : The Frechet Distance.
+        """
+
+        mu1 = np.atleast_1d(mu1)
+        mu2 = np.atleast_1d(mu2)
+
+        sigma1 = np.atleast_2d(sigma1)
+        sigma2 = np.atleast_2d(sigma2)
+
+        if mu1.shape != mu2.shape:
+            raise RuntimeError("Training and test mean vectors have different lengths")
+
+        if sigma1.shape != sigma2.shape:
+            raise RuntimeError(
+                "Training and test covariances have different dimensions"
+            )
+
+        diff = mu1 - mu2
+
+        # product might be almost singular
+        covmean, _ = linalg.sqrtm(sigma1.dot(sigma2), disp=False)
+        if not np.isfinite(covmean).all():
+            offset = np.eye(sigma1.shape[0]) * eps
+            covmean = linalg.sqrtm((sigma1 + offset).dot(sigma2 + offset))
+
+        # numerical error might give slight imaginary component
+        if np.iscomplexobj(covmean):
+            if not np.allclose(np.diagonal(covmean).imag, 0, atol=2e-3):
+                m = np.max(np.abs(covmean.imag))
+                raise ValueError("Imaginary component {}".format(m))
+            covmean = covmean.real
+
+        tr_covmean = np.trace(covmean)
+
+        return diff.dot(diff) + np.trace(sigma1) + np.trace(sigma2) - 2 * tr_covmean
+
+    @validate_arguments(config=dict(arbitrary_types_allowed=True))
+    def _evaluate(
+        self,
+        X: DataLoader,
+        X_syn: DataLoader,
+    ) -> Dict:
+        if X.type() != "image":
+            raise RuntimeError(
+                f"The metric is valid only for image tasks, but got datasets {X.type()} and {X_syn.type()}"
+            )
+
+        X1 = X.numpy().reshape(len(X), -1)
+        X2 = X_syn.numpy().reshape(len(X), -1)
+
+        mu1, cov1 = self._fit_gaussian(X1)
+        mu2, cov2 = self._fit_gaussian(X2)
+        score = self._calculate_frechet_distance(mu1, cov1, mu2, cov2)
+
+        return {
+            "score": score,
         }

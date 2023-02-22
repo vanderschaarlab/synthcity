@@ -1742,7 +1742,7 @@ class ImageDataLoader(DataLoader):
         )
 
     def __getitem__(self, index: Union[list, int, str]) -> Any:
-        return self.data[index]
+        return self.dataframe()[index]
 
     def _train_test_split(self) -> Tuple:
         indices = np.arange(len(self.data))
