@@ -99,6 +99,9 @@ class kAnonymization(PrivacyEvaluator):
 
     @validate_arguments(config=dict(arbitrary_types_allowed=True))
     def _evaluate(self, X_gt: DataLoader, X_syn: DataLoader) -> Dict:
+        if X_gt.type() == "image":
+            raise ValueError("Metric {self.name()} doesn't support images")
+
         return {
             "gt": self.evaluate_data(X_gt),
             "syn": (self.evaluate_data(X_syn) + 1e-8),
@@ -149,6 +152,9 @@ class lDiversityDistinct(PrivacyEvaluator):
 
     @validate_arguments(config=dict(arbitrary_types_allowed=True))
     def _evaluate(self, X_gt: DataLoader, X_syn: DataLoader) -> Dict:
+        if X_gt.type() == "image":
+            raise ValueError("Metric {self.name()} doesn't support images")
+
         return {
             "gt": self.evaluate_data(X_gt),
             "syn": (self.evaluate_data(X_syn) + 1e-8),
@@ -178,6 +184,9 @@ class kMap(PrivacyEvaluator):
 
     @validate_arguments(config=dict(arbitrary_types_allowed=True))
     def _evaluate(self, X_gt: DataLoader, X_syn: DataLoader) -> Dict:
+        if X_gt.type() == "image":
+            raise ValueError("Metric {self.name()} doesn't support images")
+
         features = get_features(X_gt, X_gt.sensitive_features)
 
         values = []
@@ -220,6 +229,9 @@ class DeltaPresence(PrivacyEvaluator):
 
     @validate_arguments(config=dict(arbitrary_types_allowed=True))
     def _evaluate(self, X_gt: DataLoader, X_syn: DataLoader) -> Dict:
+        if X_gt.type() == "image":
+            raise ValueError("Metric {self.name()} doesn't support images")
+
         features = get_features(X_gt, X_gt.sensitive_features)
 
         values = []
@@ -303,8 +315,8 @@ class IdentifiabilityScore(PrivacyEvaluator):
         Returns:
             WD_value: Wasserstein distance
         """
-        X_gt_ = X_gt.numpy()
-        X_syn_ = X_syn.numpy()
+        X_gt_ = X_gt.numpy().reshape(len(X_gt), -1)
+        X_syn_ = X_syn.numpy().reshape(len(X_gt), -1)
 
         if emb == "OC":
             emb = f"_{emb}"
@@ -321,7 +333,7 @@ class IdentifiabilityScore(PrivacyEvaluator):
             return entropy(counts)
 
         # Parameters
-        no, x_dim = X_gt.shape
+        no, x_dim = X_gt_.shape
 
         # Weights
         W = np.zeros(
@@ -331,7 +343,7 @@ class IdentifiabilityScore(PrivacyEvaluator):
         )
 
         for i in range(x_dim):
-            W[i] = compute_entropy(X_gt.numpy()[:, i])
+            W[i] = compute_entropy(X_gt_[:, i])
 
         # Normalization
         X_hat = X_gt_
