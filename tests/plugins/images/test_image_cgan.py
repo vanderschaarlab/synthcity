@@ -34,10 +34,11 @@ def test_plugin_hyperparams(test_plugin: Plugin) -> None:
     assert len(test_plugin.hyperparameter_space()) == 6
 
 
-def test_plugin_fit() -> None:
+@pytest.mark.parametrize("height", [32, 64, 128])
+def test_plugin_fit(height: int) -> None:
     test_plugin = plugin(n_iter=5)
 
-    X = ImageDataLoader(dataset).sample(100)
+    X = ImageDataLoader(dataset, height=height).sample(100)
 
     test_plugin.fit(X)
 
