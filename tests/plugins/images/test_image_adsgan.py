@@ -7,7 +7,7 @@ from torchvision import datasets
 # synthcity absolute
 from synthcity.plugins import Plugin
 from synthcity.plugins.core.dataloader import ImageDataLoader
-from synthcity.plugins.images.plugin_image_cgan import plugin
+from synthcity.plugins.images.plugin_image_adsgan import plugin
 
 plugin_name = "image_adsgan"
 

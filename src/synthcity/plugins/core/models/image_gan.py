@@ -163,20 +163,14 @@ class ImageGAN(nn.Module):
 
         # training
         self.generator_n_iter = generator_n_iter
-        self.generator_optimizer = torch.optim.Adam(
-            self.generator.parameters(),
-            lr=generator_lr,
-            weight_decay=generator_weight_decay,
-            # betas=generator_opt_betas,
-        )
+        self.generator_lr = generator_lr
+        self.generator_weight_decay = generator_weight_decay
+        self.generator_opt_betas = generator_opt_betas
 
         self.discriminator_n_iter = discriminator_n_iter
-        self.discriminator_optimizer = torch.optim.Adam(
-            self.discriminator.parameters(),
-            lr=discriminator_lr,
-            weight_decay=discriminator_weight_decay,
-            # betas=discriminator_opt_betas,
-        )
+        self.discriminator_lr = discriminator_lr
+        self.discriminator_weight_decay = discriminator_weight_decay
+        self.discriminator_opt_betas = discriminator_opt_betas
 
         self.n_iter_print = n_iter_print
         self.n_iter_min = n_iter_min
@@ -523,11 +517,26 @@ class ImageGAN(nn.Module):
         fake_labels_generator: Optional[Callable] = None,
         true_labels_generator: Optional[Callable] = None,
     ) -> "ImageGAN":
+        self.train()
 
         X, cond, X_val, cond_val = self._train_test_split(X, cond)
 
         # Load Dataset
         loader = self.dataloader(X, cond)
+
+        # Create the optimizers
+        self.generator_optimizer = torch.optim.Adam(
+            self.generator.parameters(),
+            lr=self.generator_lr,
+            weight_decay=self.generator_weight_decay,
+            betas=self.generator_opt_betas,
+        )
+        self.discriminator_optimizer = torch.optim.Adam(
+            self.discriminator.parameters(),
+            lr=self.discriminator_lr,
+            weight_decay=self.discriminator_weight_decay,
+            betas=self.discriminator_opt_betas,
+        )
 
         # Privacy
         if self.dp_enabled:
@@ -642,9 +651,11 @@ class ImageGAN(nn.Module):
         gradient = torch.autograd.grad(
             inputs=interpolatted_samples,
             outputs=interpolated_score,
-            retain_graph=True,
-            create_graph=True,
             grad_outputs=torch.ones_like(interpolated_score),
+            create_graph=True,
+            retain_graph=True,
+            only_inputs=True,
+            allow_unused=True,
         )[0]
         gradient = gradient.view(gradient.shape[0], -1)
         gradient_norm = gradient.norm(2, dim=1)
