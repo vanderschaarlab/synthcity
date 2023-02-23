@@ -145,7 +145,8 @@ class ConvNet(nn.Module):
             if self.early_stopping or i % self.n_iter_print == 0:
                 with torch.no_grad():
                     X_val, y_val = next(iter(test_loader))
-                    y_val = y_val.long()
+                    X_val = self._check_tensor(X_val)
+                    y_val = self._check_tensor(y_val).long()
 
                     preds = self.forward(X_val).squeeze()
                     val_loss = self.loss(preds, y_val)
@@ -200,6 +201,8 @@ class ConvNet(nn.Module):
 
     @validate_arguments(config=dict(arbitrary_types_allowed=True))
     def forward(self, X: torch.Tensor) -> torch.Tensor:
+        X = self._check_tensor(X)
+
         return self.model(X.float())
 
     def _train_epoch(self, loader: torch.utils.data.DataLoader) -> float:
@@ -209,7 +212,9 @@ class ConvNet(nn.Module):
             self.optimizer.zero_grad()
 
             X_next, y_next = sample
-            y_next = y_next.long()
+
+            X_next = self._check_tensor(X_next)
+            y_next = self._check_tensor(y_next).long()
 
             if len(X_next) < 2:
                 continue
@@ -247,6 +252,7 @@ class ConditionalGenerator(nn.Module):
         n_units_latent: int,
         cond: Optional[torch.Tensor] = None,
         cond_embedding_n_units_hidden: int = 100,
+        device: Any = DEVICE,
     ) -> None:
         super(ConditionalGenerator, self).__init__()
 
@@ -254,6 +260,7 @@ class ConditionalGenerator(nn.Module):
         self.cond = cond
         self.n_channels = n_channels
         self.n_units_latent = n_units_latent
+        self.device = device
 
         self.label_conditioned_generator: Optional[nn.Module] = None
         if cond is not None:
@@ -261,7 +268,7 @@ class ConditionalGenerator(nn.Module):
             self.label_conditioned_generator = nn.Sequential(
                 nn.Embedding(len(classes), cond_embedding_n_units_hidden),
                 nn.Linear(cond_embedding_n_units_hidden, n_channels * n_units_latent),
-            )
+            ).to(device)
 
     def forward(
         self, noise: torch.Tensor, cond: Optional[torch.Tensor] = None
@@ -289,6 +296,7 @@ class ConditionalDiscriminator(nn.Module):
         width: int,
         cond: Optional[torch.Tensor] = None,
         cond_embedding_n_units_hidden: int = 100,
+        device: Any = DEVICE,
     ) -> None:
         super(ConditionalDiscriminator, self).__init__()
         self.model = model
@@ -298,13 +306,15 @@ class ConditionalDiscriminator(nn.Module):
         self.height = height
         self.width = width
 
+        self.device = device
+
         self.label_conditioned_generator: Optional[nn.Module] = None
         if cond is not None:
             classes = torch.unique(self.cond)
             self.label_conditioned_generator = nn.Sequential(
                 nn.Embedding(len(classes), cond_embedding_n_units_hidden),
                 nn.Linear(cond_embedding_n_units_hidden, n_channels * height * width),
-            )
+            ).to(device)
 
     def forward(
         self, X: torch.Tensor, cond: Optional[torch.Tensor] = None
@@ -435,6 +445,7 @@ def suggest_image_generator_discriminator_arch(
             n_units_latent=n_units_latent,
             cond=cond,
             cond_embedding_n_units_hidden=cond_embedding_n_units_hidden,
+            device=device,
         ), ConditionalDiscriminator(
             discriminator,
             n_channels=n_channels,
@@ -442,6 +453,7 @@ def suggest_image_generator_discriminator_arch(
             width=width,
             cond=cond,
             cond_embedding_n_units_hidden=cond_embedding_n_units_hidden,
+            device=device,
         )
 
     raise ValueError(f"unsupported image arch : ({n_channels}, {height}, {width})")
