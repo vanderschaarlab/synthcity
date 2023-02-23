@@ -74,6 +74,10 @@ class AdsGANPlugin(Plugin):
             The max number of clusters to create for continuous columns when encoding
         adjust_inference_sampling: bool
             Adjust the marginal probabilities in the synthetic data to closer match the training set. Active only with the ConditionalSampler
+        lambda_gradient_penalty: float = 10
+            Weight for the gradient penalty
+        lambda_identifiability_penalty: float = 0.1
+            Weight for the identifiability penalty, if enabled
         # early stopping
         n_iter_print: int
             Number of iterations after which to print updates and check the validation loss.

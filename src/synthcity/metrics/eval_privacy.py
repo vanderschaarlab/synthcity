@@ -99,7 +99,7 @@ class kAnonymization(PrivacyEvaluator):
 
     @validate_arguments(config=dict(arbitrary_types_allowed=True))
     def _evaluate(self, X_gt: DataLoader, X_syn: DataLoader) -> Dict:
-        if X_gt.type() == "image":
+        if X_gt.type() == "images":
             raise ValueError("Metric {self.name()} doesn't support images")
 
         return {
@@ -152,7 +152,7 @@ class lDiversityDistinct(PrivacyEvaluator):
 
     @validate_arguments(config=dict(arbitrary_types_allowed=True))
     def _evaluate(self, X_gt: DataLoader, X_syn: DataLoader) -> Dict:
-        if X_gt.type() == "image":
+        if X_gt.type() == "images":
             raise ValueError("Metric {self.name()} doesn't support images")
 
         return {
@@ -184,7 +184,7 @@ class kMap(PrivacyEvaluator):
 
     @validate_arguments(config=dict(arbitrary_types_allowed=True))
     def _evaluate(self, X_gt: DataLoader, X_syn: DataLoader) -> Dict:
-        if X_gt.type() == "image":
+        if X_gt.type() == "images":
             raise ValueError("Metric {self.name()} doesn't support images")
 
         features = get_features(X_gt, X_gt.sensitive_features)
@@ -229,7 +229,7 @@ class DeltaPresence(PrivacyEvaluator):
 
     @validate_arguments(config=dict(arbitrary_types_allowed=True))
     def _evaluate(self, X_gt: DataLoader, X_syn: DataLoader) -> Dict:
-        if X_gt.type() == "image":
+        if X_gt.type() == "images":
             raise ValueError("Metric {self.name()} doesn't support images")
 
         features = get_features(X_gt, X_gt.sensitive_features)

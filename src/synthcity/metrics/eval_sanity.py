@@ -93,7 +93,7 @@ class DataMismatchScore(BasicMetricEvaluator):
         if X_gt.type() != X_syn.type():
             raise ValueError("Incompatible dataloader")
 
-        if X_gt.type() == "image":
+        if X_gt.type() == "images":
             return {"score": 0}
 
         if len(X_gt.columns) != len(X_syn.columns):

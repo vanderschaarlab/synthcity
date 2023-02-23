@@ -1582,7 +1582,7 @@ class ImageDataLoader(DataLoader):
         self.channels = data.shape()[1]
 
         super().__init__(
-            data_type="image",
+            data_type="images",
             data=data,
             random_state=random_state,
             train_size=train_size,
@@ -1735,7 +1735,7 @@ def create_from_info(
         return TimeSeriesDataLoader.from_info(data, info)
     elif info["data_type"] == "time_series_survival":
         return TimeSeriesSurvivalDataLoader.from_info(data, info)
-    elif info["data_type"] == "image":
+    elif info["data_type"] == "images":
         return ImageDataLoader.from_info(data, info)
     else:
         raise RuntimeError(f"invalid datatype {info}")

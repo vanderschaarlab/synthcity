@@ -232,7 +232,7 @@ class SyntheticDetectionMLP(DetectionEvaluator):
 
     @validate_arguments(config=dict(arbitrary_types_allowed=True))
     def evaluate(self, X_gt: DataLoader, X_syn: DataLoader) -> Dict:
-        if X_gt.type() == "image":
+        if X_gt.type() == "images":
             return self._evaluate_image_detection(X_gt, X_syn)
 
         model_args = {

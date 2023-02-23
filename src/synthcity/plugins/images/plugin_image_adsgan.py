@@ -30,12 +30,12 @@ from synthcity.plugins.core.schema import Schema
 from synthcity.utils.constants import DEVICE
 
 
-class ImageCGANPlugin(Plugin):
+class ImageAdsGANPlugin(Plugin):
     """
-    .. inheritance-diagram:: synthcity.plugins.images.plugin_image_cgan.ImageCGANPlugin
+    .. inheritance-diagram:: synthcity.plugins.images.plugin_image_adsgan.ImageAdsGANPlugin
         :parts: 1
 
-    Image (Conditional) GAN
+    Image AdsGAN - Anonymization through Data Synthesis using Generative Adversarial Networks.
 
     Args:
         n_iter: int
@@ -60,6 +60,10 @@ class ImageCGANPlugin(Plugin):
             random seed to use
         clipping_value: int, default 0
             Gradients clipping value. Zero disables the feature
+        lambda_gradient_penalty: float = 10
+            Weight for the gradient penalty
+        lambda_identifiability_penalty: float = 0.1
+            Weight for the identifiability penalty
         # early stopping
         n_iter_print: int
             Number of iterations after which to print updates and check the validation loss.
@@ -78,7 +82,7 @@ class ImageCGANPlugin(Plugin):
         >>> from synthcity.plugins import Plugins
         >>> from synthcity.plugins.core.dataloader import ImageDataLoader
         >>>
-        >>> model = Plugins().get("image_cgan", n_iter = 10)
+        >>> model = Plugins().get("image_adsgan", n_iter = 10)
         >>>
         >>> dataset = datasets.MNIST(".", download=True)
         >>> dataloader = ImageDataLoader(dataset).sample(100)
@@ -109,6 +113,7 @@ class ImageCGANPlugin(Plugin):
         random_state: int = 0,
         clipping_value: int = 1,
         lambda_gradient_penalty: float = 10,
+        lambda_identifiability_penalty: float = 0.1,
         device: Any = DEVICE,
         # early stopping
         patience: int = 5,
@@ -155,6 +160,7 @@ class ImageCGANPlugin(Plugin):
         self.random_state = random_state
         self.clipping_value = clipping_value
         self.lambda_gradient_penalty = lambda_gradient_penalty
+        self.lambda_identifiability_penalty = lambda_identifiability_penalty
 
         self.device = device
         self.patience = patience
@@ -166,7 +172,7 @@ class ImageCGANPlugin(Plugin):
 
     @staticmethod
     def name() -> str:
-        return "image_cgan"
+        return "image_adsgan"
 
     @staticmethod
     def type() -> str:
@@ -188,7 +194,7 @@ class ImageCGANPlugin(Plugin):
             CategoricalDistribution(name="weight_decay", choices=[1e-3, 1e-4]),
         ]
 
-    def _fit(self, X: DataLoader, *args: Any, **kwargs: Any) -> "ImageCGANPlugin":
+    def _fit(self, X: DataLoader, *args: Any, **kwargs: Any) -> "ImageAdsGANPlugin":
         if X.type() != "images":
             raise RuntimeError("Invalid dataloader type for image generators")
 
@@ -233,7 +239,7 @@ class ImageCGANPlugin(Plugin):
             generator_lr=self.lr,
             generator_weight_decay=self.weight_decay,
             generator_opt_betas=self.opt_betas,
-            generator_extra_penalties=[],
+            generator_extra_penalties=["identifiability_penalty"],
             # discriminator
             discriminator_n_iter=self.discriminator_n_iter,
             discriminator_lr=self.lr,
@@ -244,6 +250,7 @@ class ImageCGANPlugin(Plugin):
             random_state=self.random_state,
             clipping_value=self.clipping_value,
             lambda_gradient_penalty=self.lambda_gradient_penalty,
+            lambda_identifiability_penalty=self.lambda_identifiability_penalty,
             device=self.device,
             n_iter_min=self.n_iter_min,
             n_iter_print=self.n_iter_print,
@@ -315,4 +322,4 @@ class ImageCGANPlugin(Plugin):
         return torch.from_numpy(cond).to(self.device)
 
 
-plugin = ImageCGANPlugin
+plugin = ImageAdsGANPlugin

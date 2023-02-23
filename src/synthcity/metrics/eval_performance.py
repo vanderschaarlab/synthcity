@@ -161,7 +161,7 @@ class PerformanceEvaluator(MetricEvaluator):
         Returns:
             gt and syn performance scores
         """
-        if X_gt.type() == "image":
+        if X_gt.type() == "images":
             raise ValueError("Standard evaluation not supported for images")
 
         cache_file = (
@@ -237,7 +237,7 @@ class PerformanceEvaluator(MetricEvaluator):
         Returns:
             gt and syn performance scores
         """
-        if X_gt.type() == "image":
+        if X_gt.type() == "images":
             raise ValueError("Survival analysis evaluation not supported for images")
 
         if X_gt.type() != "survival_analysis" or X_syn.type() != "survival_analysis":
@@ -347,7 +347,7 @@ class PerformanceEvaluator(MetricEvaluator):
         Returns:
             gt and syn performance scores
         """
-        if X_gt.type() == "image":
+        if X_gt.type() == "images":
             raise ValueError("Time series evaluation not supported for images")
 
         if X_gt.type() != "time_series" or X_syn.type() != "time_series":
@@ -856,7 +856,7 @@ class PerformanceEvaluatorMLP(PerformanceEvaluator):
             )
 
         elif self._task_type == "classification" or self._task_type == "regression":
-            if X_gt.type() == "image":
+            if X_gt.type() == "images":
                 return self._evaluate_images(X_gt, X_syn)
 
             mlp_args = {

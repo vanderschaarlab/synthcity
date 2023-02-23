@@ -836,7 +836,7 @@ class FrechetInceptionDistance(StatisticalEvaluator):
         X: DataLoader,
         X_syn: DataLoader,
     ) -> Dict:
-        if X.type() != "image":
+        if X.type() != "images":
             raise RuntimeError(
                 f"The metric is valid only for image tasks, but got datasets {X.type()} and {X_syn.type()}"
             )
