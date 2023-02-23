@@ -36,6 +36,7 @@
     - Survival Analysis: SurvivalGAN, SurVAE.
     - Privacy-focused: DECAF, DP-GAN, AdsGAN, PATEGAN, PrivBayes.
     - Domain adaptation: RadialGAN.
+    - Images: Image ConditionalGAN, Image AdsGAN.
 - :book: [Read the docs !](https://synthcity.readthedocs.io/)
 - :airplane: [Checkout the tutorials!](https://github.com/vanderschaarlab/synthcity#-tutorials)
 
@@ -173,6 +174,37 @@ syn_model.fit(data)
 
 syn_model.generate(count=10)
 ```
+### Images
+
+__Note__ : The architectures used for generators are not state-of-the-art. For other architectures, consider extending the `suggest_image_generator_discriminator_arch` method from the `convnet.py` module.
+
+* List the available generators
+
+```python
+from synthcity.plugins import Plugins
+
+Plugins(categories=["images"]).list()
+```
+
+* Generate new data
+```python
+from synthcity.plugins import Plugins
+from synthcity.plugins.core.dataloader import ImageDataLoader
+from torchvision import datasets
+
+
+dataset = datasets.MNIST(".", download=True)
+loader = ImageDataLoader(dataset).sample(100)
+
+syn_model = Plugins().get("image_cgan")
+
+syn_model.fit(loader)
+
+syn_img, syn_labels = syn_model.generate(count=10).unpack().numpy()
+
+print(syn_img.shape)
+
+```
 
 ### Serialization
 
@@ -225,7 +257,8 @@ assert syn_model.name() == reloaded.name()
    - [![Test In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/drive/1Wa2CPsbXzbKMPC5fSBhKl00Gi7QqVkse?usp=sharing) [ Tutorial 3: Generating Survival Analysis data](https://github.com/vanderschaarlab/synthcity/blob/main/tutorials/tutorial3_survival_analysis.ipynb)
    - [![Test In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/drive/1jN36GCAKEkjzDlczmQfR7Wbh3yF3cIz5?usp=sharing) [ Tutorial 4: Generating Time Series](https://github.com/vanderschaarlab/synthcity/blob/main/tutorials/tutorial4_time_series.ipynb)
    - [![Test In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/drive/1Nf8d3Y6sXr1uco8MsJA4wb33iFvReL59?usp=sharing) [ Tutorial 5: Generating Data with Differential Privacy Guarantees](https://github.com/vanderschaarlab/synthcity/blob/main/tutorials/tutorial5_differential_privacy.ipynb)
-
+   - [ Tutorial 6 for using Custom Time series data](https://github.com/vanderschaarlab/synthcity/blob/main/tutorials/tutorial6_time_series_data_preparation.ipynb)
+   - [![Test In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/drive/1gEUSGxVmts9C0cDBKbq7Ees-wvQpUBoo?usp=sharing) [ Tutorial 7: Image generation](https://github.com/vanderschaarlab/synthcity/blob/main/tutorials/tutorial7_image_generation_using_mednist.ipynb)
 
 ## 🔑 Methods
 
@@ -291,6 +324,13 @@ assert syn_model.name() == reloaded.name()
 |--- | --- | --- |
 |**radialgan** | Training complex machine learning models for prediction often requires a large amount of data that is not always readily available. Leveraging these external datasets from related but different sources is, therefore, an essential task if good predictive models are to be built for deployment in settings where data can be rare. RadialGAN is an approach to the problem in which multiple GAN architectures are used to learn to translate from one dataset to another, thereby allowing to augment the target dataset effectively and learning better predictive models than just the target dataset. | [RadialGAN: Leveraging multiple datasets to improve target-specific predictive models using Generative Adversarial Networks](https://arxiv.org/abs/1802.06403) |
 
+### Images
+
+| Method | Description | Reference |
+|--- | --- | --- |
+|**image_cgan**| Conditional GAN for generating images|  --- |
+|**image_adsgan**| The AdsGAN method adapted for image generation|  --- |
+
 
 ### Debug methods
 
@@ -328,6 +368,7 @@ The following table contains the available evaluation metrics:
 |**prdc**| Computes precision, recall, density, and coverage given two manifolds. | --- |
 |**alpha_precision**|Evaluate the alpha-precision, beta-recall, and authenticity scores. | --- |
 |**survival_km_distance**|The distance between two Kaplan-Meier plots(survival analysis). | --- |
+|**fid**|The Frechet Inception Distance (FID) calculates the distance between two distributions of images. | --- |
 
 
 
