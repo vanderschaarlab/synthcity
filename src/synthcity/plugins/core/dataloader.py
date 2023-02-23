@@ -1567,10 +1567,12 @@ class ImageDataLoader(DataLoader):
         img_transform = []
         if not isinstance(dummy, PIL.Image.Image):
             img_transform = [transforms.ToPILImage()]
+
         img_transform.extend(
             [
                 transforms.Resize((height, width)),
                 transforms.ToTensor(),
+                transforms.Normalize(mean=(0.5,), std=(0.5,)),
             ]
         )
 

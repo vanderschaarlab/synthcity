@@ -19,6 +19,7 @@ from synthcity.plugins.core.dataloader import DataLoader
 from synthcity.plugins.core.dataset import NumpyDataset
 from synthcity.plugins.core.models.convnet import suggest_image_classifier_arch
 from synthcity.plugins.core.models.mlp import MLP
+from synthcity.utils.reproducibility import clear_cache
 from synthcity.utils.serialization import load_from_file, save_to_file
 
 
@@ -183,6 +184,8 @@ class SyntheticDetectionMLP(DetectionEvaluator):
 
     @validate_arguments(config=dict(arbitrary_types_allowed=True))
     def _evaluate_image_detection(self, X_gt: DataLoader, X_syn: DataLoader) -> Dict:
+        clear_cache()
+
         cache_file = (
             self._workspace
             / f"sc_metric_cache_{self.type()}_{self.name()}_{X_gt.hash()}_{X_syn.hash()}_{self._reduction}_{platform.python_version()}.bkp"
@@ -227,7 +230,7 @@ class SyntheticDetectionMLP(DetectionEvaluator):
         results = {self._reduction: float(self.reduction()(res))}
         log.info(f" Detection eval for {self.name()} : {results}")
 
-        # save_to_file(cache_file, results)
+        save_to_file(cache_file, results)
         return results
 
     @validate_arguments(config=dict(arbitrary_types_allowed=True))

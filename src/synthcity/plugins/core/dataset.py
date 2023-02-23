@@ -67,6 +67,11 @@ class FlexibleDataset(torch.utils.data.Dataset):
         self.ndarrays = (x, y)
         return x, y
 
+    def tensors(self) -> Tuple[torch.Tensor, torch.Tensor]:
+        x, y = self.numpy()
+
+        return torch.from_numpy(x), torch.from_numpy(y)
+
     def labels(self) -> np.ndarray:
         labels = []
         for idx in self.indices:

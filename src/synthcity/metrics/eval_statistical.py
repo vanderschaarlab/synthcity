@@ -25,6 +25,7 @@ from synthcity.plugins.core.dataloader import DataLoader
 from synthcity.plugins.core.models.survival_analysis.metrics import (
     nonparametric_distance,
 )
+from synthcity.utils.reproducibility import clear_cache
 from synthcity.utils.serialization import load_from_file, save_to_file
 
 
@@ -55,6 +56,7 @@ class StatisticalEvaluator(MetricEvaluator):
         if self.use_cache(cache_file):
             return load_from_file(cache_file)
 
+        clear_cache()
         results = self._evaluate(X_gt, X_syn)
         save_to_file(cache_file, results)
         return results

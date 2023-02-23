@@ -418,15 +418,18 @@ def suggest_image_generator_discriminator_arch(
                 f"Unsupported predefined arch : ({n_channels}, {height}, {width})"
             )
 
-        generator = Generator(
-            latent_shape=(n_units_latent, cond_weight * n_channels),
-            start_shape=(64, start_shape_gen, start_shape_gen),
-            channels=[64, 32, 16, n_channels],
-            strides=[2, 2, 2, 1],
-            kernel_size=3,
-            dropout=generator_dropout,
-            act=map_nonlin(generator_nonlin),
-            num_res_units=generator_n_residual_units,
+        generator = nn.Sequential(
+            Generator(
+                latent_shape=(n_units_latent, cond_weight * n_channels),
+                start_shape=(64, start_shape_gen, start_shape_gen),
+                channels=[64, 32, 16, n_channels],
+                strides=[2, 2, 2, 1],
+                kernel_size=3,
+                dropout=generator_dropout,
+                act=map_nonlin(generator_nonlin),
+                num_res_units=generator_n_residual_units,
+            ),
+            nn.Tanh(),
         ).to(device)
         discriminator = Discriminator(
             in_shape=(cond_weight * n_channels, height, width),
