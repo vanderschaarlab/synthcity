@@ -1523,10 +1523,10 @@ class ImageDataLoader(DataLoader):
 
     Constructor Args:
         data: torch.utils.data.Dataset or torch.Tensor
-            The image dataset
+            The image dataset or a tuple of (tensor images, tensor labels)
         random_state: int
             Defaults to zero.
-        height: int
+        height: int. Default = 32
             Height to use internally
         width: Optional[int]
             Optional width to use internally. If None, it is used the same value as height.
@@ -1729,6 +1729,7 @@ class ImageDataLoader(DataLoader):
 def create_from_info(
     data: Union[pd.DataFrame, torch.utils.data.Dataset], info: dict
 ) -> "DataLoader":
+    """Helper for creating a DataLoader from existing information."""
     if info["data_type"] == "generic":
         return GenericDataLoader.from_info(data, info)
     elif info["data_type"] == "survival_analysis":

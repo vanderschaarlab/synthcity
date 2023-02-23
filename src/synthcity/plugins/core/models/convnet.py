@@ -36,7 +36,7 @@ def map_nonlin(nonlin: str) -> Act:
 
 class ConvNet(nn.Module):
     """
-    Fully connected or residual neural nets for classification and regression.
+    Wrapper for convolutional nets for classification and regression.
 
     Parameters
     ----------
@@ -245,6 +245,21 @@ class ConvNet(nn.Module):
 
 
 class ConditionalGenerator(nn.Module):
+    """Wrapper for making existing CNN generator conditional. Useful for Conditional GANs
+
+    Args:
+        model: nn.Module
+            Core model.
+        n_channels: int
+            Number of channels in images
+        n_units_latent: int
+            Noise size for the input
+        cond: torch.Tensor
+            The reference conditional
+        cond_embedding_n_units_hidden: int
+            Size of the conditional embedding layer
+    """
+
     def __init__(
         self,
         model: nn.Module,
@@ -288,6 +303,23 @@ class ConditionalGenerator(nn.Module):
 
 
 class ConditionalDiscriminator(nn.Module):
+    """
+
+    Args:
+        model: nn.Module
+            Core model.
+        n_channels: int
+            Number of channels in images
+        height: int
+            Image height
+        width: int
+            Image width
+        cond: torch.Tensor
+            The reference conditional
+        cond_embedding_n_units_hidden: int
+            Size of the conditional embedding layer
+    """
+
     def __init__(
         self,
         model: nn.Module,
@@ -379,28 +411,6 @@ def suggest_image_generator_discriminator_arch(
             Which suggestion to use. Options:
                 - predefined: a few hardcoded architectures for certain image shapes.
                 - ...
-        # Training
-        lr: float
-            learning rate for optimizer.
-        weight_decay: float
-            l2 (ridge) penalty for the weights.
-        n_iter: int
-            Maximum number of iterations.
-        batch_size: int
-            Batch size
-        n_iter_print: int
-            Number of iterations after which to print updates and check the validation loss.
-        random_state: int
-            random_state used
-        patience: int
-            Number of iterations to wait before early stopping after decrease in validation loss
-        n_iter_min: int
-            Minimum number of iterations to go through before starting early stopping
-        clipping_value: int, default 1
-            Gradients clipping value
-        early_stopping: bool
-            Enable/disable early stopping
-
     """
     cond_weight = 1 if cond is None else 2
     if strategy == "predefined":
@@ -507,6 +517,29 @@ def suggest_image_classifier_arch(
              integer stating number of convolutions in residual units, 0 means no residual units
         device: str
             PyTorch device. cpu, cuda
+     # Training
+        lr: float
+            learning rate for optimizer.
+        weight_decay: float
+            l2 (ridge) penalty for the weights.
+        n_iter: int
+            Maximum number of iterations.
+        batch_size: int
+            Batch size
+        n_iter_print: int
+            Number of iterations after which to print updates and check the validation loss.
+        random_state: int
+            random_state used
+        patience: int
+            Number of iterations to wait before early stopping after decrease in validation loss
+        n_iter_min: int
+            Minimum number of iterations to go through before starting early stopping
+        clipping_value: int, default 1
+            Gradients clipping value
+        early_stopping: bool
+            Enable/disable early stopping
+
+
     """
     if strategy == "predefined":
         if height == 32 and width == 32:

@@ -10,7 +10,7 @@ from synthcity.utils.constants import DEVICE
 
 
 class FlexibleDataset(torch.utils.data.Dataset):
-    """Helper dataset wrapper for post-processing or transforming another dataset
+    """Helper dataset wrapper for post-processing or transforming another dataset. Used for controlling the image sizes for the synthcity models.
 
     The class supports adding custom transforms to existing datasets, and to subsample a set of indices.
 

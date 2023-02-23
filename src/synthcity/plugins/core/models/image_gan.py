@@ -48,8 +48,14 @@ class ImageGAN(nn.Module):
     Basic GAN implementation.
 
     Args:
+        image_generator: nn.Module
+            Generator model
+        image_discriminator: nn.Module
+            Discriminator model
         n_units_latent: int
             Number of latent units
+        n_channels: int
+            Number of channels in the image
         generator_n_iter: int
             Maximum number of iterations in the Generator.
         generator_lr: float = 2e-4

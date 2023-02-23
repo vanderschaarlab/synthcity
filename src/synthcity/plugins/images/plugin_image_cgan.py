@@ -38,18 +38,25 @@ class ImageCGANPlugin(Plugin):
     Image (Conditional) GAN
 
     Args:
+        n_units_latent: int
+            The noise units size used by the generator.
         n_iter: int
             Maximum number of iterations in the Generator.
         generator_nonlin: string, default 'leaky_relu'
             Nonlinearity to use in the generator. Can be 'elu', 'relu', 'selu' or 'leaky_relu'.
         generator_dropout: float
             Dropout value. If 0, the dropout is not used.
+        generator_n_residual_units: int
+            The number of convolutions in residual units for the generator, 0 means no residual units
         discriminator_nonlin: string, default 'leaky_relu'
             Nonlinearity to use in the discriminator. Can be 'elu', 'relu', 'selu' or 'leaky_relu'.
         discriminator_n_iter: int
             Maximum number of iterations in the discriminator.
         discriminator_dropout: float
             Dropout value for the discriminator. If 0, the dropout is not used.
+        discriminator_n_residual_units: int
+            The number of convolutions in residual units for the discriminator, 0 means no residual units
+        # training parameters
         lr: float
             learning rate for optimizer..
         weight_decay: float
@@ -60,6 +67,10 @@ class ImageCGANPlugin(Plugin):
             random seed to use
         clipping_value: int, default 0
             Gradients clipping value. Zero disables the feature
+        device: torch device
+            Device: cpu or cuda
+        plot_progress: bool
+            Plot some synthetic samples every `n_iter_print`
         # early stopping
         n_iter_print: int
             Number of iterations after which to print updates and check the validation loss.
@@ -69,6 +80,8 @@ class ImageCGANPlugin(Plugin):
             Max number of iterations without any improvement before training early stopping is trigged.
         patience_metric: Optional[WeightedMetrics]
             If not None, the metric is used for evaluation the criterion for training early stopping.
+        early_stopping: bool
+            Evaluate the quality of the synthetic data using `patience_metric`, and stop after `patience` iteration with no improvement.
         # Core Plugin arguments
         workspace: Path.
             Optional Path for caching intermediary results.

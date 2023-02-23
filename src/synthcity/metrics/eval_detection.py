@@ -75,7 +75,9 @@ class DetectionEvaluator(MetricEvaluator):
         )
         if self.use_cache(cache_file):
             results = load_from_file(cache_file)
-            log.info(f" Detection eval for {self.name()} : {results}")
+            log.info(
+                f" Synthetic-real data discrimination using {self.name()}. AUCROC : {results}"
+            )
             return results
 
         arr_gt = X_gt.numpy().reshape(len(X_gt), -1)
@@ -108,7 +110,9 @@ class DetectionEvaluator(MetricEvaluator):
             res.append(score)
 
         results = {self._reduction: float(self.reduction()(res))}
-        log.info(f" Detection eval for {self.name()} : {results}")
+        log.info(
+            f" Synthetic-real data discrimination using {self.name()}. AUCROC : {results}"
+        )
 
         save_to_file(cache_file, results)
 
@@ -192,7 +196,9 @@ class SyntheticDetectionMLP(DetectionEvaluator):
         )
         if self.use_cache(cache_file):
             results = load_from_file(cache_file)
-            log.info(f" Detection eval for {self.name()} : {results}")
+            log.info(
+                f" Synthetic-real data discrimination using {self.name()}. AUCROC : {results}"
+            )
             return results
 
         data_gt = X_gt.numpy()
@@ -228,7 +234,9 @@ class SyntheticDetectionMLP(DetectionEvaluator):
             res.append(score)
 
         results = {self._reduction: float(self.reduction()(res))}
-        log.info(f" Detection eval for {self.name()} : {results}")
+        log.info(
+            f" Synthetic-real data discrimination using {self.name()}. AUCROC : {results}"
+        )
 
         save_to_file(cache_file, results)
         return results

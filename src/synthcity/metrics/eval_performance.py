@@ -774,6 +774,7 @@ class PerformanceEvaluatorMLP(PerformanceEvaluator):
         train_data: torch.utils.data.Dataset,
         test_data: torch.utils.data.Dataset,
         input_info: Dict,
+        n_classes: int,
     ) -> float:
         _, train_Y = train_data.numpy()
         test_X, test_Y = test_data.numpy()
@@ -782,7 +783,7 @@ class PerformanceEvaluatorMLP(PerformanceEvaluator):
             n_channels=input_info["channels"],
             height=input_info["height"],
             width=input_info["width"],
-            classes=len(np.unique(train_Y)),
+            classes=n_classes,
         )
 
         clf.fit(train_data)
@@ -807,8 +808,11 @@ class PerformanceEvaluatorMLP(PerformanceEvaluator):
         id_gt = X_gt.train().unpack()
         id_X_gt, id_y_gt = id_gt.numpy()
 
+        n_classes = len(np.unique(id_y_gt))
+
         ood_gt = X_gt.test().unpack()
         iter_syn = X_syn.unpack()
+        iter_X_syn, iter_y_syn = iter_syn.numpy()
 
         skf = StratifiedKFold(
             n_splits=self._n_folds, shuffle=True, random_state=self._random_state
@@ -822,12 +826,18 @@ class PerformanceEvaluatorMLP(PerformanceEvaluator):
             train_data = id_gt.filter_indices(train_idx)
             test_data = id_gt.filter_indices(test_idx)
 
-            real_score = self._evaluate_image_clf(train_data, test_data, X_gt.info())
+            real_score = self._evaluate_image_clf(
+                train_data, test_data, X_gt.info(), n_classes=n_classes
+            )
             synth_score_id = self._evaluate_image_clf(
-                iter_syn, test_data, X_syn.info()
+                iter_syn,
+                test_data,
+                X_syn.info(),
+                n_classes=n_classes,
             )  # data seen by the generator
+
             synth_score_ood = self._evaluate_image_clf(
-                iter_syn, ood_gt, X_syn.info()
+                iter_syn, ood_gt, X_syn.info(), n_classes=n_classes
             )  # data not seen by the generator
 
             real_scores.append(real_score)
