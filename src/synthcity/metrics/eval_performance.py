@@ -1,7 +1,7 @@
 # stdlib
 import copy
 import platform
-from typing import Any, Dict, Tuple
+from typing import Any, Dict, Tuple, Union, Literal
 
 # third party
 import numpy as np
@@ -17,7 +17,7 @@ from xgboost import XGBClassifier, XGBRegressor
 
 # synthcity absolute
 import synthcity.logger as log
-from synthcity.metrics._utils import evaluate_auc
+from synthcity.metrics._utils import evaluate_auc, calculate_fair_aug_sample_size
 from synthcity.metrics.core import MetricEvaluator
 from synthcity.plugins.core.dataloader import DataLoader
 from synthcity.plugins.core.models.mlp import MLP
@@ -41,6 +41,13 @@ from synthcity.plugins.core.models.time_series_survival.ts_surv_xgb import (
 )
 from synthcity.plugins.core.models.ts_model import TimeSeriesModel
 from synthcity.utils.serialization import load_from_file, save_to_file
+
+# RD
+import os
+from pathlib import Path
+from synthcity.plugins import Plugins
+from synthcity.plugins.core.dataloader import GenericDataLoader
+from synthcity.plugins.core.constraints import Constraints
 
 
 class PerformanceEvaluator(MetricEvaluator):
@@ -179,6 +186,328 @@ class PerformanceEvaluator(MetricEvaluator):
             model_args = clf_args
         else:
             eval_cbk = self._evaluate_performance_regression
+            model = regression_model
+            model_args = regression_args
+            skf = KFold(
+                n_splits=self._n_folds, shuffle=True, random_state=self._random_state
+            )
+
+        real_scores = []
+        syn_scores_id = []
+        syn_scores_ood = []
+
+        for train_idx, test_idx in skf.split(id_X_gt, id_y_gt):
+            train_data = np.asarray(id_X_gt.loc[train_idx])
+            test_data = np.asarray(id_X_gt.loc[test_idx])
+            train_labels = np.asarray(id_y_gt.loc[train_idx])
+            test_labels = np.asarray(id_y_gt.loc[test_idx])
+
+            real_score = eval_cbk(
+                model, model_args, train_data, train_labels, test_data, test_labels
+            )
+            synth_score_id = eval_cbk(
+                model, model_args, iter_X_syn, iter_y_syn, test_data, test_labels
+            )
+            synth_score_ood = eval_cbk(
+                model, model_args, iter_X_syn, iter_y_syn, ood_X_gt, ood_y_gt
+            )
+
+            real_scores.append(real_score)
+            syn_scores_id.append(synth_score_id)
+            syn_scores_ood.append(synth_score_ood)
+
+        results = {
+            "gt": float(self.reduction()(real_scores)),
+            "syn_id": float(self.reduction()(syn_scores_id)),
+            "syn_ood": float(self.reduction()(syn_scores_ood)),
+        }
+
+        save_to_file(cache_file, results)
+
+        return results
+
+    @validate_arguments(config=dict(arbitrary_types_allowed=True))
+    def _generate_synthetic_data(
+        self,
+        X_train: np.ndarray,
+        y_train: np.ndarray,
+        fairness_column: str,
+        target_column: str,
+        syn_model_name: str,  # limit this to plugins
+        prefix: str = "fairness.conditional_augmentation",
+        strict: bool = True,
+        rule: Literal["equal", "log", "ad-hoc"] = "equal",
+        ad_hoc_augment_vals: Dict[
+            Union[int, str], int
+        ] = {},  # Only required for rule == "ad-hoc"
+        random_state: int = 42,
+    ) -> np.ndarray:
+
+        """Generates synthetic data
+
+        Args:
+            X_train (np.ndarray): The dataset used to train the downstream model.
+            y_train (np.ndarray): The data labels for `X_train`. This is used to train the downstream model.
+            fairness_column (str): The column name of the column to test the fairness of a downstream model with respect to.
+            target_column (str): The column name of the label column.
+            syn_model_name (str): The name of the synthetic model plugin to use to generate the synthetic data.
+            prefix (str): The prefix for the saved synthetic data generation model filename.
+            strict (bool, optional): Flag to ensure that the condition for generating synthetic data is strictly met. Defaults to False.
+            rule (Literal["equal", "log", "ad-hoc"): The rule used to achieve the desired proportion records with each value in the fairness column. Defaults to "equal".
+            ad_hoc_augment_vals (Dict[ Union[int, str], int ], optional): A dictionary containing the number of each class to augment the real data with. This is only required if using the rule="ad-hoc" option. Defaults to {}.
+            random_state (int, optional): The random state to seed the synthetic data generation. Defaults to 42.
+
+        Returns:
+            np.ndarray: The generated synthetic data.
+        """
+        X_train = pd.DataFrame(X_train)
+        y_train = pd.Series(y_train)
+
+        training_dataset = X_train
+        training_dataset[target_column] = y_train
+
+        loader = GenericDataLoader(
+            training_dataset,
+            target_column=target_column,
+            sensitive_features=[fairness_column],
+            random_state=random_state,
+        )
+
+        # Define saved model name
+        # TODO: Move this location to the workspace folder with workspace file naming conventions
+        # TODO: and remove Path
+        save_file = (
+            Path("Tutorials/saved_models")
+            / f"{prefix}_{syn_model_name}_numericalised_rnd={random_state}.bkp"
+        )
+
+        # Load if available
+        # TODO: and remove Path
+        if Path(save_file).exists():
+            syn_model = load_from_file(save_file)
+
+        # create and fit if not available
+        else:
+            syn_model = Plugins().get(syn_model_name, random_state=random_state)
+            syn_model.fit(loader, cond=loader[fairness_column])
+            save_to_file(save_file, syn_model)
+
+        augmentation_counts = calculate_fair_aug_sample_size(
+            X_train, fairness_column, rule, ad_hoc_augment_vals=ad_hoc_augment_vals
+        )
+        if not strict:
+            # set count equal to the total number of records required according to calculate_fair_aug_sample_size
+            count = sum(augmentation_counts.values())
+            cond = pd.Series(
+                np.repeat(
+                    list(augmentation_counts.keys()), list(augmentation_counts.values())
+                )
+            )
+            syn_data = syn_model.generate(count=count, cond=cond).dataframe()
+        else:
+            syn_data_list = []
+            for fairness_value, count in augmentation_counts.items():
+                if count > 0:
+                    constraints = Constraints(
+                        rules=[(fairness_column, "==", fairness_value)]
+                    )
+                    syn_data_list.append(
+                        syn_model.generate(
+                            count=count, constraints=constraints
+                        ).dataframe()
+                    )
+            syn_data = pd.concat(syn_data_list)
+        return np.asarray(syn_data)
+
+    # TODO: collapse into augment_data()
+    @validate_arguments(config=dict(arbitrary_types_allowed=True))
+    def _augment_data(
+        self,
+        syn_data: np.ndarray,
+        X_train: np.ndarray,
+        y_train: np.ndarray,
+        target_column: str = "is_dead_at_time_horizon=14",
+    ) -> Tuple[np.ndarray, np.ndarray]:
+        """A function to augment a dataset with synthetic records.
+
+        Args:
+            syn_data (np.ndarray): The synthetic dataset.
+            X_train (np.ndarray): The real dataset to be augmented.
+            y_train (Union[pd.Series, np.ndarray]): The data labels for `X_train`. This is used to train the downstream model.
+            target_column (str, optional): The column containing the labels for the dataset. Defaults to "is_dead_at_time_horizon=14".
+
+        Returns:
+            Tuple[np.ndarray, np.ndarray]: The augmented dataset.
+        """
+
+        X_train = pd.DataFrame(X_train)
+        y_train = pd.Series(y_train)
+
+        training_dataset = X_train
+        training_dataset[target_column] = y_train
+        augmented_data = pd.concat(
+            [
+                training_dataset,
+                syn_data,
+            ]
+        )
+        X_augmented = augmented_data[augmented_data.columns.drop(target_column)]
+        y_augmented = augmented_data[target_column]
+        return np.asarray(X_augmented), np.asarray(y_augmented)
+
+    @validate_arguments(config=dict(arbitrary_types_allowed=True))
+    def augment_data(
+        self,
+        X_train: np.ndarray,
+        y_train: np.ndarray,
+        fairness_column: str,
+        target_column: str,
+        model_name: str,
+        prefix: str = "fairness.conditional_augmentation",
+        strict: bool = False,
+        rule: Literal["equal", "log", "ad-hoc"] = "equal",
+        ad_hoc_augment_vals: Dict[
+            Union[int, str], int
+        ] = {},  # Only required for rule == "ad-hoc"
+        random_state: int = 42,
+    ) -> Tuple[np.ndarray, np.ndarray]:
+        """Augment the real data with generated synthetic data
+
+        Args:
+            X_train (np.ndarray): The real dataset to be augmented.
+            y_train (np.ndarray): The data labels for the real data to augment.
+            fairness_column (str) The column name of the column to test the fairness of a downstream model with respect to.
+            target_column (str): The column name of the label column.
+            model_name (str): The name of the synthetic model plugin to use to generate the synthetic data.
+            prefix (str, optional): prefix (str): The prefix for the saved synthetic data generation model filename. Defaults to "fairness.conditional_augmentation".
+            strict (bool, optional): Flag to ensure that the condition for generating synthetic data is strictly met. Defaults to False.
+            rule (Literal["equal", "log", "ad-hoc"): The rule used to achieve the desired proportion records with each value in the fairness column. Defaults to "equal".
+            ad_hoc_augment_vals (Dict[ Union[int, str], int ], optional): A dictionary containing the number of each class to augment the real data with. This is only required if using the rule="ad-hoc" option. Defaults to {}.
+
+        Returns:
+            Tuple[np.ndarray, np.ndarray]: The augmented dataset and labels.
+        """
+
+        X_train = pd.DataFrame(X_train)
+        y_train = pd.Series(y_train)
+
+        syn_data = self._generate_synthetic_data(
+            X_train,
+            y_train,
+            fairness_column,
+            target_column,
+            model_name,
+            prefix=prefix,
+            strict=strict,
+            rule=rule,
+            ad_hoc_augment_vals=ad_hoc_augment_vals,
+            random_state=random_state,
+        )
+        X_augmented, y_augmented = self._augment_data(syn_data, X_train, y_train)
+        return X_augmented, y_augmented
+
+    def _evaluate_augmentation_performance_classification(
+        self,
+        model_args: Any,
+        model: Any,
+        X_train: np.ndarray,
+        y_train: np.ndarray,
+        X_test: np.ndarray,
+        y_test: np.ndarray,
+        fairness_column: str,
+        target_column: str,
+        syn_model_name: str,  # limit this to plugins
+        strict_augment_numbers=True,
+        augment_rule="log",
+        train_downstream_model: bool = True,  # TODO: Sort caching
+        save_downstream_model: bool = False,  # TODO: Sort caching
+        saved_downstream_model_path: Union[
+            str, bytes, os.PathLike
+        ] = "fairness_cond_aug_downstream_model.sav",  # TODO: Sort caching
+    ) -> float:
+        """
+        Evaluate a classification task.
+
+        Returns: AUCROC.
+            1 means perfect predictions.
+            0 means only incorrect predictions.
+        """
+        labels = list(y_train) + list(y_test)
+
+        X_test_df = pd.DataFrame(X_test)
+        y_test_df = pd.Series(y_test, index=X_test_df.index)
+        for v in np.unique(labels):
+            if v not in list(y_train):
+                X_test_df = X_test_df[y_test_df != v]
+                y_test_df = y_test_df[y_test_df != v]
+
+        X_augmented, y_augmented = self.augment_data(
+            X_train,
+            y_train,
+            fairness_column,
+            target_column,
+            syn_model_name,
+            strict=strict_augment_numbers,
+            rule=augment_rule,
+        )
+
+        X_test = np.asarray(X_test_df)
+        y_test = np.asarray(y_test_df)
+        labels = list(y_augmented) + list(y_test)
+
+        if len(y_test) == 0:
+            return 0
+
+        encoder = LabelEncoder().fit(labels)
+        enc_y_augmented = encoder.transform(y_augmented)
+        if "n_units_out" in model_args:
+            model_args["n_units_out"] = len(np.unique(y_train))
+        try:
+            enc_y_test = encoder.transform(y_test)
+            estimator = model(**model_args).fit(X_augmented, enc_y_augmented)
+            y_pred = estimator.predict_proba(X_test)
+            score, _ = evaluate_auc(enc_y_test, y_pred)
+        except BaseException as e:
+            log.error(f"classifier evaluation failed {e}.")
+            score = 0
+
+        return score
+
+    @validate_arguments(config=dict(arbitrary_types_allowed=True))
+    def _evaluate_standard_augmentation_performance(
+        self,
+        clf_model: Any,
+        clf_args: Dict,
+        regression_model: Any,
+        regression_args: Any,
+        X_gt: DataLoader,
+        X_syn: DataLoader,
+    ) -> Dict:
+        """Train a classifier or regressor on the synthetic data and evaluate the performance on real test data. Returns the average performance discrepancy between training on real data vs on synthetic data.
+
+        Returns:
+            gt and syn performance scores
+        """
+        cache_file = (
+            self._workspace
+            / f"sc_metric_cache_{self.type()}_{self.name()}_{X_gt.hash()}_{X_syn.hash()}_{self._reduction}_{platform.python_version()}_{platform.python_version()}.bkp"
+        )
+        if self.use_cache(cache_file):
+            return load_from_file(cache_file)
+
+        id_X_gt, id_y_gt = X_gt.train().unpack()
+        ood_X_gt, ood_y_gt = X_gt.test().unpack()
+        iter_X_syn, iter_y_syn = X_syn.unpack()
+
+        if len(id_y_gt.unique()) < 5:
+            eval_cbk = self._evaluate_augmentation_performance_classification
+            skf = StratifiedKFold(
+                n_splits=self._n_folds, shuffle=True, random_state=self._random_state
+            )
+            model = clf_model
+            model_args = clf_args
+        else:
+            eval_cbk = self._evaluate_augmentation_performance_regression
             model = regression_model
             model_args = regression_args
             skf = KFold(
@@ -740,6 +1069,203 @@ class PerformanceEvaluatorLinear(PerformanceEvaluator):
 
 
 class PerformanceEvaluatorMLP(PerformanceEvaluator):
+    """
+    .. inheritance-diagram:: synthcity.metrics.eval_performance.PerformanceEvaluatorMLP
+        :parts: 1
+
+    Train a Neural Net classifier or regressor on the synthetic data and evaluate the performance on real test data.
+
+    Returns the average performance discrepancy between training on real data vs on synthetic data.
+
+    Score:
+        close to 1: similar performance
+        close to 1: massive performance degradation
+    """
+
+    @staticmethod
+    def name() -> str:
+        return "mlp"
+
+    @validate_arguments(config=dict(arbitrary_types_allowed=True))
+    def evaluate(
+        self,
+        X_gt: DataLoader,
+        X_syn: DataLoader,
+    ) -> Dict:
+        if self._task_type == "survival_analysis":
+            return self._evaluate_survival_model(
+                DeephitSurvivalAnalysis, {}, X_gt, X_syn
+            )
+
+        elif self._task_type == "classification" or self._task_type == "regression":
+            mlp_args = {
+                "n_units_in": X_gt.shape[1] - 1,
+                "n_units_out": 1,
+                "random_state": self._random_state,
+            }
+            clf_args = copy.deepcopy(mlp_args)
+            clf_args["task_type"] = "classification"
+            reg_args = copy.deepcopy(mlp_args)
+            reg_args["task_type"] = "regression"
+
+            return self._evaluate_standard_performance(
+                MLP,
+                clf_args,
+                MLP,
+                reg_args,
+                X_gt,
+                X_syn,
+            )
+        elif self._task_type == "time_series":
+            info = X_gt.info()
+            args = {
+                "task_type": "regression",
+                "n_static_units_in": len(info["static_features"]),
+                "n_temporal_units_in": len(info["temporal_features"]),
+                "n_temporal_window": info["window_len"],
+                "output_shape": [info["outcome_len"]],
+            }
+            return self._evaluate_time_series_performance(
+                TimeSeriesModel, args, X_gt, X_syn
+            )
+        elif self._task_type == "time_series_survival":
+            static, temporal, observation_times, T, E = X_gt.unpack()
+
+            info = X_gt.info()
+
+            args = {}
+            log.info(
+                f"Performance evaluation using DynamicDeephitTimeSeriesSurvival and {args}"
+            )
+            return self._evaluate_time_series_survival_performance(
+                DynamicDeephitTimeSeriesSurvival, args, X_gt, X_syn
+            )
+
+        else:
+            raise RuntimeError(f"Unuspported task type {self._task_type}")
+
+
+class AugmentationPerformanceEvaluatorXGB(PerformanceEvaluator):
+    """
+    .. inheritance-diagram:: synthcity.metrics.eval_performance.PerformanceEvaluatorXGB
+        :parts: 1
+
+
+    Train an XGBoost classifier or regressor on the synthetic data and evaluate the performance on real test data.
+
+    Returns the average performance discrepancy between training on real data vs on synthetic data.
+
+    Score:
+        close to 1: similar performance
+        close to 0: massive performance degradation
+    """
+
+    @staticmethod
+    def name() -> str:
+        return "xgb"
+
+    @validate_arguments(config=dict(arbitrary_types_allowed=True))
+    def evaluate(
+        self,
+        X_gt: DataLoader,
+        X_syn: DataLoader,
+    ) -> Dict:
+        if self._task_type == "survival_analysis":
+            return self._evaluate_survival_model(
+                XGBSurvivalAnalysis,
+                {
+                    "n_jobs": 2,
+                    "verbosity": 0,
+                    "depth": 3,
+                    "strategy": "weibull",  # "weibull", "debiased_bce"
+                    "random_state": self._random_state,
+                },
+                X_gt,
+                X_syn,
+            )
+        elif self._task_type == "classification" or self._task_type == "regression":
+            xgb_clf_args = {
+                "n_jobs": 2,
+                "verbosity": 0,
+                "depth": 3,
+                "random_state": self._random_state,
+            }
+
+            xgb_reg_args = copy.deepcopy(xgb_clf_args)
+
+            return self._evaluate_standard_performance(
+                XGBClassifier,
+                xgb_clf_args,
+                XGBRegressor,
+                xgb_reg_args,
+                X_gt,
+                X_syn,
+            )
+        elif self._task_type == "time_series_survival":
+            return self._evaluate_time_series_survival_performance(
+                XGBTimeSeriesSurvival,
+                {
+                    "n_jobs": 2,
+                    "verbosity": 0,
+                    "depth": 3,
+                    "strategy": "weibull",  # "weibull", "debiased_bce"
+                    "random_state": self._random_state,
+                },
+                X_gt,
+                X_syn,
+            )
+        else:
+            raise RuntimeError(f"Unuspported task type {self._task_type}")
+
+
+class AugmentationPerformanceEvaluatorLinear(PerformanceEvaluator):
+    """
+    .. inheritance-diagram:: synthcity.metrics.eval_performance.PerformanceEvaluatorLinear
+        :parts: 1
+
+    Train a Linear classifier or regressor on the synthetic data and evaluate the performance on real test data.
+
+    Returns the average performance discrepancy between training on real data vs on synthetic data.
+
+    Score:
+        close to 1: similar performance
+        close to 0: massive performance degradation
+    """
+
+    @staticmethod
+    def name() -> str:
+        return "linear_model"
+
+    @validate_arguments(config=dict(arbitrary_types_allowed=True))
+    def evaluate(
+        self,
+        X_gt: DataLoader,
+        X_syn: DataLoader,
+    ) -> Dict:
+        if self._task_type == "survival_analysis":
+            return self._evaluate_survival_model(CoxPHSurvivalAnalysis, {}, X_gt, X_syn)
+        elif self._task_type == "classification" or self._task_type == "regression":
+            return self._evaluate_standard_performance(
+                LogisticRegression,
+                {"random_state": self._random_state},
+                LinearRegression,
+                {},
+                X_gt,
+                X_syn,
+            )
+        elif self._task_type == "time_series_survival":
+            static, temporal, observation_times, T, E = X_gt.unpack()
+
+            args: dict = {}
+            log.info(f"Performance evaluation using CoxTimeSeriesSurvival and {args}")
+            return self._evaluate_time_series_survival_performance(
+                CoxTimeSeriesSurvival, args, X_gt, X_syn
+            )
+        else:
+            raise RuntimeError(f"Unuspported task type {self._task_type}")
+
+
+class AugmentationPerformanceEvaluatorMLP(PerformanceEvaluator):
     """
     .. inheritance-diagram:: synthcity.metrics.eval_performance.PerformanceEvaluatorMLP
         :parts: 1

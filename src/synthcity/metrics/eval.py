@@ -25,6 +25,9 @@ from .eval_performance import (
     PerformanceEvaluatorLinear,
     PerformanceEvaluatorMLP,
     PerformanceEvaluatorXGB,
+    AugmentationPerformanceEvaluatorLinear,
+    AugmentationPerformanceEvaluatorMLP,
+    AugmentationPerformanceEvaluatorXGB,
 )
 from .eval_privacy import (
     DeltaPresence,
@@ -74,6 +77,9 @@ standard_metrics = [
     PerformanceEvaluatorLinear,
     PerformanceEvaluatorMLP,
     PerformanceEvaluatorXGB,
+    AugmentationPerformanceEvaluatorLinear,
+    AugmentationPerformanceEvaluatorMLP,
+    AugmentationPerformanceEvaluatorXGB,
     FeatureImportanceRankDistance,
     # synthetic detection tests
     SyntheticDetectionXGB,

@@ -1,5 +1,6 @@
 # stdlib
-from typing import List, Tuple, Union
+import math
+from typing import List, Tuple, Union, Literal, Dict
 
 # third party
 import numpy as np
@@ -125,3 +126,58 @@ def evaluate_auc(
         aucprc = average_precision_score(np.ravel(y_test), y_pred_proba_tmp)
 
     return aucroc, aucprc
+
+
+def calculate_fair_aug_sample_size(
+    X_train: pd.DataFrame,
+    fairness_column: str,  # a categorical column of K levels
+    rule: Literal[
+        "equal", "log", "ad-hoc"
+    ],  # TODO: Confirm are there any more methods to include
+    ad_hoc_augment_vals: Dict[
+        Union[int, str], int
+    ] = {},  # Only required for rule == "ad-hoc"
+) -> Dict:
+    """Calculate how many samples to augment.
+
+    Args:
+        X_train (pd.DataFrame): The real dataset to be augmented.
+        fairness_column (str): The column name of the column to test the fairness of a downstream model with respect to.
+        ad_hoc_augment_vals (Dict[ Union[int, str], int ], optional): A dictionary containing the number of each class to augment the real data with. If using rule="ad-hoc" this function returns ad_hoc_augment_vals, otherwise this parameter is ignored. Defaults to {}.
+
+    Returns:
+        Dict: A dictionary containing the number of each class to augment the real data with.
+    """
+
+    # the majority class is unchanged
+
+    if rule == "equal":
+        # number of sample will be the same for each value in the fairness column after augmentation
+        # N_aug(i) = N_ang(j) for all i and j in value in the fairness column
+        fairness_col_counts = X_train[fairness_column].value_counts()
+        majority_size = fairness_col_counts.max()
+        augmentation_counts = {
+            fair_col_val: (majority_size - fairness_col_counts.loc[fair_col_val])
+            for fair_col_val in fairness_col_counts.index
+        }
+    elif rule == "log":
+        # number of samples in aug data will be proportional to the log frequency in the real data.
+        # Note: taking the log makes the distribution more even.
+        # N_aug(i) is proportional to log(N_real(i))
+        fairness_col_counts = X_train[fairness_column].value_counts()
+        majority_size = fairness_col_counts.max()
+        log_coefficient = majority_size / math.log(majority_size)
+
+        augmentation_counts = {
+            fair_col_val: (
+                majority_size - round(math.log(fair_col_count) * log_coefficient)
+            )
+            for fair_col_val, fair_col_count in fairness_col_counts.items()
+        }
+    elif rule == "ad-hoc":
+        # use user-specified values to augment
+        assert set(ad_hoc_augment_vals.keys()) == set(X_train[fairness_column].values)
+        augmentation_counts = ad_hoc_augment_vals
+
+    # return dictionary of how much to augment for each value in the fairness column
+    return augmentation_counts
