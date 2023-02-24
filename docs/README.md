@@ -16,6 +16,7 @@
     - Survival Analysis: SurvivalGAN, SurVAE.
     - Privacy-focused: DECAF, DP-GAN, AdsGAN, PATEGAN, PrivBayes.
     - Domain adaptation: RadialGAN.
+    - Images: Image ConditionalGAN, Image AdsGAN.
 - |:book:| [Read the docs !](https://synthcity.readthedocs.io/)
 - |:airplane:| [Checkout the tutorials!](https://github.com/vanderschaarlab/synthcity#-tutorials)
 
@@ -90,7 +91,7 @@ score = Benchmarks.evaluate(
 Benchmarks.print(score)
 ```
 
-### Static Survival analysis
+### Survival analysis
 
 * List the available generators dedicated to survival analysis
 
@@ -153,6 +154,37 @@ syn_model.fit(data)
 
 syn_model.generate(count=10)
 ```
+### Images
+
+__Note__ : The architectures used for generators are not state-of-the-art. For other architectures, consider extending the `suggest_image_generator_discriminator_arch` method from the `convnet.py` module.
+
+* List the available generators
+
+```python
+from synthcity.plugins import Plugins
+
+Plugins(categories=["images"]).list()
+```
+
+* Generate new data
+```python
+from synthcity.plugins import Plugins
+from synthcity.plugins.core.dataloader import ImageDataLoader
+from torchvision import datasets
+
+
+dataset = datasets.MNIST(".", download=True)
+loader = ImageDataLoader(dataset).sample(100)
+
+syn_model = Plugins().get("image_cgan")
+
+syn_model.fit(loader)
+
+syn_img, syn_labels = syn_model.generate(count=10).unpack().numpy()
+
+print(syn_img.shape)
+
+```
 
 ### Serialization
 
@@ -166,6 +198,20 @@ syn_model = Plugins().get("adsgan")
 
 buff = save(syn_model)
 reloaded = load(buff)
+
+assert syn_model.name() == reloaded.name()
+```
+
+* Saving and loading models from disk
+
+```python
+from synthcity.utils.serialization import save_to_file, load_from_file
+from synthcity.plugins import Plugins
+
+syn_model = Plugins().get("adsgan")
+
+save_to_file('./adsgan_10_epochs.pkl', syn_model)
+reloaded = load_from_file('./adsgan_10_epochs.pkl')
 
 assert syn_model.name() == reloaded.name()
 ```
@@ -247,6 +293,13 @@ assert syn_model.name() == reloaded.name()
 |--- | --- | --- |
 |**radialgan** | Training complex machine learning models for prediction often requires a large amount of data that is not always readily available. Leveraging these external datasets from related but different sources is, therefore, an essential task if good predictive models are to be built for deployment in settings where data can be rare. RadialGAN is an approach to the problem in which multiple GAN architectures are used to learn to translate from one dataset to another, thereby allowing to augment the target dataset effectively and learning better predictive models than just the target dataset. | [RadialGAN: Leveraging multiple datasets to improve target-specific predictive models using Generative Adversarial Networks](https://arxiv.org/abs/1802.06403) |
 
+### Images
+
+| Method | Description | Reference |
+|--- | --- | --- |
+|**image_cgan**| Conditional GAN for generating images|  --- |
+|**image_adsgan**| The AdsGAN method adapted for image generation|  --- |
+
 
 ### Debug methods
 
@@ -284,6 +337,7 @@ The following table contains the available evaluation metrics:
 |**prdc**| Computes precision, recall, density, and coverage given two manifolds. | --- |
 |**alpha_precision**|Evaluate the alpha-precision, beta-recall, and authenticity scores. | --- |
 |**survival_km_distance**|The distance between two Kaplan-Meier plots(survival analysis). | --- |
+|**fid**|The Frechet Inception Distance (FID) calculates the distance between two distributions of images. | --- |
 
 
 
@@ -293,7 +347,7 @@ The following table contains the available evaluation metrics:
 |--- | --- | --- |
 |**performance.xgb**|Train an XGBoost classifier/regressor/survival model on real data(gt) and synthetic data(syn), and evaluate the performance on the test set. | 1 for ideal performance, 0 for worst performance |
 |**performance.linear**|Train a Linear classifier/regressor/survival model on real data(gt) and the synthetic data and evaluate the performance on test data.| 1 for ideal performance, 0 for worst performance |
-|**performance.mlp**|Train a Neural Net classifier/regressor/survival model on the read data and the synthetic data and evaluate the performance on test data.| 1 for ideal performance, 0 for worst performance |
+|**performance.mlp**|Train a Neural Net classifier/regressor/survival model on the real data and the synthetic data and evaluate the performance on test data.| 1 for ideal performance, 0 for worst performance |
 |**performance.feat_rank_distance**| Train a model on the synthetic data and a model on the real data. Compute the feature importance of the models on the same test data, and compute the rank distance between the importance(kendalltau or spearman)| 1: similar ranks in the feature importance. 0: uncorrelated feature importance  |
 |**detection_gmm**|Train a GaussianMixture model to differentiate the synthetic data from the real data.|0: The datasets are indistinguishable. <br/>1: The datasets are totally distinguishable.|
 |**detection_xgb**|Train an XGBoost model to differentiate the synthetic data from the real data.|0: The datasets are indistinguishable. <br/>1: The datasets are totally distinguishable.|
