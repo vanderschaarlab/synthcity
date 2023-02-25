@@ -193,10 +193,16 @@ assert syn_model.name() == reloaded.name()
 * Saving and loading models from disk
 
 ```python
+from sklearn.datasets import load_diabetes
 from synthcity.utils.serialization import save_to_file, load_from_file
 from synthcity.plugins import Plugins
 
-syn_model = Plugins().get("adsgan")
+X, y = load_diabetes(return_X_y=True, as_frame=True)
+X["target"] = y
+
+syn_model = Plugins().get("adsgan", n_iter=10)
+
+syn_model.fit(X)
 
 save_to_file('./adsgan_10_epochs.pkl', syn_model)
 reloaded = load_from_file('./adsgan_10_epochs.pkl')
