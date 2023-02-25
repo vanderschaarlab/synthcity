@@ -32,8 +32,8 @@
 - :cyclone: Several evaluation metrics for correctness and privacy.
 - :fire: Several reference models, by type:
     - General purpose: GAN-based (AdsGAN, CTGAN, PATEGAN, DP-GAN),VAE-based(TVAE, RTVAE), Normalizing flows, Bayesian Networks(PrivBayes, BN).
-    - Time Series generators: TimeGAN, FourierFlows, Probabilistic autoregressive.
-    - Survival Analysis: SurvivalGAN, SurVAE.
+    - Time Series & Time-Series Survival generators: TimeGAN, FourierFlows, TimeVAE.
+    - Static Survival Analysis: SurvivalGAN, SurVAE.
     - Privacy-focused: DECAF, DP-GAN, AdsGAN, PATEGAN, PrivBayes.
     - Domain adaptation: RadialGAN.
     - Images: Image ConditionalGAN, Image AdsGAN.
@@ -111,7 +111,7 @@ score = Benchmarks.evaluate(
 Benchmarks.print(score)
 ```
 
-### Survival analysis
+### Static Survival analysis
 
 * List the available generators dedicated to survival analysis
 
