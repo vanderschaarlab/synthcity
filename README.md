@@ -1,4 +1,6 @@
 <h2 align="center">
+  <img src="https://github.com/vanderschaarlab/synthcity/raw/main/docs/logo.png" height="150px">
+
   synthcity
 </h2>
 
