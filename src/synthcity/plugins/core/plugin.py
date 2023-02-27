@@ -221,18 +221,19 @@ class Plugin(Serializable, metaclass=ABCMeta):
             random_state=self.random_state,
         )
 
-        X, self._data_encoders = X.encode()
-        if self.compress_dataset:
-            X_hash = X.hash()
-            bkp_file = (
-                self.workspace
-                / f"compressed_df_{X_hash}_{platform.python_version()}.bkp"
-            )
-            if not bkp_file.exists():
-                X_compressed_context = X.compress()
-                save_to_file(bkp_file, X_compressed_context)
+        if X.is_tabular():
+            X, self._data_encoders = X.encode()
+            if self.compress_dataset:
+                X_hash = X.hash()
+                bkp_file = (
+                    self.workspace
+                    / f"compressed_df_{X_hash}_{platform.python_version()}.bkp"
+                )
+                if not bkp_file.exists():
+                    X_compressed_context = X.compress()
+                    save_to_file(bkp_file, X_compressed_context)
 
-            X, self.compress_context = load_from_file(bkp_file)
+                X, self.compress_context = load_from_file(bkp_file)
 
         self._training_schema = Schema(
             data=X,
@@ -336,10 +337,12 @@ class Plugin(Serializable, metaclass=ABCMeta):
         syn_schema = Schema.from_constraints(gen_constraints)
 
         X_syn = self._generate(count=count, syn_schema=syn_schema, **kwargs)
-        if self.compress_dataset:
-            X_syn = X_syn.decompress(self.compress_context)
-        if self._data_encoders is not None:
-            X_syn = X_syn.decode(self._data_encoders)
+
+        if X_syn.is_tabular():
+            if self.compress_dataset:
+                X_syn = X_syn.decompress(self.compress_context)
+            if self._data_encoders is not None:
+                X_syn = X_syn.decode(self._data_encoders)
 
         # The dataset is decompressed here, we can use the public schema
         gen_constraints = self.schema().as_constraints()
@@ -469,6 +472,14 @@ class Plugin(Serializable, metaclass=ABCMeta):
 
         data_synth = self.training_schema().adapt_dtypes(data_synth)
         return create_from_info(data_synth, data_info)
+
+    @validate_arguments(config=dict(arbitrary_types_allowed=True))
+    def _safe_generate_images(
+        self, gen_cbk: Callable, count: int, syn_schema: Schema, **kwargs: Any
+    ) -> DataLoader:
+        data_synth = gen_cbk(count, **kwargs)
+
+        return create_from_info(data_synth, self.data_info)
 
     @validate_arguments(config=dict(arbitrary_types_allowed=True))
     def schema_includes(self, other: Union[DataLoader, pd.DataFrame]) -> bool:

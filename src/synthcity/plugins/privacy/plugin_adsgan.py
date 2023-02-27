@@ -61,7 +61,7 @@ class AdsGANPlugin(Plugin):
         discriminator_dropout: float
             Dropout value for the discriminator. If 0, the dropout is not used.
         lr: float
-            learning rate for optimizer. step_size equivalent in the JAX version.
+            learning rate for optimizer.
         weight_decay: float
             l2 (ridge) penalty for the weights.
         batch_size: int
@@ -74,6 +74,10 @@ class AdsGANPlugin(Plugin):
             The max number of clusters to create for continuous columns when encoding
         adjust_inference_sampling: bool
             Adjust the marginal probabilities in the synthetic data to closer match the training set. Active only with the ConditionalSampler
+        lambda_gradient_penalty: float = 10
+            Weight for the gradient penalty
+        lambda_identifiability_penalty: float = 0.1
+            Weight for the identifiability penalty, if enabled
         # early stopping
         n_iter_print: int
             Number of iterations after which to print updates and check the validation loss.

@@ -51,7 +51,6 @@ Time-series survival models
     :maxdepth: 2
 
      Time-series CoxPH <generated/synthcity.plugins.core.models.time_series_survival.ts_surv_coxph.rst>
-     DeepCoxPH <generated/synthcity.plugins.core.models.time_series_survival.ts_surv_deep_coxph.rst>
      Dynamic DeepHit <generated/synthcity.plugins.core.models.time_series_survival.ts_surv_dynamic_deephit.rst>
      Time-Series XGBoost <generated/synthcity.plugins.core.models.time_series_survival.ts_surv_xgb.rst>
 
@@ -63,3 +62,12 @@ Time-to-event models
 
      DATE <generated/synthcity.plugins.core.models.time_to_event.tte_date.rst>
      Survival function regression <generated/synthcity.plugins.core.models.time_to_event.tte_survival_function_regression.rst>
+
+Images
+-------------------------------
+.. toctree::
+    :glob:
+    :maxdepth: 2
+
+     ConvNets <generated/synthcity.plugins.core.models.convnet.rst>
+     ImageGAN <generated/synthcity.plugins.core.models.image_gan.rst>

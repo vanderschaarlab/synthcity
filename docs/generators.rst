@@ -52,5 +52,13 @@ Time-series & Time-Series Survival Analysis
 
     TimeGAN <generated/synthcity.plugins.time_series.plugin_timegan.rst>
     FourierFlows <generated/synthcity.plugins.time_series.plugin_fflows.rst>
-    Probabilistic AutoRegressive <generated/synthcity.plugins.time_series.plugin_probabilistic_ar.rst>
     TimeVAE <generated/synthcity.plugins.time_series.plugin_timevae.rst>
+
+Images
+----------------------------------------------
+.. toctree::
+    :glob:
+    :maxdepth: 2
+
+    ImageCGAN <generated/synthcity.plugins.images.plugin_image_cgan.rst>
+    Image AdsGAN <generated/synthcity.plugins.images.plugin_image_adsgan.rst>

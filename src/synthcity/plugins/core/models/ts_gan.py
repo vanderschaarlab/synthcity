@@ -71,7 +71,7 @@ class TimeSeriesGAN(nn.Module):
         discriminator_dropout: float. Default = 0.1
             Dropout value for the discriminator. If 0, the dropout is not used.
         discriminator_lr: float. Default = 2e-4
-            learning rate for discriminator optimizer. step_size equivalent in the JAX version.
+            learning rate for discriminator optimizer.
         discriminator_weight_decay: float. Default = 1e-3
             l2 (ridge) penalty for the discriminator weights.
         batch_size: int. Default = 64

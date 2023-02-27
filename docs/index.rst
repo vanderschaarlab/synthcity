@@ -20,13 +20,13 @@ Examples
 
     examples.rst
 
-Dataloaders
-============
+Dataloaders and Datasets
+==========================
 .. toctree::
     :glob:
     :maxdepth: 3
 
-    Dataloaders <generated/synthcity.plugins.core.dataloader.rst>
+    dataloaders.rst
 
 Generators
 ==========
