@@ -6,17 +6,21 @@ from typing import Any
 import numpy as np
 import pandas as pd
 import pytest
+import torch
 from lifelines.datasets import load_rossi
 from sklearn.datasets import load_breast_cancer
+from torchvision import datasets, transforms
 
 # synthcity absolute
 from synthcity.plugins.core.dataloader import (
     GenericDataLoader,
+    ImageDataLoader,
     SurvivalAnalysisDataLoader,
     TimeSeriesDataLoader,
     TimeSeriesSurvivalDataLoader,
     create_from_info,
 )
+from synthcity.plugins.core.dataset import FlexibleDataset, TensorDataset
 from synthcity.utils.datasets.time_series.google_stocks import GoogleStocksDataloader
 from synthcity.utils.datasets.time_series.pbc import PBCDataloader
 from synthcity.utils.datasets.time_series.sine import SineDataloader
@@ -29,6 +33,7 @@ def test_generic_dataloader_sanity() -> None:
 
     loader = GenericDataLoader(X, target_column="target")
 
+    assert loader.is_tabular()
     assert loader.raw().shape == X.shape
     assert loader.type() == "generic"
     assert loader.shape == X.shape
@@ -160,6 +165,7 @@ def test_survival_dataloader_sanity() -> None:
     assert (loader.dataframe().values == df.values).all()
     assert loader.raw().shape == df.shape
 
+    assert loader.is_tabular()
     assert loader.type() == "survival_analysis"
     assert loader.shape == df.shape
     assert sorted(list(loader.dataframe().columns)) == sorted(list(df.columns))
@@ -299,6 +305,8 @@ def test_time_series_dataloader_sanity(source: Any) -> None:
     )
 
     assert len(loader.raw()) == 5
+    assert loader.is_tabular()
+
     feat_cnt = temporal_data[0].shape[1] + 2  # id, time_id
     if static_data is not None:
         feat_cnt += static_data.shape[1]
@@ -625,3 +633,120 @@ def test_time_series_survival_pack_unpack_padding(as_numpy: bool) -> None:
     for idx, item in enumerate(unp_temporal):
         assert len(unp_temporal[idx]) == max_window_len
         assert len(unp_observation_times[idx]) == max_window_len
+
+
+@pytest.mark.parametrize("height", [55, 64])
+@pytest.mark.parametrize("width", [32, 22])
+def test_image_dataloader_sanity(height: int, width: int) -> None:
+    dataset = datasets.MNIST(".", download=True)
+
+    loader = ImageDataLoader(
+        data=dataset,
+        train_size=0.8,
+        height=height,
+        width=width,
+    )
+    channels = 1
+
+    assert loader.shape == (len(dataset), channels, height, width)
+    assert loader.info()["height"] == height
+    assert loader.info()["width"] == width
+    assert loader.info()["channels"] == channels
+    assert loader.info()["len"] == len(dataset)
+    assert not loader.is_tabular()
+
+    assert isinstance(loader.unpack(), torch.utils.data.Dataset)
+
+    assert loader.sample(5).shape == (5, channels, height, width)
+
+    assert loader[0].shape == (channels, height, width)
+
+    assert loader.hash() != ""
+
+    assert loader.train().shape == (0.8 * len(dataset), channels, height, width)
+    assert loader.test().shape == (0.2 * len(dataset), channels, height, width)
+
+    x_np = loader.numpy()
+    assert x_np.shape == (len(dataset), channels, height, width)
+    assert isinstance(x_np, np.ndarray)
+
+    df = loader.dataframe()
+    assert df.shape == (len(dataset), channels * height * width)
+    assert isinstance(df, pd.DataFrame)
+
+    assert loader.unpack().labels().shape == (len(loader),)
+
+
+def test_image_dataloader_create_from_info() -> None:
+    dataset = datasets.MNIST(".", download=True)
+
+    loader = ImageDataLoader(
+        data=dataset,
+        train_size=0.8,
+        height=32,
+    )
+
+    data = loader.unpack()
+
+    reloaded = create_from_info(data, loader.info())
+
+    for key in loader.info():
+        assert reloaded.info()[key] == loader.info()[key]
+
+
+def test_image_dataloader_create_from_tensor() -> None:
+    X = torch.randn((100, 10, 10))
+    y = torch.randn((100,))
+
+    loader = ImageDataLoader(
+        data=(X, y),
+        train_size=0.8,
+        height=32,
+    )
+
+    assert len(loader) == len(X)
+    assert loader.shape == (100, 1, 32, 32)
+
+
+def test_image_datasets() -> None:
+    size = 100
+    X = torch.rand(size, 10, 10)
+    y = torch.rand(size)
+
+    gen_dataset = TensorDataset(images=X, targets=y)
+    assert (gen_dataset[0][0] == X[0]).all()
+    assert (gen_dataset[0][1] == y[0]).all()
+
+    img_transform = transforms.Compose(
+        [
+            transforms.ToPILImage(),
+            transforms.Resize((20, 20)),
+            transforms.ToTensor(),
+        ]
+    )
+
+    transform_dataset = FlexibleDataset(gen_dataset, transform=img_transform)
+    assert transform_dataset.shape() == (size, 1, 20, 20)
+    assert transform_dataset[0][0].shape == (1, 20, 20)
+    assert transform_dataset[0][1] == y[0]
+
+    gen_dataset = TensorDataset(images=X, targets=None)
+    assert (gen_dataset[0][0] == X[0]).all()
+    assert gen_dataset[0][1] is None
+
+    transform_dataset = FlexibleDataset(gen_dataset, transform=img_transform)
+    assert transform_dataset.shape() == (size, 1, 20, 20)
+    assert transform_dataset[0][0].shape == (1, 20, 20)
+    assert transform_dataset[0][1] is None
+
+    transform_dataset = transform_dataset.filter_indices([0, 1, 2])
+    assert len(transform_dataset) == 3
+    assert (transform_dataset.indices == [0, 1, 2]).all()
+
+    transform_dataset = transform_dataset.filter_indices([1, 2])
+    assert len(transform_dataset) == 2
+    assert (transform_dataset.indices == [1, 2]).all()
+
+    transform_dataset = transform_dataset.filter_indices([0])
+    assert len(transform_dataset) == 1
+    assert (transform_dataset.indices == [1]).all()

@@ -60,7 +60,7 @@ class TimeVAEPlugin(Plugin):
         encoder_dropout: float
             Dropout value for the encoder. If 0, the dropout is not used.
         lr: float
-            learning rate for optimizer. step_size equivalent in the JAX version.
+            learning rate for optimizer.
         weight_decay: float
             l2 (ridge) penalty for the weights.
         batch_size: int

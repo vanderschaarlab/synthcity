@@ -8,6 +8,7 @@ from pydantic import validate_arguments
 from sklearn.neighbors import NearestNeighbors
 
 # synthcity absolute
+import synthcity.logger as log
 from synthcity.metrics.core import MetricEvaluator
 from synthcity.plugins.core.dataloader import DataLoader
 
@@ -24,10 +25,15 @@ class BasicMetricEvaluator(MetricEvaluator):
     @staticmethod
     def _helper_nearest_neighbor(X_gt: DataLoader, X_syn: DataLoader) -> np.ndarray:
         try:
-            estimator = NearestNeighbors(n_neighbors=5).fit(X_syn.numpy())
-            dist, _ = estimator.kneighbors(X_gt.numpy(), 1, return_distance=True)
+            estimator = NearestNeighbors(n_neighbors=5).fit(
+                X_syn.numpy().reshape(len(X_syn), -1)
+            )
+            dist, _ = estimator.kneighbors(
+                X_gt.numpy().reshape(len(X_gt), -1), 1, return_distance=True
+            )
             return dist.squeeze()
         except BaseException:
+            log.error("NearestNeighbors failed")
             return np.asarray([999])
 
     @staticmethod
@@ -41,6 +47,22 @@ class BasicMetricEvaluator(MetricEvaluator):
         X_syn: DataLoader,
     ) -> float:
         return self.evaluate(X_gt, X_syn)[self._default_metric]
+
+    @staticmethod
+    def name() -> str:
+        raise NotImplementedError()
+
+    @staticmethod
+    def direction() -> str:
+        raise NotImplementedError()
+
+    @validate_arguments(config=dict(arbitrary_types_allowed=True))
+    def evaluate(
+        self,
+        X_gt: DataLoader,
+        X_syn: DataLoader,
+    ) -> float:
+        raise NotImplementedError()
 
 
 class DataMismatchScore(BasicMetricEvaluator):
@@ -68,6 +90,12 @@ class DataMismatchScore(BasicMetricEvaluator):
 
     @validate_arguments(config=dict(arbitrary_types_allowed=True))
     def evaluate(self, X_gt: DataLoader, X_syn: DataLoader) -> Dict:
+        if X_gt.type() != X_syn.type():
+            raise ValueError("Incompatible dataloader")
+
+        if X_gt.type() == "images":
+            return {"score": 0}
+
         if len(X_gt.columns) != len(X_syn.columns):
             raise ValueError(f"Incompatible dataframe {X_gt.shape} and {X_syn.shape}")
 

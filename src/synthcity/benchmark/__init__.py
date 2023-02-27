@@ -9,7 +9,6 @@ from typing import Any, Dict, List, Optional, Tuple
 # third party
 import numpy as np
 import pandas as pd
-import torch
 from IPython.display import display
 from pydantic import validate_arguments
 
@@ -20,7 +19,7 @@ from synthcity.metrics.scores import ScoreEvaluator
 from synthcity.plugins import Plugins
 from synthcity.plugins.core.constraints import Constraints
 from synthcity.plugins.core.dataloader import DataLoader
-from synthcity.utils.reproducibility import enable_reproducible_results
+from synthcity.utils.reproducibility import clear_cache, enable_reproducible_results
 from synthcity.utils.serialization import load_from_file, save_to_file
 
 
@@ -96,7 +95,9 @@ class Benchmarks:
         workspace.mkdir(parents=True, exist_ok=True)
 
         plugin_cats = ["generic", "privacy"]
-        if task_type == "survival_analysis":
+        if X.type() == "images":
+            plugin_cats.append("images")
+        elif task_type == "survival_analysis":
             plugin_cats.append("survival_analysis")
         elif task_type == "time_series" or task_type == "time_series_survival":
             plugin_cats.append("time_series")
@@ -123,7 +124,7 @@ class Benchmarks:
                 kwargs["workspace"] = workspace
                 kwargs["random_state"] = repeat
 
-                torch.cuda.empty_cache()
+                clear_cache()
 
                 cache_file = (
                     workspace

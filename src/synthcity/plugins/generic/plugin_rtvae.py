@@ -56,7 +56,7 @@ class RTVAEPlugin(Plugin):
         n_iter: int
             Maximum number of iterations in the encoder.
         lr: float
-            learning rate for optimizer. step_size equivalent in the JAX version.
+            learning rate for optimizer.
         weight_decay: float
             l2 (ridge) penalty for the weights.
         batch_size: int
