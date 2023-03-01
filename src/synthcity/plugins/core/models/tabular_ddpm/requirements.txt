@@ -1,0 +1,15 @@
+category-encoders==2.3.0
+dython==0.5.1
+icecream==2.1.2
+libzero==0.0.8
+numpy==1.21.4
+optuna==2.10.1
+pandas==1.3.4
+pyarrow==6.0.0
+rtdl==0.0.9
+scikit-learn==1.0.2
+scipy==1.7.2
+skorch==0.11.0
+tomli-w==0.4.0
+tomli==1.2.2
+tqdm==4.62.3
