@@ -8,6 +8,7 @@ import pandas as pd
 import pytest
 from lifelines.datasets import load_rossi
 from sklearn.datasets import load_diabetes, load_iris
+from torchvision import datasets
 
 # synthcity absolute
 from synthcity.metrics.eval_performance import (
@@ -19,6 +20,7 @@ from synthcity.metrics.eval_performance import (
 from synthcity.plugins import Plugin, Plugins
 from synthcity.plugins.core.dataloader import (
     GenericDataLoader,
+    ImageDataLoader,
     SurvivalAnalysisDataLoader,
     TimeSeriesDataLoader,
     TimeSeriesSurvivalDataLoader,
@@ -462,3 +464,19 @@ def test_evaluate_performance_time_series_survival(
     def_score = evaluator.evaluate_default(data, data_gen)
 
     assert def_score == good_score["syn_id.c_index"] - good_score["syn_id.brier_score"]
+
+
+def test_image_support_perf() -> None:
+    dataset = datasets.MNIST(".", download=True)
+
+    X1 = ImageDataLoader(dataset).sample(100)
+    X2 = ImageDataLoader(dataset).sample(100)
+
+    for evaluator in [
+        PerformanceEvaluatorMLP,
+    ]:
+        score = evaluator().evaluate(X1, X2)
+        assert isinstance(score, dict)
+        for k in score:
+            assert score[k] >= 0
+            assert not np.isnan(score[k])

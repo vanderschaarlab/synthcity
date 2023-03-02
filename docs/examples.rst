@@ -13,6 +13,8 @@ Getting started
     Generating Survival Analysis Data <tutorials/tutorial3_survival_analysis.ipynb>
     Generating Time Series <tutorials/tutorial4_time_series.ipynb>
     Generating Data with Differential Privacy Guarantees <tutorials/tutorial5_differential_privacy.ipynb>
+    Using custom Time-series Datasets <tutorials/tutorial6_time_series_data_preparation.ipynb>
+    Generating Images <tutorials/tutorial7_image_generation_using_mednist.ipynb>
 
 General-purpose generators
 ---------------------------
@@ -55,3 +57,12 @@ Domain adaptation generators
     :maxdepth: 2
 
     RadialGAN <tutorials/plugins/domain_adaptation/plugin_radialgan.ipynb>
+
+Images
+------------------------------
+.. toctree::
+    :glob:
+    :maxdepth: 2
+
+    Image CGAN <tutorials/plugins/images/plugin_image_cgan.ipynb>
+    Image AdsGAN <tutorials/plugins/images/plugin_image_adsgan.ipynb>

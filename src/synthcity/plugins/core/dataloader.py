@@ -6,12 +6,16 @@ from typing import Any, Dict, List, Optional, Tuple, Union
 # third party
 import numpy as np
 import pandas as pd
+import PIL
+import torch
 from pydantic import validate_arguments
 from sklearn.model_selection import train_test_split
 from sklearn.preprocessing import LabelEncoder
+from torchvision import transforms
 
 # synthcity absolute
 from synthcity.plugins.core.constraints import Constraints
+from synthcity.plugins.core.dataset import FlexibleDataset, TensorDataset
 from synthcity.plugins.core.models.data_encoder import DatetimeEncoder
 from synthcity.utils.compression import compress_dataset, decompress_dataset
 from synthcity.utils.serialization import dataframe_hash
@@ -66,7 +70,7 @@ class DataLoader(metaclass=ABCMeta):
         self,
         data_type: str,
         data: Any,
-        static_features: List[str],
+        static_features: List[str] = [],
         temporal_features: List[str] = [],
         sensitive_features: List[str] = [],
         important_features: List[str] = [],
@@ -255,6 +259,10 @@ class DataLoader(metaclass=ABCMeta):
 
         return self.from_info(decoded, self.info())
 
+    @abstractmethod
+    def is_tabular(self) -> bool:
+        ...
+
 
 class GenericDataLoader(DataLoader):
     """
@@ -409,7 +417,7 @@ class GenericDataLoader(DataLoader):
             train_size=info["train_size"],
         )
 
-    def __getitem__(self, feature: Union[str, list]) -> Any:
+    def __getitem__(self, feature: Union[str, list, int]) -> Any:
         return self.data[feature]
 
     def __setitem__(self, feature: str, val: Any) -> None:
@@ -441,12 +449,39 @@ class GenericDataLoader(DataLoader):
         self.data = self.data.fillna(value)
         return self
 
+    def is_tabular(self) -> bool:
+        return True
+
 
 class SurvivalAnalysisDataLoader(DataLoader):
     """
     .. inheritance-diagram:: synthcity.plugins.core.dataloader.SurvivalAnalysisDataLoader
         :parts: 1
 
+    Data Loader for Survival Analysis Data
+
+    Constructor Args:
+        data: Union[pd.DataFrame, list, np.ndarray]
+            The dataset. Either a Pandas DataFrame or a Numpy Array.
+        time_to_event_column: str
+            Survival Analysis specific time-to-event feature
+        target_column: str
+            The outcome: event or censoring.
+        sensitive_features: List[str]
+            Name of sensitive features.
+        important_features: List[str]
+            Default: None. Only relevant for SurvivalGAN method.
+        target_column: str
+            The feature name that provides labels for downstream tasks.
+        domain_column: Optional[str]
+            Optional domain label, used for domain adaptation algorithms.
+        random_state: int
+            Defaults to zero.
+        train_size: float
+            The ratio to use for train splits.
+
+    Example:
+        >>> TODO
     """
 
     @validate_arguments(config=dict(arbitrary_types_allowed=True))
@@ -588,7 +623,7 @@ class SurvivalAnalysisDataLoader(DataLoader):
             time_horizons=info["time_horizons"],
         )
 
-    def __getitem__(self, feature: Union[str, list]) -> Any:
+    def __getitem__(self, feature: Union[str, list, int]) -> Any:
         return self.data[feature]
 
     def __setitem__(self, feature: str, val: Any) -> None:
@@ -619,6 +654,9 @@ class SurvivalAnalysisDataLoader(DataLoader):
         self.data = self.data.fillna(value)
         return self
 
+    def is_tabular(self) -> bool:
+        return True
+
 
 class TimeSeriesDataLoader(DataLoader):
     """
@@ -643,6 +681,8 @@ class TimeSeriesDataLoader(DataLoader):
         random_state: int
             Defaults to zero.
 
+    Example:
+        >>> TODO
     """
 
     @validate_arguments(config=dict(arbitrary_types_allowed=True))
@@ -861,7 +901,7 @@ class TimeSeriesDataLoader(DataLoader):
             outcome,
         )
 
-    def __getitem__(self, feature: Union[str, list]) -> Any:
+    def __getitem__(self, feature: Union[str, list, int]) -> Any:
         return self.data["seq_data"][feature]
 
     def __setitem__(self, feature: str, val: Any) -> None:
@@ -1276,6 +1316,9 @@ class TimeSeriesDataLoader(DataLoader):
 
         return static_df, temporal_data, observation_times, outcome_df
 
+    def is_tabular(self) -> bool:
+        return True
+
 
 class TimeSeriesSurvivalDataLoader(TimeSeriesDataLoader):
     """
@@ -1301,6 +1344,9 @@ class TimeSeriesSurvivalDataLoader(TimeSeriesDataLoader):
             Default: None. Only relevant for SurvivalGAN method.
         random_state. int
             Defaults to zero.
+
+    Example:
+        >>> TODO
 
     """
 
@@ -1468,8 +1514,222 @@ class TimeSeriesSurvivalDataLoader(TimeSeriesDataLoader):
         return self.unpack_and_decorate(self.filter_ids(test_ids))
 
 
+class ImageDataLoader(DataLoader):
+    """
+    .. inheritance-diagram:: synthcity.plugins.core.dataloader.ImageDataLoader
+        :parts: 1
+
+    Data loader for generic image data.
+
+    Constructor Args:
+        data: torch.utils.data.Dataset or torch.Tensor
+            The image dataset or a tuple of (tensor images, tensor labels)
+        random_state: int
+            Defaults to zero.
+        height: int. Default = 32
+            Height to use internally
+        width: Optional[int]
+            Optional width to use internally. If None, it is used the same value as height.
+        train_size: float = 0.8
+            Train dataset ratio.
+    Example:
+        >>> dataset = datasets.MNIST(".", download=True)
+        >>>
+        >>> loader = ImageDataLoader(
+        >>>     data=dataset,
+        >>>     train_size=0.8,
+        >>>     height=32,
+        >>>     width=w32,
+        >>> )
+
+    """
+
+    @validate_arguments(config=dict(arbitrary_types_allowed=True))
+    def __init__(
+        self,
+        data: Union[torch.utils.data.Dataset, Tuple[torch.Tensor, torch.Tensor]],
+        height: int = 32,
+        width: Optional[int] = None,
+        random_state: int = 0,
+        train_size: float = 0.8,
+        **kwargs: Any,
+    ) -> None:
+        if width is None:
+            width = height
+
+        if isinstance(data, tuple):
+            X, y = data
+            data = TensorDataset(images=X, targets=y)
+
+        self.data_transform = None
+
+        dummy, _ = data[0]
+        img_transform = []
+        if not isinstance(dummy, PIL.Image.Image):
+            img_transform = [transforms.ToPILImage()]
+
+        img_transform.extend(
+            [
+                transforms.Resize((height, width)),
+                transforms.ToTensor(),
+                transforms.Normalize(mean=(0.5,), std=(0.5,)),
+            ]
+        )
+
+        self.data_transform = transforms.Compose(img_transform)
+        data = FlexibleDataset(data, transform=self.data_transform)
+
+        self.height = height
+        self.width = width
+        self.channels = data.shape()[1]
+
+        super().__init__(
+            data_type="images",
+            data=data,
+            random_state=random_state,
+            train_size=train_size,
+            **kwargs,
+        )
+
+    @property
+    def shape(self) -> tuple:
+        return self.data.shape()
+
+    def unpack(self, as_numpy: bool = False, pad: bool = False) -> Any:
+        return self.data
+
+    def numpy(self) -> np.ndarray:
+        x, _ = self.data.numpy()
+
+        return x
+
+    def dataframe(self) -> pd.DataFrame:
+        x = self.numpy().reshape(len(self), -1)
+
+        x = pd.DataFrame(x)
+        x.columns = x.columns.astype(str)
+
+        return x
+
+    def info(self) -> dict:
+        return {
+            "data_type": self.data_type,
+            "len": len(self),
+            "train_size": self.train_size,
+            "height": self.height,
+            "width": self.width,
+            "channels": self.channels,
+            "random_state": self.random_state,
+        }
+
+    def __len__(self) -> int:
+        return len(self.data)
+
+    def decorate(self, data: Any) -> "DataLoader":
+        return ImageDataLoader(
+            data,
+            random_state=self.random_state,
+            train_size=self.train_size,
+            height=self.height,
+            width=self.width,
+        )
+
+    def sample(self, count: int, random_state: int = 0) -> "DataLoader":
+        idxs = np.random.choice(len(self), count, replace=False)
+        subset = FlexibleDataset(self.data.data, indices=idxs)
+        return self.decorate(subset)
+
+    @staticmethod
+    def from_info(data: torch.utils.data.Dataset, info: dict) -> "ImageDataLoader":
+        if not isinstance(data, torch.utils.data.Dataset):
+            raise ValueError(f"Invalid data type {type(data)}")
+
+        return ImageDataLoader(
+            data,
+            train_size=info["train_size"],
+            height=info["height"],
+            width=info["width"],
+            random_state=info["random_state"],
+        )
+
+    def __getitem__(self, index: Union[list, int, str]) -> Any:
+        if isinstance(index, str):
+            return self.dataframe()[index]
+
+        return self.numpy()[index]
+
+    def _train_test_split(self) -> Tuple:
+        indices = np.arange(len(self.data))
+        _, stratify = self.data.numpy()
+
+        return train_test_split(
+            indices,
+            train_size=self.train_size,
+            random_state=self.random_state,
+            stratify=stratify,
+        )
+
+    def train(self) -> "DataLoader":
+        train_idx, _ = self._train_test_split()
+        subset = FlexibleDataset(self.data.data, indices=train_idx)
+        return self.decorate(subset)
+
+    def test(self) -> "DataLoader":
+        _, test_idx = self._train_test_split()
+        subset = FlexibleDataset(self.data.data, indices=test_idx)
+        return self.decorate(subset)
+
+    def compress(
+        self,
+    ) -> Tuple["DataLoader", Dict]:
+        return self, {}
+
+    def decompress(self, context: Dict) -> "DataLoader":
+        return self
+
+    def encode(
+        self,
+        encoders: Optional[Dict[str, Any]] = None,
+    ) -> Tuple["DataLoader", Dict]:
+        return self, {}
+
+    def decode(
+        self,
+        encoders: Dict[str, Any],
+    ) -> "DataLoader":
+        return self
+
+    def is_tabular(self) -> bool:
+        return False
+
+    @property
+    def columns(self) -> list:
+        return list(self.dataframe().columns)
+
+    def satisfies(self, constraints: Constraints) -> bool:
+        return True
+
+    def match(self, constraints: Constraints) -> "DataLoader":
+        return self
+
+    def compression_protected_features(self) -> list:
+        raise NotImplementedError("Images do not support the compression call")
+
+    def drop(self, columns: list = []) -> "DataLoader":
+        raise NotImplementedError()
+
+    def __setitem__(self, feature: str, val: Any) -> None:
+        raise NotImplementedError()
+
+    def fillna(self, value: Any) -> "DataLoader":
+        raise NotImplementedError()
+
+
 @validate_arguments(config=dict(arbitrary_types_allowed=True))
-def create_from_info(data: pd.DataFrame, info: dict) -> "DataLoader":
+def create_from_info(
+    data: Union[pd.DataFrame, torch.utils.data.Dataset], info: dict
+) -> "DataLoader":
+    """Helper for creating a DataLoader from existing information."""
     if info["data_type"] == "generic":
         return GenericDataLoader.from_info(data, info)
     elif info["data_type"] == "survival_analysis":
@@ -1478,5 +1738,7 @@ def create_from_info(data: pd.DataFrame, info: dict) -> "DataLoader":
         return TimeSeriesDataLoader.from_info(data, info)
     elif info["data_type"] == "time_series_survival":
         return TimeSeriesSurvivalDataLoader.from_info(data, info)
+    elif info["data_type"] == "images":
+        return ImageDataLoader.from_info(data, info)
     else:
         raise RuntimeError(f"invalid datatype {info}")

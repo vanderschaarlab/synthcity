@@ -6,6 +6,7 @@ import numpy as np
 import pandas as pd
 import pytest
 from sklearn.datasets import load_iris
+from torchvision import datasets
 
 # synthcity absolute
 from synthcity.metrics.eval_sanity import (
@@ -16,7 +17,11 @@ from synthcity.metrics.eval_sanity import (
     NearestSyntheticNeighborDistance,
 )
 from synthcity.plugins import Plugin, Plugins
-from synthcity.plugins.core.dataloader import DataLoader, GenericDataLoader
+from synthcity.plugins.core.dataloader import (
+    DataLoader,
+    GenericDataLoader,
+    ImageDataLoader,
+)
 
 
 def _eval_plugin(cbk: Callable, X: DataLoader, X_syn: DataLoader) -> Tuple:
@@ -187,3 +192,23 @@ def test_evaluate_distant_values(test_plugin: Plugin) -> None:
 
     def_score = evaluator.evaluate_default(Xloader, X_gen)
     assert isinstance(def_score, float)
+
+
+def test_image_support() -> None:
+    dataset = datasets.MNIST(".", download=True)
+
+    X1 = ImageDataLoader(dataset).sample(100)
+    X2 = ImageDataLoader(dataset).sample(100)
+
+    for evaluator in [
+        CloseValuesProbability,
+        CommonRowsProportion,
+        DataMismatchScore,
+        DistantValuesProbability,
+        NearestSyntheticNeighborDistance,
+    ]:
+        score = evaluator().evaluate(X1, X2)
+        assert isinstance(score, dict)
+        for k in score:
+            assert score[k] >= 0
+            assert not np.isnan(score[k])

@@ -2,8 +2,10 @@
 from typing import Type
 
 # third party
+import numpy as np
 import pytest
 from sklearn.datasets import load_diabetes
+from torchvision import datasets
 
 # synthcity absolute
 from synthcity.metrics.eval_privacy import (
@@ -14,7 +16,7 @@ from synthcity.metrics.eval_privacy import (
     lDiversityDistinct,
 )
 from synthcity.plugins import Plugin, Plugins
-from synthcity.plugins.core.dataloader import GenericDataLoader
+from synthcity.plugins.core.dataloader import GenericDataLoader, ImageDataLoader
 
 
 @pytest.mark.parametrize(
@@ -49,3 +51,19 @@ def test_evaluator(evaluator_t: Type, test_plugin: Plugin) -> None:
     def_score = evaluator.evaluate_default(Xloader, X_gen)
 
     assert isinstance(def_score, (float, int))
+
+
+def test_image_support() -> None:
+    dataset = datasets.MNIST(".", download=True)
+
+    X1 = ImageDataLoader(dataset).sample(100)
+    X2 = ImageDataLoader(dataset).sample(100)
+
+    for evaluator in [
+        IdentifiabilityScore,
+    ]:
+        score = evaluator().evaluate(X1, X2)
+        assert isinstance(score, dict)
+        for k in score:
+            assert score[k] >= 0
+            assert not np.isnan(score[k])

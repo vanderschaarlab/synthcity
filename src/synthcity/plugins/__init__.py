@@ -14,6 +14,7 @@ def_categories = [
     "survival_analysis",
     "time_series",
     "domain_adaptation",
+    "images",
 ]
 plugins = {}
 
