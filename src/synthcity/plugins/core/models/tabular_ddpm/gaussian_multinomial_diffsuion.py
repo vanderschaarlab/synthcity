@@ -6,6 +6,7 @@ and https://github.com/ehoogeboom/multinomial_diffusion
 import torch.nn.functional as F
 import torch
 import math
+import pandas as pd
 
 import numpy as np
 from .utils import *
@@ -13,7 +14,6 @@ from .utils import *
 """
 Based in part on: https://github.com/lucidrains/denoising-diffusion-pytorch/blob/5989f4c77eafcdc6be0fb4739f0f277a6dd7f7d8/denoising_diffusion_pytorch/denoising_diffusion_pytorch.py#L281
 """
-eps = 1e-8
 
 def get_named_beta_schedule(schedule_name, num_diffusion_timesteps):
     """
@@ -59,12 +59,13 @@ def betas_for_alpha_bar(num_diffusion_timesteps, alpha_bar, max_beta=0.999):
         betas.append(min(1 - alpha_bar(t2) / alpha_bar(t1), max_beta))
     return np.array(betas)
 
+
 class GaussianMultinomialDiffusion(torch.nn.Module):
     def __init__(
             self,
-            num_classes: np.array,
-            num_numerical_features: int,
             denoise_fn,
+            num_numerical_features,
+            num_classes=None,
             num_timesteps=1000,
             gaussian_loss_type='mse',
             gaussian_parametrization='eps',
@@ -83,7 +84,7 @@ class GaussianMultinomialDiffusion(torch.nn.Module):
                   ' This is expensive both in terms of memory and computation.')
 
         self.num_numerical_features = num_numerical_features
-        self.num_classes = num_classes # it as a vector [K1, K2, ..., Km]
+        self.num_classes = num_classes or [0]
         self.num_classes_expanded = torch.from_numpy(
             np.concatenate([num_classes[i].repeat(num_classes[i]) for i in range(len(num_classes))])
         ).to(device)
@@ -213,7 +214,6 @@ class GaussianMultinomialDiffusion(torch.nn.Module):
         model_variance = extract(model_variance, t, x.shape)
         model_log_variance = extract(model_log_variance, t, x.shape)
 
-
         if self.gaussian_parametrization == 'eps':
             pred_xstart = self._predict_xstart_from_eps(x_t=x, t=t, eps=model_output)
         elif self.gaussian_parametrization == 'x0':
@@ -299,7 +299,7 @@ class GaussianMultinomialDiffusion(torch.nn.Module):
 
         return terms['loss']
     
-    def _predict_xstart_from_eps(self, x_t, t, eps):
+    def _predict_xstart_from_eps(self, x_t, t, eps=1e-8):
         assert x_t.shape == eps.shape
         return (
             extract(self.sqrt_recip_alphas_cumprod, t, x_t.shape) * x_t
@@ -702,7 +702,6 @@ class GaussianMultinomialDiffusion(torch.nn.Module):
         out_mean = torch.stack(out_mean, dim=1)
         true_mean = torch.stack(true_mean, dim=1)
 
-
         prior_gauss = self._prior_gaussian(x_num)
 
         prior_multin = torch.tensor([0.0])
@@ -920,7 +919,6 @@ class GaussianMultinomialDiffusion(torch.nn.Module):
             z_cat = ohe_to_categories(z_ohe, self.num_classes)
         sample = torch.cat([z_norm, z_cat], dim=1).cpu()
         return sample, out_dict
-    
 
     @torch.no_grad()
     def sample(self, num_samples, y_dist):
@@ -962,29 +960,26 @@ class GaussianMultinomialDiffusion(torch.nn.Module):
         sample = torch.cat([z_norm, z_cat], dim=1).cpu()
         return sample, out_dict
     
-    def sample_all(self, num_samples, batch_size, y_dist, ddim=False):
+    def sample_all(self, num_samples, y_dist, max_batch_size=2000, ddim=False):
         if ddim:
             print('Sample using DDIM.')
             sample_fn = self.sample_ddim
         else:
             sample_fn = self.sample
-        
-        b = batch_size
 
+        bs = np.diff(list(range(0, num_samples, max_batch_size)) + [num_samples])
         all_y = []
         all_samples = []
-        num_generated = 0
-        while num_generated < num_samples:
+        
+        for b in bs:
             sample, out_dict = sample_fn(b, y_dist)
             mask_nan = torch.any(sample.isnan(), dim=1)
             sample = sample[~mask_nan]
-            out_dict['y'] = out_dict['y'][~mask_nan]
-
-            all_samples.append(sample)
-            all_y.append(out_dict['y'].cpu())
             if sample.shape[0] != b:
                 raise FoundNANsError
-            num_generated += sample.shape[0]
+            out_dict['y'] = out_dict['y'][~mask_nan]
+            all_samples.append(sample)
+            all_y.append(out_dict['y'].cpu())
 
         x_gen = torch.cat(all_samples, dim=0)[:num_samples]
         y_gen = torch.cat(all_y, dim=0)[:num_samples]

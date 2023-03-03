@@ -26,12 +26,13 @@ from synthcity.plugins.core.distribution import (
     IntegerDistribution,
 )
 from synthcity.plugins.core.models.tabular_ddpm import GaussianMultinomialDiffusion, MLPDiffusion, ResNetDiffusion
+from synthcity.plugins.core.models.tabular_encoder import TabularEncoder
 from synthcity.plugins.core.plugin import Plugin
 from synthcity.plugins.core.schema import Schema
 from synthcity.utils.constants import DEVICE
 
 
-class DDPMPlugin(Plugin):
+class TabDDPMPlugin(Plugin):
     """
     .. inheritance-diagram:: synthcity.plugins.generic.plugin_tab_ddpm.TabDDPMPlugin
         :parts: 1
@@ -67,6 +68,8 @@ class DDPMPlugin(Plugin):
         scheduler = 'cosine',
         change_val = False,
         device: Any = DEVICE,
+        log_interval: int = 100,
+        print_interval: int = 500,
         # early stopping
         n_iter_min: int = 100,
         n_iter_print: int = 50,
@@ -87,7 +90,7 @@ class DDPMPlugin(Plugin):
             compress_dataset=compress_dataset,
             **kwargs
         )
-        
+
         if patience_metric is None:
             patience_metric = WeightedMetrics(
                 metrics=[("detection", "detection_mlp")],
@@ -110,67 +113,13 @@ class DDPMPlugin(Plugin):
     def hyperparameter_space(**kwargs: Any) -> List[Distribution]:
         raise NotImplementedError
 
-    def _fit(self, X: DataLoader, *args: Any, **kwargs: Any) -> "DDPMPlugin":
-
-        if self.model_type == 'mlp':
-            self.model = MLPDiffusion(**self.model_params)
-        elif self.model_type == 'resnet':
-            self.model = ResNetDiffusion(**self.model_params)
-        else:
-            raise "Unknown model!"
-    
-        self.diffusion = GaussianMultinomialDiffusion(
-            num_classes=num_classes,
-            num_numerical_features=num_numerical_features,
-            denoise_fn=self.model,
-            gaussian_loss_type=self.gaussian_loss_type,
-            num_timesteps=self.num_timesteps,
-            scheduler=self.scheduler,
-            device=self.device
-        ).to(self.device).train()
-        
-        trainer = Trainer(
-            self.model,
-            X,
-            lr=self.lr,
-            weight_decay=self.weight_decay,
-            steps=self.n_iter,
-            device=self.device
-        )
-        
-        trainer.run_loop()
-        return self
-
-    def _generate(self, count: int, syn_schema: Schema, **kwargs: Any) -> DataLoader:
-        self.diffusion.eval()
-        return self._safe_generate(self.model.sample_all, count, syn_schema)
-
-
-
-class Trainer:
-    def __init__(self, diffusion, train_iter, lr, weight_decay, steps, device=DEVICE):
-        self.diffusion = diffusion
-        self.ema_model = deepcopy(self.diffusion._denoise_fn)
-        for param in self.ema_model.parameters():
-            param.detach_()
-
-        self.train_iter = train_iter
-        self.steps = steps
-        self.init_lr = lr
-        self.optimizer = torch.optim.AdamW(self.diffusion.parameters(), lr=lr, weight_decay=weight_decay)
-        self.device = device
-        self.loss_history = pd.DataFrame(columns=['step', 'mloss', 'gloss', 'loss'])
-        self.log_every = 100
-        self.print_every = 500
-        self.ema_every = 1000
-
     def _anneal_lr(self, step):
         frac_done = step / self.steps
-        lr = self.init_lr * (1 - frac_done)
+        lr = self.lr * (1 - frac_done)
         for param_group in self.optimizer.param_groups:
             param_group["lr"] = lr
 
-    def _run_step(self, x, out_dict):
+    def _one_step(self, x, out_dict):
         x = x.to(self.device)
         for k in out_dict:
             out_dict[k] = out_dict[k].long().to(self.device)
@@ -179,19 +128,57 @@ class Trainer:
         loss = loss_multi + loss_gauss
         loss.backward()
         self.optimizer.step()
-
         return loss_multi, loss_gauss
 
-    def run_loop(self):
-        step = 0
+    def _update_ema(self, target_params, source_params, rate=0.999):
+        """
+        Update target parameters to be closer to those of source parameters using
+        an exponential moving average.
+        :param target_params: the target parameter sequence.
+        :param source_params: the source parameter sequence.
+        :param rate: the EMA rate (closer to 1 means slower).
+        """
+        for targ, src in zip(target_params, source_params):
+            targ.detach().mul_(rate).add_(src.detach(), alpha=1 - rate)
+
+    def _fit(self, X: DataLoader, *args: Any, **kwargs: Any) -> "TabDDPMPlugin":
+        # TODO: add parameters of TabularEncoder
+        self.encoder = TabularEncoder().fit(X)
+        
+        if self.model_type == 'mlp':
+            self.model = MLPDiffusion(**self.model_params)
+        elif self.model_type == 'resnet':
+            self.model = ResNetDiffusion(**self.model_params)
+        else:
+            raise "Unknown model!"
+        
+        self.diffusion = GaussianMultinomialDiffusion(
+            denoise_fn=self.model,
+            num_numerical_features=self.encoder.n_features(),
+            gaussian_loss_type=self.gaussian_loss_type,
+            num_timesteps=self.num_timesteps,
+            scheduler=self.scheduler,
+            device=self.device
+        ).to(self.device)
+        
+        self.ema_model = deepcopy(self.model)
+        for param in self.ema_model.parameters():
+            param.detach_()
+
+        self.optimizer = torch.optim.AdamW(
+            self.diffusion.parameters(), lr=self.lr, weight_decay=self.weight_decay)
+    
+        # TODO: check data type of X
+        self.loss_history = pd.DataFrame(columns=['step', 'mloss', 'gloss', 'loss'])
+        
         curr_loss_multi = 0.0
         curr_loss_gauss = 0.0
 
         curr_count = 0
-        while step < self.steps:
-            x, out_dict = next(self.train_iter)
+        for step in range(self.n_iter):
+            x, out_dict = next(X)
             out_dict = {'y': out_dict}
-            batch_loss_multi, batch_loss_gauss = self._run_step(x, out_dict)
+            batch_loss_multi, batch_loss_gauss = self._one_step(x, out_dict)
 
             self._anneal_lr(step)
 
@@ -199,19 +186,25 @@ class Trainer:
             curr_loss_multi += batch_loss_multi.item() * len(x)
             curr_loss_gauss += batch_loss_gauss.item() * len(x)
 
-            if (step + 1) % self.log_every == 0:
+            if (step + 1) % self.log_interval == 0:
                 mloss = np.around(curr_loss_multi / curr_count, 4)
                 gloss = np.around(curr_loss_gauss / curr_count, 4)
-                if (step + 1) % self.print_every == 0:
+                if (step + 1) % self.print_interval == 0:
                     print(f'Step {(step + 1)}/{self.steps} MLoss: {mloss} GLoss: {gloss} Sum: {mloss + gloss}')
-                self.loss_history.loc[len(self.loss_history)] =[step + 1, mloss, gloss, mloss + gloss]
+                self.loss_history.loc[len(self.loss_history)] = [
+                    step + 1, mloss, gloss, mloss + gloss]
                 curr_count = 0
                 curr_loss_gauss = 0.0
                 curr_loss_multi = 0.0
 
-            update_ema(self.ema_model.parameters(), self.diffusion._denoise_fn.parameters())
+            self._update_ema(self.ema_model.parameters(), self.model.parameters())
 
-            step += 1
+        return self
+
+    def _generate(self, count: int, syn_schema: Schema, **kwargs: Any) -> DataLoader:
+        self.diffusion.eval()
+        # TODO: check self.model.sample_all
+        return self._safe_generate(self.diffusion.sample_all, count, syn_schema)
 
 
-plugin = DDPMPlugin
+plugin = TabDDPMPlugin
