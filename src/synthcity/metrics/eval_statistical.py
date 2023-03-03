@@ -687,6 +687,15 @@ class AlphaPrecision(StatisticalEvaluator):
 
 
 class AlphaPrecisionNaive(StatisticalEvaluator):
+    """
+    .. inheritance-diagram:: synthcity.metrics.eval_statistical.AlphaPrecisionNaive
+        :parts: 1
+
+    Evaluates the alpha-precision, beta-recall, and authenticity scores.
+
+    It uses a naive method and so should not be used in favour of AlphaPrecision.
+    """
+
     def __init__(self, **kwargs: Any) -> None:
         super().__init__(default_metric="authenticity", **kwargs)
 
@@ -705,9 +714,10 @@ class AlphaPrecisionNaive(StatisticalEvaluator):
     ) -> Tuple:
         X = X_df.values.astype(float)
         X_syn = X_syn_df.values.astype(float)
-        assert len(X) == len(
-            X_syn
-        ), "The real and synthetic data mush have the same length"
+        if len(X) != len(X_syn):
+            raise AssertionError(
+                "The real and synthetic data mush have the same length"
+            )
 
         emb_center = np.mean(X, axis=0)
 
