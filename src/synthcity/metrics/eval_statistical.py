@@ -688,7 +688,7 @@ class AlphaPrecision(StatisticalEvaluator):
 
 class AlphaPrecisionNaive(StatisticalEvaluator):
     def __init__(self, **kwargs: Any) -> None:
-        super().__init__(**kwargs)
+        super().__init__(default_metric="authenticity", **kwargs)
 
     @staticmethod
     def name() -> str:
@@ -787,31 +787,44 @@ class AlphaPrecisionNaive(StatisticalEvaluator):
         self,
         X: DataLoader,
         X_syn: DataLoader,
-    ) -> Tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame]:
+    ) -> Tuple[pd.DataFrame, pd.DataFrame]:
         X_gt_norm = X.dataframe().copy()
         X_syn_norm = X_syn.dataframe().copy()
         if self._task_type != "survival_analysis":
-            X_gt_norm = X_gt_norm.drop(columns=[X.target_column])
-            X_syn_norm = X_syn_norm.drop(columns=[X_syn.target_column])
+            if hasattr(X, "target_column"):
+                X_gt_norm = X_gt_norm.drop(columns=[X.target_column])
+            if hasattr(X_syn, "target_column"):
+                X_syn_norm = X_syn_norm.drop(columns=[X_syn.target_column])
         scaler = MinMaxScaler().fit(X_gt_norm)
-        return (
-            pd.DataFrame(
+        if hasattr(X, "target_column"):
+            X_gt_norm_df = pd.DataFrame(
                 scaler.transform(X_gt_norm),
                 columns=[
                     col
                     for col in X.train().dataframe().columns
                     if col != X.target_column
                 ],
-            ),
-            pd.DataFrame(
+            )
+        else:
+            X_gt_norm_df = pd.DataFrame(
+                scaler.transform(X_gt_norm), columns=X.train().dataframe().columns
+            )
+
+        if hasattr(X_syn, "target_column"):
+            X_syn_norm_df = pd.DataFrame(
                 scaler.transform(X_syn_norm),
                 columns=[
                     col
                     for col in X_syn.dataframe().columns
                     if col != X_syn.target_column
                 ],
-            ),
-        )
+            )
+        else:
+            X_syn_norm_df = pd.DataFrame(
+                scaler.transform(X_syn_norm), columns=X_syn.dataframe().columns
+            )
+
+        return (X_gt_norm_df, X_syn_norm_df)
 
     @validate_arguments(config=dict(arbitrary_types_allowed=True))
     def _evaluate(

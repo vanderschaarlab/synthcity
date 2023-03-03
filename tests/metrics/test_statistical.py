@@ -12,6 +12,7 @@ from torchvision import datasets
 # synthcity absolute
 from synthcity.metrics.eval_statistical import (
     AlphaPrecision,
+    AlphaPrecisionNaive,
     ChiSquaredTest,
     FrechetInceptionDistance,
     InverseKLDivergence,
@@ -237,6 +238,34 @@ def test_evaluate_alpha_precision(test_plugin: Plugin) -> None:
     assert AlphaPrecision.name() == "alpha_precision"
     assert AlphaPrecision.type() == "stats"
     assert AlphaPrecision.direction() == "maximize"
+
+
+@pytest.mark.parametrize("test_plugin", [Plugins().get("dummy_sampler")])
+def test_evaluate_alpha_precision_naive(test_plugin: Plugin) -> None:
+    X, y = load_iris(return_X_y=True, as_frame=True)
+    X["target"] = y
+    Xloader = GenericDataLoader(X)
+
+    test_plugin.fit(Xloader)
+    X_gen = test_plugin.generate(len(X))
+
+    syn_score, rnd_score = _eval_plugin(AlphaPrecisionNaive, Xloader, X_gen)
+
+    for key in [
+        "delta_precision_alpha",
+        "delta_coverage_beta",
+        "authenticity",
+    ]:
+        assert key in syn_score
+        assert key in rnd_score
+
+    assert syn_score["delta_precision_alpha"] > rnd_score["delta_precision_alpha"]
+    assert syn_score["delta_coverage_beta"] > rnd_score["delta_coverage_beta"]
+    assert syn_score["authenticity"] < rnd_score["authenticity"]
+
+    assert AlphaPrecisionNaive.name() == "alpha_precision_naive"
+    assert AlphaPrecisionNaive.type() == "stats"
+    assert AlphaPrecisionNaive.direction() == "maximize"
 
 
 @pytest.mark.parametrize("test_plugin", [Plugins().get("dummy_sampler")])
