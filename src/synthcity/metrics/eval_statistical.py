@@ -716,7 +716,7 @@ class AlphaPrecisionNaive(StatisticalEvaluator):
         X_syn = X_syn_df.values.astype(float)
         if len(X) != len(X_syn):
             raise AssertionError(
-                "The real and synthetic data mush have the same length"
+                "The real and synthetic data must have the same length"
             )
 
         emb_center = np.mean(X, axis=0)
