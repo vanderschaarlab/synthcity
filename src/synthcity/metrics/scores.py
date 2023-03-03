@@ -42,7 +42,7 @@ def _safe_evaluate(
     log.debug(f" >> Evaluating metric {evaluator.fqdn()} done. Duration: {duration} s")
 
     if err is not None:
-        log.error(f" >> Rvaluator {evaluator.fqdn()} failed: {err}")
+        log.error(f" >> Evaluator {evaluator.fqdn()} failed: {err}")
 
     return evaluator.fqdn(), result, failed, duration, evaluator.direction()
 

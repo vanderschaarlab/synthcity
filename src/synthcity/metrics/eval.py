@@ -42,6 +42,7 @@ from .eval_sanity import (
 )
 from .eval_statistical import (
     AlphaPrecision,
+    AlphaPrecisionNaive,
     ChiSquaredTest,
     FrechetInceptionDistance,
     InverseKLDivergence,
@@ -70,6 +71,7 @@ standard_metrics = [
     WassersteinDistance,
     PRDCScore,
     AlphaPrecision,
+    AlphaPrecisionNaive,
     SurvivalKMDistance,
     FrechetInceptionDistance,
     # performance tests
@@ -170,7 +172,6 @@ class Metrics:
         scores = ScoreEvaluator()
 
         eval_cnt = min(len(X_gt), len(X_syn))
-
         for metric in standard_metrics:
             if metric.type() not in metrics:
                 continue
