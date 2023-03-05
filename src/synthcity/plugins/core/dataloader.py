@@ -270,6 +270,9 @@ class GenericDataLoader(DataLoader):
         :parts: 1
 
     Data loader for generic tabular data.
+    
+    Important note: preprocessing data with OneHotEncoder or StandardScaler is not needed or recommended.
+    Synthcity handles feature encoding and standardization internally.
 
     Constructor Args:
         data: Union[pd.DataFrame, list, np.ndarray]
