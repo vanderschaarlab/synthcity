@@ -25,7 +25,7 @@ from synthcity.plugins.core.distribution import (
     FloatDistribution,
     IntegerDistribution,
 )
-from synthcity.plugins.core.models.tabular_ddpm import GaussianMultinomialDiffusion, MLPDiffusion, ResNetDiffusion
+from synthcity.plugins.core.models.tabular_ddpm import TabDDPM
 from synthcity.plugins.core.models.tabular_encoder import TabularEncoder
 from synthcity.plugins.core.plugin import Plugin
 from synthcity.plugins.core.schema import Schema
@@ -57,24 +57,27 @@ class TabDDPMPlugin(Plugin):
     @validate_arguments(config=dict(arbitrary_types_allowed=True))
     def __init__(
         self,
+        *,
+        is_classification: bool = False,
         n_iter = 1000,
         lr = 0.002,
         weight_decay = 1e-4,
         batch_size = 1024,
         model_type = 'mlp',
-        model_params = None,
         num_timesteps = 1000,
         gaussian_loss_type = 'mse',
         scheduler = 'cosine',
-        change_val = False,
         device: Any = DEVICE,
         log_interval: int = 100,
         print_interval: int = 500,
+        # model params
+        rtdl_params: Optional[dict] = None,  # {'d_layers', 'dropout'}
+        dim_label_emb: int = 128,
         # early stopping
         n_iter_min: int = 100,
         n_iter_print: int = 50,
         patience: int = 5,
-        patience_metric: Optional[WeightedMetrics] = None,
+        # patience_metric: Optional[WeightedMetrics] = None,
         # core plugin arguments
         random_state: int = 0,
         workspace: Path = Path("workspace"),
@@ -90,16 +93,27 @@ class TabDDPMPlugin(Plugin):
             compress_dataset=compress_dataset,
             **kwargs
         )
+        
+        self.is_classification = is_classification
 
-        if patience_metric is None:
-            patience_metric = WeightedMetrics(
-                metrics=[("detection", "detection_mlp")],
-                weights=[1],
-                workspace=workspace,
-            )
-            
-        self.__dict__.update(locals())
-        del self.self, self.kwargs
+        self.model = TabDDPM(
+            n_iter=n_iter,
+            lr=lr,
+            weight_decay=weight_decay,
+            batch_size=batch_size,
+            num_timesteps=num_timesteps,
+            gaussian_loss_type=gaussian_loss_type,
+            scheduler=scheduler,
+            device=device, 
+            log_interval=log_interval, 
+            print_interval=print_interval,
+            model_type=model_type,
+            rtdl_params=rtdl_params, 
+            dim_label_emb=dim_label_emb,
+            n_iter_min=n_iter_min, 
+            n_iter_print=n_iter_print, 
+            patience=patience, 
+        )
 
     @staticmethod
     def name() -> str:
@@ -113,98 +127,23 @@ class TabDDPMPlugin(Plugin):
     def hyperparameter_space(**kwargs: Any) -> List[Distribution]:
         raise NotImplementedError
 
-    def _anneal_lr(self, step):
-        frac_done = step / self.steps
-        lr = self.lr * (1 - frac_done)
-        for param_group in self.optimizer.param_groups:
-            param_group["lr"] = lr
-
-    def _one_step(self, x, out_dict):
-        x = x.to(self.device)
-        for k in out_dict:
-            out_dict[k] = out_dict[k].long().to(self.device)
-        self.optimizer.zero_grad()
-        loss_multi, loss_gauss = self.diffusion.mixed_loss(x, out_dict)
-        loss = loss_multi + loss_gauss
-        loss.backward()
-        self.optimizer.step()
-        return loss_multi, loss_gauss
-
-    def _update_ema(self, target_params, source_params, rate=0.999):
-        """
-        Update target parameters to be closer to those of source parameters using
-        an exponential moving average.
-        :param target_params: the target parameter sequence.
-        :param source_params: the source parameter sequence.
-        :param rate: the EMA rate (closer to 1 means slower).
-        """
-        for targ, src in zip(target_params, source_params):
-            targ.detach().mul_(rate).add_(src.detach(), alpha=1 - rate)
-
-    def _fit(self, X: DataLoader, *args: Any, **kwargs: Any) -> "TabDDPMPlugin":
-        # TODO: add parameters of TabularEncoder
-        self.encoder = TabularEncoder().fit(X)
+    def _fit(self, data: DataLoader, cond: pd.Series = None, **kwargs) -> "TabDDPMPlugin":
+        if self.is_classification:
+            assert cond is None
+            _, cond = data.unpack()
+            
+        if cond is not None:
+            cond = pd.Series(cond, index=data.index)
+        data = data.dataframe()
+            
+        # self.encoder = TabularEncoder().fit(X)
         
-        if self.model_type == 'mlp':
-            self.model = MLPDiffusion(**self.model_params)
-        elif self.model_type == 'resnet':
-            self.model = ResNetDiffusion(**self.model_params)
-        else:
-            raise "Unknown model!"
+        self.model.fit(data, cond, **kwargs)
         
-        self.diffusion = GaussianMultinomialDiffusion(
-            denoise_fn=self.model,
-            num_numerical_features=self.encoder.n_features(),
-            gaussian_loss_type=self.gaussian_loss_type,
-            num_timesteps=self.num_timesteps,
-            scheduler=self.scheduler,
-            device=self.device
-        ).to(self.device)
-        
-        self.ema_model = deepcopy(self.model)
-        for param in self.ema_model.parameters():
-            param.detach_()
-
-        self.optimizer = torch.optim.AdamW(
-            self.diffusion.parameters(), lr=self.lr, weight_decay=self.weight_decay)
-    
-        # TODO: check data type of X
-        self.loss_history = pd.DataFrame(columns=['step', 'mloss', 'gloss', 'loss'])
-        
-        curr_loss_multi = 0.0
-        curr_loss_gauss = 0.0
-
-        curr_count = 0
-        for step in range(self.n_iter):
-            x, out_dict = next(X)
-            out_dict = {'y': out_dict}
-            batch_loss_multi, batch_loss_gauss = self._one_step(x, out_dict)
-
-            self._anneal_lr(step)
-
-            curr_count += len(x)
-            curr_loss_multi += batch_loss_multi.item() * len(x)
-            curr_loss_gauss += batch_loss_gauss.item() * len(x)
-
-            if (step + 1) % self.log_interval == 0:
-                mloss = np.around(curr_loss_multi / curr_count, 4)
-                gloss = np.around(curr_loss_gauss / curr_count, 4)
-                if (step + 1) % self.print_interval == 0:
-                    print(f'Step {(step + 1)}/{self.steps} MLoss: {mloss} GLoss: {gloss} Sum: {mloss + gloss}')
-                self.loss_history.loc[len(self.loss_history)] = [
-                    step + 1, mloss, gloss, mloss + gloss]
-                curr_count = 0
-                curr_loss_gauss = 0.0
-                curr_loss_multi = 0.0
-
-            self._update_ema(self.ema_model.parameters(), self.model.parameters())
-
-        return self
-
-    def _generate(self, count: int, syn_schema: Schema, **kwargs: Any) -> DataLoader:
-        self.diffusion.eval()
-        # TODO: check self.model.sample_all
-        return self._safe_generate(self.diffusion.sample_all, count, syn_schema)
-
+    def _generate(self, count: int, syn_schema: Schema, cond=None, **kwargs: Any) -> DataLoader:
+        def callback(count, cond):
+            sample, cond = self.model.generate(count, cond=cond)
+            return sample
+        return self._safe_generate(callback, count, syn_schema, cond=cond, **kwargs)
 
 plugin = TabDDPMPlugin

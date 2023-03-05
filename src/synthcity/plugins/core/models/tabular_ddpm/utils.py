@@ -168,7 +168,45 @@ def sliced_logsumexp(x, slices):
 def log_onehot_to_index(log_x):
     return log_x.argmax(1)
 
+
 class FoundNANsError(BaseException):
     """Found NANs during sampling"""
     def __init__(self, message='Found NANs during sampling.'):
         super(FoundNANsError, self).__init__(message)
+
+
+class TensorDataLoader:
+    """
+    A DataLoader-like object for a set of tensors that can be much faster than
+    TensorDataset + DataLoader because dataloader grabs individual indices of
+    the dataset and calls cat (slow).
+    Source: https://discuss.pytorch.org/t/dataloader-much-slower-than-manual-batching/27014/6
+    """
+    def __init__(self, *tensors, batch_size=32, shuffle=False):
+        """
+        Initialize a FastTensorDataLoader.
+        :param *tensors: tensors to store. Must have the same length @ dim 0.
+        :param batch_size: batch size to load.
+        :param shuffle: if True, shuffle the data *in-place* whenever an
+            iterator is created out of this object.
+        :returns: A FastTensorDataLoader.
+        """
+        assert all(t.shape[0] == tensors[0].shape[0] for t in tensors)
+        self.tensors = tensors
+        self.dataset_len = self.tensors[0].shape[0]
+        self.batch_size = batch_size
+        self.shuffle = shuffle
+        
+    def __iter__(self):
+        i = 0
+        idx = np.arange(self.dataset_len)
+        if self.shuffle:
+            np.random.shuffle(idx)
+        while True:
+            j = i + self.batch_size
+            s = slice(i, j)
+            if j > self.dataset_len:
+                s = list(range(i, self.dataset_len)) + list(range(0, j - self.dataset_len))
+                if self.shuffle:
+                    np.random.shuffle(idx)
+            yield tuple(t[idx[s]] for t in self.tensors)
