@@ -169,7 +169,6 @@ class Benchmarks:
 
                     if synthetic_cache:
                         save_to_file(cache_file, X_syn)
-
                 evaluation = Metrics.evaluate(
                     X_test if X_test is not None else X,
                     X_syn,
