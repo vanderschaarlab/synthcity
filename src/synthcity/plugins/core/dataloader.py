@@ -270,9 +270,6 @@ class GenericDataLoader(DataLoader):
         :parts: 1
 
     Data loader for generic tabular data.
-    
-    Important note: preprocessing data with OneHotEncoder or StandardScaler is not needed or recommended.
-    Synthcity handles feature encoding and standardization internally.
 
     Constructor Args:
         data: Union[pd.DataFrame, list, np.ndarray]
@@ -293,6 +290,8 @@ class GenericDataLoader(DataLoader):
         >>> from synthcity.plugins.core.dataloader import GenericDataLoader
         >>> X, y = load_diabetes(return_X_y=True, as_frame=True)
         >>> X["target"] = y
+        >>> # Important note: preprocessing data with OneHotEncoder or StandardScaler is not needed or recommended.
+        >>> # Synthcity handles feature encoding and standardization internally.
         >>> loader = GenericDataLoader(X, target_column="target", sensitive_columns=["sex"],)
     """
 
