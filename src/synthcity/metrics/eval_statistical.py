@@ -574,10 +574,10 @@ class AlphaPrecision(StatisticalEvaluator):
         emb_center: Optional[np.ndarray] = None,
     ) -> Tuple:
         if len(X) != len(X_syn):
-            raise RuntimeError("The real and synthetic data mush have the same length")
+            raise RuntimeError("The real and synthetic data must have the same length")
 
         if emb_center is None:
-            emb_center = np.mean(X.numpy(), axis=0)
+            emb_center = np.mean(X, axis=0)
 
         n_steps = 30
         alphas = np.linspace(0, 1, n_steps)
@@ -651,6 +651,60 @@ class AlphaPrecision(StatisticalEvaluator):
             authenticity,
         )
 
+    def _normalize_covariates(
+        self,
+        X: DataLoader,
+        X_syn: DataLoader,
+    ) -> Tuple[pd.DataFrame, pd.DataFrame]:
+        """_normalize_covariates
+        This is an internal method to replicate the old, naive method for evaluating
+        AlphaPrecision.
+
+        Args:
+            X (DataLoader): The ground truth dataset.
+            X_syn (DataLoader): The synthetic dataset.
+
+        Returns:
+            Tuple[pd.DataFrame, pd.DataFrame]: normalised version of the datasets
+        """
+        X_gt_norm = X.dataframe().copy()
+        X_syn_norm = X_syn.dataframe().copy()
+        if self._task_type != "survival_analysis":
+            if hasattr(X, "target_column"):
+                X_gt_norm = X_gt_norm.drop(columns=[X.target_column])
+            if hasattr(X_syn, "target_column"):
+                X_syn_norm = X_syn_norm.drop(columns=[X_syn.target_column])
+        scaler = MinMaxScaler().fit(X_gt_norm)
+        if hasattr(X, "target_column"):
+            X_gt_norm_df = pd.DataFrame(
+                scaler.transform(X_gt_norm),
+                columns=[
+                    col
+                    for col in X.train().dataframe().columns
+                    if col != X.target_column
+                ],
+            )
+        else:
+            X_gt_norm_df = pd.DataFrame(
+                scaler.transform(X_gt_norm), columns=X.train().dataframe().columns
+            )
+
+        if hasattr(X_syn, "target_column"):
+            X_syn_norm_df = pd.DataFrame(
+                scaler.transform(X_syn_norm),
+                columns=[
+                    col
+                    for col in X_syn.dataframe().columns
+                    if col != X_syn.target_column
+                ],
+            )
+        else:
+            X_syn_norm_df = pd.DataFrame(
+                scaler.transform(X_syn_norm), columns=X_syn.dataframe().columns
+            )
+
+        return (X_gt_norm_df, X_syn_norm_df)
+
     @validate_arguments(config=dict(arbitrary_types_allowed=True))
     def _evaluate(
         self,
@@ -682,6 +736,20 @@ class AlphaPrecision(StatisticalEvaluator):
         results[f"delta_precision_alpha{emb}"] = Delta_precision_alpha
         results[f"delta_coverage_beta{emb}"] = Delta_coverage_beta
         results[f"authenticity{emb}"] = authenticity
+
+        X_df, X_syn_df = self._normalize_covariates(X, X_syn)
+        (
+            alphas_naive,
+            alpha_precision_curve_naive,
+            beta_coverage_curve_naive,
+            Delta_precision_alpha_naive,
+            Delta_coverage_beta_naive,
+            authenticity_naive,
+        ) = self.metrics(X_df.to_numpy(), X_syn_df.to_numpy(), emb_center=None)
+
+        results["delta_precision_alpha_naive"] = Delta_precision_alpha_naive
+        results["delta_coverage_beta_naive"] = Delta_coverage_beta_naive
+        results["authenticity_naive"] = authenticity_naive
 
         return results
 

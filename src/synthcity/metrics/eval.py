@@ -176,7 +176,6 @@ class Metrics:
         scores = ScoreEvaluator()
 
         eval_cnt = min(len(X_gt), len(X_syn))
-
         for metric in standard_metrics:
             if metric.type() not in metrics:
                 continue
