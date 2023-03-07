@@ -16,6 +16,7 @@ plugin_name = "ddpm"
 plugin_args = dict(
     n_iter=100,
     is_classification=True,
+    verbose=1,
     # rtdl_params=dict(
     #     d_layers=[256, 256],
     #     dropout=0.0

@@ -68,6 +68,7 @@ class TabDDPMPlugin(Plugin):
         gaussian_loss_type = 'mse',
         scheduler = 'cosine',
         device: Any = DEVICE,
+        verbose: int = 0,
         log_interval: int = 100,
         print_interval: int = 500,
         # model params
@@ -99,8 +100,8 @@ class TabDDPMPlugin(Plugin):
         self.is_classification = is_classification
 
         rtdl_params = dict(
-            d_layers = [self.dim_hidden] * self.num_layers,
-            dropout = self.dropout
+            d_layers = [dim_hidden] * num_layers,
+            dropout = dropout
         )
         self.model = TabDDPM(
             n_iter=n_iter,
@@ -111,6 +112,7 @@ class TabDDPMPlugin(Plugin):
             gaussian_loss_type=gaussian_loss_type,
             scheduler=scheduler,
             device=device, 
+            verbose=verbose,
             log_interval=log_interval, 
             print_interval=print_interval,
             model_type=model_type,
@@ -161,13 +163,13 @@ class TabDDPMPlugin(Plugin):
             assert cond is None
             _, cond = data.unpack()
             self._labels, self._cond_dist = np.unique(cond, return_counts=True)
-            self._cond_dist /= self._cond_dist.sum()
-
-        if cond is not None:
-            cond = pd.Series(cond, index=data.index)
+            self._cond_dist = self._cond_dist / self._cond_dist.sum()
             
         # NOTE: should we include the target column in `data`?
         data = data.dataframe()
+
+        if cond is not None:
+            cond = pd.Series(cond, index=data.index)
 
         # self.encoder = TabularEncoder().fit(X)
         

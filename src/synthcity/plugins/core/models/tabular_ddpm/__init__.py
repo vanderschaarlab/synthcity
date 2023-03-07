@@ -32,6 +32,7 @@ class TabDDPM(nn.Module):
         gaussian_loss_type = 'mse',
         scheduler = 'cosine',
         device: Any = DEVICE,
+        verbose: int = 0,
         log_interval: int = 100,
         print_interval: int = 500,
         # model params
@@ -45,7 +46,7 @@ class TabDDPM(nn.Module):
     ) -> None:
         super().__init__()
         self.__dict__.update(locals())
-        del self.self, self.kwargs
+        del self.self
         
     def _anneal_lr(self, step):
         frac_done = step / self.steps
@@ -69,7 +70,7 @@ class TabDDPM(nn.Module):
             n_labels = cond.nunique()
         else:
             n_labels = 0
-            
+
         cat_cols = discrete_columns(X, return_counts=True)
         ini_cols = X.columns
         cat_cols, cat_counts = zip(*cat_cols)
@@ -86,9 +87,9 @@ class TabDDPM(nn.Module):
             dim_t = self.dim_label_emb
         )
         
-        tensors = [X] if cond is None else [X, cond]
-        tensors = [torch.tensor(t.values, dtype=torch.float32, device=self.device) for t in tensors]
-        self.dataloader = TensorDataLoader(tensors, batch_size=self.batch_size)
+        tensors = [torch.tensor(t.values, dtype=torch.float32, device=self.device)
+                   for t in ([X] if cond is None else [X, cond])]
+        self.dataloader = TensorDataLoader(*tensors, batch_size=self.batch_size)
 
         self.diffusion = GaussianMultinomialDiffusion(
             model_type=self.model_type,
@@ -98,7 +99,8 @@ class TabDDPM(nn.Module):
             gaussian_loss_type=self.gaussian_loss_type,
             num_timesteps=self.num_timesteps,
             scheduler=self.scheduler,
-            device=self.device
+            device=self.device,
+            verbose=self.verbose,
         ).to(self.device)
         
         self.ema_model = deepcopy(self.diffusion.denoise_fn)
@@ -109,6 +111,10 @@ class TabDDPM(nn.Module):
             self.diffusion.parameters(), lr=self.lr, weight_decay=self.weight_decay)
     
         self.loss_history = pd.DataFrame(columns=['step', 'mloss', 'gloss', 'loss'])
+        
+        if self.verbose:
+            print("Starting training")
+            print(self)
         
         for step, (x, y) in enumerate(self.dataloader):
             curr_loss_multi = 0.0
@@ -131,7 +137,7 @@ class TabDDPM(nn.Module):
             if (step + 1) % self.log_interval == 0:
                 mloss = np.around(curr_loss_multi / curr_count, 4)
                 gloss = np.around(curr_loss_gauss / curr_count, 4)
-                if (step + 1) % self.print_interval == 0:
+                if self.verbose and (step + 1) % self.print_interval == 0:
                     print(f'Step {(step + 1)}/{self.n_iter} MLoss: {mloss} GLoss: {gloss} Sum: {mloss + gloss}')
                 self.loss_history.loc[len(self.loss_history)] = [
                     step + 1, mloss, gloss, mloss + gloss]
