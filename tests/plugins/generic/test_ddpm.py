@@ -13,7 +13,14 @@ from synthcity.plugins.core.dataloader import GenericDataLoader
 from synthcity.plugins.generic.plugin_ddpm import plugin
 
 plugin_name = "ddpm"
-plugin_args = {"n_iter": 100}
+plugin_args = dict(
+    n_iter=100,
+    is_classification=True,
+    # rtdl_params=dict(
+    #     d_layers=[256, 256],
+    #     dropout=0.0
+    # )
+)
 
 
 @pytest.mark.parametrize(
@@ -40,20 +47,15 @@ def test_plugin_type(test_plugin: Plugin) -> None:
 @pytest.mark.parametrize(
     "test_plugin", generate_fixtures(plugin_name, plugin, plugin_args)
 )
-def test_plugin_hyperparams(test_plugin: Plugin) -> None:
-    assert len(test_plugin.hyperparameter_space()) == 9
-
-
-@pytest.mark.parametrize(
-    "test_plugin", generate_fixtures(plugin_name, plugin, plugin_args)
-)
 def test_plugin_fit(test_plugin: Plugin) -> None:
     X = pd.DataFrame(load_iris()["data"])
     test_plugin.fit(GenericDataLoader(X))
 
 
-def test_plugin_generate() -> None:
-    test_plugin = plugin(n_layers_hidden=2, n_units_hidden=100, n_iter=50)
+@pytest.mark.parametrize(
+    "test_plugin", generate_fixtures(plugin_name, plugin, plugin_args)
+)
+def test_plugin_generate(test_plugin: Plugin) -> None:
     X = pd.DataFrame(load_iris()["data"])
     test_plugin.fit(GenericDataLoader(X))
 
@@ -66,8 +68,10 @@ def test_plugin_generate() -> None:
     assert test_plugin.schema_includes(X_gen)
 
 
-def test_plugin_generate_constraints() -> None:
-    test_plugin = plugin(n_layers_hidden=2, n_units_hidden=100, n_iter=50)
+@pytest.mark.parametrize(
+    "test_plugin", generate_fixtures(plugin_name, plugin, plugin_args)
+)
+def test_plugin_generate_constraints(test_plugin: Plugin) -> None:
     X = pd.DataFrame(load_iris()["data"])
     test_plugin.fit(GenericDataLoader(X))
 
@@ -96,23 +100,29 @@ def test_plugin_generate_constraints() -> None:
     assert list(X_gen.columns) == list(X.columns)
 
 
+@pytest.mark.parametrize(
+    "test_plugin", generate_fixtures(plugin_name, plugin, plugin_args)
+)
+def test_plugin_hyperparams(test_plugin: Plugin) -> None:
+    assert len(test_plugin.hyperparameter_space()) == 6
+
+
 def test_sample_hyperparams() -> None:
     for i in range(100):
         args = plugin.sample_hyperparameters()
-
         assert plugin(**args) is not None
 
 
 @pytest.mark.slow
 @pytest.mark.parametrize("compress_dataset", [True, False])
-def test_eval_performance_nflow(compress_dataset: bool) -> None:
+def test_eval_performance_ddpm(compress_dataset: bool) -> None:
     results = []
 
     Xraw, y = load_iris(return_X_y=True, as_frame=True)
     Xraw["target"] = y
     X = GenericDataLoader(Xraw)
 
-    for retry in range(2):
+    for _ in range(2):
         test_plugin = plugin(n_iter=5000, compress_dataset=compress_dataset)
         evaluator = PerformanceEvaluatorXGB()
 

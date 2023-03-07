@@ -71,7 +71,9 @@ class TabDDPMPlugin(Plugin):
         log_interval: int = 100,
         print_interval: int = 500,
         # model params
-        rtdl_params: Optional[dict] = None,  # {'d_layers', 'dropout'}
+        num_layers: int = 3,
+        dim_hidden: int = 256,
+        dropout: float = 0.0,
         dim_label_emb: int = 128,
         # early stopping
         n_iter_min: int = 100,
@@ -96,6 +98,10 @@ class TabDDPMPlugin(Plugin):
         
         self.is_classification = is_classification
 
+        rtdl_params = dict(
+            d_layers = [self.dim_hidden] * self.num_layers,
+            dropout = self.dropout
+        )
         self.model = TabDDPM(
             n_iter=n_iter,
             lr=lr,
@@ -125,7 +131,30 @@ class TabDDPMPlugin(Plugin):
 
     @staticmethod
     def hyperparameter_space(**kwargs: Any) -> List[Distribution]:
-        raise NotImplementedError
+        """
+        Hyperparameter Search space (from the paper)
+        ----------------------------------------------
+        Learning rate           LogUniform[0.00001, 0.003]
+        Batch size              Cat{256, 4096}
+        Diffusion timesteps     Cat{100, 1000}
+        Training iterations     Cat{5000, 10000, 20000}
+        Number of MLP layers    Int{2, 4, 6, 8}
+        MLP width of layers     Int{128, 256, 512, 1024}
+        Proportion of samples   Float{0.25, 0.5, 1, 2, 4, 8}
+        ----------------------------------------------
+        Dropout                 0.0
+        Scheduler               cosine (Nichol, 2021)
+        Gaussian diffusion loss MSE
+        """
+        return [
+            # TODO: change to loguniform distribution
+            CategoricalDistribution(name="lr", choices=[1e-5, 1e-4, 1e-3, 2e-3, 3e-3]),
+            CategoricalDistribution(name="batch_size", choices=[256, 4096]),
+            CategoricalDistribution(name="num_timesteps", choices=[100, 1000]),
+            CategoricalDistribution(name="n_iter", choices=[5000, 10000, 20000]),
+            CategoricalDistribution(name="num_layers", choices=[2, 4, 6, 8]),
+            CategoricalDistribution(name="dim_hidden", choices=[128, 256, 512, 1024]),
+        ]
 
     def _fit(self, data: DataLoader, cond: pd.Series = None, **kwargs) -> "TabDDPMPlugin":
         if self.is_classification:
