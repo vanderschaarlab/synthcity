@@ -72,13 +72,18 @@ class TabDDPM(nn.Module):
             n_labels = 0
 
         cat_cols = discrete_columns(X, return_counts=True)
-        ini_cols = X.columns
-        cat_cols, cat_counts = zip(*cat_cols)
-        # reorder the columns so that the categorical ones go to the end
-        X = X[np.hstack([X.columns[~X.keys().isin(cat_cols)], cat_cols])]
-        cur_cols = X.columns
-        # find the permutation from the reordered columns to the original ones
-        self._col_perm = np.argsort(cur_cols)[np.argsort(np.argsort(ini_cols))]
+        
+        if cat_cols:
+            ini_cols = X.columns
+            cat_cols, cat_counts = zip(*cat_cols)
+            # reorder the columns so that the categorical ones go to the end
+            X = X[np.hstack([X.columns[~X.keys().isin(cat_cols)], cat_cols])]
+            cur_cols = X.columns
+            # find the permutation from the reordered columns to the original ones
+            self._col_perm = np.argsort(cur_cols)[np.argsort(np.argsort(ini_cols))]
+        else:
+            cat_counts = [0]
+            self._col_perm = np.arange(X.shape[1])
 
         model_params = dict(
             num_classes=n_labels,
@@ -87,9 +92,9 @@ class TabDDPM(nn.Module):
             dim_t = self.dim_label_emb
         )
         
-        tensors = [torch.tensor(X.values, dtype=torch.float32, device=self.device)]
-        if cond is not None:
-            tensors.append(torch.tensor(cond.values, dtype=torch.long, device=self.device))
+        tensors = [torch.tensor(X.values, dtype=torch.float32, device=self.device),
+                   np.repeat(None, len(X)) if cond is None else 
+                   torch.tensor(cond.values, dtype=torch.long, device=self.device)]
         self.dataloader = TensorDataLoader(*tensors, batch_size=self.batch_size)
 
         self.diffusion = GaussianMultinomialDiffusion(
@@ -113,9 +118,9 @@ class TabDDPM(nn.Module):
     
         self.loss_history = pd.DataFrame(columns=['step', 'mloss', 'gloss', 'loss'])
         
-        if self.verbose:
-            print("Starting training")
-            print(self)
+        # if self.verbose:
+        #     print("Starting training")
+        #     print(self)
         
         steps = 0
         curr_loss_multi = 0.0

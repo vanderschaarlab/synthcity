@@ -14,14 +14,13 @@ from synthcity.plugins.generic.plugin_ddpm import plugin
 
 plugin_name = "ddpm"
 plugin_args = dict(
-    n_iter=100,
-    is_classification=True,
-    n_iter=1000, 
+    n_iter=1000,
+    # is_classification=True,
     batch_size=200,
     num_timesteps=500,
     verbose=1,
     log_interval=10,
-    print_interval=50
+    print_interval=100
     # rtdl_params=dict(
     #     d_layers=[256, 256],
     #     dropout=0.0
@@ -129,7 +128,7 @@ def test_eval_performance_ddpm(compress_dataset: bool) -> None:
     X = GenericDataLoader(Xraw)
 
     for _ in range(2):
-        test_plugin = plugin(n_iter=5000, compress_dataset=compress_dataset)
+        test_plugin = plugin(**plugin_args, compress_dataset=compress_dataset)
         evaluator = PerformanceEvaluatorXGB()
 
         test_plugin.fit(X)
