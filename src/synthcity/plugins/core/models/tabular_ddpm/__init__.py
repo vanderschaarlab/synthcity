@@ -87,9 +87,9 @@ class TabDDPM(nn.Module):
             dim_t = self.dim_label_emb
         )
         
-        tensors = [torch.tensor(X.values, dtype=torch.float32, device=self.device)]
-        if cond is not None:
-            tensors.append(torch.tensor(cond.values, dtype=torch.long, device=self.device))
+        tensors = [torch.tensor(X.values, dtype=torch.float32, device=self.device),
+                   np.repeat(None, len(X)) if cond is None else 
+                   torch.tensor(cond.values, dtype=torch.long, device=self.device)]
         self.dataloader = TensorDataLoader(*tensors, batch_size=self.batch_size)
 
         self.diffusion = GaussianMultinomialDiffusion(
@@ -113,9 +113,9 @@ class TabDDPM(nn.Module):
     
         self.loss_history = pd.DataFrame(columns=['step', 'mloss', 'gloss', 'loss'])
         
-        if self.verbose:
-            print("Starting training")
-            print(self)
+        # if self.verbose:
+        #     print("Starting training")
+        #     print(self)
         
         steps = 0
         curr_loss_multi = 0.0
