@@ -131,19 +131,25 @@ class TabDDPMPlugin(Plugin):
         if self.is_classification:
             assert cond is None
             _, cond = data.unpack()
-            
+            self._labels, self._cond_dist = np.unique(cond, return_counts=True)
+            self._cond_dist /= self._cond_dist.sum()
+
         if cond is not None:
             cond = pd.Series(cond, index=data.index)
-        data = data.dataframe()
             
+        # NOTE: should we include the target column in `data`?
+        data = data.dataframe()
+
         # self.encoder = TabularEncoder().fit(X)
         
         self.model.fit(data, cond, **kwargs)
         
     def _generate(self, count: int, syn_schema: Schema, cond=None, **kwargs: Any) -> DataLoader:
-        def callback(count, cond):
-            sample, cond = self.model.generate(count, cond=cond)
-            return sample
-        return self._safe_generate(callback, count, syn_schema, cond=cond, **kwargs)
+        if self.is_classification and cond is None:
+            # randomly generate labels following the distribution of the training data
+            cond = np.random.choice(self._labels, size=count, p=self._cond_dist)
+        def callback(count, cond=cond):
+            return self.model.generate(count, cond=cond)
+        return self._safe_generate(callback, count, syn_schema, **kwargs)
 
 plugin = TabDDPMPlugin

@@ -11,6 +11,7 @@ from pydantic import validate_arguments
 
 # synthcity absolute
 from synthcity.utils.constants import DEVICE
+from synthcity.utils.dataframe import discrete_columns
 from synthcity.metrics.weighted_metrics import WeightedMetrics
 
 from .gaussian_multinomial_diffsuion import GaussianMultinomialDiffusion # noqa
@@ -65,12 +66,21 @@ class TabDDPM(nn.Module):
 
     def fit(self, X: pd.DataFrame, cond=None, **kwargs: Any):
         if cond is not None:
-            n_classes = len(np.unique(cond))
+            n_labels = cond.nunique()
         else:
-            n_classes = 0
+            n_labels = 0
             
+        cat_cols = discrete_columns(X, return_counts=True)
+        ini_cols = X.columns
+        cat_cols, cat_counts = zip(*cat_cols)
+        # reorder the columns so that the categorical ones go to the end
+        X = X[np.hstack([X.columns[~X.keys().isin(cat_cols)], cat_cols])]
+        cur_cols = X.columns
+        # find the permutation from the reordered columns to the original ones
+        self._col_perm = np.argsort(cur_cols)[np.argsort(np.argsort(ini_cols))]
+
         model_params = dict(
-            num_classes=n_classes,
+            num_classes=n_labels,
             is_y_cond=cond is not None,
             rtdl_params=self.rtdl_params,
             dim_t = self.dim_label_emb
@@ -83,7 +93,8 @@ class TabDDPM(nn.Module):
         self.diffusion = GaussianMultinomialDiffusion(
             model_type=self.model_type,
             model_params=model_params,
-            num_numerical_features=self.encoder.n_features(),
+            num_categorical_features=cat_counts,
+            num_numerical_features=X.shape[1]-len(cat_cols),
             gaussian_loss_type=self.gaussian_loss_type,
             num_timesteps=self.num_timesteps,
             scheduler=self.scheduler,
@@ -137,5 +148,6 @@ class TabDDPM(nn.Module):
 
     def generate(self, count: int, cond=None):
         self.diffusion.eval()
-        sample, out_dict = self.diffusion.sample_all(count)
-        return sample, out_dict['y']
+        sample = self.diffusion.sample_all(count, cond).detach().cpu().numpy()
+        sample = sample[:, self._col_perm]
+        return sample

@@ -460,6 +460,7 @@ class MLPDiffusion(nn.Module):
         x = self.proj(x) + emb
         return self.mlp(x)
 
+
 class ResNetDiffusion(nn.Module):
     def __init__(self, d_in, num_classes, is_y_cond, rtdl_params, dim_t = 256):
         super().__init__()
