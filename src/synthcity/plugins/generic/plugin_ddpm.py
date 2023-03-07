@@ -174,7 +174,7 @@ class TabDDPMPlugin(Plugin):
         # self.encoder = TabularEncoder().fit(X)
         
         self.model.fit(data, cond, **kwargs)
-        
+
     def _generate(self, count: int, syn_schema: Schema, cond=None, **kwargs: Any) -> DataLoader:
         if self.is_classification and cond is None:
             # randomly generate labels following the distribution of the training data

@@ -87,8 +87,9 @@ class TabDDPM(nn.Module):
             dim_t = self.dim_label_emb
         )
         
-        tensors = [torch.tensor(t.values, dtype=torch.float32, device=self.device)
-                   for t in ([X] if cond is None else [X, cond])]
+        tensors = [torch.tensor(X.values, dtype=torch.float32, device=self.device)]
+        if cond is not None:
+            tensors.append(torch.tensor(cond.values, dtype=torch.long, device=self.device))
         self.dataloader = TensorDataLoader(*tensors, batch_size=self.batch_size)
 
         self.diffusion = GaussianMultinomialDiffusion(
@@ -149,12 +150,17 @@ class TabDDPM(nn.Module):
                     curr_loss_gauss = 0.0
                     curr_loss_multi = 0.0
 
-                self._update_ema(self.ema_model.parameters(), self.model.parameters())
+                self._update_ema(self.ema_model.parameters(), self.diffusion.parameters())
                 
         return self
 
     def generate(self, count: int, cond=None):
         self.diffusion.eval()
+        if cond is not None:
+            cond = torch.tensor(cond, dtype=torch.long, device=self.device)
         sample = self.diffusion.sample_all(count, cond).detach().cpu().numpy()
         sample = sample[:, self._col_perm]
+        if self.verbose:
+            print("Generated sample")
+            print(sample)
         return sample

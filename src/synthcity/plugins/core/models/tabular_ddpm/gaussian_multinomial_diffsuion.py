@@ -92,7 +92,7 @@ class GaussianMultinomialDiffusion(torch.nn.Module):
                   ' This is expensive both in terms of memory and computation.')
 
         self.num_numerics = num_numerical_features
-        self.num_classes = num_categorical_features
+        self.num_classes = np.asarray(num_categorical_features)
         self.num_classes_expanded = torch.from_numpy(
             np.concatenate([np.repeat(k, k) for k in num_categorical_features],
                            dtype=np.float32)).to(device)
@@ -102,7 +102,7 @@ class GaussianMultinomialDiffusion(torch.nn.Module):
         offsets = np.cumsum(self.num_classes)
         for i in range(1, len(offsets)):
             self.slices_for_classes.append(np.arange(offsets[i - 1], offsets[i]))
-        self.offsets = torch.from_numpy(np.append([0], offsets)).to(device)
+        self.offsets = torch.from_numpy(np.append([0], offsets)).to(device).long()
 
         if model_params is None:
             model_params = dict(
@@ -426,7 +426,8 @@ class GaussianMultinomialDiffusion(torch.nn.Module):
 
         num_axes = (1,) * (len(log_x_start.size()) - 1)
         t_broadcast = t.to(log_x_start.device).view(-1, *num_axes) * torch.ones_like(log_x_start)
-        log_EV_qxtmin_x0 = torch.where(t_broadcast == 0, log_x_start, log_EV_qxtmin_x0.to(torch.float32))
+        log_EV_qxtmin_x0 = torch.where(t_broadcast == 0, log_x_start, 
+                                       log_EV_qxtmin_x0.to(torch.float32))
 
         # unnormed_logprobs = log_EV_qxtmin_x0 +
         #                     log q_pred_one_timestep(x_t, t)
