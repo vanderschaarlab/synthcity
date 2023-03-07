@@ -198,15 +198,13 @@ class TensorDataLoader:
         self.shuffle = shuffle
         
     def __iter__(self):
-        i = 0
         idx = np.arange(self.dataset_len)
         if self.shuffle:
             np.random.shuffle(idx)
-        while True:
-            j = i + self.batch_size
-            s = slice(i, j)
-            if j > self.dataset_len:
-                s = list(range(i, self.dataset_len)) + list(range(0, j - self.dataset_len))
-                if self.shuffle:
-                    np.random.shuffle(idx)
-            yield tuple(t[idx[s]] for t in self.tensors)
+        for i in range(0, self.dataset_len, self.batch_size):
+            s = idx[i:i+self.batch_size]
+            yield tuple(t[s] for t in self.tensors)
+
+    def __len__(self):
+        return len(range(0, self.dataset_len, self.batch_size))
+    

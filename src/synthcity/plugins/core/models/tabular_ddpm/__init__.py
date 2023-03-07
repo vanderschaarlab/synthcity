@@ -24,7 +24,7 @@ class TabDDPM(nn.Module):
     @validate_arguments(config=dict(arbitrary_types_allowed=True))
     def __init__(
         self,
-        n_iter = 10000,
+        n_iter = 100,
         lr = 0.002,
         weight_decay = 1e-4,
         batch_size = 1024,
@@ -48,8 +48,8 @@ class TabDDPM(nn.Module):
         self.__dict__.update(locals())
         del self.self
         
-    def _anneal_lr(self, step):
-        frac_done = step / self.steps
+    def _anneal_lr(self, epoch):
+        frac_done = epoch / self.n_iter
         lr = self.lr * (1 - frac_done)
         for param_group in self.optimizer.param_groups:
             param_group["lr"] = lr
@@ -116,40 +116,41 @@ class TabDDPM(nn.Module):
             print("Starting training")
             print(self)
         
-        for step, (x, y) in enumerate(self.dataloader):
-            curr_loss_multi = 0.0
-            curr_loss_gauss = 0.0
-            curr_count = 0
+        steps = 0
+        curr_loss_multi = 0.0
+        curr_loss_gauss = 0.0
+        curr_count = 0
+        
+        for epoch in range(self.n_iter):
             self.diffusion.train()
             
-            self.optimizer.zero_grad()
-            loss_multi, loss_gauss = self.diffusion.mixed_loss(x, dict(y=y))
-            loss = loss_multi + loss_gauss
-            loss.backward()
-            self.optimizer.step()
+            for x, y in self.dataloader:
+                self.optimizer.zero_grad()
+                loss_multi, loss_gauss = self.diffusion.mixed_loss(x, y)
+                loss = loss_multi + loss_gauss
+                loss.backward()
+                self.optimizer.step()
 
-            self._anneal_lr(step)
+                self._anneal_lr(epoch + 1)
 
-            curr_count += len(x)
-            curr_loss_multi += loss_multi.item() * len(x)
-            curr_loss_gauss += loss_gauss.item() * len(x)
+                curr_count += len(x)
+                curr_loss_multi += loss_multi.item() * len(x)
+                curr_loss_gauss += loss_gauss.item() * len(x)
 
-            if (step + 1) % self.log_interval == 0:
-                mloss = np.around(curr_loss_multi / curr_count, 4)
-                gloss = np.around(curr_loss_gauss / curr_count, 4)
-                if self.verbose and (step + 1) % self.print_interval == 0:
-                    print(f'Step {(step + 1)}/{self.n_iter} MLoss: {mloss} GLoss: {gloss} Sum: {mloss + gloss}')
-                self.loss_history.loc[len(self.loss_history)] = [
-                    step + 1, mloss, gloss, mloss + gloss]
-                curr_count = 0
-                curr_loss_gauss = 0.0
-                curr_loss_multi = 0.0
+                steps += 1
+                if steps % self.log_interval == 0:
+                    mloss = np.around(curr_loss_multi / curr_count, 4)
+                    gloss = np.around(curr_loss_gauss / curr_count, 4)
+                    if self.verbose and steps % self.print_interval == 0:
+                        print(f'Step {steps}: MLoss: {mloss} GLoss: {gloss} Sum: {mloss + gloss}')
+                    self.loss_history.loc[len(self.loss_history)] = \
+                        [steps, mloss, gloss, mloss + gloss]
+                    curr_count = 0
+                    curr_loss_gauss = 0.0
+                    curr_loss_multi = 0.0
 
-            self._update_ema(self.ema_model.parameters(), self.model.parameters())
-
-            if step == self.n_iter - 1:
-                break
-            
+                self._update_ema(self.ema_model.parameters(), self.model.parameters())
+                
         return self
 
     def generate(self, count: int, cond=None):
