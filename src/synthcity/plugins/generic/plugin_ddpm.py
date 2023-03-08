@@ -157,7 +157,10 @@ class TabDDPMPlugin(Plugin):
         self, data: DataLoader, cond: Any = None, **kwargs: Any
     ) -> "TabDDPMPlugin":
         if self.is_classification:
-            assert cond is None
+            if cond is not None:
+                raise ValueError(
+                    "cond is already given by the labels for classification"
+                )
             _, cond = data.unpack()
             self._labels, self._cond_dist = np.unique(cond, return_counts=True)
             self._cond_dist = self._cond_dist / self._cond_dist.sum()

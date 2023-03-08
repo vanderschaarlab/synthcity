@@ -55,7 +55,8 @@ def _is_glu_activation(activation: ModuleType):
 
 
 def _all_or_none(values):
-    assert all(x is None for x in values) or all(x is not None for x in values)
+    if not (all(x is None for x in values) or all(x is not None for x in values)):
+        raise AssertionError
 
 
 def reglu(x: Tensor) -> Tensor:
@@ -63,7 +64,8 @@ def reglu(x: Tensor) -> Tensor:
     References:
         [1] Noam Shazeer, "GLU Variants Improve Transformer", 2020
     """
-    assert x.shape[-1] % 2 == 0
+    if not (x.shape[-1] % 2 == 0):
+        raise AssertionError
     a, b = x.chunk(2, dim=-1)
     return a * F.relu(b)
 
@@ -73,7 +75,8 @@ def geglu(x: Tensor) -> Tensor:
     References:
         [1] Noam Shazeer, "GLU Variants Improve Transformer", 2020
     """
-    assert x.shape[-1] % 2 == 0
+    if not (x.shape[-1] % 2 == 0):
+        raise AssertionError
     a, b = x.chunk(2, dim=-1)
     return a * F.gelu(b)
 
@@ -185,8 +188,10 @@ class MLP(nn.Module):
         super().__init__()
         if isinstance(dropouts, float):
             dropouts = [dropouts] * len(d_layers)
-        assert len(d_layers) == len(dropouts)
-        assert activation not in ["ReGLU", "GEGLU"]
+        if not (len(d_layers) == len(dropouts)):
+            raise AssertionError
+        if activation in ["ReGLU", "GEGLU"]:
+            raise AssertionError
 
         self.blocks = nn.ModuleList(
             [
@@ -233,12 +238,14 @@ class MLP(nn.Module):
         References:
             * [gorishniy2021revisiting] Yury Gorishniy, Ivan Rubachev, Valentin Khrulkov, Artem Babenko, "Revisiting Deep Learning Models for Tabular Data", 2021
         """
-        assert isinstance(dropout, float)
+        if not (isinstance(dropout, float)):
+            raise AssertionError
         if len(d_layers) > 2:
-            assert len(set(d_layers[1:-1])) == 1, (
-                "if d_layers contains more than two elements, then"
-                " all elements except for the first and the last ones must be equal."
-            )
+            if not len(set(d_layers[1:-1])) == 1:
+                raise AssertionError(
+                    "if d_layers contains more than two elements, then"
+                    " all elements except for the first and the last ones must be equal."
+                )
         return MLP(
             d_in=d_in,
             d_layers=d_layers,

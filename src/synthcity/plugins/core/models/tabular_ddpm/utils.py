@@ -23,7 +23,8 @@ def normal_kl(mean1, logvar1, mean2, logvar2):
         if isinstance(obj, torch.Tensor):
             tensor = obj
             break
-    assert tensor is not None, "at least one argument must be a Tensor"
+    if tensor is None:
+        raise AssertionError("at least one argument must be a Tensor")
 
     # Force variances to be Tensors. Broadcasting helps convert scalars to
     # Tensors, but it does not work for torch.exp().
@@ -62,7 +63,8 @@ def discretized_gaussian_log_likelihood(x, *, means, log_scales):
     :param log_scales: the Gaussian log stddev Tensor.
     :return: a tensor like x of log probabilities (in nats).
     """
-    assert x.shape == means.shape == log_scales.shape
+    if not (x.shape == means.shape == log_scales.shape):
+        raise AssertionError
     centered_x = x - means
     inv_stdv = torch.exp(-log_scales)
     plus_in = inv_stdv * (centered_x + 1.0 / 255.0)
@@ -79,7 +81,8 @@ def discretized_gaussian_log_likelihood(x, *, means, log_scales):
             x > 0.999, log_one_minus_cdf_min, torch.log(cdf_delta.clamp(min=1e-12))
         ),
     )
-    assert log_probs.shape == x.shape
+    if not (log_probs.shape == x.shape):
+        raise AssertionError
     return log_probs
 
 
@@ -158,7 +161,8 @@ def log_sum_exp_by_classes(x, slices):
     res = torch.zeros_like(x)
     for ixs in slices:
         res[:, ixs] = torch.logsumexp(x[:, ixs], dim=1, keepdim=True)
-    assert x.size() == res.size()
+    if not (x.size() == res.size()):
+        raise AssertionError
     return res
 
 
@@ -212,7 +216,8 @@ class TensorDataLoader:
             iterator is created out of this object.
         :returns: A FastTensorDataLoader.
         """
-        assert all(t.shape[0] == tensors[0].shape[0] for t in tensors)
+        if not all(t.shape[0] == tensors[0].shape[0] for t in tensors):
+            raise AssertionError
         self.tensors = tensors
         self.dataset_len = self.tensors[0].shape[0]
         self.batch_size = batch_size

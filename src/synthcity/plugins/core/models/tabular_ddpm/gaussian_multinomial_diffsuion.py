@@ -83,8 +83,10 @@ class GaussianMultinomialDiffusion(torch.nn.Module):
     ):
 
         super(GaussianMultinomialDiffusion, self).__init__()
-        assert multinomial_loss_type in ("vb_stochastic", "vb_all")
-        assert parametrization in ("x0", "direct")
+        if not (multinomial_loss_type in ("vb_stochastic", "vb_all")):
+            raise AssertionError
+        if not (parametrization in ("x0", "direct")):
+            raise AssertionError
 
         if verbose:
             self.print = print
@@ -183,12 +185,15 @@ class GaussianMultinomialDiffusion(torch.nn.Module):
             .to(device)
         )
 
-        assert log_add_exp(log_alpha, log_1_min_alpha).abs().sum().item() < 1.0e-5
-        assert (
+        if not (log_add_exp(log_alpha, log_1_min_alpha).abs().sum().item() < 1.0e-5):
+            raise AssertionError
+        if not (
             log_add_exp(log_cumprod_alpha, log_1_min_cumprod_alpha).abs().sum().item()
             < 1e-5
-        )
-        assert (np.cumsum(log_alpha) - log_cumprod_alpha).abs().sum().item() < 1.0e-5
+        ):
+            raise AssertionError
+        if not ((np.cumsum(log_alpha) - log_cumprod_alpha).abs().sum().item() < 1.0e-5):
+            raise AssertionError
 
         # Convert to float32 and register buffers.
         self.register_buffer("alphas", alphas.float().to(device))
@@ -233,14 +238,16 @@ class GaussianMultinomialDiffusion(torch.nn.Module):
     def gaussian_q_sample(self, x_start, t, noise=None):
         if noise is None:
             noise = torch.randn_like(x_start)
-        assert noise.shape == x_start.shape
+        if not (noise.shape == x_start.shape):
+            raise AssertionError
         return (
             extract(self.sqrt_alphas_cumprod, t, x_start.shape) * x_start
             + extract(self.sqrt_one_minus_alphas_cumprod, t, x_start.shape) * noise
         )
 
     def gaussian_q_posterior_mean_variance(self, x_start, x_t, t):
-        assert x_start.shape == x_t.shape
+        if not (x_start.shape == x_t.shape):
+            raise AssertionError
         posterior_mean = (
             extract(self.posterior_mean_coef1, t, x_t.shape) * x_start
             + extract(self.posterior_mean_coef2, t, x_t.shape) * x_t
@@ -249,12 +256,13 @@ class GaussianMultinomialDiffusion(torch.nn.Module):
         posterior_log_variance_clipped = extract(
             self.posterior_log_variance_clipped, t, x_t.shape
         )
-        assert (
+        if not (
             posterior_mean.shape[0]
             == posterior_variance.shape[0]
             == posterior_log_variance_clipped.shape[0]
             == x_start.shape[0]
-        )
+        ):
+            raise AssertionError
         return posterior_mean, posterior_variance, posterior_log_variance_clipped
 
     def gaussian_p_mean_variance(
@@ -270,7 +278,8 @@ class GaussianMultinomialDiffusion(torch.nn.Module):
             model_kwargs = {}
 
         B, C = x.shape[:2]
-        assert t.shape == (B,)
+        if not (t.shape == (B,)):
+            raise AssertionError
 
         model_variance = torch.cat(
             [
@@ -296,9 +305,12 @@ class GaussianMultinomialDiffusion(torch.nn.Module):
             x_start=pred_xstart, x_t=x, t=t
         )
 
-        assert (
+        if not (
             model_mean.shape == model_log_variance.shape == pred_xstart.shape == x.shape
-        ), f"{model_mean.shape}, {model_log_variance.shape}, {pred_xstart.shape}, {x.shape}"
+        ):
+            raise AssertionError(
+                f"{model_mean.shape}, {model_log_variance.shape}, {pred_xstart.shape}, {x.shape}"
+            )
 
         return {
             "mean": model_mean,
@@ -326,7 +338,8 @@ class GaussianMultinomialDiffusion(torch.nn.Module):
         decoder_nll = -discretized_gaussian_log_likelihood(
             x_start, means=out["mean"], log_scales=0.5 * out["log_variance"]
         )
-        assert decoder_nll.shape == x_start.shape
+        if not (decoder_nll.shape == x_start.shape):
+            raise AssertionError
         decoder_nll = mean_flat(decoder_nll) / np.log(2.0)
 
         # At the first timestep return the decoder NLL,
@@ -377,7 +390,8 @@ class GaussianMultinomialDiffusion(torch.nn.Module):
         return terms["loss"]
 
     def _predict_xstart_from_eps(self, x_t, t, eps=1e-8):
-        assert x_t.shape == eps.shape
+        if not (x_t.shape == eps.shape):
+            raise AssertionError
         return (
             extract(self.sqrt_recip_alphas_cumprod, t, x_t.shape) * x_t
             - extract(self.sqrt_recipm1_alphas_cumprod, t, x_t.shape) * eps
@@ -450,8 +464,10 @@ class GaussianMultinomialDiffusion(torch.nn.Module):
 
         # model_out = self._denoise_fn(x_t, t.to(x_t.device), **out_dict)
 
-        assert model_out.size(0) == log_x_t.size(0)
-        assert model_out.size(1) == self.num_classes.sum(), f"{model_out.size()}"
+        if not (model_out.size(0) == log_x_t.size(0)):
+            raise AssertionError
+        if not (model_out.size(1) == self.num_classes.sum()):
+            raise AssertionError(f"{model_out.size()}")
 
         log_pred = torch.empty_like(model_out)
         for ix in self.slices_for_classes:
@@ -465,7 +481,6 @@ class GaussianMultinomialDiffusion(torch.nn.Module):
         # EV_log_qxt_x0 = self.q_pred(log_x_start, t)
 
         # self.print('sum exp', EV_log_qxt_x0.exp().sum(1).mean())
-        # assert False
 
         # log_qxt_x0 = (log_x_t.exp() * EV_log_qxt_x0).sum(dim=1)
         t_minus_1 = t - 1
@@ -861,7 +876,8 @@ class GaussianMultinomialDiffusion(torch.nn.Module):
     def gaussian_ddim_reverse_step(
         self, model_out_num, x, t, clip_denoised=False, eta=0.0
     ):
-        assert eta == 0.0, "Eta must be zero."
+        if not (eta == 0.0):
+            raise AssertionError("Eta must be zero.")
         out = self.gaussian_p_mean_variance(
             model_out_num,
             x,
