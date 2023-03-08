@@ -13,8 +13,8 @@ from sklearn.preprocessing import MinMaxScaler, OneHotEncoder
 
 # synthcity absolute
 import synthcity.logger as log
-from synthcity.utils.serialization import dataframe_hash
 from synthcity.utils.dataframe import discrete_columns as find_cat_cols
+from synthcity.utils.serialization import dataframe_hash
 
 # synthcity relative
 from .data_encoder import ContinuousDataEncoder

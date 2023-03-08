@@ -1,10 +1,11 @@
 """
 Reference: Kotelnikov, Akim et al. “TabDDPM: Modelling Tabular Data with Diffusion Models.” ArXiv abs/2209.15421 (2022): n. pag.
 """
+# mypy: disable-error-code=override
+# flake8: noqa: F401
 
 # stdlib
 from pathlib import Path
-from copy import deepcopy
 from typing import Any, List, Optional, Union
 
 # third party
@@ -13,8 +14,6 @@ import pandas as pd
 
 # Necessary packages
 from pydantic import validate_arguments
-import torch
-from torch.utils.data import sampler
 
 # synthcity absolute
 from synthcity.metrics.weighted_metrics import WeightedMetrics
@@ -26,7 +25,6 @@ from synthcity.plugins.core.distribution import (
     IntegerDistribution,
 )
 from synthcity.plugins.core.models.tabular_ddpm import TabDDPM
-from synthcity.plugins.core.models.tabular_encoder import TabularEncoder
 from synthcity.plugins.core.plugin import Plugin
 from synthcity.plugins.core.schema import Schema
 from synthcity.utils.constants import DEVICE
@@ -59,14 +57,14 @@ class TabDDPMPlugin(Plugin):
         self,
         *,
         is_classification: bool = False,
-        n_iter = 1000,
-        lr = 0.002,
-        weight_decay = 1e-4,
-        batch_size = 1024,
-        model_type = 'mlp',
-        num_timesteps = 1000,
-        gaussian_loss_type = 'mse',
-        scheduler = 'cosine',
+        n_iter: int = 1000,
+        lr: float = 0.002,
+        weight_decay: float = 1e-4,
+        batch_size: int = 1024,
+        model_type: str = "mlp",
+        num_timesteps: int = 1000,
+        gaussian_loss_type: str = "mse",
+        scheduler: str = "cosine",
         device: Any = DEVICE,
         verbose: int = 0,
         log_interval: int = 100,
@@ -96,13 +94,10 @@ class TabDDPMPlugin(Plugin):
             compress_dataset=compress_dataset,
             **kwargs
         )
-        
+
         self.is_classification = is_classification
 
-        rtdl_params = dict(
-            d_layers = [dim_hidden] * num_layers,
-            dropout = dropout
-        )
+        rtdl_params = dict(d_layers=[dim_hidden] * num_layers, dropout=dropout)
         self.model = TabDDPM(
             n_iter=n_iter,
             lr=lr,
@@ -111,16 +106,16 @@ class TabDDPMPlugin(Plugin):
             num_timesteps=num_timesteps,
             gaussian_loss_type=gaussian_loss_type,
             scheduler=scheduler,
-            device=device, 
+            device=device,
             verbose=verbose,
-            log_interval=log_interval, 
+            log_interval=log_interval,
             print_interval=print_interval,
             model_type=model_type,
-            rtdl_params=rtdl_params, 
+            rtdl_params=rtdl_params,
             dim_label_emb=dim_label_emb,
-            n_iter_min=n_iter_min, 
-            n_iter_print=n_iter_print, 
-            patience=patience, 
+            n_iter_min=n_iter_min,
+            n_iter_print=n_iter_print,
+            patience=patience,
         )
 
     @staticmethod
@@ -158,29 +153,38 @@ class TabDDPMPlugin(Plugin):
             CategoricalDistribution(name="dim_hidden", choices=[128, 256, 512, 1024]),
         ]
 
-    def _fit(self, data: DataLoader, cond: pd.Series = None, **kwargs) -> "TabDDPMPlugin":
+    def _fit(
+        self, data: DataLoader, cond: Any = None, **kwargs: Any
+    ) -> "TabDDPMPlugin":
         if self.is_classification:
             assert cond is None
             _, cond = data.unpack()
             self._labels, self._cond_dist = np.unique(cond, return_counts=True)
             self._cond_dist = self._cond_dist / self._cond_dist.sum()
-            
-        # NOTE: should we include the target column in `data`?
-        data = data.dataframe()
+
+        # NOTE: should we include the target column in `df`?
+        df = data.dataframe()
 
         if cond is not None:
-            cond = pd.Series(cond, index=data.index)
+            cond = pd.Series(cond, index=df.index)
 
         # self.encoder = TabularEncoder().fit(X)
-        
-        self.model.fit(data, cond, **kwargs)
 
-    def _generate(self, count: int, syn_schema: Schema, cond=None, **kwargs: Any) -> DataLoader:
+        self.model.fit(df, cond, **kwargs)
+
+        return self
+
+    def _generate(
+        self, count: int, syn_schema: Schema, cond: Any = None, **kwargs: Any
+    ) -> DataLoader:
         if self.is_classification and cond is None:
             # randomly generate labels following the distribution of the training data
             cond = np.random.choice(self._labels, size=count, p=self._cond_dist)
-        def callback(count, cond=cond):
+
+        def callback(count, cond=cond):  # type: ignore
             return self.model.generate(count, cond=cond)
+
         return self._safe_generate(callback, count, syn_schema, **kwargs)
+
 
 plugin = TabDDPMPlugin
