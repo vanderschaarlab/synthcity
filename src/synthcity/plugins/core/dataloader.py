@@ -240,7 +240,6 @@ class DataLoader(metaclass=ABCMeta):
                     encoder = DatetimeEncoder().fit(encoded[col])
                     encoded[col] = encoder.transform(encoded[col]).values
                     encoders[col] = encoder
-
         return self.from_info(encoded, self.info()), encoders
 
     def decode(
@@ -263,6 +262,10 @@ class DataLoader(metaclass=ABCMeta):
     def is_tabular(self) -> bool:
         ...
 
+    @abstractmethod
+    def get_fairness_column(self) -> Optional[str]:
+        ...
+
 
 class GenericDataLoader(DataLoader):
     """
@@ -280,6 +283,8 @@ class GenericDataLoader(DataLoader):
             Default: None. Only relevant for SurvivalGAN method.
         target_column: Optional[str]
             The feature name that provides labels for downstream tasks.
+        fairness_column: Optional[str]
+            Optional fairness column label, used for fairness benchmarking.
         domain_column: Optional[str]
             Optional domain label, used for domain adaptation algorithms.
         random_state: int
@@ -300,6 +305,7 @@ class GenericDataLoader(DataLoader):
         sensitive_features: List[str] = [],
         important_features: List[str] = [],
         target_column: Optional[str] = None,
+        fairness_column: Optional[str] = None,
         domain_column: Optional[str] = None,
         random_state: int = 0,
         train_size: float = 0.8,
@@ -316,6 +322,7 @@ class GenericDataLoader(DataLoader):
         else:
             self.target_column = "---"
 
+        self.fairness_column = fairness_column
         self.domain_column = domain_column
 
         super().__init__(
@@ -336,6 +343,9 @@ class GenericDataLoader(DataLoader):
 
     def domain(self) -> Optional[str]:
         return self.domain_column
+
+    def get_fairness_column(self) -> Optional[str]:
+        return self.fairness_column
 
     @property
     def columns(self) -> list:
@@ -373,6 +383,7 @@ class GenericDataLoader(DataLoader):
             "important_features": self.important_features,
             "outcome_features": self.outcome_features,
             "target_column": self.target_column,
+            "fairness_column": self.fairness_column,
             "domain_column": self.domain_column,
             "train_size": self.train_size,
         }
@@ -388,6 +399,7 @@ class GenericDataLoader(DataLoader):
             target_column=self.target_column,
             random_state=self.random_state,
             train_size=self.train_size,
+            fairness_column=self.fairness_column,
             domain_column=self.domain_column,
         )
 
@@ -413,6 +425,7 @@ class GenericDataLoader(DataLoader):
             sensitive_features=info["sensitive_features"],
             important_features=info["important_features"],
             target_column=info["target_column"],
+            fairness_column=info["fairness_column"],
             domain_column=info["domain_column"],
             train_size=info["train_size"],
         )
@@ -473,6 +486,8 @@ class SurvivalAnalysisDataLoader(DataLoader):
             Default: None. Only relevant for SurvivalGAN method.
         target_column: str
             The feature name that provides labels for downstream tasks.
+        fairness_column: Optional[str]
+            Optional fairness column label, used for fairness benchmarking.
         domain_column: Optional[str]
             Optional domain label, used for domain adaptation algorithms.
         random_state: int

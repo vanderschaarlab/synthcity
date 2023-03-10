@@ -21,13 +21,13 @@ from .eval_detection import (
     SyntheticDetectionXGB,
 )
 from .eval_performance import (
+    AugmentationPerformanceEvaluatorLinear,
+    AugmentationPerformanceEvaluatorMLP,
+    AugmentationPerformanceEvaluatorXGB,
     FeatureImportanceRankDistance,
     PerformanceEvaluatorLinear,
     PerformanceEvaluatorMLP,
     PerformanceEvaluatorXGB,
-    AugmentationPerformanceEvaluatorLinear,
-    AugmentationPerformanceEvaluatorMLP,
-    AugmentationPerformanceEvaluatorXGB,
 )
 from .eval_privacy import (
     DeltaPresence,
@@ -103,12 +103,14 @@ class Metrics:
     def evaluate(
         X_gt: Union[DataLoader, pd.DataFrame],
         X_syn: Union[DataLoader, pd.DataFrame],
+        X_augmented: Union[DataLoader, pd.DataFrame],
         reduction: str = "mean",
         n_histogram_bins: int = 10,
         metrics: Optional[Dict] = None,
         task_type: str = "classification",
         random_state: int = 0,
         workspace: Path = Path("workspace"),
+        use_cache: bool = True,
     ) -> pd.DataFrame:
         """Core evaluation logic for the metrics
 
@@ -172,6 +174,7 @@ class Metrics:
 
         X_gt, _ = X_gt.encode()
         X_syn, _ = X_syn.encode()
+        X_augmented, _ = X_augmented.encode()
 
         scores = ScoreEvaluator()
 
@@ -181,17 +184,32 @@ class Metrics:
                 continue
             if metric.name() not in metrics[metric.type()]:
                 continue
-            scores.queue(
-                metric(
-                    reduction=reduction,
-                    n_histogram_bins=n_histogram_bins,
-                    task_type=task_type,
-                    random_state=random_state,
-                    workspace=workspace,
-                ),
-                X_gt.sample(eval_cnt),
-                X_syn.sample(eval_cnt),
-            )
+            if "augmentation" in metric.name():
+                scores.queue(
+                    metric(
+                        reduction=reduction,
+                        n_histogram_bins=n_histogram_bins,
+                        task_type=task_type,
+                        random_state=random_state,
+                        workspace=workspace,
+                        use_cache=use_cache,
+                    ),
+                    X_gt.sample(eval_cnt),
+                    X_augmented.sample(eval_cnt),
+                )
+            else:
+                scores.queue(
+                    metric(
+                        reduction=reduction,
+                        n_histogram_bins=n_histogram_bins,
+                        task_type=task_type,
+                        random_state=random_state,
+                        workspace=workspace,
+                        use_cache=use_cache,
+                    ),
+                    X_gt.sample(eval_cnt),
+                    X_syn.sample(eval_cnt),
+                )
 
         scores.compute()
 
