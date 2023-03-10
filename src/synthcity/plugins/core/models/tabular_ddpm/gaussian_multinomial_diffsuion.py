@@ -4,8 +4,6 @@ Based on
 - https://github.com/ehoogeboom/multinomial_diffusion
 - https://github.com/lucidrains/denoising-diffusion-pytorch/blob/5989f4c77eafcdc6be0fb4739f0f277a6dd7f7d8/denoising_diffusion_pytorch/denoising_diffusion_pytorch.py#L281
 """
-# flake8: noqa: F405
-
 # stdlib
 import math
 from typing import Any, Callable, Optional
@@ -18,7 +16,20 @@ from torch import Tensor, nn
 
 # synthcity relative
 from .modules import MLPDiffusion, ResNetDiffusion
-from .utils import *
+from .utils import (
+    FoundNANsError,
+    discretized_gaussian_log_likelihood,
+    extract,
+    index_to_log_onehot,
+    log_1_min_a,
+    log_add_exp,
+    log_categorical,
+    mean_flat,
+    normal_kl,
+    ohe_to_categories,
+    sliced_logsumexp,
+    sum_except_batch,
+)
 
 
 def get_named_beta_schedule(
