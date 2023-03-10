@@ -508,7 +508,12 @@ class SurvivalAnalysisDataLoader(DataLoader):
             )
 
         T = data[time_to_event_column]
-        data = data[T > 0]
+        data_filtered = data[T > 0]
+        row_diff = data.shape[0] - data_filtered.shape[0]
+        if row_diff > 0:
+            raise ValueError(
+                f"The time_to_event_column contains {row_diff} values less than or equal to zero. Please remove them."
+            )
 
         if len(time_horizons) == 0:
             time_horizons = np.linspace(T.min(), T.max(), num=5)[1:-1].tolist()
