@@ -227,12 +227,26 @@ def test_evaluate_alpha_precision(test_plugin: Plugin) -> None:
         "delta_precision_alpha_OC",
         "delta_coverage_beta_OC",
         "authenticity_OC",
+        "delta_precision_alpha_naive",
+        "delta_coverage_beta_naive",
+        "authenticity_naive",
     ]:
         assert key in syn_score
         assert key in rnd_score
 
+    # fr best method
     assert syn_score["delta_precision_alpha_OC"] > rnd_score["delta_precision_alpha_OC"]
     assert syn_score["authenticity_OC"] < rnd_score["authenticity_OC"]
+
+    # For naive method
+    assert (
+        syn_score["delta_precision_alpha_naive"]
+        > rnd_score["delta_precision_alpha_naive"]
+    )
+    assert (
+        syn_score["delta_coverage_beta_naive"] > rnd_score["delta_coverage_beta_naive"]
+    )
+    assert syn_score["authenticity_naive"] < rnd_score["authenticity_naive"]
 
     assert AlphaPrecision.name() == "alpha_precision"
     assert AlphaPrecision.type() == "stats"
