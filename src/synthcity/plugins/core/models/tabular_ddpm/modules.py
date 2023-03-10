@@ -1,11 +1,9 @@
 """
 Code was adapted from https://github.com/Yura52/rtdl
 """
-# flake8: noqa: F401
-
 # stdlib
 import math
-from typing import Any, Callable, Dict, List, Optional, Tuple, Type, Union, cast
+from typing import Any, Callable, Optional, Union
 
 # third party
 import torch
@@ -162,8 +160,8 @@ class MLP(nn.Module):
         self,
         *,
         d_in: int,
-        d_layers: List[int],
-        dropouts: Union[float, List[float]],
+        d_layers: list[int],
+        dropouts: Union[float, list[float]],
         activation: Union[str, Callable[[], nn.Module]],
         d_out: int,
     ) -> None:
@@ -195,9 +193,9 @@ class MLP(nn.Module):
 
     @classmethod
     def make_baseline(
-        cls: Type["MLP"],
+        cls: type["MLP"],
         d_in: int,
-        d_layers: List[int],
+        d_layers: list[int],
         dropout: float,
         d_out: int,
     ) -> "MLP":
@@ -383,7 +381,7 @@ class ResNet(nn.Module):
 
     @classmethod
     def make_baseline(
-        cls: Type["ResNet"],
+        cls: type["ResNet"],
         *,
         d_in: int,
         n_blocks: int,

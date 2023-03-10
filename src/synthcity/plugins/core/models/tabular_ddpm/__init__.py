@@ -1,8 +1,6 @@
-# flake8: noqa: F401
-
 # stdlib
 from copy import deepcopy
-from typing import Any, Iterator, Optional, Union
+from typing import Any, Iterator, Optional
 
 # third party
 import numpy as np
@@ -12,7 +10,6 @@ from pydantic import validate_arguments
 from torch import nn
 
 # synthcity absolute
-from synthcity.metrics.weighted_metrics import WeightedMetrics
 from synthcity.utils.constants import DEVICE
 from synthcity.utils.dataframe import discrete_columns
 

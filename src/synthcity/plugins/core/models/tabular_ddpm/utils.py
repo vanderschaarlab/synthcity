@@ -1,7 +1,5 @@
-# flake8: noqa: F401
-
 # stdlib
-from typing import Any, Callable, Dict, Iterator, List, Optional, Tuple
+from typing import Iterator
 
 # third party
 import numpy as np
