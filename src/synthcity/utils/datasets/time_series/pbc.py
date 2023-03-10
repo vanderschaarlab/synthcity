@@ -55,7 +55,7 @@ class PBCDataloader:
         survival analysis. Vol. 169. John Wiley & Sons, 2011.
         """
         if not df_path.exists():
-            s = requests.get(URL).content
+            s = requests.get(URL, timeout=5).content
             data = pd.read_csv(io.StringIO(s.decode("utf-8")))
             data.to_csv(df_path, index=None)
         else:
