@@ -65,7 +65,7 @@ def test_plugin_hyperparams(test_plugin: Plugin) -> None:
     ],
 )
 def test_plugin_fit(tte_strategy: str) -> None:
-    test_plugin = plugin(tte_strategy=tte_strategy, device="cpu", **plugins_args)
+    test_plugin = plugin(tte_strategy=tte_strategy, device="zz", **plugins_args)
 
     test_plugin.fit(data)
 

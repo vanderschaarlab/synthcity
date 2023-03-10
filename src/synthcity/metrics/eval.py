@@ -103,7 +103,7 @@ class Metrics:
     def evaluate(
         X_gt: Union[DataLoader, pd.DataFrame],
         X_syn: Union[DataLoader, pd.DataFrame],
-        X_augmented: Union[DataLoader, pd.DataFrame],
+        X_augmented: Optional[Union[DataLoader, pd.DataFrame]] = None,
         reduction: str = "mean",
         n_histogram_bins: int = 10,
         metrics: Optional[Dict] = None,
@@ -174,7 +174,8 @@ class Metrics:
 
         X_gt, _ = X_gt.encode()
         X_syn, _ = X_syn.encode()
-        X_augmented, _ = X_augmented.encode()
+        if X_augmented:
+            X_augmented, _ = X_augmented.encode()
 
         scores = ScoreEvaluator()
 
@@ -184,7 +185,7 @@ class Metrics:
                 continue
             if metric.name() not in metrics[metric.type()]:
                 continue
-            if "augmentation" in metric.name():
+            if X_augmented and "augmentation" in metric.name():
                 scores.queue(
                     metric(
                         reduction=reduction,

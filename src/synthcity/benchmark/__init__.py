@@ -210,7 +210,7 @@ class Benchmarks:
                     )
                     try:
                         augment_generator.fit(
-                            X.train(),  # cond=X.train()[X.get_fairness_column()]
+                            X.train(),  # cond=X.train()[X.get_fairness_column()] # TODO: do I need to pass the fairness_column to cond?
                         )
                     except BaseException as e:
                         log.critical(
