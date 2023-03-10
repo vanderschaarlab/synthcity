@@ -1,9 +1,8 @@
-# mypy: allow-untyped-defs, allow-untyped-calls
 # flake8: noqa: F401
 
 # stdlib
 from copy import deepcopy
-from typing import Any, Optional, Union
+from typing import Any, Iterator, Optional, Union
 
 # third party
 import numpy as np
@@ -50,13 +49,18 @@ class TabDDPM(nn.Module):
         self.__dict__.update(locals())
         del self.self
 
-    def _anneal_lr(self, epoch):
+    def _anneal_lr(self, epoch: int) -> None:
         frac_done = epoch / self.n_iter
         lr = self.lr * (1 - frac_done)
         for param_group in self.optimizer.param_groups:
             param_group["lr"] = lr
 
-    def _update_ema(self, target_params, source_params, rate=0.999):
+    def _update_ema(
+        self,
+        target_params: Iterator[nn.Parameter],
+        source_params: Iterator[nn.Parameter],
+        rate: float = 0.999,
+    ) -> None:
         """
         Update target parameters to be closer to those of source parameters using
         an exponential moving average.

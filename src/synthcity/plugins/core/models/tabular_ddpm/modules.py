@@ -1,7 +1,6 @@
 """
 Code was adapted from https://github.com/Yura52/rtdl
 """
-# mypy: disable-error-code=no-untyped-def
 # flake8: noqa: F401
 
 # stdlib
@@ -19,11 +18,11 @@ ModuleType = Union[str, Callable[..., nn.Module]]
 
 
 class SiLU(nn.Module):
-    def forward(self, x):
+    def forward(self, x: Tensor) -> Tensor:
         return x * torch.sigmoid(x)
 
 
-def timestep_embedding(timesteps, dim, max_period=10000):
+def timestep_embedding(timesteps: Tensor, dim: int, max_period: int = 10000) -> Tensor:
     """
     Create sinusoidal timestep embeddings.
 
@@ -44,19 +43,6 @@ def timestep_embedding(timesteps, dim, max_period=10000):
     if dim % 2:
         embedding = torch.cat([embedding, torch.zeros_like(embedding[:, :1])], dim=-1)
     return embedding
-
-
-def _is_glu_activation(activation: ModuleType):
-    return (
-        isinstance(activation, str)
-        and activation.endswith("GLU")
-        or activation in [ReGLU, GEGLU]
-    )
-
-
-def _all_or_none(values):
-    if not (all(x is None for x in values) or all(x is not None for x in values)):
-        raise AssertionError
 
 
 def reglu(x: Tensor) -> Tensor:
@@ -117,7 +103,7 @@ class GEGLU(nn.Module):
         return geglu(x)
 
 
-def _make_nn_module(module_type: ModuleType, *args) -> nn.Module:
+def _make_nn_module(module_type: ModuleType, *args: Any) -> nn.Module:
     return (
         (
             ReGLU()
@@ -445,7 +431,14 @@ class ResNet(nn.Module):
 
 
 class MLPDiffusion(nn.Module):
-    def __init__(self, d_in, num_classes, is_y_cond, rtdl_params, dim_t=128):
+    def __init__(
+        self,
+        d_in: int,
+        num_classes: int,
+        is_y_cond: bool,
+        rtdl_params: dict,
+        dim_t: int = 128,
+    ) -> None:
         super().__init__()
         self.dim_t = dim_t
         self.num_classes = num_classes
@@ -468,7 +461,9 @@ class MLPDiffusion(nn.Module):
             nn.Linear(dim_t, dim_t), nn.SiLU(), nn.Linear(dim_t, dim_t)
         )
 
-    def forward(self, x, timesteps, y=None):
+    def forward(
+        self, x: Tensor, timesteps: Tensor, y: Optional[Tensor] = None
+    ) -> Tensor:
         emb = self.time_embed(timestep_embedding(timesteps, self.dim_t))
         if self.is_y_cond and y is not None:
             if self.num_classes > 0:
@@ -481,7 +476,14 @@ class MLPDiffusion(nn.Module):
 
 
 class ResNetDiffusion(nn.Module):
-    def __init__(self, d_in, num_classes, is_y_cond, rtdl_params, dim_t=256):
+    def __init__(
+        self,
+        d_in: int,
+        num_classes: int,
+        is_y_cond: bool,
+        rtdl_params: dict,
+        dim_t: int = 256,
+    ) -> None:
         super().__init__()
         self.dim_t = dim_t
         self.num_classes = num_classes
@@ -501,7 +503,9 @@ class ResNetDiffusion(nn.Module):
             nn.Linear(dim_t, dim_t), nn.SiLU(), nn.Linear(dim_t, dim_t)
         )
 
-    def forward(self, x, timesteps, y=None):
+    def forward(
+        self, x: Tensor, timesteps: Tensor, y: Optional[Tensor] = None
+    ) -> Tensor:
         emb = self.time_embed(timestep_embedding(timesteps, self.dim_t))
         if self.is_y_cond and y is not None:
             if self.num_classes > 0:
