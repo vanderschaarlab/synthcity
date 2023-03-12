@@ -193,7 +193,7 @@ class MLP(nn.Module):
 
     @classmethod
     def make_baseline(
-        cls: type["MLP"],
+        cls,
         d_in: int,
         d_layers: List[int],
         dropout: float,
@@ -381,7 +381,7 @@ class ResNet(nn.Module):
 
     @classmethod
     def make_baseline(
-        cls: type["ResNet"],
+        cls,
         *,
         d_in: int,
         n_blocks: int,
