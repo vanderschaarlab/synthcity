@@ -1,6 +1,7 @@
 # stdlib
+from collections.abc import Iterator
 from copy import deepcopy
-from typing import Any, Iterator, Optional
+from typing import Any, Dict, Optional
 
 # third party
 import numpy as np
@@ -24,18 +25,18 @@ class TabDDPM(nn.Module):
         self,
         n_iter: int = 1000,
         lr: float = 0.002,
-        weight_decay: float = 1e-4,
+        weight_decay: float = 0.0001,
         batch_size: int = 1024,
         num_timesteps: int = 1000,
         gaussian_loss_type: str = "mse",
         scheduler: str = "cosine",
-        device: Any = DEVICE,
+        device: torch.device = DEVICE,
         verbose: int = 0,
         log_interval: int = 10,
         print_interval: int = 100,
         # model params
         model_type: str = "mlp",
-        rtdl_params: Optional[dict] = None,  # {'d_layers', 'dropout'}
+        rtdl_params: Optional[Dict[str, Any]] = None,
         dim_label_emb: int = 128,
         # early stopping
         n_iter_min: int = 100,
@@ -68,7 +69,9 @@ class TabDDPM(nn.Module):
         for targ, src in zip(target_params, source_params):
             targ.detach().mul_(rate).add_(src.detach(), alpha=1 - rate)
 
-    def fit(self, X: pd.DataFrame, cond: Any = None, **kwargs: Any) -> "TabDDPM":
+    def fit(
+        self, X: pd.DataFrame, cond: Optional[pd.Series] = None, **kwargs: Any
+    ) -> "TabDDPM":
         if cond is not None:
             n_labels = cond.nunique()
         else:
@@ -180,7 +183,4 @@ class TabDDPM(nn.Module):
             cond = torch.tensor(cond, dtype=torch.long, device=self.device)
         sample = self.diffusion.sample_all(count, cond).detach().cpu().numpy()
         sample = sample[:, self._col_perm]
-        if self.verbose:
-            print("Generated sample")
-            print(sample)
         return sample

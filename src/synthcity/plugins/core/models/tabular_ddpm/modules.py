@@ -3,7 +3,7 @@ Code was adapted from https://github.com/Yura52/rtdl
 """
 # stdlib
 import math
-from typing import Any, Callable, Optional, Union
+from typing import Any, Callable, List, Optional, Union
 
 # third party
 import torch
@@ -160,8 +160,8 @@ class MLP(nn.Module):
         self,
         *,
         d_in: int,
-        d_layers: list[int],
-        dropouts: Union[float, list[float]],
+        d_layers: List[int],
+        dropouts: Union[float, List[float]],
         activation: Union[str, Callable[[], nn.Module]],
         d_out: int,
     ) -> None:
@@ -195,7 +195,7 @@ class MLP(nn.Module):
     def make_baseline(
         cls: type["MLP"],
         d_in: int,
-        d_layers: list[int],
+        d_layers: List[int],
         dropout: float,
         d_out: int,
     ) -> "MLP":

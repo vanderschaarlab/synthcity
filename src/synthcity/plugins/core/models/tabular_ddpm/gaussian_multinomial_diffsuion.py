@@ -6,7 +6,7 @@ Based on
 """
 # stdlib
 import math
-from typing import Any, Callable, Optional
+from typing import Any, Callable, Optional, Tuple
 
 # third party
 import numpy as np
@@ -246,7 +246,7 @@ class GaussianMultinomialDiffusion(torch.nn.Module):
     # Gaussian part
     def gaussian_q_mean_variance(
         self, x_start: Tensor, t: Tensor
-    ) -> tuple[Tensor, Tensor, Tensor]:
+    ) -> Tuple[Tensor, Tensor, Tensor]:
         mean = extract(self.sqrt_alphas_cumprod, t, x_start.shape) * x_start
         variance = extract(1.0 - self.alphas_cumprod, t, x_start.shape)
         log_variance = extract(self.log_1_min_cumprod_alpha, t, x_start.shape)
@@ -266,7 +266,7 @@ class GaussianMultinomialDiffusion(torch.nn.Module):
 
     def gaussian_q_posterior_mean_variance(
         self, x_start: Tensor, x_t: Tensor, t: Tensor
-    ) -> tuple[Tensor, Tensor, Tensor]:
+    ) -> Tuple[Tensor, Tensor, Tensor]:
         if not (x_start.shape == x_t.shape):
             raise AssertionError
         posterior_mean = (
