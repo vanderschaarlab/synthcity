@@ -195,8 +195,8 @@ class Metrics:
                         workspace=workspace,
                         use_cache=use_cache,
                     ),
-                    X_gt.sample(eval_cnt),
-                    X_augmented.sample(eval_cnt),
+                    X_gt,
+                    X_augmented,
                 )
             else:
                 scores.queue(
