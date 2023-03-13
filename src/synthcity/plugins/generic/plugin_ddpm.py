@@ -1,12 +1,10 @@
 """
 Reference: Kotelnikov, Akim et al. “TabDDPM: Modelling Tabular Data with Diffusion Models.” ArXiv abs/2209.15421 (2022): n. pag.
 """
-# mypy: disable-error-code=override
-# flake8: noqa: F401
 
 # stdlib
 from pathlib import Path
-from typing import Any, List, Optional, Union
+from typing import Any, List
 
 # third party
 import numpy as np
@@ -16,14 +14,8 @@ import pandas as pd
 from pydantic import validate_arguments
 
 # synthcity absolute
-from synthcity.metrics.weighted_metrics import WeightedMetrics
 from synthcity.plugins.core.dataloader import DataLoader
-from synthcity.plugins.core.distribution import (
-    CategoricalDistribution,
-    Distribution,
-    FloatDistribution,
-    IntegerDistribution,
-)
+from synthcity.plugins.core.distribution import CategoricalDistribution, Distribution
 from synthcity.plugins.core.models.tabular_ddpm import TabDDPM
 from synthcity.plugins.core.plugin import Plugin
 from synthcity.plugins.core.schema import Schema
@@ -153,20 +145,28 @@ class TabDDPMPlugin(Plugin):
             CategoricalDistribution(name="dim_hidden", choices=[128, 256, 512, 1024]),
         ]
 
-    def _fit(
-        self, data: DataLoader, cond: Any = None, **kwargs: Any
-    ) -> "TabDDPMPlugin":
+    def _fit(self, X: DataLoader, *args: Any, **kwargs: Any) -> "TabDDPMPlugin":
+        cond = None
+        if args:
+            if len(args) > 1:
+                raise ValueError("Only one positional argument is allowed")
+            if "cond" in kwargs:
+                raise ValueError("cond is already given by the positional argument")
+            cond = args[0]
+        elif "cond" in kwargs:
+            cond = kwargs.pop("cond")
+
         if self.is_classification:
             if cond is not None:
                 raise ValueError(
                     "cond is already given by the labels for classification"
                 )
-            _, cond = data.unpack()
+            _, cond = X.unpack()
             self._labels, self._cond_dist = np.unique(cond, return_counts=True)
             self._cond_dist = self._cond_dist / self._cond_dist.sum()
 
         # NOTE: should we include the target column in `df`?
-        df = data.dataframe()
+        df = X.dataframe()
 
         if cond is not None:
             cond = pd.Series(cond, index=df.index)
@@ -177,9 +177,9 @@ class TabDDPMPlugin(Plugin):
 
         return self
 
-    def _generate(
-        self, count: int, syn_schema: Schema, cond: Any = None, **kwargs: Any
-    ) -> DataLoader:
+    def _generate(self, count: int, syn_schema: Schema, **kwargs: Any) -> DataLoader:
+        cond = kwargs.pop("cond", None)
+
         if self.is_classification and cond is None:
             # randomly generate labels following the distribution of the training data
             cond = np.random.choice(self._labels, size=count, p=self._cond_dist)
