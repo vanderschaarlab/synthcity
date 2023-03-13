@@ -1,12 +1,13 @@
 # stdlib
 import math
 from copy import copy
-from typing import Any, Dict, Literal, Optional
+from typing import Any, Dict, Optional
 
 # third party
 import numpy as np
 import pandas as pd
 from pydantic import validate_arguments
+from typing_extensions import Literal
 
 # synthcity absolute
 from synthcity.plugins.core.constraints import Constraints
