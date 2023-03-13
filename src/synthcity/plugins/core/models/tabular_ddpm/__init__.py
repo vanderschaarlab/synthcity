@@ -55,8 +55,8 @@ class TabDDPM(nn.Module):
 
     def _update_ema(
         self,
-        target_params: Iterator[nn.Parameter],
-        source_params: Iterator[nn.Parameter],
+        target_params: Iterator,
+        source_params: Iterator,
         rate: float = 0.999,
     ) -> None:
         """
