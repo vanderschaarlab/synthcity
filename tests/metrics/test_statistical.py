@@ -257,8 +257,8 @@ def test_evaluate_alpha_precision(test_plugin: Plugin) -> None:
 def test_evaluate_survival_km_distance(test_plugin: Plugin) -> None:
     X = load_rossi()
 
-    with pytest.raises(ValueError) as e_info:
-        fail_loader = SurvivalAnalysisDataLoader(
+    with pytest.raises(ValueError):
+        SurvivalAnalysisDataLoader(
             X,
             target_column="arrest",
             time_to_event_column="week",
