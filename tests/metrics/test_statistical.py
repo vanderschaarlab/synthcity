@@ -44,7 +44,7 @@ def _eval_plugin(
 
     sz = len(X_syn)
     X_rnd = create_from_info(
-        pd.DataFrame(np.random.randn(sz, len(X.columns)), columns=X.columns), X.info()
+        pd.DataFrame(np.random.uniform(size=(sz, len(X.columns))), columns=X.columns), X.info()
     )
     rnd_score = evaluator.evaluate(
         X,
@@ -257,8 +257,6 @@ def test_evaluate_alpha_precision(test_plugin: Plugin) -> None:
 def test_evaluate_survival_km_distance(test_plugin: Plugin) -> None:
     X = load_rossi()
 
-    T = X["week"]
-    X = X[T > 0]
     Xloader = SurvivalAnalysisDataLoader(
         X,
         target_column="arrest",
