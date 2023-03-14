@@ -62,14 +62,27 @@ def calculate_fair_aug_sample_size(
     elif rule == "ad-hoc":
         # use user-specified values to augment
         if not ad_hoc_augment_vals:
-            raise AssertionError(
+            raise ValueError(
                 "When augmenting with an `ad-hoc` method, ad_hoc_augment_vals must be a dictionary, where the dictionary keys are the values of the fairness_column and the dictionary values are the number of records to augment."
             )
         else:
-            if set(ad_hoc_augment_vals.keys()) != set(X_train[fairness_column].values):
-                raise AssertionError(
+            if not set(ad_hoc_augment_vals.keys()).issubset(
+                set(X_train[fairness_column].values)
+            ):
+                print(set(X_train[fairness_column].values))
+                print(set(ad_hoc_augment_vals.keys()))
+                raise ValueError(
                     "ad_hoc_augment_vals must be a dictionary, where the dictionary keys are the values of the fairness_column and the dictionary values are the number of records to augment."
                 )
+            elif set(X_train[fairness_column].values) != set(
+                ad_hoc_augment_vals.keys()
+            ):
+                ad_hoc_augment_vals = {
+                    k: v
+                    for k, v in ad_hoc_augment_vals.items()
+                    if k in set(X_train[fairness_column].values)
+                }
+
             augmentation_counts = ad_hoc_augment_vals
 
     return augmentation_counts
