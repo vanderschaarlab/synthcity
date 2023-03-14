@@ -171,7 +171,7 @@ def test_weighted_metric(test_plugin: str) -> None:
 
 
 @pytest.mark.parametrize(
-    "fairness_column, rule, strict, add_hoc_vals",
+    "fairness_column, rule, strict, ad_hoc_vals",
     [
         ("sepal length (cm)", "equal", True, {}),
         ("sepal length (cm)", "equal", False, {}),
@@ -199,7 +199,7 @@ def test_weighted_metric(test_plugin: str) -> None:
     ],
 )
 def test_augmentation(
-    fairness_column: str, rule: str, strict: bool, add_hoc_vals: dict
+    fairness_column: str, rule: str, strict: bool, ad_hoc_vals: dict
 ) -> None:
     augment_generator = Plugins().get("marginal_distributions")
 
@@ -216,7 +216,7 @@ def test_augmentation(
         augment_generator,
         rule=rule,
         strict=strict,
-        ad_hoc_augment_vals=add_hoc_vals,
+        ad_hoc_augment_vals=ad_hoc_vals,
     )
     assert len(Xraw) < len(X_augmented)
 

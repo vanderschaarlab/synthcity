@@ -69,8 +69,6 @@ def calculate_fair_aug_sample_size(
             if not set(ad_hoc_augment_vals.keys()).issubset(
                 set(X_train[fairness_column].values)
             ):
-                print(set(X_train[fairness_column].values))
-                print(set(ad_hoc_augment_vals.keys()))
                 raise ValueError(
                     "ad_hoc_augment_vals must be a dictionary, where the dictionary keys are the values of the fairness_column and the dictionary values are the number of records to augment."
                 )
