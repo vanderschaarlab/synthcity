@@ -275,9 +275,6 @@ def test_benchmark_workspace_cache() -> None:
             / f"{experiment_name}_{testcase}_{plugin}_augmentation_{augmentation_hash}_{kwargs_hash}_{platform.python_version()}_generator_{repeat}.bkp"
         )
 
-        # print("\ntest - X_augment_cache_file: ", X_augment_cache_file, "\n")
-        # print("\ntest - augment_generator_file: ", augment_generator_file, "\n")
-
         assert X_syn_cache_file.exists()
         assert generator_file.exists()
 
