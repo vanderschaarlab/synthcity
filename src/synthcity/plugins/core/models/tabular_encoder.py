@@ -277,7 +277,6 @@ class TabularEncoder(TransformerMixin, BaseEstimator):
     ) -> pd.DataFrame:
         name = data.name
         encoder = column_transform_info.transform
-        print("data: ", data.shape)
         transformed = encoder.transform(data)
 
         #  Converts the transformed data to the appropriate output format.
