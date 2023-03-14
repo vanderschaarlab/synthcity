@@ -256,7 +256,6 @@ def test_evaluate_alpha_precision(test_plugin: Plugin) -> None:
 @pytest.mark.parametrize("test_plugin", [Plugins().get("dummy_sampler")])
 def test_evaluate_survival_km_distance(test_plugin: Plugin) -> None:
     X = load_rossi()
-
     Xloader = SurvivalAnalysisDataLoader(
         X,
         target_column="arrest",
