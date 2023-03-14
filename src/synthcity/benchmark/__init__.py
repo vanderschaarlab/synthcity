@@ -124,7 +124,6 @@ class Benchmarks:
                 hash_object = hashlib.sha256(kwargs_hash_raw)
                 kwargs_hash = hash_object.hexdigest()
 
-            augmentation_hash = ""
             augmentation_arguments = {
                 "augmentation_rule": augmentation_rule,
                 "strict_augmentation": strict_augmentation,
@@ -159,7 +158,6 @@ class Benchmarks:
                     workspace
                     / f"{experiment_name}_{testcase}_{plugin}_augmentation_{augmentation_hash}_{kwargs_hash}_{platform.python_version()}_{repeat}.bkp"
                 )
-
                 augment_generator_file = (
                     workspace
                     / f"{experiment_name}_{testcase}_{plugin}_augmentation_{augmentation_hash}_{kwargs_hash}_{platform.python_version()}_generator_{repeat}.bkp"
@@ -201,45 +199,57 @@ class Benchmarks:
                         save_to_file(X_syn_cache_file, X_syn)
 
                 # Augmentation
-                if augment_generator_file.exists() and augmented_reuse_if_exists:
-                    augment_generator = load_from_file(augment_generator_file)
-                else:
-                    augment_generator = Plugins(categories=plugin_cats).get(
-                        plugin,
-                        **kwargs,
-                    )
-                    try:
-                        augment_generator.fit(
-                            X.train(),  # cond=X.train()[X.get_fairness_column()] # TODO: do I need to pass the fairness_column to cond?
+                if metrics and any(
+                    "augmentation" in metric
+                    for metric in [x for v in metrics.values() for x in v]
+                ):
+                    if augment_generator_file.exists() and augmented_reuse_if_exists:
+                        augment_generator = load_from_file(augment_generator_file)
+                    else:
+                        augment_generator = Plugins(categories=plugin_cats).get(
+                            plugin,
+                            **kwargs,
                         )
-                    except BaseException as e:
-                        log.critical(
-                            f"[{plugin}][take {repeat}] failed to fit augmentation generator: {e}"
-                        )
-                        continue
-                    if synthetic_cache:
-                        save_to_file(augment_generator_file, augment_generator)
+                        try:
+                            if not X.get_fairness_column():
+                                raise ValueError(
+                                    "To use the augmentation metrics, `fairness_column` must be set to a string representing the name of a column in the DataLoader."
+                                )
+                            augment_generator.fit(
+                                X.train(),
+                                cond=X.train()[X.get_fairness_column()],
+                            )
+                        except BaseException as e:
+                            log.critical(
+                                f"[{plugin}][take {repeat}] failed to fit augmentation generator: {e}"
+                            )
+                            continue
+                        if synthetic_cache:
+                            save_to_file(augment_generator_file, augment_generator)
 
-                if X_augment_cache_file.exists() and augmented_reuse_if_exists:
-                    X_augmented = load_from_file(X_augment_cache_file)
+                    if X_augment_cache_file.exists() and augmented_reuse_if_exists:
+                        X_augmented = load_from_file(X_augment_cache_file)
+                    else:
+                        try:
+                            X_augmented = augment_data(
+                                X.train(),
+                                augment_generator,
+                                rule=augmentation_rule,
+                                strict=strict_augmentation,
+                                ad_hoc_augment_vals=ad_hoc_augment_vals,
+                                **generate_kwargs,
+                            )
+                            if len(X_augmented) == 0:
+                                raise RuntimeError("Plugin failed to generate data")
+                        except BaseException as e:
+                            log.critical(
+                                f"[{plugin}][take {repeat}] failed to generate augmentation data: {e}"
+                            )
+                            continue
+                        if synthetic_cache:
+                            save_to_file(X_augment_cache_file, X_augmented)
                 else:
-                    try:
-                        X_augmented = augment_data(
-                            X.train(),
-                            augment_generator,
-                            rule=augmentation_rule,
-                            strict=strict_augmentation,
-                            ad_hoc_augment_vals=ad_hoc_augment_vals,
-                            **generate_kwargs,
-                        )
-                        if len(X_augmented) == 0:
-                            raise RuntimeError("Plugin failed to generate data")
-                    except BaseException as e:
-                        log.critical(f"[{plugin}][take {repeat}] failed: {e}")
-                        continue
-                    if synthetic_cache:
-                        save_to_file(X_augment_cache_file, X_augmented)
-
+                    X_augmented = None
                 evaluation = Metrics.evaluate(
                     X_test if X_test is not None else X.test(),
                     X_syn,

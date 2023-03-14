@@ -263,7 +263,7 @@ class DataLoader(metaclass=ABCMeta):
         ...
 
     @abstractmethod
-    def get_fairness_column(self) -> Optional[str]:
+    def get_fairness_column(self) -> Union[str, Any]:
         ...
 
 
@@ -295,8 +295,6 @@ class GenericDataLoader(DataLoader):
         >>> from synthcity.plugins.core.dataloader import GenericDataLoader
         >>> X, y = load_diabetes(return_X_y=True, as_frame=True)
         >>> X["target"] = y
-        >>> # Important note: preprocessing data with OneHotEncoder or StandardScaler is not needed or recommended.
-        >>> # Synthcity handles feature encoding and standardization internally.
         >>> loader = GenericDataLoader(X, target_column="target", sensitive_columns=["sex"],)
     """
 
@@ -346,7 +344,7 @@ class GenericDataLoader(DataLoader):
     def domain(self) -> Optional[str]:
         return self.domain_column
 
-    def get_fairness_column(self) -> Optional[str]:
+    def get_fairness_column(self) -> Union[str, Any]:
         return self.fairness_column
 
     @property
@@ -556,7 +554,7 @@ class SurvivalAnalysisDataLoader(DataLoader):
     def columns(self) -> list:
         return list(self.data.columns)
 
-    def get_fairness_column(self) -> Optional[str]:
+    def get_fairness_column(self) -> Union[str, Any]:
         return self.fairness_column
 
     def compression_protected_features(self) -> list:
@@ -799,7 +797,7 @@ class TimeSeriesDataLoader(DataLoader):
     def columns(self) -> list:
         return self.data["seq_data"].columns
 
-    def get_fairness_column(self) -> Optional[str]:
+    def get_fairness_column(self) -> Union[str, Any]:
         return self.fairness_column
 
     def compression_protected_features(self) -> list:
@@ -1430,7 +1428,7 @@ class TimeSeriesSurvivalDataLoader(TimeSeriesDataLoader):
         )
         self.data_type = "time_series_survival"
 
-    def get_fairness_column(self) -> Optional[str]:
+    def get_fairness_column(self) -> Union[str, Any]:
         return self.fairness_column
 
     def info(self) -> dict:
@@ -1639,7 +1637,7 @@ class ImageDataLoader(DataLoader):
     def shape(self) -> tuple:
         return self.data.shape()
 
-    def get_fairness_column(self) -> Optional[str]:
+    def get_fairness_column(self) -> None:
         """Not implemented for ImageDataLoader"""
         ...
 

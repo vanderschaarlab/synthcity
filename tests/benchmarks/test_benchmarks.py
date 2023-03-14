@@ -1,4 +1,8 @@
 # stdlib
+import hashlib
+import json
+import platform
+from copy import copy
 from pathlib import Path
 
 # third party
@@ -25,6 +29,28 @@ def test_benchmark_sanity() -> None:
         ],
         GenericDataLoader(X, sensitive_columns=["sex"]),
         metrics={"sanity": ["common_rows_proportion", "data_mismatch_score"]},
+    )
+
+    Benchmarks.print(scores)
+
+
+def test_benchmark_augmentation() -> None:
+    X, y = load_diabetes(return_X_y=True, as_frame=True)
+    X["target"] = y
+
+    scores = Benchmarks.evaluate(
+        [
+            ("test1", "marginal_distributions", {}),
+            ("test2", "dummy_sampler", {}),
+        ],
+        GenericDataLoader(X, sensitive_columns=["sex"]),
+        metrics={
+            "performance": [
+                "linear_model_augmentation",
+                "mlp_augmentation",
+                "xgb_augmentation",
+            ]
+        },
     )
 
     Benchmarks.print(scores)
@@ -149,7 +175,29 @@ def test_benchmark_survival_analysis() -> None:
             ]
         },
     )
-    print(score)
+    Benchmarks.print(score)
+
+    score = Benchmarks.evaluate(
+        [
+            ("test1", "marginal_distributions", {}),
+            ("test2", "dummy_sampler", {}),
+        ],
+        SurvivalAnalysisDataLoader(
+            df,
+            target_column="arrest",
+            fairness_column="age",
+            time_to_event_column="week",
+            time_horizons=[30],
+        ),
+        task_type="survival_analysis",
+        metrics={
+            "performance": [
+                "linear_model",
+                "linear_model_augmentation",
+            ]
+        },
+    )
+    Benchmarks.print(score)
 
 
 def test_benchmark_workspace_cache() -> None:
@@ -161,20 +209,77 @@ def test_benchmark_workspace_cache() -> None:
     except BaseException:
         pass
 
+    X = SurvivalAnalysisDataLoader(
+        df,
+        target_column="arrest",
+        fairness_column="age",
+        time_to_event_column="week",
+        time_horizons=[30],
+    )
+
+    testcase = "test1"
+    plugin = "uniform_sampler"
+
+    kwargs_hash = ""
+
+    augmentation_arguments = {
+        "augmentation_rule": "equal",
+        "strict_augmentation": False,
+        "ad_hoc_augment_vals": None,
+    }
+    augmentation_arguments_hash_raw = json.dumps(
+        copy(augmentation_arguments), sort_keys=True
+    ).encode()
+    augmentation_hash_object = hashlib.sha256(augmentation_arguments_hash_raw)
+    augmentation_hash = augmentation_hash_object.hexdigest()
+
+    experiment_name = X.hash()
+    repeats = 3
+
     Benchmarks.evaluate(
         [
-            ("test1", "uniform_sampler", {}),
+            (testcase, plugin, {}),
         ],
-        SurvivalAnalysisDataLoader(
-            df, target_column="arrest", time_to_event_column="week", time_horizons=[30]
-        ),
+        X,
         task_type="survival_analysis",
         metrics={
             "performance": [
-                "linear_model",
+                "linear_model_augmentation",
             ]
         },
+        repeats=repeats,
         workspace=workspace,
+        augmented_reuse_if_exists=False,
+        synthetic_reuse_if_exists=False,
     )
 
     assert workspace.exists()
+
+    for repeat in range(repeats):
+
+        X_syn_cache_file = (
+            workspace
+            / f"{experiment_name}_{testcase}_{plugin}_{kwargs_hash}_{platform.python_version()}_{repeat}.bkp"
+        )
+        generator_file = (
+            workspace
+            / f"{experiment_name}_{testcase}_{plugin}_{kwargs_hash}_{platform.python_version()}_generator_{repeat}.bkp"
+        )
+        X_augment_cache_file = (
+            workspace
+            / f"{experiment_name}_{testcase}_{plugin}_augmentation_{augmentation_hash}_{kwargs_hash}_{platform.python_version()}_{repeat}.bkp"
+        )
+
+        augment_generator_file = (
+            workspace
+            / f"{experiment_name}_{testcase}_{plugin}_augmentation_{augmentation_hash}_{kwargs_hash}_{platform.python_version()}_generator_{repeat}.bkp"
+        )
+
+        # print("\ntest - X_augment_cache_file: ", X_augment_cache_file, "\n")
+        # print("\ntest - augment_generator_file: ", augment_generator_file, "\n")
+
+        assert X_syn_cache_file.exists()
+        assert generator_file.exists()
+
+        assert X_augment_cache_file.exists()
+        assert augment_generator_file.exists()

@@ -34,10 +34,6 @@ def calculate_fair_aug_sample_size(
     Returns:
         Dict: A dictionary containing the number of each class to augment the real data with.
     """
-    if X_train.get_fairness_column() is None:
-        raise TypeError(
-            "To use the augmentation metrics, `fairness_column` must be set to a string representing the name of a column in the DataLoader."
-        )
 
     # the majority class is unchanged
     if rule == "equal":
