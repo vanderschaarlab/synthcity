@@ -118,6 +118,8 @@ class Metrics:
             Reference real data
         X_syn: Dataloader or DataFrame
             Synthetic data
+        X_augmented: Dataloader or DataFrame
+            Augmented data
         metrics: dict
             the dictionary of metrics to evaluate
             Full dictionary of metrics is:
@@ -130,12 +132,16 @@ class Metrics:
             }
         reduction: str
             The way to aggregate metrics across folds. Can be: 'mean', "min", or "max".
+        n_histogram_bins: int
+            The number of bins used in histogram calculation of a given metric. Defaults to 10.
         task_type: str
             The type of problem. Relevant for evaluating the downstream models with the correct metrics. Valid tasks are:  "classification", "regression", "survival_analysis", "time_series", "time_series_survival".
         random_state: int
             random seed
         workspace: Path
             The folder for caching intermediary results.
+        use_cache: bool
+            If the a metric has been previously run and is cached, it will be reused for the experiments. Defaults to True.
         """
         workspace.mkdir(parents=True, exist_ok=True)
 

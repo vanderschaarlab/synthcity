@@ -29,6 +29,7 @@ def calculate_fair_aug_sample_size(
     Args:
         X_train (pd.DataFrame): The real dataset to be augmented.
         fairness_column (str): The column name of the column to test the fairness of a downstream model with respect to.
+        rule (Literal["equal", "log", "ad-hoc"]):  The rule used to achieve the desired proportion records with each value in the fairness column. Defaults to "equal".
         ad_hoc_augment_vals (Dict[ Union[int, str], int ], optional): A dictionary containing the number of each class to augment the real data with. If using rule="ad-hoc" this function returns ad_hoc_augment_vals, otherwise this parameter is ignored. Defaults to {}.
 
     Returns:
@@ -98,19 +99,14 @@ def _generate_synthetic_data(
     synthetic_constraints: Optional[Constraints] = None,
     **generate_kwargs: Any,
 ) -> pd.DataFrame:
-
     """Generates synthetic data
 
     Args:
-        X_train (pd.DataFrame): The dataset used to train the downstream model.
-        y_train (Union[pd.Series, pd.DataFrame]): The data labels for `X_train`. This is used to train the downstream model.
-        fairness_column (str): The column name of the column to test the fairness of a downstream model with respect to.
-        target_column (str): The column name of the label column.
-        syn_model_name (str): The name of the synthetic model plugin to use to generate the synthetic data.
+        X_train (DataLoader): The dataset used to train the downstream model.
+        augment_generator (Any): The synthetic model to be used to generate the synthetic portion of the augmented dataset.
         strict (bool, optional): Flag to ensure that the condition for generating synthetic data is strictly met. Defaults to False.
         rule (Literal["equal", "log", "ad-hoc"): The rule used to achieve the desired proportion records with each value in the fairness column. Defaults to "equal".
         ad_hoc_augment_vals (Dict[ Union[int, str], int ], optional): A dictionary containing the number of each class to augment the real data with. This is only required if using the rule="ad-hoc" option. Defaults to {}.
-        random_state (int, optional): The random state to seed the synthetic data generation. Defaults to 42.
 
     Returns:
         pd.DataFrame: The generated synthetic data.
@@ -166,15 +162,15 @@ def augment_data(
     """Augment the real data with generated synthetic data
 
     Args:
-        X (DataLoader): The ground truth DataLoader to augment with synthetic data.
-        model_name (str): The name of the synthetic model plugin to use to generate the synthetic data.
-        prefix (str, optional): prefix (str): The prefix for the saved synthetic data generation model filename. Defaults to "fairness.conditional_augmentation".
+        X_train (DataLoader): The ground truth DataLoader to augment with synthetic data.
+        augment_generator (Any): The synthetic model to be used to generate the synthetic portion of the augmented dataset.
         strict (bool, optional): Flag to ensure that the condition for generating synthetic data is strictly met. Defaults to False.
         rule (Literal["equal", "log", "ad-hoc"): The rule used to achieve the desired proportion records with each value in the fairness column. Defaults to "equal".
-        ad_hoc_augment_vals (Dict[ Union[int, str], int ], optional): A dictionary containing the number of each class to augment the real data with. This is only required if using the rule="ad-hoc" option. Defaults to {}.
+        ad_hoc_augment_vals (Dict[Union[int, str], int], optional): A dictionary containing the number of each class to augment the real data with. This is only required if using the rule="ad-hoc" option. Defaults to None.
+        synthetic_constraints (Optional[Constraints]): Constraints placed on the generation of the synthetic data. Defaults to None.
 
     Returns:
-        Tuple[np.ndarray, np.ndarray]: The augmented dataset and labels.
+        DataLoader: The augmented dataset and labels.
     """
     syn_data = _generate_synthetic_data(
         X_train,

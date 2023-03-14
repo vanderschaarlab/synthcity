@@ -59,6 +59,7 @@ class Benchmarks:
         use_metric_cache: bool = True,
         **generate_kwargs: Any,
     ) -> pd.DataFrame:
+
         """Benchmark the performance of several algorithms.
 
         Args:
@@ -87,13 +88,21 @@ class Benchmarks:
             synthetic_cache: bool
                 Enable experiment caching
             synthetic_reuse_if_exists: bool
-                If the current synthetic dataset is cached, it will be reused for the experiments.
+                If the current synthetic dataset is cached, it will be reused for the experiments. Defaults to True.
             augmented_reuse_if_exists: bool
-                If the current synthetic dataset is cached, it will be reused for the experiments.
+                If the current augmented dataset is cached, it will be reused for the experiments. Defaults to True.
             task_type: str
                 The type of problem. Relevant for evaluating the downstream models with the correct metrics. Valid tasks are:  "classification", "regression", "survival_analysis", "time_series", "time_series_survival".
             workspace: Path
                 Path for caching experiments. Default: "workspace".
+            augmentation_rule: str
+                The rule used to achieve the desired proportion records with each value in the fairness column. Possible values are: 'equal', 'log', and 'ad-hoc'. Defaults to "equal".
+            strict_augmentation: bool
+                Flag to ensure that the condition for generating synthetic data is strictly met. Defaults to False.
+            ad_hoc_augment_vals: Dict
+                A dictionary containing the number of each class to augment the real data with. This is only required if using the rule="ad-hoc" option. Defaults to None.
+            use_metric_cache: bool
+                If the current metric has been previously run and is cached, it will be reused for the experiments. Defaults to True.
             plugin_kwargs:
                 Optional kwargs for each algorithm. Example {"adsgan": {"n_iter": 10}},
         """
