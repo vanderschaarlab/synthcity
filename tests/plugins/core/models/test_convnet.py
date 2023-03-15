@@ -11,6 +11,7 @@ from synthcity.plugins.core.models.convnet import (
     suggest_image_classifier_arch,
     suggest_image_generator_discriminator_arch,
 )
+from synthcity.utils.constants import DEVICE
 
 
 @pytest.mark.parametrize("nonlin", ["relu", "elu", "prelu", "leaky_relu"])
@@ -29,10 +30,10 @@ def test_suggest_gan(n_channels: int, height: int) -> None:
         width=height,
     )
 
-    dummy_noise = torch.rand((10, n_units_latent, n_channels, 1))
+    dummy_noise = torch.rand((10, n_units_latent, n_channels, 1), device=DEVICE)
     gen(dummy_noise)
 
-    dummy_in = torch.rand((10, n_channels, height, height))
+    dummy_in = torch.rand((10, n_channels, height, height), device=DEVICE)
     disc(dummy_in)
 
 

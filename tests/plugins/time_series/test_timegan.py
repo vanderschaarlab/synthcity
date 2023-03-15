@@ -89,11 +89,7 @@ def test_plugin_generate(source: Any) -> None:
 
 
 @pytest.mark.parametrize(
-    "source",
-    [
-        SineDataloader(with_missing=True),
-        GoogleStocksDataloader(),
-    ],
+    "source", [SineDataloader(with_missing=True), GoogleStocksDataloader()]
 )
 def test_plugin_generate_static_cond(source: Any) -> None:
     static_data, temporal_data, observation_times, outcome = source.load()

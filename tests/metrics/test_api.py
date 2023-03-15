@@ -4,6 +4,7 @@ import pytest
 from sklearn.datasets import load_iris
 
 # synthcity absolute
+from synthcity.benchmark.utils import augment_data
 from synthcity.metrics import Metrics, WeightedMetrics
 from synthcity.plugins import Plugins
 from synthcity.plugins.core.dataloader import GenericDataLoader
@@ -167,3 +168,61 @@ def test_weighted_metric(test_plugin: str) -> None:
         WeightedMetrics(
             [("sanity", "common_rows_proportion"), ("performance", "xgb")], [0.5, 0.5]
         )
+
+
+@pytest.mark.parametrize(
+    "fairness_column, rule, strict, ad_hoc_vals",
+    [
+        ("sepal length (cm)", "equal", True, {}),
+        ("sepal length (cm)", "equal", False, {}),
+        ("sepal length (cm)", "log", True, {}),
+        ("sepal length (cm)", "log", False, {}),
+        (
+            "sepal length (cm)",
+            "ad-hoc",
+            True,
+            {k: 10 for k in [4.6, 5.0, 5.4, 4.4, 4.8, 7.4, 7.9]},
+        ),
+        (
+            "sepal length (cm)",
+            "ad-hoc",
+            False,
+            {k: 10 for k in [4.6, 5.0, 5.4, 4.4, 4.8, 7.4, 7.9]},
+        ),
+        pytest.param(
+            "sepal length (cm)",
+            "ad-hoc",
+            True,
+            {k: 10 for k in [-1, 10000]},
+            marks=pytest.mark.xfail,
+        ),
+    ],
+)
+def test_augmentation(
+    fairness_column: str, rule: str, strict: bool, ad_hoc_vals: dict
+) -> None:
+    augment_generator = Plugins().get("marginal_distributions")
+
+    X, y = load_iris(return_X_y=True, as_frame=True)
+    X["target"] = y
+    X["target"] = X["target"].astype(str)
+
+    Xraw = GenericDataLoader(X, target_column="target", fairness_column=fairness_column)
+
+    augment_generator.fit(Xraw, cond=Xraw[fairness_column])
+
+    X_augmented = augment_data(
+        Xraw,
+        augment_generator,
+        rule=rule,
+        strict=strict,
+        ad_hoc_augment_vals=ad_hoc_vals,
+    )
+    assert len(Xraw) < len(X_augmented)
+
+    X_gen = augment_generator.generate(100)
+
+    out = Metrics.evaluate(
+        Xraw, X_gen, X_augmented, metrics={"performance": "linear_model_augmentation"}
+    )
+    assert "performance.linear_model_augmentation.aug_ood" in out.index

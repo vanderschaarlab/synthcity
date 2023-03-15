@@ -1,7 +1,7 @@
 # stdlib
 import copy
 import platform
-from typing import Any, Dict, Tuple
+from typing import Any, Dict, List, Tuple
 
 # third party
 import numpy as np
@@ -65,6 +65,10 @@ class PerformanceEvaluator(MetricEvaluator):
     @staticmethod
     def direction() -> str:
         return "maximize"
+
+    @staticmethod
+    def standard_performance_output_keys() -> List:
+        return []
 
     def _evaluate_performance_classification(
         self,
@@ -214,11 +218,16 @@ class PerformanceEvaluator(MetricEvaluator):
             syn_scores_id.append(synth_score_id)
             syn_scores_ood.append(synth_score_ood)
 
-        results = {
-            "gt": float(self.reduction()(real_scores)),
-            "syn_id": float(self.reduction()(syn_scores_id)),
-            "syn_ood": float(self.reduction()(syn_scores_ood)),
-        }
+        results = {}
+        for key in self.standard_performance_output_keys():
+            if key == "gt":
+                results.update({key: float(self.reduction()(real_scores))})
+            elif key == "syn_id":
+                results.update({key: float(self.reduction()(syn_scores_id))})
+            elif key == "syn_ood":
+                results.update({key: float(self.reduction()(syn_scores_ood))})
+            elif key == "aug_ood":
+                results.update({key: float(self.reduction()(syn_scores_ood))})
 
         save_to_file(cache_file, results)
 
@@ -649,6 +658,10 @@ class PerformanceEvaluatorXGB(PerformanceEvaluator):
     def name() -> str:
         return "xgb"
 
+    @staticmethod
+    def standard_performance_output_keys() -> List:
+        return ["gt", "syn_id", "syn_ood"]
+
     @validate_arguments(config=dict(arbitrary_types_allowed=True))
     def evaluate(
         self,
@@ -677,7 +690,6 @@ class PerformanceEvaluatorXGB(PerformanceEvaluator):
             }
 
             xgb_reg_args = copy.deepcopy(xgb_clf_args)
-
             return self._evaluate_standard_performance(
                 XGBClassifier,
                 xgb_clf_args,
@@ -720,6 +732,10 @@ class PerformanceEvaluatorLinear(PerformanceEvaluator):
     @staticmethod
     def name() -> str:
         return "linear_model"
+
+    @staticmethod
+    def standard_performance_output_keys() -> List:
+        return ["gt", "syn_id", "syn_ood"]
 
     @validate_arguments(config=dict(arbitrary_types_allowed=True))
     def evaluate(
@@ -767,6 +783,10 @@ class PerformanceEvaluatorMLP(PerformanceEvaluator):
     @staticmethod
     def name() -> str:
         return "mlp"
+
+    @staticmethod
+    def standard_performance_output_keys() -> List:
+        return ["gt", "syn_id", "syn_ood"]
 
     @validate_arguments(config=dict(arbitrary_types_allowed=True))
     def _evaluate_image_clf(
@@ -914,6 +934,36 @@ class PerformanceEvaluatorMLP(PerformanceEvaluator):
 
         else:
             raise RuntimeError(f"Unuspported task type {self._task_type}")
+
+
+class AugmentationPerformanceEvaluatorXGB(PerformanceEvaluatorXGB):
+    @staticmethod
+    def name() -> str:
+        return "xgb_augmentation"
+
+    @staticmethod
+    def standard_performance_output_keys() -> List:
+        return ["gt", "aug_ood"]
+
+
+class AugmentationPerformanceEvaluatorLinear(PerformanceEvaluatorLinear):
+    @staticmethod
+    def name() -> str:
+        return "linear_model_augmentation"
+
+    @staticmethod
+    def standard_performance_output_keys() -> List:
+        return ["gt", "aug_ood"]
+
+
+class AugmentationPerformanceEvaluatorMLP(PerformanceEvaluatorMLP):
+    @staticmethod
+    def name() -> str:
+        return "mlp_augmentation"
+
+    @staticmethod
+    def standard_performance_output_keys() -> List:
+        return ["gt", "aug_ood"]
 
 
 class FeatureImportanceRankDistance(MetricEvaluator):
