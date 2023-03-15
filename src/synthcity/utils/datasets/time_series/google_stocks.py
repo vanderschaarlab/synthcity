@@ -23,7 +23,7 @@ class GoogleStocksDataloader:
     ) -> Tuple[pd.DataFrame, List[pd.DataFrame], List, pd.DataFrame]:
         # Load Google Data
         if not df_path.exists():
-            s = requests.get(URL).content
+            s = requests.get(URL, timeout=5).content
             df = pd.read_csv(io.StringIO(s.decode("utf-8")))
 
             df.to_csv(df_path, index=None)

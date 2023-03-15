@@ -245,7 +245,6 @@ class TabularEncoder(TransformerMixin, BaseEstimator):
         """
         if discrete_columns is None:
             discrete_columns = find_cat_cols(raw_data, self.categorical_limit)
-
         self.output_dimensions = 0
 
         self._column_raw_dtypes = raw_data.infer_objects().dtypes
@@ -264,7 +263,6 @@ class TabularEncoder(TransformerMixin, BaseEstimator):
 
             self.output_dimensions += column_transform_info.output_dimensions
             self._column_transform_info_list.append(column_transform_info)
-
         return self
 
     def _transform_continuous(

@@ -413,7 +413,6 @@ class TimeSeriesVAE(nn.Module):
         static_t = self._check_tensor(static).float()
         temporal_t = self._check_tensor(temporal).float()
         horizons_t = self._check_tensor(observation_times).float()
-
         self._train(static_t, temporal_t, horizons_t)
 
         return self
@@ -534,7 +533,6 @@ class TimeSeriesVAE(nn.Module):
                 static_mb, temporal_mb, horiz_mb = data
 
                 losses.append(self._train_step(static_mb, temporal_mb, horiz_mb))
-
                 torch.nn.utils.clip_grad_norm_(self.parameters(), self.clipping_value)
 
                 optimizer.step()

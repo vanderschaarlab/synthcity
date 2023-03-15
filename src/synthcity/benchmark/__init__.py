@@ -3,6 +3,7 @@ import hashlib
 import json
 import platform
 import random
+from copy import copy
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
 
@@ -14,6 +15,7 @@ from pydantic import validate_arguments
 
 # synthcity absolute
 import synthcity.logger as log
+from synthcity.benchmark.utils import augment_data
 from synthcity.metrics import Metrics
 from synthcity.metrics.scores import ScoreEvaluator
 from synthcity.plugins import Plugins
@@ -48,10 +50,16 @@ class Benchmarks:
         synthetic_constraints: Optional[Constraints] = None,
         synthetic_cache: bool = True,
         synthetic_reuse_if_exists: bool = True,
+        augmented_reuse_if_exists: bool = True,
         task_type: str = "classification",  # classification, regression, survival_analysis, time_series
         workspace: Path = Path("workspace"),
+        augmentation_rule: str = "equal",
+        strict_augmentation: bool = False,
+        ad_hoc_augment_vals: Optional[Dict] = None,
+        use_metric_cache: bool = True,
         **generate_kwargs: Any,
     ) -> pd.DataFrame:
+
         """Benchmark the performance of several algorithms.
 
         Args:
@@ -80,11 +88,21 @@ class Benchmarks:
             synthetic_cache: bool
                 Enable experiment caching
             synthetic_reuse_if_exists: bool
-                If the current synthetic dataset is cached, it will be reused for the experiments.
+                If the current synthetic dataset is cached, it will be reused for the experiments. Defaults to True.
+            augmented_reuse_if_exists: bool
+                If the current augmented dataset is cached, it will be reused for the experiments. Defaults to True.
             task_type: str
                 The type of problem. Relevant for evaluating the downstream models with the correct metrics. Valid tasks are:  "classification", "regression", "survival_analysis", "time_series", "time_series_survival".
             workspace: Path
                 Path for caching experiments. Default: "workspace".
+            augmentation_rule: str
+                The rule used to achieve the desired proportion records with each value in the fairness column. Possible values are: 'equal', 'log', and 'ad-hoc'. Defaults to "equal".
+            strict_augmentation: bool
+                Flag to ensure that the condition for generating synthetic data is strictly met. Defaults to False.
+            ad_hoc_augment_vals: Dict
+                A dictionary containing the number of each class to augment the real data with. This is only required if using the rule="ad-hoc" option. Defaults to None.
+            use_metric_cache: bool
+                If the current metric has been previously run and is cached, it will be reused for the experiments. Defaults to True.
             plugin_kwargs:
                 Optional kwargs for each algorithm. Example {"adsgan": {"n_iter": 10}},
         """
@@ -115,6 +133,17 @@ class Benchmarks:
                 hash_object = hashlib.sha256(kwargs_hash_raw)
                 kwargs_hash = hash_object.hexdigest()
 
+            augmentation_arguments = {
+                "augmentation_rule": augmentation_rule,
+                "strict_augmentation": strict_augmentation,
+                "ad_hoc_augment_vals": ad_hoc_augment_vals,
+            }
+            augmentation_arguments_hash_raw = json.dumps(
+                copy(augmentation_arguments), sort_keys=True
+            ).encode()
+            augmentation_hash_object = hashlib.sha256(augmentation_arguments_hash_raw)
+            augmentation_hash = augmentation_hash_object.hexdigest()
+
             repeats_list = list(range(repeats))
             random.shuffle(repeats_list)
 
@@ -126,13 +155,21 @@ class Benchmarks:
 
                 clear_cache()
 
-                cache_file = (
+                X_syn_cache_file = (
                     workspace
                     / f"{experiment_name}_{testcase}_{plugin}_{kwargs_hash}_{platform.python_version()}_{repeat}.bkp"
                 )
                 generator_file = (
                     workspace
                     / f"{experiment_name}_{testcase}_{plugin}_{kwargs_hash}_{platform.python_version()}_generator_{repeat}.bkp"
+                )
+                X_augment_cache_file = (
+                    workspace
+                    / f"{experiment_name}_{testcase}_{plugin}_augmentation_{augmentation_hash}_{kwargs_hash}_{platform.python_version()}_{repeat}.bkp"
+                )
+                augment_generator_file = (
+                    workspace
+                    / f"{experiment_name}_{testcase}_{plugin}_augmentation_{augmentation_hash}_{kwargs_hash}_{platform.python_version()}_generator_{repeat}.bkp"
                 )
 
                 log.info(
@@ -152,8 +189,8 @@ class Benchmarks:
                     if synthetic_cache:
                         save_to_file(generator_file, generator)
 
-                if cache_file.exists() and synthetic_reuse_if_exists:
-                    X_syn = load_from_file(cache_file)
+                if X_syn_cache_file.exists() and synthetic_reuse_if_exists:
+                    X_syn = load_from_file(X_syn_cache_file)
                 else:
                     try:
                         X_syn = generator.generate(
@@ -168,14 +205,68 @@ class Benchmarks:
                         continue
 
                     if synthetic_cache:
-                        save_to_file(cache_file, X_syn)
+                        save_to_file(X_syn_cache_file, X_syn)
 
+                # Augmentation
+                if metrics and any(
+                    "augmentation" in metric
+                    for metric in [x for v in metrics.values() for x in v]
+                ):
+                    if augment_generator_file.exists() and augmented_reuse_if_exists:
+                        augment_generator = load_from_file(augment_generator_file)
+                    else:
+                        augment_generator = Plugins(categories=plugin_cats).get(
+                            plugin,
+                            **kwargs,
+                        )
+                        try:
+                            if not X.get_fairness_column():
+                                raise ValueError(
+                                    "To use the augmentation metrics, `fairness_column` must be set to a string representing the name of a column in the DataLoader."
+                                )
+                            augment_generator.fit(
+                                X.train(),
+                                cond=X.train()[X.get_fairness_column()],
+                            )
+                        except BaseException as e:
+                            log.critical(
+                                f"[{plugin}][take {repeat}] failed to fit augmentation generator: {e}"
+                            )
+                            continue
+                        if synthetic_cache:
+                            save_to_file(augment_generator_file, augment_generator)
+
+                    if X_augment_cache_file.exists() and augmented_reuse_if_exists:
+                        X_augmented = load_from_file(X_augment_cache_file)
+                    else:
+                        try:
+                            X_augmented = augment_data(
+                                X.train(),
+                                augment_generator,
+                                rule=augmentation_rule,
+                                strict=strict_augmentation,
+                                ad_hoc_augment_vals=ad_hoc_augment_vals,
+                                **generate_kwargs,
+                            )
+                            if len(X_augmented) == 0:
+                                raise RuntimeError("Plugin failed to generate data")
+                        except BaseException as e:
+                            log.critical(
+                                f"[{plugin}][take {repeat}] failed to generate augmentation data: {e}"
+                            )
+                            continue
+                        if synthetic_cache:
+                            save_to_file(X_augment_cache_file, X_augmented)
+                else:
+                    X_augmented = None
                 evaluation = Metrics.evaluate(
-                    X_test if X_test is not None else X,
+                    X_test if X_test is not None else X.test(),
                     X_syn,
+                    X_augmented,
                     metrics=metrics,
                     task_type=task_type,
                     workspace=workspace,
+                    use_cache=use_metric_cache,
                 )
 
                 mean_score = evaluation["mean"].to_dict()
