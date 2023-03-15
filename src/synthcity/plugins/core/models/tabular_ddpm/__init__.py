@@ -1,7 +1,7 @@
 # stdlib
 from collections.abc import Iterator
 from copy import deepcopy
-from typing import Any, Dict, Optional
+from typing import Any, Optional, Sequence
 
 # third party
 import numpy as np
@@ -11,6 +11,9 @@ from pydantic import validate_arguments
 from torch import nn
 
 # synthcity absolute
+from synthcity.logger import info
+from synthcity.metrics.weighted_metrics import WeightedMetrics
+from synthcity.utils.callbacks import Callback
 from synthcity.utils.constants import DEVICE
 from synthcity.utils.dataframe import discrete_columns
 
@@ -28,20 +31,21 @@ class TabDDPM(nn.Module):
         weight_decay: float = 0.0001,
         batch_size: int = 1024,
         num_timesteps: int = 1000,
+        is_classification: bool = False,
         gaussian_loss_type: str = "mse",
         scheduler: str = "cosine",
+        callbacks: Sequence[Callback] = (),
         device: torch.device = DEVICE,
-        verbose: int = 0,
         log_interval: int = 10,
         print_interval: int = 100,
         # model params
         model_type: str = "mlp",
-        rtdl_params: Optional[Dict[str, Any]] = None,
-        dim_label_emb: int = 128,
+        mlp_params: Optional[dict] = None,
+        dim_embed: int = 128,
         # early stopping
         n_iter_min: int = 100,
-        n_iter_print: int = 50,
         patience: int = 5,
+        patience_metric: Optional[WeightedMetrics] = None,
     ) -> None:
         super().__init__()
         self.__dict__.update(locals())
@@ -72,10 +76,12 @@ class TabDDPM(nn.Module):
     def fit(
         self, X: pd.DataFrame, cond: Optional[pd.Series] = None, **kwargs: Any
     ) -> "TabDDPM":
-        if cond is not None:
-            n_labels = cond.nunique()
+        if self.is_classification and cond is not None:
+            if np.ndim(cond) != 1:
+                raise ValueError("cond must be a 1D array")
+            self.n_classes = cond.nunique()
         else:
-            n_labels = 0
+            self.n_classes = 0
 
         cat_cols = discrete_columns(X, return_counts=True)
 
@@ -92,10 +98,10 @@ class TabDDPM(nn.Module):
             self._col_perm = np.arange(X.shape[1])
 
         model_params = dict(
-            num_classes=n_labels,
-            is_y_cond=cond is not None,
-            rtdl_params=self.rtdl_params,
-            dim_t=self.dim_label_emb,
+            num_classes=self.n_classes,
+            use_label=cond is not None,
+            mlp_params=self.mlp_params,
+            dim_emb=self.dim_embed,
         )
 
         tensors = [
@@ -104,6 +110,7 @@ class TabDDPM(nn.Module):
             if cond is None
             else torch.tensor(cond.values, dtype=torch.long, device=self.device),
         ]
+
         self.dataloader = TensorDataLoader(*tensors, batch_size=self.batch_size)
 
         self.diffusion = GaussianMultinomialDiffusion(
@@ -115,7 +122,6 @@ class TabDDPM(nn.Module):
             num_timesteps=self.num_timesteps,
             scheduler=self.scheduler,
             device=self.device,
-            verbose=self.verbose,
         ).to(self.device)
 
         self.ema_model = deepcopy(self.diffusion.denoise_fn)
@@ -126,11 +132,10 @@ class TabDDPM(nn.Module):
             self.diffusion.parameters(), lr=self.lr, weight_decay=self.weight_decay
         )
 
-        self.loss_history = pd.DataFrame(columns=["step", "mloss", "gloss", "loss"])
+        for cbk in self.callbacks:
+            cbk.on_fit_begin(self)
 
-        # if self.verbose:
-        #     print("Starting training")
-        #     print(self)
+        self.loss_history = pd.DataFrame(columns=["step", "mloss", "gloss", "loss"])
 
         steps = 0
         curr_loss_multi = 0.0
@@ -138,7 +143,10 @@ class TabDDPM(nn.Module):
         curr_count = 0
 
         for epoch in range(self.n_iter):
+            self.epoch = epoch + 1
             self.diffusion.train()
+
+            [cbk.on_epoch_begin(self, epoch) for cbk in self.callbacks]
 
             for x, y in self.dataloader:
                 self.optimizer.zero_grad()
@@ -157,8 +165,8 @@ class TabDDPM(nn.Module):
                 if steps % self.log_interval == 0:
                     mloss = np.around(curr_loss_multi / curr_count, 4)
                     gloss = np.around(curr_loss_gauss / curr_count, 4)
-                    if self.verbose and steps % self.print_interval == 0:
-                        print(
+                    if steps % self.print_interval == 0:
+                        info(
                             f"Step {steps}: MLoss: {mloss} GLoss: {gloss} Sum: {mloss + gloss}"
                         )
                     self.loss_history.loc[len(self.loss_history)] = [
@@ -174,6 +182,17 @@ class TabDDPM(nn.Module):
                 self._update_ema(
                     self.ema_model.parameters(), self.diffusion.parameters()
                 )
+
+            self.eval()
+
+            try:
+                [cbk.on_epoch_end(self, epoch) for cbk in self.callbacks]
+            except StopIteration:
+                info(f"Early stopped at epoch {epoch}")
+                break
+
+        for cbk in self.callbacks:
+            cbk.on_fit_end(self)
 
         return self
 

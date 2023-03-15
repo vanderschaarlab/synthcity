@@ -18,13 +18,12 @@ def normal_kl(mean1: Tensor, logvar1: Tensor, mean2: Tensor, logvar2: Tensor) ->
     Shapes are automatically broadcasted, so batches can be compared to
     scalars, among other use cases.
     """
-    tensor = None
-    for obj in (mean1, logvar1, mean2, logvar2):
-        if isinstance(obj, Tensor):
-            tensor = obj
-            break
-    if tensor is None:
-        raise AssertionError("at least one argument must be a Tensor")
+    try:
+        tensor = next(
+            x for x in (mean1, logvar1, mean2, logvar2) if isinstance(x, Tensor)
+        )
+    except StopIteration:
+        raise TypeError("at least one argument must be a Tensor")
 
     # Force variances to be Tensors. Broadcasting helps convert scalars to
     # Tensors, but it does not work for torch.exp().
@@ -66,7 +65,7 @@ def discretized_gaussian_log_likelihood(
     :return: a tensor like x of log probabilities (in nats).
     """
     if not (x.shape == means.shape == log_scales.shape):
-        raise AssertionError
+        raise ValueError("shapes must match")
     centered_x = x - means
     inv_stdv = torch.exp(-log_scales)
     plus_in = inv_stdv * (centered_x + 1.0 / 255.0)
@@ -83,8 +82,8 @@ def discretized_gaussian_log_likelihood(
             x > 0.999, log_one_minus_cdf_min, torch.log(cdf_delta.clamp(min=1e-12))
         ),
     )
-    if not (log_probs.shape == x.shape):
-        raise AssertionError
+    if log_probs.shape != x.shape:
+        raise ValueError("shapes must match")
     return log_probs
 
 
@@ -123,8 +122,9 @@ def log_1_min_a(a: Tensor) -> Tensor:
 
 
 def log_add_exp(a: Tensor, b: Tensor) -> Tensor:
-    maximum = torch.max(a, b)
-    return maximum + torch.log(torch.exp(a - maximum) + torch.exp(b - maximum))
+    """Numerically stable log(exp(a) + exp(b))."""
+    m = torch.max(a, b)
+    return m + torch.log(torch.exp(a - m) + torch.exp(b - m))
 
 
 def extract(a: Tensor, t: Tensor, x_shape: tuple) -> Tensor:
@@ -171,13 +171,6 @@ def sliced_logsumexp(x: Tensor, slices: Tensor) -> Tensor:
     return slice_lse_repeated
 
 
-class FoundNANsError(BaseException):
-    """Found NANs during sampling"""
-
-    def __init__(self, message: str = "Found NANs during sampling.") -> None:
-        super(FoundNANsError, self).__init__(message)
-
-
 class TensorDataLoader:
     """
     A DataLoader-like object for a set of tensors that can be much faster than
@@ -198,13 +191,13 @@ class TensorDataLoader:
         :returns: A FastTensorDataLoader.
         """
         if not all(t.shape[0] == tensors[0].shape[0] for t in tensors):
-            raise AssertionError
+            raise ValueError("All tensors must have the same length.")
         self.tensors = tensors
         self.dataset_len = self.tensors[0].shape[0]
         self.batch_size = batch_size
         self.shuffle = shuffle
 
-    def __iter__(self) -> Iterator[tuple]:
+    def __iter__(self) -> Iterator:
         idx = np.arange(self.dataset_len)
         if self.shuffle:
             np.random.shuffle(idx)

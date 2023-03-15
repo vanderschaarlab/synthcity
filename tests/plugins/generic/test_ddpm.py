@@ -15,16 +15,11 @@ from synthcity.plugins.generic.plugin_ddpm import plugin
 plugin_name = "ddpm"
 plugin_args = dict(
     n_iter=1000,
-    # is_classification=True,
+    is_classification=True,
     batch_size=200,
     num_timesteps=500,
-    verbose=1,
     log_interval=10,
-    print_interval=100
-    # rtdl_params=dict(
-    #     d_layers=[256, 256],
-    #     dropout=0.0
-    # )
+    print_interval=100,
 )
 
 

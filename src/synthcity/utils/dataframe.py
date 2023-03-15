@@ -6,7 +6,7 @@ def constant_columns(dataframe: pd.DataFrame) -> list:
     """
     Find constant value columns in a pandas dataframe.
     """
-    return discrete_columns(dataframe, 2)
+    return discrete_columns(dataframe, 1)
 
 
 def discrete_columns(
@@ -19,5 +19,5 @@ def discrete_columns(
         (col, cnt) if return_counts else col
         for col, vals in dataframe.items()
         for cnt in [vals.nunique()]
-        if cnt < max_classes
+        if cnt <= max_classes
     ]
