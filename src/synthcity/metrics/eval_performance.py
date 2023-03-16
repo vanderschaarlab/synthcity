@@ -675,7 +675,7 @@ class PerformanceEvaluatorXGB(PerformanceEvaluator):
                     "n_jobs": 2,
                     "verbosity": 0,
                     "depth": 3,
-                    "strategy": "weibull",  # "weibull", "debiased_bce"
+                    "strategy": "debiased_bce",  # "weibull", "debiased_bce"
                     "random_state": self._random_state,
                 },
                 X_gt,
@@ -705,7 +705,7 @@ class PerformanceEvaluatorXGB(PerformanceEvaluator):
                     "n_jobs": 2,
                     "verbosity": 0,
                     "depth": 3,
-                    "strategy": "weibull",  # "weibull", "debiased_bce"
+                    "strategy": "debiased_bce",  # "weibull", "debiased_bce"
                     "random_state": self._random_state,
                 },
                 X_gt,
@@ -1033,7 +1033,7 @@ class FeatureImportanceRankDistance(MetricEvaluator):
                 n_jobs=2,
                 verbosity=0,
                 depth=3,
-                strategy="weibull",  # "weibull", "debiased_bce"
+                strategy="debiased_bce",  # "weibull", "debiased_bce"
                 random_state=self._random_state,
             )
 
