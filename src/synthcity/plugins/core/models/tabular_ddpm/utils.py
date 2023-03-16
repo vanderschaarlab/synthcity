@@ -1,9 +1,6 @@
 # future
 from __future__ import annotations
 
-# stdlib
-from typing import Iterator
-
 # third party
 import numpy as np
 import torch
@@ -127,10 +124,11 @@ def log_add_exp(a: Tensor, b: Tensor) -> Tensor:
     return m + torch.log(torch.exp(a - m) + torch.exp(b - m))
 
 
-def extract(a: Tensor, t: Tensor, x_shape: tuple) -> Tensor:
-    b, *_ = t.shape
-    t = t.to(a.device)
-    out = a.gather(-1, t)
+def perm_and_expand(a: Tensor, t: Tensor, x_shape: tuple) -> Tensor:
+    """Permutes a tensor in the order specified by `t` and expands it to `x_shape`."""
+    if not (a.ndim == 1 and t.shape == (x_shape[0],)):
+        raise ValueError(f"dimensionality mismatch: {a.shape}, {t.shape}, {x_shape}")
+    out = a[t]
     while len(out.shape) < len(x_shape):
         out = out[..., None]
     return out.expand(x_shape)
@@ -169,41 +167,3 @@ def sliced_logsumexp(x: Tensor, slices: Tensor) -> Tensor:
         slice_lse, slice_ends - slice_starts, dim=-1
     )
     return slice_lse_repeated
-
-
-class TensorDataLoader:
-    """
-    A DataLoader-like object for a set of tensors that can be much faster than
-    TensorDataset + DataLoader because dataloader grabs individual indices of
-    the dataset and calls cat (slow).
-    Source: https://discuss.pytorch.org/t/dataloader-much-slower-than-manual-batching/27014/6
-    """
-
-    def __init__(
-        self, *tensors: Tensor, batch_size: int = 32, shuffle: bool = False
-    ) -> None:
-        """
-        Initialize a FastTensorDataLoader.
-        :param *tensors: tensors to store. Must have the same length @ dim 0.
-        :param batch_size: batch size to load.
-        :param shuffle: if True, shuffle the data *in-place* whenever an
-            iterator is created out of this object.
-        :returns: A FastTensorDataLoader.
-        """
-        if not all(t.shape[0] == tensors[0].shape[0] for t in tensors):
-            raise ValueError("All tensors must have the same length.")
-        self.tensors = tensors
-        self.dataset_len = self.tensors[0].shape[0]
-        self.batch_size = batch_size
-        self.shuffle = shuffle
-
-    def __iter__(self) -> Iterator:
-        idx = np.arange(self.dataset_len)
-        if self.shuffle:
-            np.random.shuffle(idx)
-        for i in range(0, self.dataset_len, self.batch_size):
-            s = idx[i : i + self.batch_size]
-            yield tuple(t[s] for t in self.tensors)
-
-    def __len__(self) -> int:
-        return len(range(0, self.dataset_len, self.batch_size))

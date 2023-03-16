@@ -195,6 +195,11 @@ class TabDDPMPlugin(Plugin):
         df = X.dataframe()
         cond = kwargs.pop("cond", None)
 
+        # note that the TabularEncoder is not used in this plugin, because the
+        # Gaussian multinomial diffusion module needs to know the number of classes
+        # for each discrete feature before it applies torch.nn.functional.one_hot
+        # on these features, and it also preprocesses the continuous features differently.
+
         if args:
             raise ValueError("Only keyword arguments are allowed")
 

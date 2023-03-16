@@ -9,6 +9,7 @@ import pandas as pd
 import torch
 from pydantic import validate_arguments
 from torch import nn
+from torch.utils.data import DataLoader, TensorDataset
 
 # synthcity absolute
 from synthcity.logger import info
@@ -19,7 +20,6 @@ from synthcity.utils.dataframe import discrete_columns
 
 # synthcity relative
 from .gaussian_multinomial_diffsuion import GaussianMultinomialDiffusion
-from .utils import TensorDataLoader
 
 
 class TabDDPM(nn.Module):
@@ -104,14 +104,18 @@ class TabDDPM(nn.Module):
             dim_emb=self.dim_embed,
         )
 
-        tensors = [
+        dataset = TensorDataset(
             torch.tensor(X.values, dtype=torch.float32, device=self.device),
-            np.repeat(None, len(X))
+            torch.tensor([torch.nan] * len(X), dtype=torch.float32, device=self.device)
             if cond is None
-            else torch.tensor(cond.values, dtype=torch.long, device=self.device),
-        ]
+            else torch.tensor(
+                cond.values,
+                dtype=torch.long if self.is_classification else torch.float32,
+                device=self.device,
+            ),
+        )
 
-        self.dataloader = TensorDataLoader(*tensors, batch_size=self.batch_size)
+        self.dataloader = DataLoader(dataset, batch_size=self.batch_size)
 
         self.diffusion = GaussianMultinomialDiffusion(
             model_type=self.model_type,
@@ -150,7 +154,8 @@ class TabDDPM(nn.Module):
 
             for x, y in self.dataloader:
                 self.optimizer.zero_grad()
-                loss_multi, loss_gauss = self.diffusion.mixed_loss(x, y)
+                args = (x,) if cond is None else (x, y)
+                loss_multi, loss_gauss = self.diffusion.mixed_loss(*args)
                 loss = loss_multi + loss_gauss
                 loss.backward()
                 self.optimizer.step()

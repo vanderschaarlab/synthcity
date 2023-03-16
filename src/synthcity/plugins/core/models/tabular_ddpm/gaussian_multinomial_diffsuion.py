@@ -21,7 +21,6 @@ from synthcity.logger import debug, info, warning
 from .modules import MLPDiffusion, ResNetDiffusion
 from .utils import (
     discretized_gaussian_log_likelihood,
-    extract,
     index_to_log_onehot,
     log_1_min_a,
     log_add_exp,
@@ -29,6 +28,7 @@ from .utils import (
     mean_flat,
     normal_kl,
     ohe_to_categories,
+    perm_and_expand,
     sliced_logsumexp,
     sum_except_batch,
 )
@@ -233,9 +233,9 @@ class GaussianMultinomialDiffusion(torch.nn.Module):
     def gaussian_q_mean_variance(
         self, x_start: Tensor, t: Tensor
     ) -> Tuple[Tensor, Tensor, Tensor]:
-        mean = extract(self.sqrt_alphas_cumprod, t, x_start.shape) * x_start
-        variance = extract(1.0 - self.alphas_cumprod, t, x_start.shape)
-        log_variance = extract(self.log_1_min_cumprod_alpha, t, x_start.shape)
+        mean = perm_and_expand(self.sqrt_alphas_cumprod, t, x_start.shape) * x_start
+        variance = perm_and_expand(1.0 - self.alphas_cumprod, t, x_start.shape)
+        log_variance = perm_and_expand(self.log_1_min_cumprod_alpha, t, x_start.shape)
         return mean, variance, log_variance
 
     def gaussian_q_sample(
@@ -246,8 +246,9 @@ class GaussianMultinomialDiffusion(torch.nn.Module):
         if noise.shape != x_start.shape:
             raise ValueError("noise.shape != x_start.shape")
         return (
-            extract(self.sqrt_alphas_cumprod, t, x_start.shape) * x_start
-            + extract(self.sqrt_one_minus_alphas_cumprod, t, x_start.shape) * noise
+            perm_and_expand(self.sqrt_alphas_cumprod, t, x_start.shape) * x_start
+            + perm_and_expand(self.sqrt_one_minus_alphas_cumprod, t, x_start.shape)
+            * noise
         )
 
     def gaussian_q_posterior_mean_variance(
@@ -256,11 +257,11 @@ class GaussianMultinomialDiffusion(torch.nn.Module):
         if x_start.shape != x_t.shape:
             raise ValueError("x_start.shape != x_t.shape")
         posterior_mean = (
-            extract(self.posterior_mean_coef1, t, x_t.shape) * x_start
-            + extract(self.posterior_mean_coef2, t, x_t.shape) * x_t
+            perm_and_expand(self.posterior_mean_coef1, t, x_t.shape) * x_start
+            + perm_and_expand(self.posterior_mean_coef2, t, x_t.shape) * x_t
         )
-        posterior_variance = extract(self.posterior_variance, t, x_t.shape)
-        posterior_log_variance_clipped = extract(
+        posterior_variance = perm_and_expand(self.posterior_variance, t, x_t.shape)
+        posterior_log_variance_clipped = perm_and_expand(
             self.posterior_log_variance_clipped, t, x_t.shape
         )
         if not (
@@ -296,15 +297,15 @@ class GaussianMultinomialDiffusion(torch.nn.Module):
         # model_variance = self.posterior_variance.to(x.device)
         model_log_variance = torch.log(model_variance)
 
-        model_variance = extract(model_variance, t, x.shape)
-        model_log_variance = extract(model_log_variance, t, x.shape)
+        model_variance = perm_and_expand(model_variance, t, x.shape)
+        model_log_variance = perm_and_expand(model_log_variance, t, x.shape)
 
         if self.gaussian_parametrization == "eps":
             pred_xstart = self._predict_xstart_from_eps(x_t=x, t=t, eps=model_output)
         elif self.gaussian_parametrization == "x0":
             pred_xstart = model_output
         else:
-            raise NotImplementedError
+            raise ValueError("unknown gaussian_parametrization. Must be 'eps' or 'x0'")
 
         model_mean, _, _ = self.gaussian_q_posterior_mean_variance(
             x_start=pred_xstart, x_t=x, t=t
@@ -412,16 +413,17 @@ class GaussianMultinomialDiffusion(torch.nn.Module):
         if x_t.shape != eps.shape:
             raise ValueError("x_t.shape != eps.shape")
         return (
-            extract(self.sqrt_recip_alphas_cumprod, t, x_t.shape) * x_t
-            - extract(self.sqrt_recipm1_alphas_cumprod, t, x_t.shape) * eps
+            perm_and_expand(self.sqrt_recip_alphas_cumprod, t, x_t.shape) * x_t
+            - perm_and_expand(self.sqrt_recipm1_alphas_cumprod, t, x_t.shape) * eps
         )
 
     def _predict_eps_from_xstart(
         self, x_t: Tensor, t: Tensor, pred_xstart: Tensor
     ) -> Tensor:
         return (
-            extract(self.sqrt_recip_alphas_cumprod, t, x_t.shape) * x_t - pred_xstart
-        ) / extract(self.sqrt_recipm1_alphas_cumprod, t, x_t.shape)
+            perm_and_expand(self.sqrt_recip_alphas_cumprod, t, x_t.shape) * x_t
+            - pred_xstart
+        ) / perm_and_expand(self.sqrt_recipm1_alphas_cumprod, t, x_t.shape)
 
     def gaussian_p_sample(
         self,
@@ -453,8 +455,8 @@ class GaussianMultinomialDiffusion(torch.nn.Module):
         return kl
 
     def q_pred_one_timestep(self, log_x_t: Tensor, t: Tensor) -> Tensor:
-        log_alpha_t = extract(self.log_alpha, t, log_x_t.shape)
-        log_1_min_alpha_t = extract(self.log_1_min_alpha, t, log_x_t.shape)
+        log_alpha_t = perm_and_expand(self.log_alpha, t, log_x_t.shape)
+        log_1_min_alpha_t = perm_and_expand(self.log_1_min_alpha, t, log_x_t.shape)
 
         # alpha_t * E[xt] + (1 - alpha_t) 1 / K
         log_probs = log_add_exp(
@@ -465,8 +467,10 @@ class GaussianMultinomialDiffusion(torch.nn.Module):
         return log_probs
 
     def q_pred(self, log_x_start: Tensor, t: Tensor) -> Tensor:
-        log_cumprod_alpha_t = extract(self.log_cumprod_alpha, t, log_x_start.shape)
-        log_1_min_cumprod_alpha = extract(
+        log_cumprod_alpha_t = perm_and_expand(
+            self.log_cumprod_alpha, t, log_x_start.shape
+        )
+        log_1_min_cumprod_alpha = perm_and_expand(
             self.log_1_min_cumprod_alpha, t, log_x_start.shape
         )
 
@@ -525,7 +529,7 @@ class GaussianMultinomialDiffusion(torch.nn.Module):
         elif self.parametrization == "direct":
             log_model_pred = self.predict_start(model_out, log_x)
         else:
-            raise ValueError
+            raise ValueError(f"unknown parametrization {self.parametrization}")
         return log_model_pred
 
     @torch.no_grad()
@@ -613,8 +617,11 @@ class GaussianMultinomialDiffusion(torch.nn.Module):
 
             pt = torch.ones_like(t).float() / self.num_timesteps
             return t, pt
+
         else:
-            raise ValueError
+            raise ValueError(
+                "Unknown sampling method. Must be 'importance' or 'uniform'."
+            )
 
     def _multinomial_loss(
         self,
@@ -636,8 +643,11 @@ class GaussianMultinomialDiffusion(torch.nn.Module):
             # Expensive, dont do it ;).
             # DEPRECATED
             return -self.nll(log_x_start)
+
         else:
-            raise ValueError()
+            raise ValueError(
+                "Unknown multinomial loss type. Must be 'vb_stochastic' or 'vb_all'."
+            )
 
     def mixed_loss(self, x: Tensor, cond: Optional[Tensor] = None) -> tuple:
         b = x.shape[0]
@@ -665,6 +675,7 @@ class GaussianMultinomialDiffusion(torch.nn.Module):
 
         loss_multi = torch.zeros((1,)).float()
         loss_gauss = torch.zeros((1,)).float()
+
         if x_cat.shape[1] > 0:
             loss_multi = self._multinomial_loss(
                 model_out_cat, log_x_cat, log_x_cat_t, t, pt
@@ -781,8 +792,8 @@ class GaussianMultinomialDiffusion(torch.nn.Module):
 
         eps = self._predict_eps_from_xstart(x, t, out["pred_xstart"])
 
-        alpha_bar = extract(self.alphas_cumprod, t, x.shape)
-        alpha_bar_prev = extract(self.alphas_cumprod_prev, t, x.shape)
+        alpha_bar = perm_and_expand(self.alphas_cumprod, t, x.shape)
+        alpha_bar_prev = perm_and_expand(self.alphas_cumprod_prev, t, x.shape)
         sigma = eta or (
             eta
             * torch.sqrt((1 - alpha_bar_prev) / (1 - alpha_bar))
@@ -811,9 +822,10 @@ class GaussianMultinomialDiffusion(torch.nn.Module):
         out = self.gaussian_p_mean_variance(model_out_num, x, t)
 
         eps = (
-            extract(self.sqrt_recip_alphas_cumprod, t, x.shape) * x - out["pred_xstart"]
-        ) / extract(self.sqrt_recipm1_alphas_cumprod, t, x.shape)
-        alpha_bar_next = extract(self.alphas_cumprod_next, t, x.shape)
+            perm_and_expand(self.sqrt_recip_alphas_cumprod, t, x.shape) * x
+            - out["pred_xstart"]
+        ) / perm_and_expand(self.sqrt_recipm1_alphas_cumprod, t, x.shape)
+        alpha_bar_next = perm_and_expand(self.alphas_cumprod_next, t, x.shape)
 
         mean_pred = (
             out["pred_xstart"] * torch.sqrt(alpha_bar_next)
@@ -828,8 +840,8 @@ class GaussianMultinomialDiffusion(torch.nn.Module):
     ) -> Tensor:
         log_x0 = self.predict_start(model_out_cat, log_x_t=log_x_t)
 
-        alpha_bar = extract(self.alphas_cumprod, t, log_x_t.shape)
-        alpha_bar_prev = extract(self.alphas_cumprod_prev, t, log_x_t.shape)
+        alpha_bar = perm_and_expand(self.alphas_cumprod, t, log_x_t.shape)
+        alpha_bar_prev = perm_and_expand(self.alphas_cumprod_prev, t, log_x_t.shape)
         sigma = eta or (
             eta
             * torch.sqrt((1 - alpha_bar_prev) / (1 - alpha_bar))

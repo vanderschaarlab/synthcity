@@ -1,3 +1,7 @@
+# stdlib
+from itertools import product
+from typing import Any, Generator
+
 # third party
 import numpy as np
 import pandas as pd
@@ -13,9 +17,8 @@ from synthcity.plugins.core.dataloader import GenericDataLoader
 from synthcity.plugins.generic.plugin_ddpm import plugin
 
 plugin_name = "ddpm"
-plugin_args = dict(
+plugin_params = dict(
     n_iter=1000,
-    is_classification=True,
     batch_size=200,
     num_timesteps=500,
     log_interval=10,
@@ -23,29 +26,39 @@ plugin_args = dict(
 )
 
 
-@pytest.mark.parametrize(
-    "test_plugin", generate_fixtures(plugin_name, plugin, plugin_args)
-)
+def extend_fixtures(
+    plugin_name: str = plugin_name,
+    plugin: Any = plugin,
+    plugin_params: dict = plugin_params,
+    **extra_params: list
+) -> Generator:
+    if not extra_params:
+        yield from generate_fixtures(plugin_name, plugin, plugin_params)
+        return
+    param_set = list(product(*extra_params.values()))
+    for values in param_set:
+        params = plugin_params.copy()
+        params.update(zip(extra_params.keys(), values))
+        yield from generate_fixtures(plugin_name, plugin, params)
+
+
+@pytest.mark.parametrize("test_plugin", extend_fixtures())
 def test_plugin_sanity(test_plugin: Plugin) -> None:
     assert test_plugin is not None
 
 
-@pytest.mark.parametrize(
-    "test_plugin", generate_fixtures(plugin_name, plugin, plugin_args)
-)
+@pytest.mark.parametrize("test_plugin", extend_fixtures())
 def test_plugin_name(test_plugin: Plugin) -> None:
     assert test_plugin.name() == plugin_name
 
 
-@pytest.mark.parametrize(
-    "test_plugin", generate_fixtures(plugin_name, plugin, plugin_args)
-)
+@pytest.mark.parametrize("test_plugin", extend_fixtures())
 def test_plugin_type(test_plugin: Plugin) -> None:
     assert test_plugin.type() == "generic"
 
 
 @pytest.mark.parametrize(
-    "test_plugin", generate_fixtures(plugin_name, plugin, plugin_args)
+    "test_plugin", extend_fixtures(is_classification=[True, False])
 )
 def test_plugin_fit(test_plugin: Plugin) -> None:
     X = pd.DataFrame(load_iris()["data"])
@@ -53,7 +66,7 @@ def test_plugin_fit(test_plugin: Plugin) -> None:
 
 
 @pytest.mark.parametrize(
-    "test_plugin", generate_fixtures(plugin_name, plugin, plugin_args)
+    "test_plugin", extend_fixtures(is_classification=[True, False])
 )
 def test_plugin_generate(test_plugin: Plugin) -> None:
     X = pd.DataFrame(load_iris()["data"])
@@ -69,7 +82,7 @@ def test_plugin_generate(test_plugin: Plugin) -> None:
 
 
 @pytest.mark.parametrize(
-    "test_plugin", generate_fixtures(plugin_name, plugin, plugin_args)
+    "test_plugin", extend_fixtures(is_classification=[True, False])
 )
 def test_plugin_generate_constraints(test_plugin: Plugin) -> None:
     X = pd.DataFrame(load_iris()["data"])
@@ -100,9 +113,7 @@ def test_plugin_generate_constraints(test_plugin: Plugin) -> None:
     assert list(X_gen.columns) == list(X.columns)
 
 
-@pytest.mark.parametrize(
-    "test_plugin", generate_fixtures(plugin_name, plugin, plugin_args)
-)
+@pytest.mark.parametrize("test_plugin", extend_fixtures())
 def test_plugin_hyperparams(test_plugin: Plugin) -> None:
     assert len(test_plugin.hyperparameter_space()) == 6
 
@@ -123,7 +134,7 @@ def test_eval_performance_ddpm(compress_dataset: bool) -> None:
     X = GenericDataLoader(Xraw)
 
     for _ in range(2):
-        test_plugin = plugin(**plugin_args, compress_dataset=compress_dataset)
+        test_plugin = plugin(**plugin_params, compress_dataset=compress_dataset)
         evaluator = PerformanceEvaluatorXGB()
 
         test_plugin.fit(X)
