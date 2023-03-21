@@ -151,6 +151,7 @@ class SyntheticDetectionXGB(DetectionEvaluator):
 
     @validate_arguments(config=dict(arbitrary_types_allowed=True))
     def evaluate(self, X_gt: DataLoader, X_syn: DataLoader) -> Dict:
+        # TODO: investigate why XGBoost always has high AUCROC for the detection
         model_template = XGBClassifier
         model_args = {
             "n_jobs": 2,

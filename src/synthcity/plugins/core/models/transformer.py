@@ -4,7 +4,7 @@ from typing import Any
 # third party
 import torch
 from torch import nn
-from torch.nn.modules.transformer import TransformerEncoder, TransformerEncoderLayer
+from torch.nn.modules.transformer import TransformerEncoderLayer
 
 # synthcity absolute
 from synthcity.utils.constants import DEVICE
@@ -39,17 +39,6 @@ class TransformerModel(nn.Module):
             bs (batch size) x seq_len (aka time steps) x nvars (aka variables, dimensions, channels)
         """
         super(TransformerModel, self).__init__()
-        encoder_layer = TransformerEncoderLayer(
-            n_units_hidden,
-            n_head,
-            dim_feedforward=d_ffn,
-            dropout=dropout,
-            activation=activation,
-        )
-        encoder_norm = nn.LayerNorm(n_units_hidden)
-        self.transformer_encoder = TransformerEncoder(
-            encoder_layer, n_layers_hidden, norm=encoder_norm
-        )
         self.model = nn.Sequential(
             Permute(1, 0, 2),  # bs x seq_len x nvars -> seq_len x bs x nvars
             nn.Linear(
