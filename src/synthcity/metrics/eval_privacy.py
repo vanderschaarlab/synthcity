@@ -20,6 +20,8 @@ from synthcity.utils.serialization import load_from_file, save_to_file
 # synthcity relative
 from .core import MetricEvaluator
 
+# TODO: Integrate DOMIAS https://github.com/vanderschaarlab/DOMIAS
+
 
 class PrivacyEvaluator(MetricEvaluator):
     """

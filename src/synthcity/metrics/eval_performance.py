@@ -966,6 +966,7 @@ class AugmentationPerformanceEvaluatorMLP(PerformanceEvaluatorMLP):
         return ["gt", "aug_ood"]
 
 
+# TODO: investigate if this metric is relevant or not.
 class FeatureImportanceRankDistance(MetricEvaluator):
     """
     .. inheritance-diagram:: synthcity.metrics.eval_performance.FeatureImportanceRankDistance

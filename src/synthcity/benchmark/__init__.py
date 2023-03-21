@@ -176,6 +176,7 @@ class Benchmarks:
                     f"[testcase] Experiment repeat: {repeat} task type: {task_type} Train df hash = {experiment_name}"
                 )
 
+                # TODO: caches should be from the same version of Synthcity. Different APIs will crash.
                 if generator_file.exists() and synthetic_reuse_if_exists:
                     generator = load_from_file(generator_file)
                 else:
