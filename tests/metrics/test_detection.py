@@ -154,6 +154,7 @@ def test_detect_synth_timeseries(test_plugin: Plugin, evaluator_t: Type) -> None
     assert evaluator.direction() == "minimize"
 
 
+@pytest.mark.slow
 def test_image_support_detection() -> None:
     dataset = datasets.MNIST(".", download=True)
 
