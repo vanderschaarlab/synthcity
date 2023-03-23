@@ -1,18 +1,22 @@
 # stdlib
-from typing import Any
+from typing import Any, Optional
 
 # third party
+import numpy as np
 import pandas as pd
 import torch
 from pydantic import validate_arguments
 
 # synthcity absolute
 from synthcity.utils.constants import DEVICE
-from synthcity.utils.samplers import ConditionalDatasetSampler
 
 # synthcity relative
 from .goggle import Goggle, GoggleLoss
-from .tabular_encoder import TabularEncoder
+
+# from synthcity.utils.samplers import ConditionalDatasetSampler
+
+
+# from .tabular_encoder import TabularEncoder
 
 
 class GoggleModel:
@@ -27,8 +31,8 @@ class GoggleModel:
         decoder_l: int = 2,
         threshold: float = 0.1,
         decoder_arch: str = "gcn",
-        graph_prior: Any = None,  # torch.Tensor
-        prior_mask: Any = None,  # torch.Tensor
+        graph_prior: Optional[np.ndarray] = None,
+        prior_mask: Optional[np.ndarray] = None,
         device: str = DEVICE,
         alpha: float = 0.1,
         beta: float = 0.1,
@@ -39,9 +43,9 @@ class GoggleModel:
         patience: int = 50,
         dataloader_sampler: Any = None,
         logging_epoch: int = 100,
-        tabular_encoder: Any = None,
-        encoder_max_clusters: int = 20,
-        encoder_whitelist: list = [],
+        # tabular_encoder: Any = None,
+        # encoder_max_clusters: int = 20,
+        # encoder_whitelist: list = [],
     ):
         self.n_iter = n_iter
         self.device = device
@@ -57,16 +61,28 @@ class GoggleModel:
         self.optimiser_ga = None
         self.optimiser = None
 
-        if tabular_encoder is not None:
-            self.tabular_encoder = tabular_encoder
-        else:
-            self.tabular_encoder = TabularEncoder(
-                max_clusters=encoder_max_clusters, whitelist=encoder_whitelist
-            ).fit(X)
+        # if tabular_encoder is not None:
+        #     self.tabular_encoder = tabular_encoder
+        # else:
+        #     self.tabular_encoder = TabularEncoder(
+        #         max_clusters=encoder_max_clusters, whitelist=encoder_whitelist
+        #     ).fit(X)
+
+        # if dataloader_sampler is None:
+        #     dataloader_sampler = ConditionalDatasetSampler(
+        #         self.tabular_encoder.transform(X),
+        #         self.tabular_encoder.layout(),
+        #     )
+
+        # self.dataloader_sampler = dataloader_sampler
+
+        graph_prior = self._check_tensor(graph_prior)
+        prior_mask = self._check_tensor(prior_mask)
 
         self.loss = GoggleLoss(alpha, beta, graph_prior, device)
         self.model = Goggle(
-            self.encode(X).shape[1],
+            # self.encode(X).shape[1],  # Encode or not?
+            X.shape[1],  # Encode or not?
             n_iter,
             encoder_dim,
             encoder_l,
@@ -112,24 +128,24 @@ class GoggleModel:
                 weight_decay=self.weight_decay,
             )
 
-        if dataloader_sampler is None:
-            dataloader_sampler = ConditionalDatasetSampler(
-                self.tabular_encoder.transform(X),
-                self.tabular_encoder.layout(),
-            )
+    # @validate_arguments(config=dict(arbitrary_types_allowed=True))
+    # def encode(self, X: pd.DataFrame) -> pd.DataFrame:
+    #     return self.tabular_encoder.transform(X)
 
-        self.dataloader_sampler = dataloader_sampler
+    # @validate_arguments(config=dict(arbitrary_types_allowed=True))
+    # def decode(self, X: pd.DataFrame) -> pd.DataFrame:
+    #     return self.tabular_encoder.inverse_transform(X)
 
-    @validate_arguments(config=dict(arbitrary_types_allowed=True))
-    def encode(self, X: pd.DataFrame) -> pd.DataFrame:
-        return self.tabular_encoder.transform(X)
+    # def get_encoder(self) -> TabularEncoder:
+    #     return self.tabular_encoder
 
-    @validate_arguments(config=dict(arbitrary_types_allowed=True))
-    def decode(self, X: pd.DataFrame) -> pd.DataFrame:
-        return self.tabular_encoder.inverse_transform(X)
-
-    def get_encoder(self) -> TabularEncoder:
-        return self.tabular_encoder
+    def _check_tensor(self, X: torch.Tensor) -> torch.Tensor:
+        if isinstance(X, torch.Tensor):
+            return X.to(self.device)
+        elif X is not None:
+            return torch.from_numpy(np.asarray(X)).to(self.device)
+        else:
+            return X
 
     @validate_arguments(config=dict(arbitrary_types_allowed=True))
     def fit(
@@ -138,14 +154,14 @@ class GoggleModel:
         encoded: bool = False,
         **kwargs: Any,
     ) -> None:
-        # preprocessing
-        if encoded:
-            X_enc = X
-        else:
-            X_enc = self.encode(X)
+        # # preprocessing
+        # if encoded:
+        #     X_enc = X
+        # else:
+        #     X_enc = self.encode(X)
 
         self.model.fit(
-            X_enc,
+            X,
             optimiser_gl=self.optimiser_gl,
             optimiser_ga=self.optimiser_ga,
             optimiser=self.optimiser,
@@ -159,7 +175,7 @@ class GoggleModel:
         **kwargs: Any,
     ) -> pd.DataFrame:
         samples = self.forward(count)  # , cond)
-        return self.decode(pd.DataFrame(samples))
+        return pd.DataFrame(samples)
 
     @validate_arguments(config=dict(arbitrary_types_allowed=True))
     def forward(

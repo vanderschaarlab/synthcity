@@ -105,8 +105,11 @@ class Goggle(nn.Module):
         best_loss = np.inf
         for epoch in tqdm(range(self.n_iter)):
             train_loss, num_samples = 0.0, 0
-            data: Any = None  # work-around for mypy - Need type annotation for "y"
+            data: Any = None  # work-around for mypy - Need type annotation for "data"
             for i, data in enumerate(train_loader):
+                # if epoch == 0:
+                #     log.debug(f"data[0].shape: {data[0].shape}")
+                #     log.debug(f"data: {data}")
                 if self.iter_opt:
                     if i % 2 == 0:
                         self.train()

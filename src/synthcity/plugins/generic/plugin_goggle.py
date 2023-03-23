@@ -7,6 +7,7 @@ from pathlib import Path
 from typing import Any, List, Optional
 
 # third party
+import numpy as np
 import pandas as pd
 
 # Necessary packages
@@ -60,8 +61,8 @@ class GOGGLEPlugin(Plugin):
         decoder_l: int = 2,
         threshold: float = 0.1,
         decoder_arch: str = "gcn",
-        graph_prior: Any = None,
-        prior_mask: Any = None,
+        graph_prior: Optional[np.ndarray] = None,
+        prior_mask: Optional[np.ndarray] = None,
         alpha: float = 0.1,
         beta: float = 0.1,
         iter_opt: bool = True,
@@ -71,7 +72,7 @@ class GOGGLEPlugin(Plugin):
         patience: int = 50,
         logging_epoch: int = 100,
         # core plugin arguments
-        device: Any = DEVICE,
+        device: str = DEVICE,
         random_state: int = 0,
         sampling_patience: int = 500,
         workspace: Path = Path("workspace"),
@@ -147,7 +148,7 @@ class GOGGLEPlugin(Plugin):
 
     #     return cond
 
-    def _fit(self, X: DataLoader, *Args: Any, **kwargs: Any) -> "GOGGLEPlugin":
+    def _fit(self, X: DataLoader, *args: Any, **kwargs: Any) -> "GOGGLEPlugin":
 
         # cond: Optional[Union[pd.DataFrame, pd.Series]] = None
         # if "cond" in kwargs:
@@ -178,6 +179,10 @@ class GOGGLEPlugin(Plugin):
             dataloader_sampler=self.dataloader_sampler,
             **kwargs,
         )
+        if "cond" in kwargs and kwargs["cond"] is not None:
+            raise NotImplementedError(
+                "conditional generation is not currently available for the goggle plugin."
+            )
         self.model.fit(X.dataframe(), **kwargs)  # , cond=cond, **kwargs)
         return self
 
@@ -185,6 +190,10 @@ class GOGGLEPlugin(Plugin):
         # cond: Optional[Union[pd.DataFrame, pd.Series]] = None
         # if "cond" in kwargs and kwargs["cond"] is not None:
         #     cond = np.asarray(kwargs["cond"])
+        if "cond" in kwargs and kwargs["cond"] is not None:
+            raise NotImplementedError(
+                "conditional generation is not currently available for the goggle plugin."
+            )
 
         return self._safe_generate(
             self.model.generate, count, syn_schema
