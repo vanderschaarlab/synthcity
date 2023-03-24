@@ -43,9 +43,7 @@ class GoggleModel:
         patience: int = 50,
         dataloader_sampler: Any = None,
         logging_epoch: int = 100,
-        # tabular_encoder: Any = None,
-        # encoder_max_clusters: int = 20,
-        # encoder_whitelist: list = [],
+        schema: Any = None,
     ):
         self.n_iter = n_iter
         self.device = device
@@ -60,29 +58,14 @@ class GoggleModel:
         self.optimiser_gl = None
         self.optimiser_ga = None
         self.optimiser = None
-
-        # if tabular_encoder is not None:
-        #     self.tabular_encoder = tabular_encoder
-        # else:
-        #     self.tabular_encoder = TabularEncoder(
-        #         max_clusters=encoder_max_clusters, whitelist=encoder_whitelist
-        #     ).fit(X)
-
-        # if dataloader_sampler is None:
-        #     dataloader_sampler = ConditionalDatasetSampler(
-        #         self.tabular_encoder.transform(X),
-        #         self.tabular_encoder.layout(),
-        #     )
-
-        # self.dataloader_sampler = dataloader_sampler
+        self.schema = schema
 
         graph_prior = self._check_tensor(graph_prior)
         prior_mask = self._check_tensor(prior_mask)
 
         self.loss = GoggleLoss(alpha, beta, graph_prior, device)
         self.model = Goggle(
-            # self.encode(X).shape[1],  # Encode or not?
-            X.shape[1],  # Encode or not?
+            X.shape[1],
             n_iter,
             encoder_dim,
             encoder_l,
@@ -128,17 +111,6 @@ class GoggleModel:
                 weight_decay=self.weight_decay,
             )
 
-    # @validate_arguments(config=dict(arbitrary_types_allowed=True))
-    # def encode(self, X: pd.DataFrame) -> pd.DataFrame:
-    #     return self.tabular_encoder.transform(X)
-
-    # @validate_arguments(config=dict(arbitrary_types_allowed=True))
-    # def decode(self, X: pd.DataFrame) -> pd.DataFrame:
-    #     return self.tabular_encoder.inverse_transform(X)
-
-    # def get_encoder(self) -> TabularEncoder:
-    #     return self.tabular_encoder
-
     def _check_tensor(self, X: torch.Tensor) -> torch.Tensor:
         if isinstance(X, torch.Tensor):
             return X.to(self.device)
@@ -154,11 +126,6 @@ class GoggleModel:
         encoded: bool = False,
         **kwargs: Any,
     ) -> None:
-        # # preprocessing
-        # if encoded:
-        #     X_enc = X
-        # else:
-        #     X_enc = self.encode(X)
 
         self.model.fit(
             X,
@@ -168,6 +135,19 @@ class GoggleModel:
             **kwargs,
         )
 
+    def enforce_constraints(self, X_synth: torch.Tensor) -> np.ndarray:
+        X_synth = pd.DataFrame(X_synth, columns=self.schema.features())
+        for rule in self.schema.as_constraints().rules:
+            if rule[1] == "in":
+                X_synth[rule[0]] = X_synth[rule[0]].apply(
+                    lambda x: min(rule[2], key=lambda z: abs(z - x))
+                )
+            elif rule[1] == "eq":
+                raise Exception("not yet implemented")
+            else:
+                pass
+        return X_synth.values
+
     @validate_arguments(config=dict(arbitrary_types_allowed=True))
     def generate(
         self,
@@ -175,7 +155,8 @@ class GoggleModel:
         **kwargs: Any,
     ) -> pd.DataFrame:
         samples = self.forward(count)  # , cond)
-        return pd.DataFrame(samples)
+        samples = self.enforce_constraints(samples)
+        return pd.DataFrame(samples, columns=self.schema)
 
     @validate_arguments(config=dict(arbitrary_types_allowed=True))
     def forward(

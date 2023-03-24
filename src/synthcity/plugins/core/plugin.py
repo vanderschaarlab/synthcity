@@ -393,27 +393,33 @@ class Plugin(Serializable, metaclass=ABCMeta):
         for it in range(self.sampling_patience):
             # sample
             iter_samples = gen_cbk(count, **kwargs)
-            print(6)
-            print(iter_samples)
-            print(type(iter_samples))
-            print(self.training_schema().features())
 
             iter_samples_df = pd.DataFrame(
                 iter_samples, columns=self.training_schema().features()
             )
-            print(7)
-            print(iter_samples_df)
+            if it == 0:
+                print(7)
+                print(iter_samples_df)
 
             # validate schema
             iter_samples_df = self.training_schema().adapt_dtypes(iter_samples_df)
-            # print(8)
-            # print(iter_samples_df)
+            # if it == 0:
+            #     print(8)
+            #     print(iter_samples_df)
 
             if self.strict:
                 iter_samples_df = constraints.match(iter_samples_df)
+                # if it == 0:
+                # print(8.5)
+                # print(constraints.feature_constraints)
+                # print(iter_samples_df)
                 iter_samples_df = iter_samples_df.drop_duplicates()
-            # print(9)
-            # print(iter_samples_df)
+                # if it == 0:
+                #     print(8.9)
+                # print(iter_samples_df)
+            # if it == 0:
+            #     print(9)
+            #     print(iter_samples_df)
 
             data_synth = pd.concat([data_synth, iter_samples_df], ignore_index=True)
 

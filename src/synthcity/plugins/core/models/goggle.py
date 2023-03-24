@@ -107,9 +107,6 @@ class Goggle(nn.Module):
             train_loss, num_samples = 0.0, 0
             data: Any = None  # work-around for mypy - Need type annotation for "data"
             for i, data in enumerate(train_loader):
-                # if epoch == 0:
-                #     log.debug(f"data[0].shape: {data[0].shape}")
-                #     log.debug(f"data: {data}")
                 if self.iter_opt:
                     if i % 2 == 0:
                         self.train()
@@ -231,7 +228,7 @@ class Goggle(nn.Module):
             graph_input = self.graph_processor(z, adj)
             synth_x = self.decoder(graph_input, count)
 
-        return synth_x
+        return synth_x.detach().cpu().numpy()
 
     def _check_tensor(self, X: torch.Tensor) -> torch.Tensor:
         if isinstance(X, torch.Tensor):

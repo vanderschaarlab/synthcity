@@ -177,6 +177,7 @@ class GOGGLEPlugin(Plugin):
             patience=self.patience,
             logging_epoch=self.logging_epoch,
             dataloader_sampler=self.dataloader_sampler,
+            schema=self.schema(),
             **kwargs,
         )
         if "cond" in kwargs and kwargs["cond"] is not None:
