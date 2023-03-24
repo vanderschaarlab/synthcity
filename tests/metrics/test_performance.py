@@ -466,6 +466,7 @@ def test_evaluate_performance_time_series_survival(
     assert def_score == good_score["syn_id.c_index"] - good_score["syn_id.brier_score"]
 
 
+@pytest.mark.slow
 def test_image_support_perf() -> None:
     dataset = datasets.MNIST(".", download=True)
 
