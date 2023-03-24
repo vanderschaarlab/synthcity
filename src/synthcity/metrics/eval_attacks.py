@@ -64,6 +64,7 @@ class AttackEvaluator(MetricEvaluator):
             target = X_syn[col]
             keys_data = X_syn.drop(columns=[col])
 
+            # TODO: use a common limit for categorical features
             if len(target.unique()) < 15:
                 task_type = "classification"
                 encoder = LabelEncoder()

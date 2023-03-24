@@ -55,14 +55,14 @@ class PBCDataloader:
         survival analysis. Vol. 169. John Wiley & Sons, 2011.
         """
         if not df_path.exists():
-            s = requests.get(URL).content
+            s = requests.get(URL, timeout=5).content
             data = pd.read_csv(io.StringIO(s.decode("utf-8")))
             data.to_csv(df_path, index=None)
         else:
             data = pd.read_csv(df_path)
 
         data["time"] = data["years"] - data["year"]
-        data = data.sort_values(by="time")
+        data = data.sort_values(by=["id", "time"], ignore_index=True)
         data["histologic"] = data["histologic"].astype(str)
         dat_cat = data[
             ["drug", "sex", "ascites", "hepatomegaly", "spiders", "edema", "histologic"]
@@ -136,6 +136,14 @@ class PBCDataloader:
             patient = x_[data["id"] == id_]
 
             patient_static = patient[static_cols]
+            if (
+                not (patient_static.iloc[0] == patient_static).all().all()
+            ):  # pragma: no cover
+                # This is a sanity check.
+                raise RuntimeError(
+                    "Found patient with static data that are not actually fixed:\n"
+                    f"id: {id_}\n{patient_static}"
+                )
             x_static.append(patient_static.values[0].tolist())
 
             patient_temporal = patient[temporal_cols]

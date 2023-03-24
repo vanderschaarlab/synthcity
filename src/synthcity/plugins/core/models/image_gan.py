@@ -386,6 +386,7 @@ class ImageGAN(nn.Module):
             errD = -errD_real + errD_fake
 
             self.discriminator_optimizer.zero_grad()
+            # TODO: investigate DP support for image generation. The current version is not functional
             if self.dp_enabled:
                 # Adversarial loss
                 # 1. split fwd-bkwd on fake and real images into two explicit blocks.
