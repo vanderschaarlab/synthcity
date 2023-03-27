@@ -391,7 +391,6 @@ class Plugin(Serializable, metaclass=ABCMeta):
         for it in range(self.sampling_patience):
             # sample
             iter_samples = gen_cbk(count, **kwargs)
-
             iter_samples_df = pd.DataFrame(
                 iter_samples, columns=self.training_schema().features()
             )
