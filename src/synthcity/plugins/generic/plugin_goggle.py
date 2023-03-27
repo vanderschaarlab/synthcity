@@ -149,11 +149,9 @@ class GOGGLEPlugin(Plugin):
     #     return cond
 
     def _fit(self, X: DataLoader, *args: Any, **kwargs: Any) -> "GOGGLEPlugin":
-
         # cond: Optional[Union[pd.DataFrame, pd.Series]] = None
         # if "cond" in kwargs:
         #     cond = self._prepare_cond(kwargs["cond"])
-
         self.model = GoggleModel(
             X.dataframe(),
             # cond=cond,

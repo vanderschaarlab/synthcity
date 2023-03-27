@@ -1,19 +1,17 @@
-# Standard
 # stdlib
+from copy import deepcopy
 from typing import Any, Tuple
 
 # third party
-import dgl  # remove dependency
-
-# 3rd party
+import dgl
 import numpy as np
 import torch
-from dgl.nn import GraphConv, SAGEConv  # remove dependency
+from dgl.nn import GraphConv, SAGEConv
 from pydantic import validate_arguments
 from torch import nn
 from torch.utils.data import DataLoader as TorchDataLoader
 from torch.utils.data import TensorDataset
-from torch_geometric.utils import dense_to_sparse  # remove dependency
+from torch_geometric.utils import dense_to_sparse
 from tqdm import tqdm
 
 # synthcity absolute
@@ -88,7 +86,6 @@ class Goggle(nn.Module):
         optimiser: Any,
     ) -> None:
         clear_cache()
-
         self.optimiser_gl = optimiser_gl
         self.optimiser_ga = optimiser_ga
         self.optimiser = optimiser
@@ -100,9 +97,9 @@ class Goggle(nn.Module):
         # Load Dataset
         train_loader: TorchDataLoader = self.get_dataloader(X)
         val_loader: TorchDataLoader = self.get_dataloader(X_val)
-
         # Training loop
         best_loss = np.inf
+        best_model_state = self.state_dict()
         for epoch in tqdm(range(self.n_iter)):
             train_loss, num_samples = 0.0, 0
             data: Any = None  # work-around for mypy - Need type annotation for "data"
@@ -159,6 +156,7 @@ class Goggle(nn.Module):
             if val_loss[1] < best_loss:
                 best_loss = val_loss[1]
                 patience = 0
+                best_model_state = deepcopy(self.state_dict())
             else:
                 patience += 1
 
@@ -169,6 +167,7 @@ class Goggle(nn.Module):
 
             if patience == self.patience:
                 log.debug(f"Training terminated after {epoch} epochs")
+                self.load_state_dict(best_model_state)
                 break
 
     def forward(
@@ -240,7 +239,6 @@ class Goggle(nn.Module):
         self,
         X: torch.Tensor,
     ) -> Tuple[torch.Tensor, torch.Tensor]:
-
         total = np.arange(0, len(X))
         np.random.shuffle(total)
         split = int(len(total) * 0.8)

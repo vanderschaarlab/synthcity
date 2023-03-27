@@ -13,11 +13,6 @@ from synthcity.utils.constants import DEVICE
 # synthcity relative
 from .goggle import Goggle, GoggleLoss
 
-# from synthcity.utils.samplers import ConditionalDatasetSampler
-
-
-# from .tabular_encoder import TabularEncoder
-
 
 class GoggleModel:
     def __init__(
@@ -126,7 +121,6 @@ class GoggleModel:
         encoded: bool = False,
         **kwargs: Any,
     ) -> None:
-
         self.model.fit(
             X,
             optimiser_gl=self.optimiser_gl,
