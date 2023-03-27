@@ -99,7 +99,7 @@ class TabDDPM(nn.Module):
 
         model_params = dict(
             num_classes=self.n_classes,
-            use_label=cond is not None,
+            conditional=cond is not None,
             mlp_params=self.mlp_params,
             dim_emb=self.dim_embed,
         )
@@ -139,7 +139,7 @@ class TabDDPM(nn.Module):
         for cbk in self.callbacks:
             cbk.on_fit_begin(self)
 
-        self.loss_history = pd.DataFrame(columns=["step", "mloss", "gloss", "loss"])
+        self.loss_history = []
 
         steps = 0
         curr_loss_multi = 0.0
@@ -174,12 +174,14 @@ class TabDDPM(nn.Module):
                         info(
                             f"Step {steps}: MLoss: {mloss} GLoss: {gloss} Sum: {mloss + gloss}"
                         )
-                    self.loss_history.loc[len(self.loss_history)] = [
-                        steps,
-                        mloss,
-                        gloss,
-                        mloss + gloss,
-                    ]
+                    self.loss_history.append(
+                        [
+                            steps,
+                            mloss,
+                            gloss,
+                            mloss + gloss,
+                        ]
+                    )
                     curr_count = 0
                     curr_loss_gauss = 0.0
                     curr_loss_multi = 0.0
@@ -195,6 +197,10 @@ class TabDDPM(nn.Module):
             except StopIteration:
                 info(f"Early stopped at epoch {epoch}")
                 break
+
+        self.loss_history = pd.DataFrame(
+            self.loss_history, columns=["step", "mloss", "gloss", "loss"]
+        ).set_index("step")
 
         for cbk in self.callbacks:
             cbk.on_fit_end(self)

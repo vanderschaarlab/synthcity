@@ -19,7 +19,7 @@ from synthcity.logger import debug, info, warning
 
 # synthcity relative
 from .modules import MLPDiffusion, ResNetDiffusion
-from .utils import (
+from .nn_utils import (
     discretized_gaussian_log_likelihood,
     index_to_log_onehot,
     log_1_min_a,
@@ -112,7 +112,7 @@ class GaussianMultinomialDiffusion(torch.nn.Module):
 
         if model_params is None:
             model_params = dict(
-                dim_in=self.dim_input, num_classes=0, use_label=False, mlp_params=None
+                dim_in=self.dim_input, num_classes=0, conditional=False, mlp_params=None
             )
         else:
             model_params["dim_in"] = self.dim_input

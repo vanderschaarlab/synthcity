@@ -194,6 +194,7 @@ class TabDDPMPlugin(Plugin):
         """
         df = X.dataframe()
         cond = kwargs.pop("cond", None)
+        self.loss_history = None
 
         # note that the TabularEncoder is not used in this plugin, because the
         # Gaussian multinomial diffusion module needs to know the number of classes
@@ -208,18 +209,23 @@ class TabDDPMPlugin(Plugin):
                 raise ValueError(
                     "cond is already given by the labels for classification"
                 )
-            _, cond = X.unpack()
+            df, cond = X.unpack()
             self._labels, self._cond_dist = np.unique(cond, return_counts=True)
             self._cond_dist = self._cond_dist / self._cond_dist.sum()
-        else:
+            self.target_name = cond.name
+            self.target_iloc = list(X.columns).index(cond.name)
+
+        if cond is not None:
             if type(cond) is str:
                 cond = df[cond]
+            self.expecting_conditional = True
 
         if cond is not None:
             cond = pd.Series(cond, index=df.index)
 
         # NOTE: cond may also be included in the dataframe
         self.model.fit(df, cond, **kwargs)
+        self.loss_history = self.model.loss_history
 
         return self
 
@@ -230,8 +236,14 @@ class TabDDPMPlugin(Plugin):
             # randomly generate labels following the distribution of the training data
             cond = np.random.choice(self._labels, size=count, p=self._cond_dist)
 
+        if cond is not None and len(cond) > count:
+            raise ValueError("The length of cond is less than the required count")
+
         def callback(count):  # type: ignore
-            return self.model.generate(count, cond=cond)
+            data = self.model.generate(count, cond=cond)
+            if self.is_classification:
+                data = np.insert(data, self.target_iloc, cond, axis=1)
+            return data
 
         return self._safe_generate(callback, count, syn_schema, **kwargs)
 
