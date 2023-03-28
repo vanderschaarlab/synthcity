@@ -22,7 +22,7 @@ from synthcity.plugins.core.distribution import (
     FloatDistribution,
     IntegerDistribution,
 )
-from synthcity.plugins.core.models.goggle_model import GoggleModel
+from synthcity.plugins.core.models.tabular_goggle import TabularGoggle
 from synthcity.plugins.core.plugin import Plugin
 from synthcity.plugins.core.schema import Schema
 from synthcity.utils.constants import DEVICE
@@ -57,8 +57,11 @@ class GOGGLEPlugin(Plugin):
         encoder_dim: int = 64,
         encoder_l: int = 2,
         het_encoding: bool = True,
+        encoder_nonlin: str = "tanh",
+        decoder_nonlin: str = "tanh",
         decoder_dim: int = 64,
         decoder_l: int = 2,
+        data_encoder_max_clusters: int = 10,
         threshold: float = 0.1,
         decoder_arch: str = "gcn",
         graph_prior: Optional[np.ndarray] = None,
@@ -96,6 +99,7 @@ class GOGGLEPlugin(Plugin):
         self.decoder_dim = decoder_dim
         self.decoder_l = decoder_l
         self.threshold = threshold
+        self.data_encoder_max_clusters = data_encoder_max_clusters
         self.decoder_arch = decoder_arch
         self.graph_prior = graph_prior
         self.prior_mask = prior_mask
@@ -109,6 +113,8 @@ class GOGGLEPlugin(Plugin):
         self.patience = patience
         self.logging_epoch = logging_epoch
         self.dataloader_sampler = dataloader_sampler
+        self.encoder_nonlin = encoder_nonlin
+        self.decoder_nonlin = decoder_nonlin
 
     @staticmethod
     def name() -> str:
@@ -152,7 +158,7 @@ class GOGGLEPlugin(Plugin):
         # cond: Optional[Union[pd.DataFrame, pd.Series]] = None
         # if "cond" in kwargs:
         #     cond = self._prepare_cond(kwargs["cond"])
-        self.model = GoggleModel(
+        self.model = TabularGoggle(
             X.dataframe(),
             # cond=cond,
             n_iter=self.n_iter,
@@ -161,6 +167,7 @@ class GOGGLEPlugin(Plugin):
             het_encoding=self.het_encoding,
             decoder_dim=self.decoder_dim,
             decoder_l=self.decoder_l,
+            encoder_max_clusters=self.data_encoder_max_clusters,
             threshold=self.threshold,
             decoder_arch=self.decoder_arch,
             graph_prior=self.graph_prior,
@@ -176,6 +183,8 @@ class GOGGLEPlugin(Plugin):
             logging_epoch=self.logging_epoch,
             dataloader_sampler=self.dataloader_sampler,
             schema=self.schema(),
+            encoder_nonlin=self.encoder_nonlin,
+            decoder_nonlin=self.decoder_nonlin,
             **kwargs,
         )
         if "cond" in kwargs and kwargs["cond"] is not None:

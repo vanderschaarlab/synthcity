@@ -1,6 +1,6 @@
 # stdlib
 from copy import deepcopy
-from typing import Any, Tuple
+from typing import Any, List, Optional, Tuple
 
 # third party
 import dgl
@@ -17,6 +17,11 @@ from tqdm import tqdm
 # synthcity absolute
 import synthcity.logger as log
 from synthcity.plugins.core.dataloader import DataLoader
+from synthcity.plugins.core.models.mlp import (
+    GumbelSoftmax,
+    MultiActivationHead,
+    get_nonlin,
+)
 from synthcity.plugins.core.models.RGCNConv import RGCNConv
 from synthcity.utils.constants import DEVICE
 from synthcity.utils.reproducibility import clear_cache
@@ -37,6 +42,9 @@ class Goggle(nn.Module):
         graph_prior: Any = None,
         prior_mask: Any = None,
         batch_size: int = 32,
+        decoder_nonlin: str = "leaky_relu",
+        encoder_nonlin: str = "leaky_relu",
+        decoder_nonlin_out: Optional[List[Tuple[str, int]]] = None,
         loss: Any = None,
         learning_rate: float = 5e-3,
         iter_opt: bool = True,
@@ -60,22 +68,49 @@ class Goggle(nn.Module):
         self.random_state = random_state
         torch.manual_seed(self.random_state)
 
+        if decoder_nonlin_out is None:
+            decoder_nonlin_out = [("none", input_dim)]
+        self.decoder_nonlin_out = decoder_nonlin_out
+
         self.learned_graph = LearnedGraph(
             input_dim, graph_prior, prior_mask, threshold, device
         )
-        self.encoder = Encoder(input_dim, encoder_dim, encoder_l, device)
+        self.encoder = Encoder(
+            input_dim, encoder_dim, encoder_l, device, encoder_nonlin
+        )
         if decoder_arch == "het":
             n_edge_types = input_dim * input_dim
             self.graph_processor = GraphInputProcessorHet(
-                input_dim, decoder_dim, n_edge_types, het_encoding, device
+                input_dim,
+                decoder_dim,
+                n_edge_types,
+                het_encoding,
+                device,
             )
-            self.decoder = GraphDecoderHet(decoder_dim, decoder_l, n_edge_types, device)
+            self.decoder = GraphDecoderHet(
+                decoder_dim,
+                decoder_l,
+                n_edge_types,
+                device,
+                n_units_out=input_dim,
+                decoder_nonlin=decoder_nonlin,
+                decoder_nonlin_out=self.decoder_nonlin_out,
+            )
         else:
             self.graph_processor = GraphInputProcessorHomo(
-                input_dim, decoder_dim, het_encoding, device
+                input_dim,
+                decoder_dim,
+                het_encoding,
+                device,
             )
             self.decoder = GraphDecoderHomo(
-                decoder_dim, decoder_l, decoder_arch, device
+                decoder_dim,
+                decoder_l,
+                decoder_arch,
+                device,
+                n_units_out=input_dim,
+                decoder_nonlin=decoder_nonlin,
+                decoder_nonlin_out=self.decoder_nonlin_out,
             )
 
     def fit(
@@ -171,7 +206,9 @@ class Goggle(nn.Module):
                 break
 
     def forward(
-        self, x: torch.Tensor, iter: int
+        self,
+        x: torch.Tensor,
+        iter: int,
     ) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor]:
         z, (mu_z, logvar_z) = self.encoder(x)
         b_size, _ = z.shape
@@ -262,7 +299,12 @@ class Goggle(nn.Module):
 
 class Encoder(nn.Module):
     def __init__(
-        self, input_dim: int, encoder_dim: int, encoder_l: int, device: str
+        self,
+        input_dim: int,
+        encoder_dim: int,
+        encoder_l: int,
+        device: str,
+        encoder_nonlin: str,
     ) -> None:
         super().__init__()
         encoder = nn.ModuleList([nn.Linear(input_dim, encoder_dim), nn.ReLU()])
@@ -271,6 +313,7 @@ class Encoder(nn.Module):
             encoder.append(nn.Linear(encoder_dim, encoder_dim_))
             encoder.append(nn.ReLU())
             encoder_dim = encoder_dim_
+        encoder.append(get_nonlin(encoder_nonlin))
         self.encoder = nn.Sequential(*encoder)
         self.encode_mu = nn.Linear(encoder_dim, input_dim)
         self.encode_logvar = nn.Linear(encoder_dim, input_dim)
@@ -289,10 +332,18 @@ class Encoder(nn.Module):
 
 class GraphDecoderHomo(nn.Module):
     def __init__(
-        self, decoder_dim: int, decoder_l: int, decoder_arch: str, device: str
+        self,
+        decoder_dim: int,
+        decoder_l: int,
+        decoder_arch: str,
+        device: str,
+        n_units_out: int,
+        decoder_nonlin: str,
+        decoder_nonlin_out: Optional[List[Tuple[str, int]]] = None,
     ) -> None:
         super().__init__()
         decoder = nn.ModuleList([])
+        nonlin_layers = nn.ModuleList([])
 
         if decoder_arch == "gcn":
             for i in range(decoder_l):
@@ -309,7 +360,8 @@ class GraphDecoderHomo(nn.Module):
                             norm="both",
                             weight=True,
                             bias=True,
-                            activation=nn.Tanh(),
+                            activation=get_nonlin(decoder_nonlin),
+                            # activation=nn.Tanh(),
                         )
                     )
                     decoder_dim = decoder_dim_
@@ -327,29 +379,51 @@ class GraphDecoderHomo(nn.Module):
                             decoder_dim_,
                             aggregator_type="mean",
                             bias=True,
-                            activation=nn.Tanh(),
+                            activation=get_nonlin(decoder_nonlin),
+                            # activation=nn.Tanh(),
                         )
                     )
                     decoder_dim = decoder_dim_
         else:
             raise Exception("decoder can only be {het|gcn|sage}")
 
+        if decoder_nonlin_out is not None:
+            total_nonlin_len = 0
+            activations = []
+            for nonlin, nonlin_len in decoder_nonlin_out:
+                total_nonlin_len += nonlin_len
+                activations.append((get_nonlin(nonlin), nonlin_len))
+
+            if total_nonlin_len != n_units_out:
+                raise RuntimeError(
+                    f"Shape mismatch for the output layer. Expected length {n_units_out}, but got {decoder_nonlin_out} with length {total_nonlin_len}"
+                )
+            nonlin_layers.append(MultiActivationHead(activations, device=device))
         self.decoder = nn.Sequential(*decoder)
+        self.nonlin_layers = nn.Sequential(*nonlin_layers)
 
     def forward(self, graph_input: torch.Tensor, b_size: int) -> torch.Tensor:
         b_z, b_adj, b_edge_weight = graph_input
 
         for layer in self.decoder:
             b_z = layer(b_adj, feat=b_z, edge_weight=b_edge_weight)
-
         x_hat = b_z.reshape(b_size, -1)
+        for layer in self.nonlin_layers:
+            x_hat = layer(x_hat)
 
         return x_hat
 
 
 class GraphDecoderHet(nn.Module):
     def __init__(
-        self, decoder_dim: int, decoder_l: int, n_edge_types: int, device: str
+        self,
+        decoder_dim: int,
+        decoder_l: int,
+        n_edge_types: int,
+        device: str,
+        n_units_out: int,
+        decoder_nonlin: str,
+        decoder_nonlin_out: Optional[List[Tuple[str, int]]] = None,
     ) -> None:
         super().__init__()
         decoder = nn.ModuleList([])
@@ -378,7 +452,24 @@ class GraphDecoderHet(nn.Module):
                 )
                 decoder.append(nn.ReLU())
                 decoder_dim = decoder_dim_
+        decoder.append(get_nonlin(decoder_nonlin))
 
+        if decoder_nonlin_out is not None:
+            total_nonlin_len = 0
+            activations = []
+            for nonlin, nonlin_len in decoder_nonlin_out:
+                total_nonlin_len += nonlin_len
+                activations.append((get_nonlin(nonlin), nonlin_len))
+
+            if total_nonlin_len != n_units_out:
+                raise RuntimeError(
+                    f"Shape mismatch for the output layer. Expected length {n_units_out}, but got {decoder_nonlin_out} with length {total_nonlin_len}"
+                )
+            decoder.append(MultiActivationHead(activations, device=device))
+        elif self.task_type == "classification":
+            decoder.append(
+                MultiActivationHead([(GumbelSoftmax(), n_units_out)], device=device)
+            )
         self.decoder = nn.Sequential(*decoder)
 
     def forward(self, graph_input: torch.Tensor, b_size: int) -> torch.Tensor:

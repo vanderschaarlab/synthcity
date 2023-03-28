@@ -12,9 +12,10 @@ from synthcity.utils.constants import DEVICE
 
 # synthcity relative
 from .goggle import Goggle, GoggleLoss
+from .tabular_encoder import TabularEncoder
 
 
-class GoggleModel:
+class TabularGoggle:
     def __init__(
         self,
         X: pd.DataFrame,
@@ -39,7 +40,19 @@ class GoggleModel:
         dataloader_sampler: Any = None,
         logging_epoch: int = 100,
         schema: Any = None,
+        encoder_nonlin: str = "leaky_relu",
+        decoder_nonlin: str = "leaky_relu",
+        encoder_max_clusters: int = 20,
+        encoder_whitelist: list = [],
+        decoder_nonlin_out_discrete: str = "softmax",
+        decoder_nonlin_out_continuous: str = "tanh",
     ):
+        super(TabularGoggle, self).__init__()
+        self.columns = X.columns
+        self.encoder = TabularEncoder(
+            max_clusters=encoder_max_clusters, whitelist=encoder_whitelist
+        ).fit(X)
+
         self.n_iter = n_iter
         self.device = device
         self.learning_rate = learning_rate
@@ -60,7 +73,7 @@ class GoggleModel:
 
         self.loss = GoggleLoss(alpha, beta, graph_prior, device)
         self.model = Goggle(
-            X.shape[1],
+            self.encoder.n_features(),  # X.shape[1],
             n_iter,
             encoder_dim,
             encoder_l,
@@ -72,6 +85,12 @@ class GoggleModel:
             graph_prior,
             prior_mask,
             batch_size,
+            decoder_nonlin=decoder_nonlin,
+            decoder_nonlin_out=self.encoder.activation_layout(
+                discrete_activation=decoder_nonlin_out_discrete,
+                continuous_activation=decoder_nonlin_out_continuous,
+            ),
+            encoder_nonlin=encoder_nonlin,
             loss=self.loss,
             learning_rate=learning_rate,
             iter_opt=self.iter_opt,
@@ -106,6 +125,17 @@ class GoggleModel:
                 weight_decay=self.weight_decay,
             )
 
+    @validate_arguments(config=dict(arbitrary_types_allowed=True))
+    def encode(self, X: pd.DataFrame) -> pd.DataFrame:
+        return self.encoder.transform(X)
+
+    @validate_arguments(config=dict(arbitrary_types_allowed=True))
+    def decode(self, X: pd.DataFrame) -> pd.DataFrame:
+        return self.encoder.inverse_transform(X)
+
+    def get_encoder(self) -> TabularEncoder:
+        return self.encoder
+
     def _check_tensor(self, X: torch.Tensor) -> torch.Tensor:
         if isinstance(X, torch.Tensor):
             return X.to(self.device)
@@ -121,8 +151,9 @@ class GoggleModel:
         encoded: bool = False,
         **kwargs: Any,
     ) -> None:
+        X_enc = self.encode(X)
         self.model.fit(
-            X,
+            X_enc,
             optimiser_gl=self.optimiser_gl,
             optimiser_ga=self.optimiser_ga,
             optimiser=self.optimiser,
@@ -149,7 +180,7 @@ class GoggleModel:
         **kwargs: Any,
     ) -> pd.DataFrame:
         samples = self.forward(count)  # , cond)
-        samples = self.enforce_constraints(samples)
+        samples = self.enforce_constraints(self.decode(pd.DataFrame(samples)))
         return pd.DataFrame(samples, columns=self.schema)
 
     @validate_arguments(config=dict(arbitrary_types_allowed=True))
