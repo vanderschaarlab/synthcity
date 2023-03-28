@@ -180,7 +180,7 @@ class TabularGoggle:
         **kwargs: Any,
     ) -> pd.DataFrame:
         samples = self.forward(count)  # , cond)
-        samples = self.enforce_constraints(self.decode(pd.DataFrame(samples)))
+        samples = self.decode(pd.DataFrame(samples))
         return pd.DataFrame(samples, columns=self.schema)
 
     @validate_arguments(config=dict(arbitrary_types_allowed=True))

@@ -117,8 +117,18 @@ def test_sample_hyperparams() -> None:
 
 
 @pytest.mark.slow
-@pytest.mark.parametrize("compress_dataset", [True, False])
-def test_eval_performance_goggle(compress_dataset: bool) -> None:
+@pytest.mark.parametrize(
+    "compress_dataset,decoder_arch",
+    [
+        (True, "het"),
+        (False, "het"),
+        (True, "gcn"),
+        (False, "gcn"),
+        (True, "sage"),
+        (False, "sage"),
+    ],
+)
+def test_eval_performance_goggle(compress_dataset: bool, decoder_arch: str) -> None:
     results = []
 
     Xraw, y = load_iris(return_X_y=True, as_frame=True)
@@ -129,7 +139,9 @@ def test_eval_performance_goggle(compress_dataset: bool) -> None:
         test_plugin = plugin(
             n_iter=5000,
             compress_dataset=compress_dataset,
+            decoder_arch=decoder_arch,
             device="cpu",
+            random_state=retry,
         )
         evaluator = PerformanceEvaluatorXGB()
 

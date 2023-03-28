@@ -11,17 +11,14 @@ from pydantic import validate_arguments
 from torch import nn
 from torch.utils.data import DataLoader as TorchDataLoader
 from torch.utils.data import TensorDataset
+from torch_geometric.nn.conv import MessagePassing
 from torch_geometric.utils import dense_to_sparse
 from tqdm import tqdm
 
 # synthcity absolute
 import synthcity.logger as log
 from synthcity.plugins.core.dataloader import DataLoader
-from synthcity.plugins.core.models.mlp import (
-    GumbelSoftmax,
-    MultiActivationHead,
-    get_nonlin,
-)
+from synthcity.plugins.core.models.mlp import MultiActivationHead, get_nonlin
 from synthcity.plugins.core.models.RGCNConv import RGCNConv
 from synthcity.utils.constants import DEVICE
 from synthcity.utils.reproducibility import clear_cache
@@ -427,6 +424,7 @@ class GraphDecoderHet(nn.Module):
     ) -> None:
         super().__init__()
         decoder = nn.ModuleList([])
+        nonlin_layers = nn.ModuleList([])
 
         for i in range(decoder_l):
             if i == decoder_l - 1:
@@ -435,7 +433,7 @@ class GraphDecoderHet(nn.Module):
                         decoder_dim,
                         1,
                         num_relations=n_edge_types + 1,
-                        num_blocks=1,
+                        # num_blocks=1,
                         root_weight=False,
                     )
                 )
@@ -446,7 +444,7 @@ class GraphDecoderHet(nn.Module):
                         decoder_dim,
                         decoder_dim_,
                         num_relations=n_edge_types + 1,
-                        num_blocks=1,
+                        # num_blocks=1,
                         root_weight=False,
                     )
                 )
@@ -465,24 +463,26 @@ class GraphDecoderHet(nn.Module):
                 raise RuntimeError(
                     f"Shape mismatch for the output layer. Expected length {n_units_out}, but got {decoder_nonlin_out} with length {total_nonlin_len}"
                 )
-            decoder.append(MultiActivationHead(activations, device=device))
-        elif self.task_type == "classification":
-            decoder.append(
-                MultiActivationHead([(GumbelSoftmax(), n_units_out)], device=device)
-            )
+            nonlin_layers.append(MultiActivationHead(activations, device=device))
         self.decoder = nn.Sequential(*decoder)
+        self.nonlin_layers = nn.Sequential(*nonlin_layers)
 
     def forward(self, graph_input: torch.Tensor, b_size: int) -> torch.Tensor:
         b_z, b_edge_index, b_edge_weights, b_edge_types = graph_input
 
         h = b_z
         for layer in self.decoder:
-            if not isinstance(layer, nn.ReLU):
+            if isinstance(
+                layer,
+                MessagePassing,
+            ):
                 h = layer(h, b_edge_index, b_edge_types, b_edge_weights)
             else:
                 h = layer(h)
 
         x_hat = h.reshape(b_size, -1)
+        for layer in self.nonlin_layers:
+            x_hat = layer(x_hat)
 
         return x_hat
 
