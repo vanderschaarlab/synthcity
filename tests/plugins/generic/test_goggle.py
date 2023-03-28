@@ -140,7 +140,6 @@ def test_eval_performance_goggle(compress_dataset: bool, decoder_arch: str) -> N
             n_iter=5000,
             compress_dataset=compress_dataset,
             decoder_arch=decoder_arch,
-            device="cpu",
             random_state=retry,
         )
         evaluator = PerformanceEvaluatorXGB()

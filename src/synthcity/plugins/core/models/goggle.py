@@ -210,7 +210,7 @@ class Goggle(nn.Module):
         z, (mu_z, logvar_z) = self.encoder(x)
         b_size, _ = z.shape
         adj = self.learned_graph(iter)
-        graph_input = self.graph_processor(z, adj)
+        graph_input = self.graph_processor(z, adj)  # .to(self.device)
         x_hat = self.decoder(graph_input, b_size)
 
         return x_hat, adj, mu_z, logvar_z
@@ -598,12 +598,17 @@ class GraphInputProcessorHet(nn.Module):
         b_size, n_nodes, n_feats = b_z.shape
 
         n_edge_types = self.n_edge_types
-        edge_types = torch.arange(1, n_edge_types + 1, 1).reshape(n_nodes, n_nodes)
+        edge_types = (
+            torch.arange(1, n_edge_types + 1, 1)
+            .reshape(n_nodes, n_nodes)
+            .to(self.device)
+        )
 
         b_adj = torch.stack([adj for _ in range(b_size)], dim=0)
 
         b_edge_index, b_edge_weights = dense_to_sparse(b_adj)
-        r, c = b_edge_index
+        r, c = b_edge_index.to(self.device)
+
         b_edge_types = edge_types[r % n_nodes, c % n_nodes]
         b_z = b_z.reshape(b_size * n_nodes, n_feats)
 
