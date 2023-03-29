@@ -4,11 +4,12 @@ Reference: "GOGGLE: Generative Modelling for Tabular Data by Learning Relational
 
 # stdlib
 from pathlib import Path
-from typing import Any, List, Optional
+from typing import Any, List, Optional, Union
 
 # third party
 import numpy as np
 import pandas as pd
+import torch
 
 # Necessary packages
 from pydantic import validate_arguments
@@ -75,7 +76,7 @@ class GOGGLEPlugin(Plugin):
         patience: int = 50,
         logging_epoch: int = 100,
         # core plugin arguments
-        device: str = DEVICE,
+        device: Union[str, torch.device] = DEVICE,
         random_state: int = 0,
         sampling_patience: int = 500,
         workspace: Path = Path("workspace"),

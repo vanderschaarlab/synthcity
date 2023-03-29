@@ -67,9 +67,3 @@ lightning_logs
 generated
 MNIST
 cifar-10*
-
-
-# Temp
-src/synthcity/plugins/core/models/goggle_temp.py
-tutorials/tutorial0_basic_examples_test.py
-reqs.txt

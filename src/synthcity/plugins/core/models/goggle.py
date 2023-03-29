@@ -1,7 +1,7 @@
 # stdlib
 import random
 from copy import deepcopy
-from typing import Any, List, Optional, Tuple
+from typing import Any, List, Optional, Tuple, Union
 
 # third party
 import dgl
@@ -26,6 +26,7 @@ from synthcity.utils.reproducibility import clear_cache, enable_reproducible_res
 
 
 class Goggle(nn.Module):
+    @validate_arguments(config=dict(arbitrary_types_allowed=True))
     def __init__(
         self,
         input_dim: int,
@@ -49,7 +50,7 @@ class Goggle(nn.Module):
         dataloader_sampler: Any = None,
         logging_epoch: int = 100,
         patience: int = 50,
-        device: str = DEVICE,
+        device: Union[str, torch.device] = DEVICE,
         random_state: int = 0,
     ) -> None:
         super().__init__()
@@ -73,11 +74,9 @@ class Goggle(nn.Module):
         self.decoder_nonlin_out = decoder_nonlin_out
 
         self.learned_graph = LearnedGraph(
-            input_dim, graph_prior, prior_mask, threshold, device
+            input_dim, graph_prior, prior_mask, threshold, device=self.device
         )
-        self.encoder = Encoder(
-            input_dim, encoder_dim, encoder_l, device, encoder_nonlin
-        )
+        self.encoder = Encoder(input_dim, encoder_dim, encoder_l, encoder_nonlin)
         if decoder_arch == "het":
             n_edge_types = input_dim * input_dim
             self.graph_processor = GraphInputProcessorHet(
@@ -85,32 +84,32 @@ class Goggle(nn.Module):
                 decoder_dim,
                 n_edge_types,
                 het_encoding,
-                device,
+                device=self.device,
             )
             self.decoder = GraphDecoderHet(
                 decoder_dim,
                 self.decoder_l,
                 n_edge_types,
-                device,
                 n_units_out=input_dim,
                 decoder_nonlin=decoder_nonlin,
                 decoder_nonlin_out=self.decoder_nonlin_out,
+                device=self.device,
             )
         else:
             self.graph_processor = GraphInputProcessorHomo(
                 input_dim,
                 decoder_dim,
                 het_encoding,
-                device,
+                device=self.device,
             )
             self.decoder = GraphDecoderHomo(
                 decoder_dim,
                 self.decoder_l,
                 decoder_arch,
-                device,
                 n_units_out=input_dim,
                 decoder_nonlin=decoder_nonlin,
                 decoder_nonlin_out=self.decoder_nonlin_out,
+                device=self.device,
             )
 
     def fit(
@@ -138,7 +137,7 @@ class Goggle(nn.Module):
         best_model_state = self.state_dict()
         for epoch in tqdm(range(self.n_iter)):
             train_loss, num_samples = 0.0, 0
-            data: Any = None  # work-around for mypy - Need type annotation for "data"
+            data: Any = None
             for i, data in enumerate(train_loader):
                 if self.iter_opt:
                     if i % 2 == 0:
@@ -312,7 +311,6 @@ class Encoder(nn.Module):
         input_dim: int,
         encoder_dim: int,
         encoder_l: int,
-        device: str,
         encoder_nonlin: str,
     ) -> None:
         super().__init__()
@@ -340,15 +338,16 @@ class Encoder(nn.Module):
 
 
 class GraphDecoderHomo(nn.Module):
+    @validate_arguments(config=dict(arbitrary_types_allowed=True))
     def __init__(
         self,
         decoder_dim: int,
         decoder_l: int,
         decoder_arch: str,
-        device: str,
         n_units_out: int,
         decoder_nonlin: str,
         decoder_nonlin_out: Optional[List[Tuple[str, int]]] = None,
+        device: Union[str, torch.device] = DEVICE,
     ) -> None:
         super().__init__()
         decoder = nn.ModuleList([])
@@ -424,15 +423,16 @@ class GraphDecoderHomo(nn.Module):
 
 
 class GraphDecoderHet(nn.Module):
+    @validate_arguments(config=dict(arbitrary_types_allowed=True))
     def __init__(
         self,
         decoder_dim: int,
         decoder_l: int,
         n_edge_types: int,
-        device: str,
         n_units_out: int,
         decoder_nonlin: str,
         decoder_nonlin_out: Optional[List[Tuple[str, int]]] = None,
+        device: Union[str, torch.device] = DEVICE,
     ) -> None:
         super().__init__()
         decoder = nn.ModuleList([])
@@ -500,8 +500,13 @@ class GraphDecoderHet(nn.Module):
 
 
 class GraphInputProcessorHomo(nn.Module):
+    @validate_arguments(config=dict(arbitrary_types_allowed=True))
     def __init__(
-        self, input_dim: int, decoder_dim: int, het_encoding: bool, device: str
+        self,
+        input_dim: int,
+        decoder_dim: int,
+        het_encoding: bool,
+        device: Union[str, torch.device] = DEVICE,
     ) -> None:
         super().__init__()
         self.device = device
@@ -556,13 +561,14 @@ class GraphInputProcessorHomo(nn.Module):
 
 
 class GraphInputProcessorHet(nn.Module):
+    @validate_arguments(config=dict(arbitrary_types_allowed=True))
     def __init__(
         self,
         input_dim: int,
         decoder_dim: int,
         n_edge_types: int,
         het_encoding: bool,
-        device: str,
+        device: Union[str, torch.device] = DEVICE,
     ) -> None:
         super().__init__()
         self.n_edge_types = n_edge_types
@@ -628,13 +634,14 @@ class GraphInputProcessorHet(nn.Module):
 
 
 class LearnedGraph(nn.Module):
+    @validate_arguments(config=dict(arbitrary_types_allowed=True))
     def __init__(
         self,
         input_dim: int,
         graph_prior: Any,
         prior_mask: Any,
         threshold: float,
-        device: str,
+        device: Union[str, torch.device] = DEVICE,
     ) -> None:
         super().__init__()
 
@@ -680,12 +687,13 @@ class LearnedGraph(nn.Module):
 
 
 class GoggleLoss(nn.Module):
+    @validate_arguments(config=dict(arbitrary_types_allowed=True))
     def __init__(
         self,
         alpha: float = 1.0,
         beta: float = 0.0,
         graph_prior: Any = None,
-        device: str = "cpu",
+        device: Union[str, torch.device] = DEVICE,
     ) -> None:
         super().__init__()
         self.mse_loss = nn.MSELoss(reduction="sum")

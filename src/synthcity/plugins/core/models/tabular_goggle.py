@@ -1,5 +1,5 @@
 # stdlib
-from typing import Any, Optional
+from typing import Any, Optional, Union
 
 # third party
 import numpy as np
@@ -29,7 +29,7 @@ class TabularGoggle:
         decoder_arch: str = "gcn",
         graph_prior: Optional[np.ndarray] = None,
         prior_mask: Optional[np.ndarray] = None,
-        device: str = DEVICE,
+        device: Union[str, torch.device] = DEVICE,
         alpha: float = 0.1,
         beta: float = 0.1,
         iter_opt: bool = True,
@@ -73,7 +73,7 @@ class TabularGoggle:
         graph_prior = self._check_tensor(graph_prior)
         prior_mask = self._check_tensor(prior_mask)
 
-        self.loss = GoggleLoss(alpha, beta, graph_prior, device)
+        self.loss = GoggleLoss(alpha, beta, graph_prior, self.device)
         self.model = Goggle(
             self.encoder.n_features(),  # X.shape[1],
             n_iter,
@@ -162,19 +162,6 @@ class TabularGoggle:
             optimiser=self.optimiser,
             **kwargs,
         )
-
-    def enforce_constraints(self, X_synth: torch.Tensor) -> np.ndarray:
-        X_synth = pd.DataFrame(X_synth, columns=self.schema.features())
-        for rule in self.schema.as_constraints().rules:
-            if rule[1] == "in":
-                X_synth[rule[0]] = X_synth[rule[0]].apply(
-                    lambda x: min(rule[2], key=lambda z: abs(z - x))
-                )
-            elif rule[1] == "eq":
-                raise Exception("not yet implemented")
-            else:
-                pass
-        return X_synth.values
 
     @validate_arguments(config=dict(arbitrary_types_allowed=True))
     def generate(
