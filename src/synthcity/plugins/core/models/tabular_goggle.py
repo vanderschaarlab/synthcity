@@ -46,6 +46,7 @@ class TabularGoggle:
         encoder_whitelist: list = [],
         decoder_nonlin_out_discrete: str = "softmax",
         decoder_nonlin_out_continuous: str = "tanh",
+        random_state: int = 0,
     ):
         super(TabularGoggle, self).__init__()
         self.columns = X.columns
@@ -67,6 +68,7 @@ class TabularGoggle:
         self.optimiser_ga = None
         self.optimiser = None
         self.schema = schema
+        self.random_state = random_state
 
         graph_prior = self._check_tensor(graph_prior)
         prior_mask = self._check_tensor(prior_mask)
@@ -97,6 +99,7 @@ class TabularGoggle:
             dataloader_sampler=self.dataloader_sampler,
             logging_epoch=self.logging_epoch,
             patience=self.patience,
+            random_state=self.random_state,
             device=self.device,
         ).to(device)
 

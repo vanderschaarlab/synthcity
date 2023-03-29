@@ -185,6 +185,7 @@ class GOGGLEPlugin(Plugin):
             schema=self.schema(),
             encoder_nonlin=self.encoder_nonlin,
             decoder_nonlin=self.decoder_nonlin,
+            random_state=self.random_state,
             **kwargs,
         )
         if "cond" in kwargs and kwargs["cond"] is not None:

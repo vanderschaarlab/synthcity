@@ -21,7 +21,7 @@ from synthcity.plugins.core.dataloader import DataLoader
 from synthcity.plugins.core.models.mlp import MultiActivationHead, get_nonlin
 from synthcity.plugins.core.models.RGCNConv import RGCNConv
 from synthcity.utils.constants import DEVICE
-from synthcity.utils.reproducibility import clear_cache
+from synthcity.utils.reproducibility import clear_cache, enable_reproducible_results
 
 
 class Goggle(nn.Module):
@@ -63,7 +63,8 @@ class Goggle(nn.Module):
         self.logging_epoch = logging_epoch
         self.patience = patience
         self.random_state = random_state
-        torch.manual_seed(self.random_state)
+
+        enable_reproducible_results(self.random_state)
 
         if decoder_nonlin_out is None:
             decoder_nonlin_out = [("none", input_dim)]
