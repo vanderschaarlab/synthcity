@@ -133,34 +133,16 @@ class GOGGLEPlugin(Plugin):
             IntegerDistribution(name="decoder_dim", low=32, high=128, step=16),
             FloatDistribution(name="threshold", low=0.0, high=1.0),
             CategoricalDistribution(
-                name="decoder_arch", choices=["gcn", "het"]
-            ),  # TODO: Is this needed here?
-            CategoricalDistribution(
-                name="iter_opt", choices=[True, False]
-            ),  # TODO: Is this needed here?
+                name="decoder_arch", choices=["gcn", "het", "sage"]
+            ),
+            CategoricalDistribution(name="iter_opt", choices=[True, False]),
             FloatDistribution(name="alpha", low=0, high=1.0),
             FloatDistribution(name="beta", low=0, high=1.0),
         ]
 
-    # def _prepare_cond(
-    #     self, cond: Optional[Union[pd.DataFrame, pd.Series, np.ndarray, list]]
-    # ) -> Optional[np.ndarray]:
-    #     if cond is None:
-    #         return None
-
-    #     cond = np.asarray(cond)
-    #     if len(cond.shape) == 1:
-    #         cond = cond.reshape(-1, 1)
-
-    #     return cond
-
     def _fit(self, X: DataLoader, *args: Any, **kwargs: Any) -> "GOGGLEPlugin":
-        # cond: Optional[Union[pd.DataFrame, pd.Series]] = None
-        # if "cond" in kwargs:
-        #     cond = self._prepare_cond(kwargs["cond"])
         self.model = TabularGoggle(
             X.dataframe(),
-            # cond=cond,
             n_iter=self.n_iter,
             encoder_dim=self.encoder_dim,
             encoder_l=self.encoder_l,
@@ -192,21 +174,16 @@ class GOGGLEPlugin(Plugin):
             raise NotImplementedError(
                 "conditional generation is not currently available for the goggle plugin."
             )
-        self.model.fit(X.dataframe(), **kwargs)  # , cond=cond, **kwargs)
+        self.model.fit(X.dataframe(), **kwargs)
         return self
 
     def _generate(self, count: int, syn_schema: Schema, **kwargs: Any) -> pd.DataFrame:
-        # cond: Optional[Union[pd.DataFrame, pd.Series]] = None
-        # if "cond" in kwargs and kwargs["cond"] is not None:
-        #     cond = np.asarray(kwargs["cond"])
         if "cond" in kwargs and kwargs["cond"] is not None:
             raise NotImplementedError(
                 "conditional generation is not currently available for the goggle plugin."
             )
 
-        return self._safe_generate(
-            self.model.generate, count, syn_schema
-        )  # , cond=cond)
+        return self._safe_generate(self.model.generate, count, syn_schema)
 
 
 plugin = GOGGLEPlugin
