@@ -9,7 +9,7 @@ import numpy as np
 import pandas as pd
 import pytest
 from generic_helpers import generate_fixtures, get_airfoil_dataset
-from sklearn.datasets import load_iris
+from sklearn.datasets import load_diabetes, load_iris
 
 # synthcity absolute
 from synthcity.metrics.eval import PerformanceEvaluatorXGB
@@ -131,7 +131,7 @@ def test_sample_hyperparams() -> None:
 def test_eval_performance_goggle(compress_dataset: bool, decoder_arch: str) -> None:
     results = []
 
-    Xraw, y = load_iris(return_X_y=True, as_frame=True)
+    Xraw, y = load_diabetes(return_X_y=True, as_frame=True)
     Xraw["target"] = y
     X = GenericDataLoader(Xraw)
 
@@ -149,7 +149,7 @@ def test_eval_performance_goggle(compress_dataset: bool, decoder_arch: str) -> N
 
         results.append(evaluator.evaluate(X, X_syn)["syn_id"])
 
-    print(plugin.name(), compress_dataset, results)
+    print(plugin.name(), compress_dataset, decoder_arch, results)
     assert np.mean(results) > 0.7
 
 

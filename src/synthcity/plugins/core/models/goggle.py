@@ -1,4 +1,5 @@
 # stdlib
+import random
 from copy import deepcopy
 from typing import Any, List, Optional, Tuple
 
@@ -54,8 +55,9 @@ class Goggle(nn.Module):
         super().__init__()
         self.loss = loss
         self.iter_opt = iter_opt
-        self.n_iter = n_iter
         self.input_dim = input_dim
+        self.n_iter = n_iter
+        self.decoder_l = decoder_l
         self.batch_size = batch_size
         self.device = device
         self.learning_rate = learning_rate
@@ -87,7 +89,7 @@ class Goggle(nn.Module):
             )
             self.decoder = GraphDecoderHet(
                 decoder_dim,
-                decoder_l,
+                self.decoder_l,
                 n_edge_types,
                 device,
                 n_units_out=input_dim,
@@ -103,7 +105,7 @@ class Goggle(nn.Module):
             )
             self.decoder = GraphDecoderHomo(
                 decoder_dim,
-                decoder_l,
+                self.decoder_l,
                 decoder_arch,
                 device,
                 n_units_out=input_dim,
@@ -130,6 +132,7 @@ class Goggle(nn.Module):
         # Load Dataset
         train_loader: TorchDataLoader = self.get_dataloader(X)
         val_loader: TorchDataLoader = self.get_dataloader(X_val)
+
         # Training loop
         best_loss = np.inf
         best_model_state = self.state_dict()
@@ -277,21 +280,29 @@ class Goggle(nn.Module):
         total = np.arange(0, len(X))
         np.random.shuffle(total)
         split = int(len(total) * 0.8)
-        train_idx, test_idx = total[:split], total[split:]
+        train_idx, val_idx = total[:split], total[split:]
 
-        X_train, X_val = X[train_idx], X[test_idx]
+        X_train, X_val = X[train_idx], X[val_idx]
         return X_train, X_val
+
+    def seed_worker(self) -> None:
+        worker_seed = torch.initial_seed() % 2**32
+        np.random.seed(worker_seed)
+        random.seed(worker_seed)
 
     def get_dataloader(
         self,
         X: torch.Tensor,
     ) -> DataLoader:
         dataset = TensorDataset(X)
+        g = torch.Generator()
+        g.manual_seed(self.random_state)
         return TorchDataLoader(
             dataset,
             batch_size=self.batch_size,
             sampler=self.dataloader_sampler,
             pin_memory=False,
+            worker_init_fn=self.seed_worker,
         )
 
 
