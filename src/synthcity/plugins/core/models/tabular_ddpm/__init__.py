@@ -83,19 +83,17 @@ class TabDDPM(nn.Module):
         else:
             self.n_classes = 0
 
+        self.feature_names = X.columns
         cat_cols = discrete_columns(X, return_counts=True)
 
         if cat_cols:
-            ini_cols = X.columns
             cat_cols, cat_counts = zip(*cat_cols)
             # reorder the columns so that the categorical ones go to the end
             X = X[np.hstack([X.columns[~X.keys().isin(cat_cols)], cat_cols])]
-            cur_cols = X.columns
-            # find the permutation from the reordered columns to the original ones
-            self._col_perm = np.argsort(cur_cols)[np.argsort(np.argsort(ini_cols))]
+            self.feature_names_out = X.columns
         else:
             cat_counts = [0]
-            self._col_perm = np.arange(X.shape[1])
+            self.feature_names_out = self.feature_names
 
         model_params = dict(
             num_classes=self.n_classes,
@@ -207,10 +205,10 @@ class TabDDPM(nn.Module):
 
         return self
 
-    def generate(self, count: int, cond: Any = None) -> np.ndarray:
+    def generate(self, count: int, cond: Any = None) -> pd.DataFrame:
         self.diffusion.eval()
         if cond is not None:
             cond = torch.tensor(cond, dtype=torch.long, device=self.device)
         sample = self.diffusion.sample_all(count, cond).detach().cpu().numpy()
-        sample = sample[:, self._col_perm]
-        return sample
+        df = pd.DataFrame(sample, columns=self.feature_names_out)
+        return df[self.feature_names]

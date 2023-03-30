@@ -154,6 +154,12 @@ class TabDDPMPlugin(Plugin):
             dim_embed=dim_embed,
         )
 
+        self.encoder = TabularEncoder(
+            categorical_encoder="passthrough",
+            continuous_encoder="quantile",
+            cont_encoder_params=dict(random_state=random_state),
+        )
+
     @staticmethod
     def name() -> str:
         return "ddpm"
@@ -198,6 +204,8 @@ class TabDDPMPlugin(Plugin):
         If the task is regression, the target variable is not specially treated. There is no condition by default, but can be given by the user, either as a column name or an array-like.
         """
         df = X.dataframe()
+        self.feature_names = df.columns
+
         cond = kwargs.pop("cond", None)
         self.loss_history = None
 
@@ -213,11 +221,7 @@ class TabDDPMPlugin(Plugin):
             self._labels, self._cond_dist = np.unique(cond, return_counts=True)
             self._cond_dist = self._cond_dist / self._cond_dist.sum()
             self.target_name = cond.name
-            self.target_iloc = list(X.columns).index(cond.name)
 
-        self.encoder = TabularEncoder(
-            categorical_encoder="passthrough", continuous_encoder="quantile"
-        )
         df = self.encoder.fit_transform(df)
 
         if cond is not None:
@@ -245,11 +249,11 @@ class TabDDPMPlugin(Plugin):
             raise ValueError("The length of cond is less than the required count")
 
         def callback(count):  # type: ignore
-            data = self.model.generate(count, cond=cond)
-            data = self.encoder.inverse_transform(data)
+            df = self.model.generate(count, cond=cond)
+            df = self.encoder.inverse_transform(df)
             if self.is_classification:
-                data = np.insert(data, self.target_iloc, cond, axis=1)
-            return data
+                df = df.join(pd.Series(cond, name=self.target_name))
+            return df[self.feature_names]  # reorder columns
 
         return self._safe_generate(callback, count, syn_schema, **kwargs)
 

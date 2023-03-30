@@ -9,6 +9,7 @@ import numpy as np
 import pandas as pd
 from pydantic import BaseModel, validate_arguments, validator
 from sklearn.base import BaseEstimator, TransformerMixin
+from sklearn.preprocessing import MinMaxScaler
 
 # synthcity absolute
 import synthcity.logger as log
@@ -16,15 +17,16 @@ from synthcity.utils.dataframe import discrete_columns as find_cat_cols
 from synthcity.utils.serialization import dataframe_hash
 
 # synthcity relative
-from .data_encoder import FeatureEncoder, get_encoder
+from .data_encoder import get_encoder
 
 
 class FeatureInfo(BaseModel):
     name: str
     feature_type: str
-    transform: FeatureEncoder
+    transform: Any
     output_dimensions: int
     transformed_features: List[str]
+    trans_feature_types: List[str]
 
     @validator("feature_type")
     def _feature_type_validator(cls: Any, v: str) -> str:
@@ -66,6 +68,7 @@ class TabularEncoder(TransformerMixin, BaseEstimator):
         self,
         *,
         whitelist: tuple = (),
+        max_clusters: int = 10,
         categorical_limit: int = 10,
         categorical_encoder: Optional[Union[str, type]] = None,
         continuous_encoder: Optional[Union[str, type]] = None,
@@ -78,8 +81,9 @@ class TabularEncoder(TransformerMixin, BaseEstimator):
             whitelist (tuple):
                 Columns that will not be transformed.
         """
-        self.categorical_limit = categorical_limit
         self.whitelist = whitelist
+        self.categorical_limit = categorical_limit
+        self.max_clusters = max_clusters  # for compatibility
         if categorical_encoder is not None:
             self.categorical_encoder = categorical_encoder
         if continuous_encoder is not None:
@@ -92,6 +96,8 @@ class TabularEncoder(TransformerMixin, BaseEstimator):
             self.cont_encoder_params = cont_encoder_params
         else:
             self.cont_encoder_params = self.cont_encoder_params.copy()
+        if self.continuous_encoder == "bayesian_gmm":
+            self.cont_encoder_params["n_components"] = max_clusters
 
     @validate_arguments(config=dict(arbitrary_types_allowed=True))
     def _fit_feature(self, feature: pd.Series, feature_type: str) -> FeatureInfo:
@@ -120,6 +126,7 @@ class TabularEncoder(TransformerMixin, BaseEstimator):
             transform=encoder,
             output_dimensions=encoder.n_features_out,
             transformed_features=encoder.feature_names_out,
+            trans_feature_types=encoder.feature_types_out,
         )
 
     @validate_arguments(config=dict(arbitrary_types_allowed=True))
@@ -136,7 +143,7 @@ class TabularEncoder(TransformerMixin, BaseEstimator):
         self.output_dimensions = 0
 
         self._column_raw_dtypes = raw_data.infer_objects().dtypes
-        self._column_transform_info_list = []
+        self._column_transform_info_list: Sequence[FeatureInfo] = []
 
         for name in raw_data.columns:
             if name in self.whitelist:
@@ -233,7 +240,7 @@ class TabularEncoder(TransformerMixin, BaseEstimator):
         ).astype(self._column_raw_dtypes.filter(names))
         return recovered_data
 
-    def layout(self) -> List[Tuple]:
+    def layout(self) -> Sequence[FeatureInfo]:
         """Get the layout of the encoded dataset.
 
         Returns a list of tuple, describing each column as:
@@ -258,7 +265,7 @@ class TabularEncoder(TransformerMixin, BaseEstimator):
     @validate_arguments(config=dict(arbitrary_types_allowed=True))
     def activation_layout(
         self, discrete_activation: str, continuous_activation: str
-    ) -> Sequence[Tuple]:
+    ) -> Sequence[Tuple[str, int]]:
         """Get the layout of the activations.
 
         Returns a list of tuple, describing each column as:
@@ -267,21 +274,9 @@ class TabularEncoder(TransformerMixin, BaseEstimator):
         """
         out = []
         for column_transform_info in self._column_transform_info_list:
-            if column_transform_info.feature_type == "continuous":
-                out.extend(
-                    [
-                        (continuous_activation, 1),
-                        (
-                            discrete_activation,
-                            column_transform_info.output_dimensions - 1,
-                        ),
-                    ]
-                )
-            else:
-                out.append(
-                    (discrete_activation, column_transform_info.output_dimensions)
-                )
-
+            for t in column_transform_info.trans_feature_types:
+                act = discrete_activation if t == "discrete" else continuous_activation
+                out.append((act, 1))
         return out
 
 
@@ -305,13 +300,9 @@ class BinEncoder(TabularEncoder):
             return super()._transform_feature(column_transform_info, feature)
         bgm = column_transform_info.transform
         out = bgm.transform(feature)
-        if out.shape != (len(feature), 3):
-            raise ValueError(
-                "BinEncoder should transform continuous features using a "
-                "BayesianGMM with 2 components"
-            )
-        # encoded as a binary vector corresponding to the first component
-        return pd.DataFrame(out.values[:, [1]], columns=[bgm.feature_name_in])
+        return pd.DataFrame(
+            out.values[:, 1:].argmax(axis=1), columns=[bgm.feature_name_in]
+        )
 
     def _inverse_transform_feature(
         self, column_transform_info: FeatureInfo, column_data: pd.DataFrame
@@ -339,12 +330,10 @@ class TimeSeriesTabularEncoder(TransformerMixin, BaseEstimator):
         max_clusters: int = 10,
         categorical_limit: int = 10,
         whitelist: list = [],
-        encoder: str = "minmax",
     ) -> None:
         self.max_clusters = max_clusters
         self.categorical_limit = categorical_limit
         self.whitelist = whitelist
-        self.encoder = encoder
 
     def fit_temporal(
         self,
@@ -369,8 +358,9 @@ class TimeSeriesTabularEncoder(TransformerMixin, BaseEstimator):
         self.temporal_encoder.fit(temporal_df)
 
         # Temporal horizons
-        self.observation_times_encoder = get_encoder(self.encoder)
-        self.observation_times_encoder.fit(np.asarray(observation_times).reshape(-1, 1))
+        self.observation_times_encoder = MinMaxScaler().fit(
+            np.asarray(observation_times).reshape(-1, 1)
+        )
 
         return self
 
