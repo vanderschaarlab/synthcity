@@ -81,6 +81,8 @@ class RGCNConv(MessagePassing):
             efficiency. (default: :obj:`False`)
         bias (bool, optional): If set to :obj:`False`, the layer will not learn
             an additive bias. (default: :obj:`True`)
+        message_passing_node_dim (int, optional): The axis along which to
+            propagate in message passing. (default: :obj:`0`)
         **kwargs (optional): Additional arguments of
             :class:`torch_geometric.nn.conv.MessagePassing`.
     """
@@ -96,10 +98,11 @@ class RGCNConv(MessagePassing):
         root_weight: bool = True,
         is_sorted: bool = False,
         bias: bool = True,
+        message_passing_node_dim: int = 0,
         **kwargs: Any,
     ) -> None:
         kwargs.setdefault("aggr", aggr)
-        super().__init__(node_dim=0, **kwargs)
+        super().__init__(node_dim=message_passing_node_dim, **kwargs)
         self._WITH_PYG_LIB = torch.cuda.is_available() and _WITH_PYG_LIB
 
         if num_bases is not None and num_blocks is not None:
