@@ -22,6 +22,7 @@ from synthcity.plugins.core.distribution import (
     LogIntDistribution,
 )
 from synthcity.plugins.core.models.tabular_ddpm import TabDDPM
+from synthcity.plugins.core.models.tabular_encoder import TabularEncoder
 from synthcity.plugins.core.plugin import Plugin
 from synthcity.plugins.core.schema import Schema
 from synthcity.utils.callbacks import Callback
@@ -200,11 +201,6 @@ class TabDDPMPlugin(Plugin):
         cond = kwargs.pop("cond", None)
         self.loss_history = None
 
-        # note that the TabularEncoder is not used in this plugin, because the
-        # Gaussian multinomial diffusion module needs to know the number of classes
-        # for each discrete feature before it applies torch.nn.functional.one_hot
-        # on these features, and it also preprocesses the continuous features differently.
-
         if args:
             raise ValueError("Only keyword arguments are allowed")
 
@@ -218,6 +214,11 @@ class TabDDPMPlugin(Plugin):
             self._cond_dist = self._cond_dist / self._cond_dist.sum()
             self.target_name = cond.name
             self.target_iloc = list(X.columns).index(cond.name)
+
+        self.encoder = TabularEncoder(
+            categorical_encoder="passthrough", continuous_encoder="quantile"
+        )
+        df = self.encoder.fit_transform(df)
 
         if cond is not None:
             if type(cond) is str:
@@ -245,6 +246,7 @@ class TabDDPMPlugin(Plugin):
 
         def callback(count):  # type: ignore
             data = self.model.generate(count, cond=cond)
+            data = self.encoder.inverse_transform(data)
             if self.is_classification:
                 data = np.insert(data, self.target_iloc, cond, axis=1)
             return data
