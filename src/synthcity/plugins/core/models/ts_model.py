@@ -704,6 +704,7 @@ class WindowLinearLayer(nn.Module):
 
         self.device = device
         self.window_size = window_size
+        self.n_static_units_in = n_static_units_in
         self.model = MLP(
             task_type="regression",
             n_units_in=n_static_units_in + n_temporal_units_in * window_size,
@@ -719,7 +720,7 @@ class WindowLinearLayer(nn.Module):
     def forward(
         self, static_data: torch.Tensor, temporal_data: torch.Tensor
     ) -> torch.Tensor:
-        if len(static_data) != len(temporal_data):
+        if self.n_static_units_in > 0 and len(static_data) != len(temporal_data):
             raise ValueError("Length mismatch between static and temporal data")
 
         batch_size, seq_len, n_feats = temporal_data.shape

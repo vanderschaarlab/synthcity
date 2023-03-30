@@ -1,6 +1,7 @@
 # stdlib
 import math
-from copy import copy
+from copy import copy, deepcopy
+from pathlib import Path
 from typing import Any, Dict, Optional
 
 # third party
@@ -12,6 +13,18 @@ from typing_extensions import Literal
 # synthcity absolute
 from synthcity.plugins.core.constraints import Constraints
 from synthcity.plugins.core.dataloader import DataLoader
+
+
+def get_json_serializable_kwargs(kwargs: Dict) -> Dict:
+    """
+    This function should take the kwargs for Benchmarks.evaluate and makes them serializable with json.dumps.
+    Currently it only handles pathlib.Path -> str.
+    """
+    serializable_kwargs = deepcopy(kwargs)
+    for k, v in serializable_kwargs.items():
+        if isinstance(v, Path):
+            serializable_kwargs[k] = str(serializable_kwargs[k])
+    return serializable_kwargs
 
 
 def calculate_fair_aug_sample_size(

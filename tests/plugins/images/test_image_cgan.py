@@ -35,6 +35,7 @@ def test_plugin_hyperparams(test_plugin: Plugin) -> None:
 
 
 @pytest.mark.parametrize("height", [32, 64, 128])
+@pytest.mark.slow
 def test_plugin_fit(height: int) -> None:
     test_plugin = plugin(n_iter=5)
 
@@ -71,6 +72,7 @@ def test_plugin_generate_with_conditional() -> None:
     assert len(X_gen) == 50
 
 
+@pytest.mark.slow
 def test_plugin_generate_with_stop_conditional() -> None:
     test_plugin = plugin(n_iter=10, n_units_latent=13, n_iter_print=2)
 

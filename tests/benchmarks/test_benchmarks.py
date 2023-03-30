@@ -12,6 +12,7 @@ from sklearn.datasets import load_diabetes, load_iris
 
 # synthcity absolute
 from synthcity.benchmark import Benchmarks
+from synthcity.benchmark.utils import get_json_serializable_kwargs
 from synthcity.plugins.core.dataloader import (
     GenericDataLoader,
     SurvivalAnalysisDataLoader,
@@ -219,8 +220,14 @@ def test_benchmark_workspace_cache() -> None:
 
     testcase = "test1"
     plugin = "uniform_sampler"
+    kwargs = {"workspace": Path("workspace_test")}
 
     kwargs_hash = ""
+    if len(kwargs) > 0:
+        serializable_kwargs = get_json_serializable_kwargs(kwargs)
+        kwargs_hash_raw = json.dumps(serializable_kwargs, sort_keys=True).encode()
+        hash_object = hashlib.sha256(kwargs_hash_raw)
+        kwargs_hash = hash_object.hexdigest()
 
     augmentation_arguments = {
         "augmentation_rule": "equal",
@@ -238,7 +245,7 @@ def test_benchmark_workspace_cache() -> None:
 
     Benchmarks.evaluate(
         [
-            (testcase, plugin, {}),
+            (testcase, plugin, kwargs),
         ],
         X,
         task_type="survival_analysis",

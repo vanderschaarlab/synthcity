@@ -19,7 +19,7 @@ from synthcity.logger import debug, info, warning
 
 # synthcity relative
 from .modules import MLPDiffusion, ResNetDiffusion
-from .nn_utils import (
+from .utils import (
     discretized_gaussian_log_likelihood,
     index_to_log_onehot,
     log_1_min_a,
