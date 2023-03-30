@@ -155,9 +155,10 @@ class TabDDPMPlugin(Plugin):
         )
 
         self.encoder = TabularEncoder(
-            categorical_encoder="passthrough",
             continuous_encoder="quantile",
+            categorical_encoder="passthrough",
             cont_encoder_params=dict(random_state=random_state),
+            cat_encoder_params=dict(),
         )
 
     @staticmethod

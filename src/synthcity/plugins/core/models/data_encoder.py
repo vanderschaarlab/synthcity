@@ -67,8 +67,8 @@ class FeatureEncoder(TransformerMixin, BaseEstimator):  # type: ignore
         output = self._fit(input, **kwargs)._transform(input)
         self._out_shape = (-1, *output.shape[1:])  # for inverse_transform
         output = validate_shape(output, self.n_dim_out)
+        self.n_features_out = output.shape[1]
         self.feature_names_out = self.get_feature_names_out()
-        self.n_features_out = len(self.feature_names_out)
         self.feature_types_out = self.get_feature_types_out(output)
         return self
 
