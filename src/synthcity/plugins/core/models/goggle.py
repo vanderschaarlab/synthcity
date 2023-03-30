@@ -50,7 +50,7 @@ class Goggle(nn.Module):
         dataloader_sampler: Any = None,
         logging_epoch: int = 100,
         patience: int = 50,
-        device: Union[str, torch.device] = "cpu",
+        device: Union[str, torch.device] = DEVICE,
         random_state: int = 0,
     ) -> None:
         super().__init__()

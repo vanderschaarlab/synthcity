@@ -7,6 +7,9 @@ import pandas as pd
 import torch
 from pydantic import validate_arguments
 
+# synthcity absolute
+from synthcity.utils.constants import DEVICE
+
 # synthcity relative
 from .goggle import Goggle, GoggleLoss
 from .tabular_encoder import TabularEncoder
@@ -26,7 +29,7 @@ class TabularGoggle:
         decoder_arch: str = "gcn",
         graph_prior: Optional[np.ndarray] = None,
         prior_mask: Optional[np.ndarray] = None,
-        device: Union[str, torch.device] = "cpu",
+        device: Union[str, torch.device] = DEVICE,
         alpha: float = 0.1,
         beta: float = 0.1,
         iter_opt: bool = True,
@@ -76,8 +79,8 @@ class TabularGoggle:
                 The graph_prior used to calculate the loss. Defaults to None.
             prior_mask: np.ndarray = None
                 A mask that is applied to the LearnedGraph and graph prior. Defaults to None.
-            device: Union[str, torch.device] = "cpu"
-                The device that the model is run on. Defaults to "cpu".
+            device: Union[str, torch.device] = synthcity.utils.constants.DEVICE
+                The device that the model is run on. Defaults to "cuda" if cuda is available else "cpu".
             alpha: float = 0.1
                 The weight applied to the MSE loss in the loss function. Defaults to 0.1.
             beta: float = 0.1
