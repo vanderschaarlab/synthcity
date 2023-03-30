@@ -14,7 +14,7 @@ from sklearn.preprocessing import (
     StandardScaler,
 )
 
-FeatureEncoder = Any
+FeatureEncoder = Any  # tried to use ForwardRef but it didn't work under mypy
 
 
 class FeatureEncoder(TransformerMixin, BaseEstimator):  # type: ignore
@@ -224,6 +224,7 @@ ENCODERS = {
     "minmax": MinMaxScaler,
     "quantile": GaussianQuantileTransformer,
     "bayesian_gmm": BayesianGMMEncoder,
+    "passthrough": FeatureEncoder,
 }
 
 
@@ -240,6 +241,7 @@ def get_encoder(encoder: Union[str, type]) -> Type[FeatureEncoder]:
         - minmax
         - quantile
         - bayesian_gmm
+    - Passthrough
     """
     if isinstance(encoder, type):  # custom encoder
         return FeatureEncoder.wraps(encoder)
