@@ -41,8 +41,8 @@ class Goggle(nn.Module):
         graph_prior: Any = None,
         prior_mask: Any = None,
         batch_size: int = 32,
-        decoder_nonlin: str = "leaky_relu",
-        encoder_nonlin: str = "leaky_relu",
+        decoder_nonlin: str = "relu",
+        encoder_nonlin: str = "relu",
         decoder_nonlin_out: Optional[List[Tuple[str, int]]] = None,
         loss: Any = None,
         learning_rate: float = 5e-3,
@@ -61,7 +61,6 @@ class Goggle(nn.Module):
         self.decoder_l = decoder_l
         self.batch_size = batch_size
         self.device = device
-        self.learning_rate = learning_rate
         self.dataloader_sampler = dataloader_sampler
         self.logging_epoch = logging_epoch
         self.patience = patience

@@ -84,6 +84,68 @@ class GOGGLEPlugin(Plugin):
         dataloader_sampler: Optional[sampler.Sampler] = None,
         **kwargs: Any
     ) -> None:
+        """
+        .. inheritance-diagram:: synthcity.plugins.generic.plugin_goggle.GOGGLEPlugin
+        :parts: 1
+
+        Goggle implementation.
+
+        Args:
+            n_iter: int = 1000
+                Maximum number of iterations in the Generator. Defaults to 1000.
+            encoder_dim: int = 64
+                The number of dimensions in goggle's encoder. Defaults to 64.
+            encoder_l: int = 2
+                Number of layers in goggle's encoder. Defaults to 2.
+            het_encoding: bool = True
+                Flag to use heterogeneous encoding in core goggle model. Defaults to True.
+            encoder_nonlin: str = "relu"
+                The non-linear activation function applied in goggle's encoder. Defaults to "relu".
+            decoder_nonlin: str = "relu"
+                 The non-linear activation function applied in goggle's decoder. Defaults to "relu".
+            decoder_dim: int = 64
+                The number of dimensions in goggle's decoder. Defaults to 64.
+            decoder_l: int = 2
+                Number of layers in goggle's decoder. Defaults to 2.
+            data_encoder_max_clusters: int = 10
+                The max number of clusters to create for continuous columns when encoding with TabularEncoder. Defaults to 10.
+            threshold: float = 0.1
+                The value to threshold the values in Goggle's LearnedGraph tensor at. Defaults to 0.1.
+            decoder_arch: str = "gcn"
+                The choice of decoder architecture. Available options are "gcn", "het", and "sage". Defaults to "gcn".
+            graph_prior: np.ndarray = None
+                The graph_prior used to calculate the loss. Defaults to None.
+            prior_mask: np.ndarray = None
+                A mask that is applied to the LearnedGraph and graph prior. Defaults to None.
+            alpha: float = 0.1
+                The weight applied to the MSE loss in the loss function. Defaults to 0.1.
+            beta: float = 0.1
+                The weight applied to the loss_graph in the loss function. Defaults to 0.1.
+            iter_opt: bool = True
+                A flag for optimizing the graph and autoencoder parameters separately. Defaults to True.
+            learning_rate: float = 5e-3
+                Generator learning rate, used by the Adam optimizer. Defaults to 5e-3.
+            weight_decay: float = 1e-3
+                Generator weight decay, used by the Adam optimizer. Defaults to 1e-3.
+            batch_size: int = 32
+                batch size. Defaults to 32.
+            patience: int = 50
+                Max number of iterations without any improvement before early stopping is triggered. Defaults to 50.
+            logging_epoch: int = 100
+                The number of epochs after which information is sent to the debugging level of the logger. Defaults to 100.
+            device: Union[str, torch.device] = synthcity.utils.constants.DEVICE
+                The device that the model is run on. Defaults to "cuda" if cuda is available else "cpu".
+            random_state: int = 0
+                random_state used. Defaults to 0.
+            sampling_patience: int = 500
+                Max inference iterations to wait for the generated data to match the training schema. Defaults to 500.
+            workspace: Path
+                Path for caching intermediary results. Defaults to Path("workspace").
+            compress_dataset: bool. Default = False
+                Drop redundant features before training the generator. Defaults to False.
+            dataloader_sampler: Any = None
+                Optional sampler for the dataloader. Defaults to None.
+        """
         super().__init__(
             device=device,
             random_state=random_state,
@@ -165,7 +227,6 @@ class GOGGLEPlugin(Plugin):
             patience=self.patience,
             logging_epoch=self.logging_epoch,
             dataloader_sampler=self.dataloader_sampler,
-            schema=self.schema(),
             encoder_nonlin=self.encoder_nonlin,
             decoder_nonlin=self.decoder_nonlin,
             random_state=self.random_state,
