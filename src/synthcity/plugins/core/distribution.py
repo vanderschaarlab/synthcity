@@ -260,7 +260,7 @@ class FloatDistribution(Distribution):
         return self.high
 
     def __eq__(self, other: Any) -> bool:
-        if not isinstance(other, FloatDistribution):
+        if not isinstance(other, type(self)):
             return False
 
         return (
@@ -271,6 +271,21 @@ class FloatDistribution(Distribution):
 
     def dtype(self) -> str:
         return "float"
+
+
+class LogDistribution(FloatDistribution):
+    low: float = np.iinfo(np.int64).min
+    high: float = np.iinfo(np.int64).max
+    base: float = 10.0
+    _log_low: float = np.log(low) / np.log(base)
+    _log_high: float = np.log(high) / np.log(base)
+
+    def sample(self, count: int = 1) -> Any:
+        np.random.seed(self.random_state)
+        msamples = self.sample_marginal(count)
+        if msamples is not None:
+            return msamples
+        return self.base ** np.random.uniform(self._log_low, self._log_high, count)
 
 
 class IntegerDistribution(Distribution):
@@ -345,7 +360,20 @@ class IntegerDistribution(Distribution):
         return "int"
 
 
-OFFSET = 120
+class LogIntDistribution(FloatDistribution):
+    low: int = np.iinfo(np.int64).min
+    high: int = np.iinfo(np.int64).max
+    base: float = 10.0
+    _log_low: float = np.log(low) / np.log(base)
+    _log_high: float = np.log(high) / np.log(base)
+
+    def sample(self, count: int = 1) -> Any:
+        np.random.seed(self.random_state)
+        msamples = self.sample_marginal(count)
+        if msamples is not None:
+            return msamples
+        s = self.base ** np.random.uniform(self._log_low, self._log_high, count)
+        return s.astype(int)
 
 
 class DatetimeDistribution(Distribution):
@@ -356,6 +384,7 @@ class DatetimeDistribution(Distribution):
 
     low: datetime = datetime.utcfromtimestamp(0)
     high: datetime = datetime.now()
+    offset: int = 120
 
     @validator("low", always=True)
     def _validate_low_thresh(cls: Any, v: datetime, values: Dict) -> datetime:
@@ -363,7 +392,7 @@ class DatetimeDistribution(Distribution):
         if mkey in values and values[mkey] is not None:
             v = values[mkey].index.min()
 
-        return v - timedelta(seconds=OFFSET)
+        return v - timedelta(seconds=cls.offset)
 
     @validator("high", always=True)
     def _validate_high_thresh(cls: Any, v: datetime, values: Dict) -> datetime:
@@ -371,7 +400,7 @@ class DatetimeDistribution(Distribution):
         if mkey in values and values[mkey] is not None:
             v = values[mkey].index.max()
 
-        return v + timedelta(seconds=OFFSET)
+        return v + timedelta(seconds=cls.offset)
 
     def get(self) -> List[Any]:
         return [self.name, self.low, self.high]
@@ -397,8 +426,8 @@ class DatetimeDistribution(Distribution):
 
     def includes(self, other: "Distribution") -> bool:
         return self.min() - timedelta(
-            seconds=OFFSET
-        ) <= other.min() and other.max() <= self.max() + timedelta(seconds=OFFSET)
+            seconds=self.offset
+        ) <= other.min() and other.max() <= self.max() + timedelta(seconds=self.offset)
 
     def as_constraint(self) -> Constraints:
         return Constraints(

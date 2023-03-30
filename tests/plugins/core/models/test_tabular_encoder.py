@@ -78,7 +78,6 @@ def test_encoder_fit_transform(max_clusters: int) -> None:
                 assert set(encoded[f"{column.name}_{val}"].unique()).issubset(
                     set([0, 1])
                 )
-
         else:
             assert f"{column.name}.value" in encoded.columns
             for enc_col in encoded.columns:
@@ -102,6 +101,27 @@ def test_encoder_inverse_transform(max_clusters: int) -> None:
     assert np.abs(X - recovered).sum().sum() < 5
 
 
+def check_equal_layouts(
+    layout: list, act_layout: list, disc_act: str, cont_act: str
+) -> None:
+    expected_act_layout = []
+    for col_info in layout:
+        if col_info.feature_type == "continuous":
+            expected_act_layout.append(cont_act)
+            for _ in range(col_info.output_dimensions - 1):
+                expected_act_layout.append(disc_act)
+        else:
+            for _ in range(col_info.output_dimensions):
+                expected_act_layout.append(disc_act)
+
+    expanded_act_layout = []
+    for act, num in act_layout:
+        for _ in range(num):
+            expanded_act_layout.append(act)
+
+    assert expanded_act_layout == expected_act_layout
+
+
 def test_encoder_activation_layout() -> None:
     X, _ = load_diabetes(return_X_y=True, as_frame=True)
     net = TabularEncoder()
@@ -113,20 +133,7 @@ def test_encoder_activation_layout() -> None:
     layout = net.layout()
 
     assert len(layout) <= len(act_layout)
-
-    act_step = 0
-
-    for col_info in layout:
-        if col_info.feature_type == "continuous":
-            assert act_layout[act_step] == ("tanh", 1)
-            assert act_layout[act_step + 1] == (
-                "softmax",
-                col_info.output_dimensions - 1,
-            )
-            act_step += 2
-        else:
-            assert act_layout[act_step] == ("softmax", col_info.output_dimensions)
-            act_step += 1
+    check_equal_layouts(layout, act_layout, "softmax", "tanh")
 
 
 def test_bin_encoder() -> None:
@@ -138,6 +145,8 @@ def test_bin_encoder() -> None:
     binned = net.transform(X)
 
     for col in X.columns:
+        # ! the target column is transformed by OneHotEncoder to target_0, target_1, target_2
+        # ! will result in a KeyError
         assert len(binned[col].unique()) <= 10
 
 
@@ -272,35 +281,5 @@ def test_ts_encoder_activation_layout(source: Any) -> None:
 
     assert len(static_layout) <= len(static_act_layout)
     assert len(temporal_layout) <= len(temporal_act_layout)
-
-    act_step = 0
-    for col_info in static_layout:
-        if col_info.feature_type == "continuous":
-            assert static_act_layout[act_step] == ("tanh", 1)
-            assert static_act_layout[act_step + 1] == (
-                "softmax",
-                col_info.output_dimensions - 1,
-            )
-            act_step += 2
-        else:
-            assert static_act_layout[act_step] == (
-                "softmax",
-                col_info.output_dimensions,
-            )
-            act_step += 1
-
-    act_step = 0
-    for col_info in temporal_layout:
-        if col_info.feature_type == "continuous":
-            assert temporal_act_layout[act_step] == ("tanh", 1)
-            assert temporal_act_layout[act_step + 1] == (
-                "softmax",
-                col_info.output_dimensions - 1,
-            )
-            act_step += 2
-        else:
-            assert temporal_act_layout[act_step] == (
-                "softmax",
-                col_info.output_dimensions,
-            )
-            act_step += 1
+    check_equal_layouts(static_layout, static_act_layout, "softmax", "tanh")
+    check_equal_layouts(temporal_layout, temporal_act_layout, "softmax", "tanh")

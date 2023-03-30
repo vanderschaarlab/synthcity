@@ -169,6 +169,7 @@ def gen_datetime(min_year: int = 2000, max_year: int = datetime.now().year) -> d
     return start + (end - start) * random.random()
 
 
+@pytest.mark.slow
 def test_plugin_encoding() -> None:
     data = [[gen_datetime(), i % 2 == 0, i] for i in range(1000)]
 

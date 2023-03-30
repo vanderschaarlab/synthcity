@@ -15,8 +15,14 @@ from pydantic import validate_arguments
 
 # synthcity absolute
 from synthcity.plugins.core.dataloader import DataLoader
-from synthcity.plugins.core.distribution import CategoricalDistribution, Distribution
+from synthcity.plugins.core.distribution import (
+    Distribution,
+    IntegerDistribution,
+    LogDistribution,
+    LogIntDistribution,
+)
 from synthcity.plugins.core.models.tabular_ddpm import TabDDPM
+from synthcity.plugins.core.models.tabular_encoder import TabularEncoder
 from synthcity.plugins.core.plugin import Plugin
 from synthcity.plugins.core.schema import Schema
 from synthcity.utils.callbacks import Callback
@@ -148,6 +154,13 @@ class TabDDPMPlugin(Plugin):
             dim_embed=dim_embed,
         )
 
+        self.encoder = TabularEncoder(
+            continuous_encoder="quantile",
+            categorical_encoder="passthrough",
+            cont_encoder_params=dict(random_state=random_state),
+            cat_encoder_params=dict(),
+        )
+
     @staticmethod
     def name() -> str:
         return "ddpm"
@@ -174,13 +187,12 @@ class TabDDPMPlugin(Plugin):
         Gaussian diffusion loss MSE
         """
         return [
-            # TODO: change to loguniform distribution
-            CategoricalDistribution(name="lr", choices=[1e-5, 1e-4, 1e-3, 2e-3, 3e-3]),
-            CategoricalDistribution(name="batch_size", choices=[256, 4096]),
-            CategoricalDistribution(name="num_timesteps", choices=[100, 1000]),
-            CategoricalDistribution(name="n_iter", choices=[5000, 10000, 20000]),
-            CategoricalDistribution(name="n_layers_hidden", choices=[2, 4, 6, 8]),
-            CategoricalDistribution(name="dim_hidden", choices=[128, 256, 512, 1024]),
+            LogDistribution(name="lr", low=1e-5, high=1e-1),
+            LogIntDistribution(name="batch_size", low=256, high=4096),
+            IntegerDistribution(name="num_timesteps", choices=[100, 1000]),
+            LogIntDistribution(name="n_iter", low=1000, high=10000),
+            IntegerDistribution(name="n_layers_hidden", low=2, high=8),
+            LogIntDistribution(name="dim_hidden", low=128, high=1024),
         ]
 
     def _fit(self, X: DataLoader, *args: Any, **kwargs: Any) -> "TabDDPMPlugin":
@@ -193,12 +205,10 @@ class TabDDPMPlugin(Plugin):
         If the task is regression, the target variable is not specially treated. There is no condition by default, but can be given by the user, either as a column name or an array-like.
         """
         df = X.dataframe()
-        cond = kwargs.pop("cond", None)
+        self.feature_names = df.columns
 
-        # note that the TabularEncoder is not used in this plugin, because the
-        # Gaussian multinomial diffusion module needs to know the number of classes
-        # for each discrete feature before it applies torch.nn.functional.one_hot
-        # on these features, and it also preprocesses the continuous features differently.
+        cond = kwargs.pop("cond", None)
+        self.loss_history = None
 
         if args:
             raise ValueError("Only keyword arguments are allowed")
@@ -208,18 +218,24 @@ class TabDDPMPlugin(Plugin):
                 raise ValueError(
                     "cond is already given by the labels for classification"
                 )
-            _, cond = X.unpack()
+            df, cond = X.unpack()
             self._labels, self._cond_dist = np.unique(cond, return_counts=True)
             self._cond_dist = self._cond_dist / self._cond_dist.sum()
-        else:
+            self.target_name = cond.name
+
+        df = self.encoder.fit_transform(df)
+
+        if cond is not None:
             if type(cond) is str:
                 cond = df[cond]
+            self.expecting_conditional = True
 
         if cond is not None:
             cond = pd.Series(cond, index=df.index)
 
         # NOTE: cond may also be included in the dataframe
         self.model.fit(df, cond, **kwargs)
+        self.loss_history = self.model.loss_history
 
         return self
 
@@ -230,8 +246,15 @@ class TabDDPMPlugin(Plugin):
             # randomly generate labels following the distribution of the training data
             cond = np.random.choice(self._labels, size=count, p=self._cond_dist)
 
+        if cond is not None and len(cond) > count:
+            raise ValueError("The length of cond is less than the required count")
+
         def callback(count):  # type: ignore
-            return self.model.generate(count, cond=cond)
+            df = self.model.generate(count, cond=cond)
+            df = self.encoder.inverse_transform(df)
+            if self.is_classification:
+                df = df.join(pd.Series(cond, name=self.target_name))
+            return df[self.feature_names]  # reorder columns
 
         return self._safe_generate(callback, count, syn_schema, **kwargs)
 

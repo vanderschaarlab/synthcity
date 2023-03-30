@@ -83,23 +83,21 @@ class TabDDPM(nn.Module):
         else:
             self.n_classes = 0
 
+        self.feature_names = X.columns
         cat_cols = discrete_columns(X, return_counts=True)
 
         if cat_cols:
-            ini_cols = X.columns
             cat_cols, cat_counts = zip(*cat_cols)
             # reorder the columns so that the categorical ones go to the end
             X = X[np.hstack([X.columns[~X.keys().isin(cat_cols)], cat_cols])]
-            cur_cols = X.columns
-            # find the permutation from the reordered columns to the original ones
-            self._col_perm = np.argsort(cur_cols)[np.argsort(np.argsort(ini_cols))]
+            self.feature_names_out = X.columns
         else:
             cat_counts = [0]
-            self._col_perm = np.arange(X.shape[1])
+            self.feature_names_out = self.feature_names
 
         model_params = dict(
             num_classes=self.n_classes,
-            use_label=cond is not None,
+            conditional=cond is not None,
             mlp_params=self.mlp_params,
             dim_emb=self.dim_embed,
         )
@@ -139,7 +137,7 @@ class TabDDPM(nn.Module):
         for cbk in self.callbacks:
             cbk.on_fit_begin(self)
 
-        self.loss_history = pd.DataFrame(columns=["step", "mloss", "gloss", "loss"])
+        self.loss_history = []
 
         steps = 0
         curr_loss_multi = 0.0
@@ -174,12 +172,14 @@ class TabDDPM(nn.Module):
                         info(
                             f"Step {steps}: MLoss: {mloss} GLoss: {gloss} Sum: {mloss + gloss}"
                         )
-                    self.loss_history.loc[len(self.loss_history)] = [
-                        steps,
-                        mloss,
-                        gloss,
-                        mloss + gloss,
-                    ]
+                    self.loss_history.append(
+                        [
+                            steps,
+                            mloss,
+                            gloss,
+                            mloss + gloss,
+                        ]
+                    )
                     curr_count = 0
                     curr_loss_gauss = 0.0
                     curr_loss_multi = 0.0
@@ -196,15 +196,19 @@ class TabDDPM(nn.Module):
                 info(f"Early stopped at epoch {epoch}")
                 break
 
+        self.loss_history = pd.DataFrame(
+            self.loss_history, columns=["step", "mloss", "gloss", "loss"]
+        ).set_index("step")
+
         for cbk in self.callbacks:
             cbk.on_fit_end(self)
 
         return self
 
-    def generate(self, count: int, cond: Any = None) -> np.ndarray:
+    def generate(self, count: int, cond: Any = None) -> pd.DataFrame:
         self.diffusion.eval()
         if cond is not None:
             cond = torch.tensor(cond, dtype=torch.long, device=self.device)
         sample = self.diffusion.sample_all(count, cond).detach().cpu().numpy()
-        sample = sample[:, self._col_perm]
-        return sample
+        df = pd.DataFrame(sample, columns=self.feature_names_out)
+        return df[self.feature_names]
