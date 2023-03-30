@@ -26,7 +26,6 @@ from synthcity.plugins.core.distribution import (
 from synthcity.plugins.core.models.tabular_goggle import TabularGoggle
 from synthcity.plugins.core.plugin import Plugin
 from synthcity.plugins.core.schema import Schema
-from synthcity.utils.constants import DEVICE
 
 
 class GOGGLEPlugin(Plugin):
@@ -76,7 +75,7 @@ class GOGGLEPlugin(Plugin):
         patience: int = 50,
         logging_epoch: int = 100,
         # core plugin arguments
-        device: Union[str, torch.device] = DEVICE,
+        device: Union[str, torch.device] = "cpu",
         random_state: int = 0,
         sampling_patience: int = 500,
         workspace: Path = Path("workspace"),
@@ -133,8 +132,8 @@ class GOGGLEPlugin(Plugin):
                 Max number of iterations without any improvement before early stopping is triggered. Defaults to 50.
             logging_epoch: int = 100
                 The number of epochs after which information is sent to the debugging level of the logger. Defaults to 100.
-            device: Union[str, torch.device] = synthcity.utils.constants.DEVICE
-                The device that the model is run on. Defaults to "cuda" if cuda is available else "cpu".
+            device: Union[str, torch.device] = "cpu"
+                The device that the model is run on. Defaults to "cpu".
             random_state: int = 0
                 random_state used. Defaults to 0.
             sampling_patience: int = 500
