@@ -153,26 +153,6 @@ def test_eval_performance_goggle(compress_dataset: bool, decoder_arch: str) -> N
     assert np.mean(results) > 0.7
 
 
-# @pytest.mark.skipif(sys.platform != "linux", reason="Linux only for faster results")
-# def test_plugin_conditional_goggle() -> None:
-#     test_plugin = plugin(generator_n_units_hidden=5, device="cpu")
-#     Xraw, y = load_iris(as_frame=True, return_X_y=True)
-#     Xraw["target"] = y
-
-#     X = GenericDataLoader(Xraw)
-#     test_plugin.fit(X, cond=y)
-
-#     X_gen = test_plugin.generate(2 * len(X))
-#     assert len(X_gen) == 2 * len(X)
-#     assert test_plugin.schema_includes(X_gen)
-
-#     count = 10
-#     X_gen = test_plugin.generate(count, cond=np.ones(count))
-#     assert len(X_gen) == count
-
-#     assert (X_gen["target"] == 1).sum() >= 0.8 * count
-
-
 def gen_datetime(min_year: int = 2000, max_year: int = datetime.now().year) -> datetime:
     # generate a datetime in format yyyy-mm-dd hh:mm:ss.000000
     start = datetime(min_year, 1, 1, 00, 00, 00)
