@@ -946,11 +946,12 @@ class GaussianMultinomialDiffusion(torch.nn.Module):
         else:
             sample_fn = self.sample
 
-        bs = np.diff([*range(0, num_samples, max_batch_size), num_samples])
+        indices = [*range(0, num_samples, max_batch_size), num_samples]
         all_samples = []
 
-        for b in bs:
-            sample = sample_fn(b, cond)
+        for i, b in enumerate(np.diff(indices)):
+            c = None if cond is None else cond[indices[i] : indices[i + 1]]
+            sample = sample_fn(b, c)
             if torch.any(sample.isnan()).item():
                 raise ValueError("found NaNs in sample")
             all_samples.append(sample)
