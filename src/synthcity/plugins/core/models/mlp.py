@@ -1,11 +1,11 @@
 # stdlib
-from typing import Any, Callable, List, Optional, Tuple
+from typing import Any, Callable, List, Optional, Tuple, Union
 
 # third party
 import numpy as np
 import torch
 from pydantic import validate_arguments
-from torch import nn
+from torch import Tensor, nn
 from torch.utils.data import DataLoader, TensorDataset
 
 # synthcity absolute
@@ -31,8 +31,27 @@ class GumbelSoftmax(nn.Module):
         )
 
 
-def get_nonlin(name: str) -> nn.Module:
-    if name == "none":
+class GLU(nn.Module):
+    """Gated Linear Unit (GLU)."""
+
+    def __init__(self, activation: Union[str, nn.Module] = "sigmoid") -> None:
+        super().__init__()
+        if type(activation) == str:
+            self.non_lin = get_nonlin(activation)
+        else:
+            self.non_lin = activation
+
+    def forward(self, x: Tensor) -> Tensor:
+        if x.shape[-1] % 2:
+            raise ValueError("The last dimension of the input tensor must be even.")
+        a, b = x.chunk(2, dim=-1)
+        return a * self.non_lin(b)
+
+
+def get_nonlin(name: Union[str, nn.Module]) -> nn.Module:
+    if isinstance(name, nn.Module):
+        return name
+    elif name == "none":
         return nn.Identity()
     elif name == "elu":
         return nn.ELU()
@@ -48,6 +67,16 @@ def get_nonlin(name: str) -> nn.Module:
         return nn.Sigmoid()
     elif name == "softmax":
         return GumbelSoftmax()
+    elif name == "gelu":
+        return nn.GELU()
+    elif name == "glu":
+        return GLU()
+    elif name == "reglu":
+        return GLU("relu")
+    elif name == "geglu":
+        return GLU("gelu")
+    elif name in ("silu", "swish"):
+        return nn.SiLU()
     else:
         raise ValueError(f"Unknown nonlinearity {name}")
 

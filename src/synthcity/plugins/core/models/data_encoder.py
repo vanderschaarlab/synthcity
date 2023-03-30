@@ -80,8 +80,7 @@ class ContinuousDataEncoder:
 
         aranged = np.arange(len(X))
         normalized = normalized_values[aranged, components].reshape([-1, 1])
-        normalized = np.clip(normalized, -0.99, 0.99).squeeze()
-
+        normalized = np.clip(normalized, -0.99, 0.99).squeeze(axis=1)
         out = np.stack([normalized, components], axis=1)
 
         return pd.DataFrame(out, columns=[f"{name}.value", f"{name}.component"])

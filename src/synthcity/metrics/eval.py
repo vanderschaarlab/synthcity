@@ -21,6 +21,9 @@ from .eval_detection import (
     SyntheticDetectionXGB,
 )
 from .eval_performance import (
+    AugmentationPerformanceEvaluatorLinear,
+    AugmentationPerformanceEvaluatorMLP,
+    AugmentationPerformanceEvaluatorXGB,
     FeatureImportanceRankDistance,
     PerformanceEvaluatorLinear,
     PerformanceEvaluatorMLP,
@@ -76,6 +79,9 @@ standard_metrics = [
     PerformanceEvaluatorLinear,
     PerformanceEvaluatorMLP,
     PerformanceEvaluatorXGB,
+    AugmentationPerformanceEvaluatorLinear,
+    AugmentationPerformanceEvaluatorMLP,
+    AugmentationPerformanceEvaluatorXGB,
     FeatureImportanceRankDistance,
     # synthetic detection tests
     SyntheticDetectionXGB,
@@ -97,12 +103,14 @@ class Metrics:
     def evaluate(
         X_gt: Union[DataLoader, pd.DataFrame],
         X_syn: Union[DataLoader, pd.DataFrame],
+        X_augmented: Optional[Union[DataLoader, pd.DataFrame]] = None,
         reduction: str = "mean",
         n_histogram_bins: int = 10,
         metrics: Optional[Dict] = None,
         task_type: str = "classification",
         random_state: int = 0,
         workspace: Path = Path("workspace"),
+        use_cache: bool = True,
     ) -> pd.DataFrame:
         """Core evaluation logic for the metrics
 
@@ -110,6 +118,8 @@ class Metrics:
             Reference real data
         X_syn: Dataloader or DataFrame
             Synthetic data
+        X_augmented: Dataloader or DataFrame
+            Augmented data
         metrics: dict
             the dictionary of metrics to evaluate
             Full dictionary of metrics is:
@@ -122,12 +132,16 @@ class Metrics:
             }
         reduction: str
             The way to aggregate metrics across folds. Can be: 'mean', "min", or "max".
+        n_histogram_bins: int
+            The number of bins used in histogram calculation of a given metric. Defaults to 10.
         task_type: str
             The type of problem. Relevant for evaluating the downstream models with the correct metrics. Valid tasks are:  "classification", "regression", "survival_analysis", "time_series", "time_series_survival".
         random_state: int
             random seed
         workspace: Path
             The folder for caching intermediary results.
+        use_cache: bool
+            If the a metric has been previously run and is cached, it will be reused for the experiments. Defaults to True.
         """
         workspace.mkdir(parents=True, exist_ok=True)
 
@@ -166,6 +180,8 @@ class Metrics:
 
         X_gt, _ = X_gt.encode()
         X_syn, _ = X_syn.encode()
+        if X_augmented:
+            X_augmented, _ = X_augmented.encode()
 
         scores = ScoreEvaluator()
 
@@ -175,17 +191,32 @@ class Metrics:
                 continue
             if metric.name() not in metrics[metric.type()]:
                 continue
-            scores.queue(
-                metric(
-                    reduction=reduction,
-                    n_histogram_bins=n_histogram_bins,
-                    task_type=task_type,
-                    random_state=random_state,
-                    workspace=workspace,
-                ),
-                X_gt.sample(eval_cnt),
-                X_syn.sample(eval_cnt),
-            )
+            if X_augmented and "augmentation" in metric.name():
+                scores.queue(
+                    metric(
+                        reduction=reduction,
+                        n_histogram_bins=n_histogram_bins,
+                        task_type=task_type,
+                        random_state=random_state,
+                        workspace=workspace,
+                        use_cache=use_cache,
+                    ),
+                    X_gt,
+                    X_augmented,
+                )
+            else:
+                scores.queue(
+                    metric(
+                        reduction=reduction,
+                        n_histogram_bins=n_histogram_bins,
+                        task_type=task_type,
+                        random_state=random_state,
+                        workspace=workspace,
+                        use_cache=use_cache,
+                    ),
+                    X_gt.sample(eval_cnt),
+                    X_syn.sample(eval_cnt),
+                )
 
         scores.compute()
 

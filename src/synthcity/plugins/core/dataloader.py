@@ -240,7 +240,6 @@ class DataLoader(metaclass=ABCMeta):
                     encoder = DatetimeEncoder().fit(encoded[col])
                     encoded[col] = encoder.transform(encoded[col]).values
                     encoders[col] = encoder
-
         return self.from_info(encoded, self.info()), encoders
 
     def decode(
@@ -263,6 +262,10 @@ class DataLoader(metaclass=ABCMeta):
     def is_tabular(self) -> bool:
         ...
 
+    @abstractmethod
+    def get_fairness_column(self) -> Union[str, Any]:
+        ...
+
 
 class GenericDataLoader(DataLoader):
     """
@@ -280,6 +283,8 @@ class GenericDataLoader(DataLoader):
             Default: None. Only relevant for SurvivalGAN method.
         target_column: Optional[str]
             The feature name that provides labels for downstream tasks.
+        fairness_column: Optional[str]
+            Optional fairness column label, used for fairness benchmarking.
         domain_column: Optional[str]
             Optional domain label, used for domain adaptation algorithms.
         random_state: int
@@ -302,6 +307,7 @@ class GenericDataLoader(DataLoader):
         sensitive_features: List[str] = [],
         important_features: List[str] = [],
         target_column: Optional[str] = None,
+        fairness_column: Optional[str] = None,
         domain_column: Optional[str] = None,
         random_state: int = 0,
         train_size: float = 0.8,
@@ -318,6 +324,7 @@ class GenericDataLoader(DataLoader):
         else:
             self.target_column = "---"
 
+        self.fairness_column = fairness_column
         self.domain_column = domain_column
 
         super().__init__(
@@ -338,6 +345,9 @@ class GenericDataLoader(DataLoader):
 
     def domain(self) -> Optional[str]:
         return self.domain_column
+
+    def get_fairness_column(self) -> Union[str, Any]:
+        return self.fairness_column
 
     @property
     def columns(self) -> list:
@@ -375,6 +385,7 @@ class GenericDataLoader(DataLoader):
             "important_features": self.important_features,
             "outcome_features": self.outcome_features,
             "target_column": self.target_column,
+            "fairness_column": self.fairness_column,
             "domain_column": self.domain_column,
             "train_size": self.train_size,
         }
@@ -390,6 +401,7 @@ class GenericDataLoader(DataLoader):
             target_column=self.target_column,
             random_state=self.random_state,
             train_size=self.train_size,
+            fairness_column=self.fairness_column,
             domain_column=self.domain_column,
         )
 
@@ -415,6 +427,7 @@ class GenericDataLoader(DataLoader):
             sensitive_features=info["sensitive_features"],
             important_features=info["important_features"],
             target_column=info["target_column"],
+            fairness_column=info["fairness_column"],
             domain_column=info["domain_column"],
             train_size=info["train_size"],
         )
@@ -475,6 +488,8 @@ class SurvivalAnalysisDataLoader(DataLoader):
             Default: None. Only relevant for SurvivalGAN method.
         target_column: str
             The feature name that provides labels for downstream tasks.
+        fairness_column: Optional[str]
+            Optional fairness column label, used for fairness benchmarking.
         domain_column: Optional[str]
             Optional domain label, used for domain adaptation algorithms.
         random_state: int
@@ -495,6 +510,7 @@ class SurvivalAnalysisDataLoader(DataLoader):
         time_horizons: list = [],
         sensitive_features: List[str] = [],
         important_features: List[str] = [],
+        fairness_column: Optional[str] = None,
         random_state: int = 0,
         train_size: float = 0.8,
         **kwargs: Any,
@@ -523,6 +539,7 @@ class SurvivalAnalysisDataLoader(DataLoader):
         self.target_column = target_column
         self.time_to_event_column = time_to_event_column
         self.time_horizons = time_horizons
+        self.fairness_column = fairness_column
 
         super().__init__(
             data_type="survival_analysis",
@@ -543,6 +560,9 @@ class SurvivalAnalysisDataLoader(DataLoader):
     @property
     def columns(self) -> list:
         return list(self.data.columns)
+
+    def get_fairness_column(self) -> Union[str, Any]:
+        return self.fairness_column
 
     def compression_protected_features(self) -> list:
         out = [self.target_column, self.time_to_event_column]
@@ -578,6 +598,7 @@ class SurvivalAnalysisDataLoader(DataLoader):
             "important_features": self.important_features,
             "outcome_features": self.outcome_features,
             "target_column": self.target_column,
+            "fairness_column": self.fairness_column,
             "time_to_event_column": self.time_to_event_column,
             "time_horizons": self.time_horizons,
             "train_size": self.train_size,
@@ -592,6 +613,7 @@ class SurvivalAnalysisDataLoader(DataLoader):
             sensitive_features=self.sensitive_features,
             important_features=self.important_features,
             target_column=self.target_column,
+            fairness_column=self.fairness_column,
             time_to_event_column=self.time_to_event_column,
             time_horizons=self.time_horizons,
             random_state=self.random_state,
@@ -628,6 +650,7 @@ class SurvivalAnalysisDataLoader(DataLoader):
             sensitive_features=info["sensitive_features"],
             important_features=info["important_features"],
             time_horizons=info["time_horizons"],
+            fairness_column=info["fairness_column"],
         )
 
     def __getitem__(self, feature: Union[str, list, int]) -> Any:
@@ -685,6 +708,8 @@ class TimeSeriesDataLoader(DataLoader):
             Name of sensitive features
         important_features List[str]
             Default: None. Only relevant for SurvivalGAN method
+        fairness_column: Optional[str]
+            Optional fairness column label, used for fairness benchmarking.
         random_state: int
             Defaults to zero.
 
@@ -701,6 +726,7 @@ class TimeSeriesDataLoader(DataLoader):
         static_data: Optional[pd.DataFrame] = None,
         sensitive_features: List[str] = [],
         important_features: List[str] = [],
+        fairness_column: Optional[str] = None,
         random_state: int = 0,
         train_size: float = 0.8,
         seq_offset: int = 0,
@@ -749,6 +775,7 @@ class TimeSeriesDataLoader(DataLoader):
             seq_offset=seq_offset,
         )
         self.seq_info = seq_info
+        self.fairness_column = fairness_column
 
         super().__init__(
             data={
@@ -777,6 +804,9 @@ class TimeSeriesDataLoader(DataLoader):
     def columns(self) -> list:
         return self.data["seq_data"].columns
 
+    def get_fairness_column(self) -> Union[str, Any]:
+        return self.fairness_column
+
     def compression_protected_features(self) -> list:
         return self.outcome_features
 
@@ -802,6 +832,7 @@ class TimeSeriesDataLoader(DataLoader):
             "window_len": self.window_len,
             "sensitive_features": self.sensitive_features,
             "important_features": self.important_features,
+            "fairness_column": self.fairness_column,
             "random_state": self.random_state,
             "train_size": self.train_size,
             "fill": self.fill,
@@ -825,6 +856,7 @@ class TimeSeriesDataLoader(DataLoader):
             outcome=outcome,
             sensitive_features=self.sensitive_features,
             important_features=self.important_features,
+            fairness_column=self.fairness_column,
             random_state=self.random_state,
             train_size=self.train_size,
             seq_offset=self.seq_offset,
@@ -870,6 +902,7 @@ class TimeSeriesDataLoader(DataLoader):
             outcome=outcome,
             sensitive_features=info["sensitive_features"],
             important_features=info["important_features"],
+            fairness_column=info["fairness_column"],
             fill=info["fill"],
             seq_offset=info["seq_offset"],
         )
@@ -1349,6 +1382,8 @@ class TimeSeriesSurvivalDataLoader(TimeSeriesDataLoader):
             Name of sensitive features
         important_features: List[str}
             Default: None. Only relevant for SurvivalGAN method.
+        fairness_column: Optional[str]
+            Optional fairness column label, used for fairness benchmarking.
         random_state. int
             Defaults to zero.
 
@@ -1368,6 +1403,7 @@ class TimeSeriesSurvivalDataLoader(TimeSeriesDataLoader):
         sensitive_features: List[str] = [],
         important_features: List[str] = [],
         time_horizons: list = [],
+        fairness_column: Optional[str] = None,
         random_state: int = 0,
         train_size: float = 0.8,
         seq_offset: int = 0,
@@ -1375,6 +1411,7 @@ class TimeSeriesSurvivalDataLoader(TimeSeriesDataLoader):
     ) -> None:
         self.time_to_event_col = "time_to_event"
         self.event_col = "event"
+        self.fairness_column = fairness_column
 
         if len(time_horizons) == 0:
             time_horizons = np.linspace(T.min(), T.max(), num=5)[1:-1].tolist()
@@ -1397,6 +1434,9 @@ class TimeSeriesSurvivalDataLoader(TimeSeriesDataLoader):
             **kwargs,
         )
         self.data_type = "time_series_survival"
+
+    def get_fairness_column(self) -> Union[str, Any]:
+        return self.fairness_column
 
     def info(self) -> dict:
         parent_info = super().info()
@@ -1426,6 +1466,7 @@ class TimeSeriesSurvivalDataLoader(TimeSeriesDataLoader):
             E=outcome[self.event_col],
             sensitive_features=self.sensitive_features,
             important_features=self.important_features,
+            fairness_column=self.fairness_column,
             random_state=self.random_state,
             time_horizons=self.time_horizons,
             train_size=self.train_size,
@@ -1451,6 +1492,7 @@ class TimeSeriesSurvivalDataLoader(TimeSeriesDataLoader):
             E=outcome[info["event_column"]],
             sensitive_features=info["sensitive_features"],
             important_features=info["important_features"],
+            fairness_column=info["fairness_column"],
             time_horizons=info["time_horizons"],
             seq_offset=info["seq_offset"],
         )
@@ -1601,6 +1643,10 @@ class ImageDataLoader(DataLoader):
     @property
     def shape(self) -> tuple:
         return self.data.shape()
+
+    def get_fairness_column(self) -> None:
+        """Not implemented for ImageDataLoader"""
+        ...
 
     def unpack(self, as_numpy: bool = False, pad: bool = False) -> Any:
         return self.data

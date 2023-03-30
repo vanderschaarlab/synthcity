@@ -12,7 +12,7 @@
 <div align="center">
 
 [![Test In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/drive/1Vr2PJswgfFYBkJCm3hhVkuH-9dXnHeYV?usp=sharing)
-[![Tests Python](https://github.com/vanderschaarlab/synthcity/actions/workflows/test.yml/badge.svg)](https://github.com/vanderschaarlab/synthcity/actions/workflows/test.yml)
+[![Tests Python](https://github.com/vanderschaarlab/synthcity/actions/workflows/test_pr.yml/badge.svg)](https://github.com/vanderschaarlab/synthcity/actions/workflows/test_pr.yml)
 [![Tutorials](https://github.com/vanderschaarlab/synthcity/actions/workflows/test_tutorials.yml/badge.svg)](https://github.com/vanderschaarlab/synthcity/actions/workflows/test_tutorials.yml)
 [![Documentation Status](https://readthedocs.org/projects/synthcity/badge/?version=latest)](https://synthcity.readthedocs.io/en/latest/?badge=latest)
 [![arXiv](https://img.shields.io/badge/arXiv-2301.07573-b31b1b.svg)](https://arxiv.org/abs/2301.07573)
@@ -21,7 +21,7 @@
 [![License](https://img.shields.io/badge/License-Apache_2.0-blue.svg)](https://github.com/vanderschaarlab/synthcity/blob/main/LICENSE)
 [![Python 3.7+](https://img.shields.io/badge/python-3.7+-blue.svg)](https://www.python.org/downloads/release/python-370/)
 [![about](https://img.shields.io/badge/about-The%20van%20der%20Schaar%20Lab-blue)](https://www.vanderschaar-lab.com/)
-[![slack](https://img.shields.io/badge/chat-on%20slack-purple?logo=slack)](https://vanderschaarlab.slack.com/archives/C04RER889NX)
+[![slack](https://img.shields.io/badge/chat-on%20slack-purple?logo=slack)](https://join.slack.com/t/vanderschaarlab/shared_invite/zt-1pzy8z7ti-zVsUPHAKTgCd1UoY8XtTEw)
 
 ![image](https://github.com/vanderschaarlab/synthcity/raw/main/docs/arch.png "Synthcity")
 

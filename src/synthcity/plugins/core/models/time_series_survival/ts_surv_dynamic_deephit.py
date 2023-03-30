@@ -141,6 +141,7 @@ class DynamicDeephitTimeSeriesSurvival(TimeSeriesSurvivalPlugin):
         temporal: Union[np.ndarray, List],
         observation_times: Union[np.ndarray, List],
         time_horizons: List,
+        batch_size: Optional[int] = 100,
     ) -> np.ndarray:
         "Predict risk"
         static = np.asarray(static)
@@ -150,7 +151,8 @@ class DynamicDeephitTimeSeriesSurvival(TimeSeriesSurvivalPlugin):
         data = self._merge_data(static, temporal, observation_times)
 
         return pd.DataFrame(
-            self.model.predict_risk(data, time_horizons), columns=time_horizons
+            self.model.predict_risk(data, time_horizons, bs=batch_size),
+            columns=time_horizons,
         )
 
     @validate_arguments(config=dict(arbitrary_types_allowed=True))
@@ -221,7 +223,6 @@ class DynamicDeepHitModel:
         clipping_value: int = 1,
         output_type: str = "MLP",
     ) -> None:
-
         self.split = split
         self.split_time = None
 
