@@ -15,7 +15,7 @@ from pydantic import validate_arguments
 
 # synthcity absolute
 import synthcity.logger as log
-from synthcity.benchmark.utils import augment_data
+from synthcity.benchmark.utils import augment_data, get_json_serializable_kwargs
 from synthcity.metrics import Metrics
 from synthcity.metrics.scores import ScoreEvaluator
 from synthcity.plugins import Plugins
@@ -129,7 +129,10 @@ class Benchmarks:
 
             kwargs_hash = ""
             if len(kwargs) > 0:
-                kwargs_hash_raw = json.dumps(kwargs, sort_keys=True).encode()
+                serializable_kwargs = get_json_serializable_kwargs(kwargs)
+                kwargs_hash_raw = json.dumps(
+                    serializable_kwargs, sort_keys=True
+                ).encode()
                 hash_object = hashlib.sha256(kwargs_hash_raw)
                 kwargs_hash = hash_object.hexdigest()
 
@@ -176,6 +179,7 @@ class Benchmarks:
                     f"[testcase] Experiment repeat: {repeat} task type: {task_type} Train df hash = {experiment_name}"
                 )
 
+                # TODO: caches should be from the same version of Synthcity. Different APIs will crash.
                 if generator_file.exists() and synthetic_reuse_if_exists:
                     generator = load_from_file(generator_file)
                 else:

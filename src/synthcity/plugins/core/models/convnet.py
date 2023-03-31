@@ -366,6 +366,7 @@ class ConditionalDiscriminator(nn.Module):
         return self.model(X)
 
 
+# TODO: add more image processing architectures for better performance
 def suggest_image_generator_discriminator_arch(
     n_units_latent: int,
     n_channels: int,
