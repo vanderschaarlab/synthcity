@@ -26,26 +26,31 @@ plugin_args = {
 }
 
 
+@pytest.mark.goggle
 @pytest.mark.parametrize("test_plugin", generate_fixtures(plugin_name, plugin))
 def test_plugin_sanity(test_plugin: Plugin) -> None:
     assert test_plugin is not None
 
 
+@pytest.mark.goggle
 @pytest.mark.parametrize("test_plugin", generate_fixtures(plugin_name, plugin))
 def test_plugin_name(test_plugin: Plugin) -> None:
     assert test_plugin.name() == plugin_name
 
 
+@pytest.mark.goggle
 @pytest.mark.parametrize("test_plugin", generate_fixtures(plugin_name, plugin))
 def test_plugin_type(test_plugin: Plugin) -> None:
     assert test_plugin.type() == "generic"
 
 
+@pytest.mark.goggle
 @pytest.mark.parametrize("test_plugin", generate_fixtures(plugin_name, plugin))
 def test_plugin_hyperparams(test_plugin: Plugin) -> None:
     assert len(test_plugin.hyperparameter_space()) == 9
 
 
+@pytest.mark.goggle
 @pytest.mark.parametrize(
     "test_plugin", generate_fixtures(plugin_name, plugin, plugin_args)
 )
@@ -54,6 +59,7 @@ def test_plugin_fit(test_plugin: Plugin) -> None:
     test_plugin.fit(GenericDataLoader(X))
 
 
+@pytest.mark.goggle
 @pytest.mark.parametrize(
     "test_plugin", generate_fixtures(plugin_name, plugin, plugin_args)
 )
@@ -83,6 +89,7 @@ def test_plugin_generate(test_plugin: Plugin, serialize: bool) -> None:
     assert (X_gen1.numpy() != X_gen3.numpy()).any()
 
 
+@pytest.mark.goggle
 @pytest.mark.parametrize(
     "test_plugin", generate_fixtures(plugin_name, plugin, plugin_args)
 )
@@ -110,12 +117,14 @@ def test_plugin_generate_constraints_goggle(test_plugin: Plugin) -> None:
     assert list(X_gen.columns) == list(X.columns)
 
 
+@pytest.mark.goggle
 def test_sample_hyperparams() -> None:
     for i in range(100):
         args = plugin.sample_hyperparameters()
         assert plugin(**args) is not None
 
 
+@pytest.mark.goggle
 @pytest.mark.slow
 @pytest.mark.parametrize(
     "compress_dataset,decoder_arch",
@@ -161,6 +170,7 @@ def gen_datetime(min_year: int = 2000, max_year: int = datetime.now().year) -> d
     return start + (end - start) * random.random()
 
 
+@pytest.mark.goggle
 def test_plugin_encoding() -> None:
     data = [[gen_datetime(), i % 2 == 0, i] for i in range(1000)]
 

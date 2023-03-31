@@ -28,6 +28,7 @@ jobs:
       - name: Install dependencies
         run: |
             pip install -r prereq.txt
+            pip install .[goggle]
 
             pip install --upgrade pip
             pip install .[testing]
