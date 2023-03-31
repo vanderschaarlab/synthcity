@@ -157,7 +157,7 @@ class CategoricalDistribution(Distribution):
         if msamples is not None:
             return msamples
 
-        return np.random.choice(self.choices, count).tolist()
+        return np.random.choice(self.choices, count)
 
     def has(self, val: Any) -> bool:
         return val in self.choices
@@ -209,8 +209,8 @@ class FloatDistribution(Distribution):
         :parts: 1
     """
 
-    low: float = np.iinfo(np.int64).min
-    high: float = np.iinfo(np.int64).max
+    low: float = np.finfo(np.float64).min
+    high: float = np.finfo(np.float64).max
 
     @validator("low", always=True)
     def _validate_low_thresh(cls: Any, v: float, values: Dict) -> float:
@@ -274,18 +274,18 @@ class FloatDistribution(Distribution):
 
 
 class LogDistribution(FloatDistribution):
-    low: float = np.iinfo(np.int64).min
-    high: float = np.iinfo(np.int64).max
-    base: float = 10.0
-    _log_low: float = np.log(low) / np.log(base)
-    _log_high: float = np.log(high) / np.log(base)
+    low: float = np.finfo(np.float64).tiny
+    high: float = np.finfo(np.float64).max
+    base: float = 2.0
 
     def sample(self, count: int = 1) -> Any:
         np.random.seed(self.random_state)
         msamples = self.sample_marginal(count)
         if msamples is not None:
             return msamples
-        return self.base ** np.random.uniform(self._log_low, self._log_high, count)
+        lo = np.log2(self.low) / np.log2(self.base)
+        hi = np.log2(self.high) / np.log2(self.base)
+        return self.base ** np.random.uniform(lo, hi, count)
 
 
 class IntegerDistribution(Distribution):
@@ -322,8 +322,9 @@ class IntegerDistribution(Distribution):
         if msamples is not None:
             return msamples
 
-        choices = [val for val in range(self.low, self.high + 1, self.step)]
-        return np.random.choice(choices, count).tolist()
+        high = (self.high + 1 - self.low) // self.step
+        s = np.random.choice(high, count)
+        return s * self.step + self.low
 
     def has(self, val: Any) -> bool:
         return self.low <= val and val <= self.high
@@ -361,18 +362,18 @@ class IntegerDistribution(Distribution):
 
 
 class LogIntDistribution(FloatDistribution):
-    low: int = np.iinfo(np.int64).min
-    high: int = np.iinfo(np.int64).max
-    base: float = 10.0
-    _log_low: float = np.log(low) / np.log(base)
-    _log_high: float = np.log(high) / np.log(base)
+    low: float = 1.0
+    high: float = float(np.iinfo(np.int64).max)
+    base: float = 2.0
 
     def sample(self, count: int = 1) -> Any:
         np.random.seed(self.random_state)
         msamples = self.sample_marginal(count)
         if msamples is not None:
             return msamples
-        s = self.base ** np.random.uniform(self._log_low, self._log_high, count)
+        lo = np.log2(self.low) / np.log2(self.base)
+        hi = np.log2(self.high) / np.log2(self.base)
+        s = self.base ** np.random.uniform(lo, hi, count)
         return s.astype(int)
 
 
@@ -411,15 +412,8 @@ class DatetimeDistribution(Distribution):
         if msamples is not None:
             return msamples
 
-        samples = np.random.uniform(
-            datetime.timestamp(self.low), datetime.timestamp(self.high), count
-        )
-
-        samples_dt = []
-        for s in samples:
-            samples_dt.append(datetime.fromtimestamp(s))
-
-        return samples_dt
+        delta = self.high - self.low
+        return self.low + delta * np.random.rand(count)
 
     def has(self, val: datetime) -> bool:
         return self.low <= val and val <= self.high
