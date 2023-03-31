@@ -4,16 +4,12 @@ from copy import deepcopy
 from typing import Any, List, Optional, Tuple, Union
 
 # third party
-import dgl
 import numpy as np
 import torch
-from dgl.nn import GraphConv, SAGEConv
 from pydantic import validate_arguments
 from torch import nn
 from torch.utils.data import DataLoader as TorchDataLoader
 from torch.utils.data import TensorDataset
-from torch_geometric.nn.conv import MessagePassing
-from torch_geometric.utils import dense_to_sparse
 from tqdm import tqdm
 
 # synthcity absolute
@@ -23,6 +19,18 @@ from synthcity.plugins.core.models.mlp import MultiActivationHead, get_nonlin
 from synthcity.plugins.core.models.RGCNConv import RGCNConv
 from synthcity.utils.constants import DEVICE
 from synthcity.utils.reproducibility import clear_cache, enable_reproducible_results
+
+# third party from installed with [goggle] extra
+try:
+    # third party
+    import dgl
+    from dgl.nn import GraphConv, SAGEConv
+    from torch_geometric.nn.conv import MessagePassing
+    from torch_geometric.utils import dense_to_sparse
+except ImportError:
+    log.critical(
+        "Dependencies for goggle not installed. Have you installed the [goggle] extra?. See docs for more info."
+    )
 
 
 class Goggle(nn.Module):
