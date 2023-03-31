@@ -189,7 +189,7 @@ class TabDDPMPlugin(Plugin):
         return [
             LogDistribution(name="lr", low=1e-5, high=1e-1),
             LogIntDistribution(name="batch_size", low=256, high=4096),
-            IntegerDistribution(name="num_timesteps", choices=[100, 1000]),
+            IntegerDistribution(name="num_timesteps", low=10, high=1000),
             LogIntDistribution(name="n_iter", low=1000, high=10000),
             IntegerDistribution(name="n_layers_hidden", low=2, high=8),
             LogIntDistribution(name="dim_hidden", low=128, high=1024),
