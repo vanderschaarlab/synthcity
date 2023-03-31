@@ -6,23 +6,10 @@ import torch
 from torch import Tensor
 from torch.nn import Parameter
 from torch.nn import Parameter as Param
-
-# synthcity absolute
-# Synthcity absolute
-import synthcity.logger as log
-
-# third party from installed with [goggle] extra
-try:
-    # third party
-    from torch_geometric.nn.conv import MessagePassing
-    from torch_geometric.nn.inits import glorot, zeros
-    from torch_geometric.typing import Adj, OptTensor
-    from torch_sparse import SparseTensor, masked_select_nnz, matmul
-except ImportError:
-    log.critical(
-        "Dependencies for goggle not installed. Have you installed the [goggle] extra?. See docs for more info."
-    )
-
+from torch_geometric.nn.conv import MessagePassing
+from torch_geometric.nn.inits import glorot, zeros
+from torch_geometric.typing import Adj, OptTensor
+from torch_sparse import SparseTensor, masked_select_nnz, matmul
 
 try:
     # third party

@@ -616,9 +616,12 @@ class PluginLoader:
             raise ValueError(
                 f"Plugin {name} must derive the {self._expected_type} interface."
             )
-
-        self._plugins[name] = cls
-
+        try:
+            self._plugins[name] = cls
+        except ImportError as e:
+            log.warning(
+                f"Plugin {name} cannot be loaded do to import error in plugin. {e}. Make sure the any relevant extras are installed, e.g. pip install synthcity[goggle]."
+            )
         return self
 
     @validate_arguments
