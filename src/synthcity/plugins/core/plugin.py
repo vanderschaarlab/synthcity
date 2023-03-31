@@ -548,8 +548,22 @@ class PluginLoader:
         self._available_plugins = {}
         for plugin in plugins:
             stem = Path(plugin).stem.split("plugin_")[-1]
-            self._available_plugins[stem] = plugin
+            if stem == "goggle":
+                try:
+                    # Import the extra requirements for goggle to check if goggle is available
+                    # third party
+                    import dgl  # noqa: F401
+                    import torch_geometric  # noqa: F401
+                    import torch_scatter  # noqa: F401
+                    import torch_sparse  # noqa: F401
 
+                    self._available_plugins[stem] = plugin
+                except ImportError:
+                    log.info(
+                        "Goggle plugin not available. Use `pip install synthcity[goggle]` to install it."
+                    )
+            else:
+                self._available_plugins[stem] = plugin
         self._expected_type = expected_type
         self._categories = categories
 
@@ -616,12 +630,7 @@ class PluginLoader:
             raise ValueError(
                 f"Plugin {name} must derive the {self._expected_type} interface."
             )
-        try:
-            self._plugins[name] = cls
-        except ImportError as e:
-            log.warning(
-                f"Plugin {name} cannot be loaded do to import error in plugin. {e}. Make sure the any relevant extras are installed, e.g. pip install synthcity[goggle]."
-            )
+        self._plugins[name] = cls
         return self
 
     @validate_arguments
