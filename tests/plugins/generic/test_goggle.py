@@ -8,7 +8,7 @@ from datetime import datetime, timedelta
 import numpy as np
 import pandas as pd
 import pytest
-from generic_helpers import generate_fixtures, get_airfoil_dataset
+from generic_helpers import generate_fixtures
 from sklearn.datasets import load_diabetes, load_iris
 
 # synthcity absolute
@@ -55,8 +55,9 @@ def test_plugin_hyperparams(test_plugin: Plugin) -> None:
     "test_plugin", generate_fixtures(plugin_name, plugin, plugin_args)
 )
 def test_plugin_fit(test_plugin: Plugin) -> None:
-    X = get_airfoil_dataset()
-    test_plugin.fit(GenericDataLoader(X))
+    Xraw, y = load_diabetes(return_X_y=True, as_frame=True)
+    Xraw["target"] = y
+    test_plugin.fit(GenericDataLoader(Xraw))
 
 
 @pytest.mark.goggle
@@ -65,7 +66,8 @@ def test_plugin_fit(test_plugin: Plugin) -> None:
 )
 @pytest.mark.parametrize("serialize", [True, False])
 def test_plugin_generate(test_plugin: Plugin, serialize: bool) -> None:
-    X = get_airfoil_dataset()
+    X, y = load_diabetes(return_X_y=True, as_frame=True)
+    X["target"] = y
     test_plugin.fit(GenericDataLoader(X))
 
     if serialize:
