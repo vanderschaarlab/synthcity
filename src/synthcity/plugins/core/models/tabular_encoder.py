@@ -83,7 +83,7 @@ class TabularEncoder(TransformerMixin, BaseEstimator):
         """
         self.whitelist = whitelist
         self.categorical_limit = categorical_limit
-        self.max_clusters = max_clusters  # for compatibility
+        self.max_clusters = max_clusters
         if categorical_encoder is not None:
             self.categorical_encoder = categorical_encoder
         if continuous_encoder is not None:
@@ -150,10 +150,7 @@ class TabularEncoder(TransformerMixin, BaseEstimator):
                 continue
             column_hash = dataframe_hash(raw_data[[name]])
             log.info(f"Encoding {name} {column_hash}")
-            if name in discrete_columns:
-                ftype = "discrete"
-            else:
-                ftype = "continuous"
+            ftype = "discrete" if name in discrete_columns else "continuous"
             column_transform_info = self._fit_feature(raw_data[name], ftype)
 
             self.output_dimensions += column_transform_info.output_dimensions
@@ -289,8 +286,9 @@ class BinEncoder(TabularEncoder):
 
     continuous_encoder = "bayesian_gmm"
     cont_encoder_params = dict(n_components=2)
-    categorical_encoder = "onehot"
-    cat_encoder_params = dict(handle_unknown="ignore", sparse=False)
+    categorical_encoder = "passthrough"  # "onehot"
+    # ! onehot encoder does not pass the tests
+    cat_encoder_params = dict()  # dict(handle_unknown="ignore", sparse=False)
 
     # TODO: check if this is correct
     def _transform_feature(
