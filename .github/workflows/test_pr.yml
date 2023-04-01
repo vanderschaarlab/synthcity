@@ -59,4 +59,4 @@ jobs:
             pip install --upgrade pip
             pip install .[all]
       - name: Test with pytest
-        run: pytest -vvvs -m "not slow" --durations=50
+        run: pytest -n auto -vvvs -m "not slow" --durations=50
