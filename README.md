@@ -51,6 +51,19 @@ or from source, using
 ```bash
 $ pip install .
 ```
+Other library extensions:
+ * Install the library with unit-testing support
+```bash
+ pip install synthcity[testing]
+```
+ * Install the library with GOGGLE support
+```bash
+ pip install synthcity[goggle]
+```
+ * Install the library with ALL the extensions
+```bash
+ pip install synthcity[all]
+```
 
 ## :boom: Sample Usage
 
