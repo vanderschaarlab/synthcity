@@ -32,4 +32,4 @@ jobs:
             pip install --upgrade pip
             pip install .[all]
       - name: Test with pytest
-        run: pytest -n auto -vvvs --durations=50
+        run: pytest -vvvs --durations=50

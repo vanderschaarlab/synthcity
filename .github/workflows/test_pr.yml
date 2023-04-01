@@ -50,8 +50,7 @@ jobs:
           cache: 'pip' # caching pip dependencies
       - name: Install MacOS dependencies
         run: |
-            brew unlink libomp
-            brew install rajivshah3/libomp-tap/libomp@11.1.0
+            brew install libomp
         if: ${{ matrix.os == 'macos-latest' }}
       - name: Install dependencies
         run: |
@@ -60,4 +59,4 @@ jobs:
             pip install --upgrade pip
             pip install .[all]
       - name: Test with pytest
-        run: pytest -n auto -vvvs -m "not slow" --durations=50
+        run: pytest -vvvs -m "not slow" --durations=50
