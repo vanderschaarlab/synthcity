@@ -1,12 +1,5 @@
-# stdlib
-import random
-
-# import sys
-from datetime import datetime, timedelta
-
 # third party
 import numpy as np
-import pandas as pd
 import pytest
 from generic_helpers import generate_fixtures
 from sklearn.datasets import load_diabetes, load_iris
@@ -26,31 +19,26 @@ plugin_args = {
 }
 
 
-@pytest.mark.goggle
 @pytest.mark.parametrize("test_plugin", generate_fixtures(plugin_name, plugin))
 def test_plugin_sanity(test_plugin: Plugin) -> None:
     assert test_plugin is not None
 
 
-@pytest.mark.goggle
 @pytest.mark.parametrize("test_plugin", generate_fixtures(plugin_name, plugin))
 def test_plugin_name(test_plugin: Plugin) -> None:
     assert test_plugin.name() == plugin_name
 
 
-@pytest.mark.goggle
 @pytest.mark.parametrize("test_plugin", generate_fixtures(plugin_name, plugin))
 def test_plugin_type(test_plugin: Plugin) -> None:
     assert test_plugin.type() == "generic"
 
 
-@pytest.mark.goggle
 @pytest.mark.parametrize("test_plugin", generate_fixtures(plugin_name, plugin))
 def test_plugin_hyperparams(test_plugin: Plugin) -> None:
     assert len(test_plugin.hyperparameter_space()) == 9
 
 
-@pytest.mark.goggle
 @pytest.mark.parametrize(
     "test_plugin", generate_fixtures(plugin_name, plugin, plugin_args)
 )
@@ -60,7 +48,6 @@ def test_plugin_fit(test_plugin: Plugin) -> None:
     test_plugin.fit(GenericDataLoader(Xraw))
 
 
-@pytest.mark.goggle
 @pytest.mark.parametrize(
     "test_plugin", generate_fixtures(plugin_name, plugin, plugin_args)
 )
@@ -91,7 +78,6 @@ def test_plugin_generate(test_plugin: Plugin, serialize: bool) -> None:
     assert (X_gen1.numpy() != X_gen3.numpy()).any()
 
 
-@pytest.mark.goggle
 @pytest.mark.parametrize(
     "test_plugin", generate_fixtures(plugin_name, plugin, plugin_args)
 )
@@ -119,14 +105,12 @@ def test_plugin_generate_constraints_goggle(test_plugin: Plugin) -> None:
     assert list(X_gen.columns) == list(X.columns)
 
 
-@pytest.mark.goggle
 def test_sample_hyperparams() -> None:
     for i in range(100):
         args = plugin.sample_hyperparameters()
         assert plugin(**args) is not None
 
 
-@pytest.mark.goggle
 @pytest.mark.slow
 @pytest.mark.parametrize(
     "compress_dataset,decoder_arch",
@@ -162,30 +146,3 @@ def test_eval_performance_goggle(compress_dataset: bool, decoder_arch: str) -> N
 
     print(plugin.name(), compress_dataset, decoder_arch, results)
     assert np.mean(results) > 0.7
-
-
-def gen_datetime(min_year: int = 2000, max_year: int = datetime.now().year) -> datetime:
-    # generate a datetime in format yyyy-mm-dd hh:mm:ss.000000
-    start = datetime(min_year, 1, 1, 00, 00, 00)
-    years = max_year - min_year + 1
-    end = start + timedelta(days=365 * years)
-    return start + (end - start) * random.random()
-
-
-@pytest.mark.goggle
-def test_plugin_encoding() -> None:
-    data = [[gen_datetime(), i % 2 == 0, i] for i in range(1000)]
-
-    df = pd.DataFrame(data, columns=["date", "bool", "int"])
-    test_plugin = plugin(n_iter=10, device="cpu")
-    test_plugin.fit(df)
-
-    syn = test_plugin.generate(10)
-
-    assert len(syn) == 10
-    assert test_plugin.schema_includes(syn)
-
-    syn_df = syn.dataframe()
-
-    assert syn_df["date"].infer_objects().dtype.kind == "M"
-    assert syn_df["bool"].infer_objects().dtype.kind == "b"

@@ -548,22 +548,7 @@ class PluginLoader:
         self._available_plugins = {}
         for plugin in plugins:
             stem = Path(plugin).stem.split("plugin_")[-1]
-            if stem == "goggle":
-                try:
-                    # Import the extra requirements for goggle to check if goggle is available
-                    # third party
-                    import dgl  # noqa: F401
-                    import torch_geometric  # noqa: F401
-                    import torch_scatter  # noqa: F401
-                    import torch_sparse  # noqa: F401
-
-                    self._available_plugins[stem] = plugin
-                except ImportError:
-                    log.info(
-                        "Goggle plugin not available. Use `pip install synthcity[goggle]` to install it."
-                    )
-            else:
-                self._available_plugins[stem] = plugin
+            self._available_plugins[stem] = plugin
         self._expected_type = expected_type
         self._categories = categories
 
