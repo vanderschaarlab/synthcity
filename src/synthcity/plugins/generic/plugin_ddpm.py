@@ -66,12 +66,6 @@ class TabDDPMPlugin(Plugin):
             Number of iterations between logging.
         print_interval: int = 500
             Number of iterations between printing.
-        n_layers_hidden: int = 3
-            Number of hidden layers in the MLP.
-        dim_hidden: int = 256
-            Number of hidden units per hidden layer in the MLP.
-        dropout: float = 0.0
-            Dropout rate.
         dim_embed: int = 128
             Dimensionality of the embedding space.
         random_state: int
@@ -191,8 +185,8 @@ class TabDDPMPlugin(Plugin):
             LogIntDistribution(name="batch_size", low=256, high=4096),
             IntegerDistribution(name="num_timesteps", low=10, high=1000),
             LogIntDistribution(name="n_iter", low=1000, high=10000),
-            IntegerDistribution(name="n_layers_hidden", low=2, high=8),
-            LogIntDistribution(name="dim_hidden", low=128, high=1024),
+            # IntegerDistribution(name="n_layers_hidden", low=2, high=8),
+            # LogIntDistribution(name="dim_hidden", low=128, high=1024),
         ]
 
     def _fit(self, X: DataLoader, *args: Any, **kwargs: Any) -> "TabDDPMPlugin":
@@ -205,8 +199,6 @@ class TabDDPMPlugin(Plugin):
         If the task is regression, the target variable is not specially treated. There is no condition by default, but can be given by the user, either as a column name or an array-like.
         """
         df = X.dataframe()
-        self.feature_names = df.columns
-
         cond = kwargs.pop("cond", None)
         self.loss_history = None
 
@@ -228,10 +220,8 @@ class TabDDPMPlugin(Plugin):
         if cond is not None:
             if type(cond) is str:
                 cond = df[cond]
-            self.expecting_conditional = True
-
-        if cond is not None:
             cond = pd.Series(cond, index=df.index)
+            self.expecting_conditional = True
 
         # NOTE: cond may also be included in the dataframe
         self.model.fit(df, cond, **kwargs)
@@ -254,7 +244,7 @@ class TabDDPMPlugin(Plugin):
             df = self.encoder.inverse_transform(df)
             if self.is_classification:
                 df = df.join(pd.Series(cond, name=self.target_name))
-            return df[self.feature_names]  # reorder columns
+            return df
 
         return self._safe_generate(callback, count, syn_schema, **kwargs)
 

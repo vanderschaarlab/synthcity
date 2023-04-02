@@ -9,98 +9,19 @@ from torch.nn import BatchNorm1d, Linear, ReLU
 # synthcity relative
 from .layers import Entmax, Sparsemax
 
-# class TabNet(torch.nn.Module):
-#     def __init__(
-#         self,
-#         input_dim,
-#         output_dim,
-#         n_d=8,
-#         n_a=8,
-#         n_steps=3,
-#         gamma=1.3,
-#         n_independent=2,
-#         n_shared=2,
-#         epsilon=1e-15,
-#         virtual_batch_size=128,
-#         momentum=0.02,
-#         mask_type="sparsemax",
-#         group_attention_matrix=None,
-#     ):
-#         """
-#         Defines TabNet network
 
-#         Parameters
-#         ----------
-#         input_dim : int
-#             Initial number of features
-#         output_dim : int
-#             Dimension of network output
-#             examples : one for regression, 2 for binary classification etc...
-#         n_d : int
-#             Dimension of the prediction  layer (usually between 4 and 64)
-#         n_a : int
-#             Dimension of the attention  layer (usually between 4 and 64)
-#         n_steps : int
-#             Number of successive steps in the network (usually between 3 and 10)
-#         gamma : float
-#             Float above 1, scaling factor for attention updates (usually between 1.0 to 2.0)
-#         n_independent : int
-#             Number of independent GLU layer in each GLU block (default 2)
-#         n_shared : int
-#             Number of independent GLU layer in each GLU block (default 2)
-#         epsilon : float
-#             Avoid log(0), this should be kept very low
-#         virtual_batch_size : int
-#             Batch size for Ghost Batch Normalization
-#         momentum : float
-#             Float value between 0 and 1 which will be used for momentum in all batch norm
-#         mask_type : str
-#             Either "sparsemax" or "entmax" : this is the masking function to use
-#         group_attention_matrix : torch matrix
-#             Matrix of size (n_groups, input_dim), m_ij = importance within group i of feature j
-#         """
-#         super(TabNet, self).__init__()
+def initialize_non_glu(module: Linear, input_dim: int, output_dim: int) -> None:
+    gain_value = np.sqrt((input_dim + output_dim) / np.sqrt(4 * input_dim))
+    torch.nn.init.xavier_normal_(module.weight, gain=gain_value)
+    # torch.nn.init.zeros_(module.bias)
+    return
 
-#         if group_attention_matrix is None:
-#             group_attention_matrix = torch.Tensor([])
 
-#         self.input_dim = input_dim
-#         self.output_dim = output_dim
-#         self.n_d = n_d
-#         self.n_a = n_a
-#         self.n_steps = n_steps
-#         self.gamma = gamma
-#         self.epsilon = epsilon
-#         self.n_independent = n_independent
-#         self.n_shared = n_shared
-#         self.mask_type = mask_type
-
-#         self.virtual_batch_size = virtual_batch_size
-#         self.post_embed_dim = self.embedder.post_embed_dim
-
-#         self.tabnet = TabNetNoEmbeddings(
-#             self.post_embed_dim,
-#             output_dim,
-#             n_d,
-#             n_a,
-#             n_steps,
-#             gamma,
-#             n_independent,
-#             n_shared,
-#             epsilon,
-#             virtual_batch_size,
-#             momentum,
-#             mask_type,
-#             self.embedder.embedding_group_matrix,
-#         )
-
-#     def forward(self, x):
-#         x = self.embedder(x)
-#         return self.tabnet(x)
-
-#     def forward_masks(self, x):
-#         x = self.embedder(x)
-#         return self.tabnet.forward_masks(x)
+def initialize_glu(module: Linear, input_dim: int, output_dim: int) -> None:
+    gain_value = np.sqrt((input_dim + output_dim) / np.sqrt(input_dim))
+    torch.nn.init.xavier_normal_(module.weight, gain=gain_value)
+    # torch.nn.init.zeros_(module.bias)
+    return
 
 
 class TabNet(torch.nn.Module):
@@ -121,7 +42,7 @@ class TabNet(torch.nn.Module):
         group_attention_matrix: Optional[torch.Tensor] = None,
     ) -> None:
         """
-        Defines main part of the TabNet network without the embedding layers.
+        Defines main part of the TabNet network.
 
         Parameters
         ----------
@@ -131,9 +52,9 @@ class TabNet(torch.nn.Module):
             Dimension of network output
             examples : one for regression, 2 for binary classification etc...
         n_d : int
-            Dimension of the prediction  layer (usually between 4 and 64)
+            Dimension of the prediction layer (usually between 4 and 64)
         n_a : int
-            Dimension of the attention  layer (usually between 4 and 64)
+            Dimension of the attention layer (usually between 4 and 64)
         n_steps : int
             Number of successive steps in the network (usually between 3 and 10)
         gamma : float
@@ -200,20 +121,6 @@ class TabNet(torch.nn.Module):
 
     def forward_masks(self, x: torch.Tensor) -> torch.Tensor:
         return self.encoder.forward_masks(x)
-
-
-def initialize_non_glu(module: Linear, input_dim: int, output_dim: int) -> None:
-    gain_value = np.sqrt((input_dim + output_dim) / np.sqrt(4 * input_dim))
-    torch.nn.init.xavier_normal_(module.weight, gain=gain_value)
-    # torch.nn.init.zeros_(module.bias)
-    return
-
-
-def initialize_glu(module: Linear, input_dim: int, output_dim: int) -> None:
-    gain_value = np.sqrt((input_dim + output_dim) / np.sqrt(input_dim))
-    torch.nn.init.xavier_normal_(module.weight, gain=gain_value)
-    # torch.nn.init.zeros_(module.bias)
-    return
 
 
 class GBN(torch.nn.Module):
@@ -412,191 +319,6 @@ class TabNetEncoder(torch.nn.Module):
         return M_explain, masks
 
 
-# class TabNetDecoder(torch.nn.Module):
-#     def __init__(
-#         self,
-#         input_dim,
-#         n_d=8,
-#         n_steps=3,
-#         n_independent=1,
-#         n_shared=1,
-#         virtual_batch_size=128,
-#         momentum=0.02,
-#     ):
-#         """
-#         Defines main part of the TabNet network without the embedding layers.
-
-#         Parameters
-#         ----------
-#         input_dim : int
-#             Number of features
-#         output_dim : int or list of int for multi task classification
-#             Dimension of network output
-#             examples : one for regression, 2 for binary classification etc...
-#         n_d : int
-#             Dimension of the prediction  layer (usually between 4 and 64)
-#         n_steps : int
-#             Number of successive steps in the network (usually between 3 and 10)
-#         gamma : float
-#             Float above 1, scaling factor for attention updates (usually between 1.0 to 2.0)
-#         n_independent : int
-#             Number of independent GLU layer in each GLU block (default 1)
-#         n_shared : int
-#             Number of independent GLU layer in each GLU block (default 1)
-#         virtual_batch_size : int
-#             Batch size for Ghost Batch Normalization
-#         momentum : float
-#             Float value between 0 and 1 which will be used for momentum in all batch norm
-#         """
-#         super(TabNetDecoder, self).__init__()
-#         self.input_dim = input_dim
-#         self.n_d = n_d
-#         self.n_steps = n_steps
-#         self.n_independent = n_independent
-#         self.n_shared = n_shared
-#         self.virtual_batch_size = virtual_batch_size
-
-#         self.feat_transformers = torch.nn.ModuleList()
-
-#         if self.n_shared > 0:
-#             shared_feat_transform = torch.nn.ModuleList()
-#             for i in range(self.n_shared):
-#                 if i == 0:
-#                     shared_feat_transform.append(Linear(n_d, 2 * n_d, bias=False))
-#                 else:
-#                     shared_feat_transform.append(Linear(n_d, 2 * n_d, bias=False))
-
-#         else:
-#             shared_feat_transform = None
-
-#         for step in range(n_steps):
-#             transformer = FeatTransformer(
-#                 n_d,
-#                 n_d,
-#                 shared_feat_transform,
-#                 n_glu_independent=self.n_independent,
-#                 virtual_batch_size=self.virtual_batch_size,
-#                 momentum=momentum,
-#             )
-#             self.feat_transformers.append(transformer)
-
-#         self.reconstruction_layer = Linear(n_d, self.input_dim, bias=False)
-#         initialize_non_glu(self.reconstruction_layer, n_d, self.input_dim)
-
-#     def forward(self, steps_output):
-#         res = 0
-#         for step_nb, step_output in enumerate(steps_output):
-#             x = self.feat_transformers[step_nb](step_output)
-#             res = torch.add(res, x)
-#         res = self.reconstruction_layer(res)
-#         return res
-
-
-# class TabNetPretraining(torch.nn.Module):
-#     def __init__(
-#         self,
-#         input_dim,
-#         pretraining_ratio=0.2,
-#         n_d=8,
-#         n_a=8,
-#         n_steps=3,
-#         gamma=1.3,
-#         cat_idxs=[],
-#         cat_dims=[],
-#         cat_emb_dim=1,
-#         n_independent=2,
-#         n_shared=2,
-#         epsilon=1e-15,
-#         virtual_batch_size=128,
-#         momentum=0.02,
-#         mask_type="sparsemax",
-#         n_shared_decoder=1,
-#         n_indep_decoder=1,
-#         group_attention_matrix=None,
-#     ):
-#         super(TabNetPretraining, self).__init__()
-
-#         self.cat_idxs = cat_idxs or []
-#         self.cat_dims = cat_dims or []
-#         self.cat_emb_dim = cat_emb_dim
-
-#         self.input_dim = input_dim
-#         self.n_d = n_d
-#         self.n_a = n_a
-#         self.n_steps = n_steps
-#         self.gamma = gamma
-#         self.epsilon = epsilon
-#         self.n_independent = n_independent
-#         self.n_shared = n_shared
-#         self.mask_type = mask_type
-#         self.pretraining_ratio = pretraining_ratio
-#         self.n_shared_decoder = n_shared_decoder
-#         self.n_indep_decoder = n_indep_decoder
-
-#         if self.n_steps <= 0:
-#             raise ValueError("n_steps should be a positive integer.")
-#         if self.n_independent == 0 and self.n_shared == 0:
-#             raise ValueError("n_shared and n_independent can't be both zero.")
-
-#         self.virtual_batch_size = virtual_batch_size
-#         self.embedder = EmbeddingGenerator(
-#             input_dim, cat_dims, cat_idxs, cat_emb_dim, group_attention_matrix
-#         )
-#         self.post_embed_dim = self.embedder.post_embed_dim
-
-#         self.masker = RandomObfuscator(
-#             self.pretraining_ratio, group_matrix=self.embedder.embedding_group_matrix
-#         )
-#         self.encoder = TabNetEncoder(
-#             input_dim=self.post_embed_dim,
-#             output_dim=self.post_embed_dim,
-#             n_d=n_d,
-#             n_a=n_a,
-#             n_steps=n_steps,
-#             gamma=gamma,
-#             n_independent=n_independent,
-#             n_shared=n_shared,
-#             epsilon=epsilon,
-#             virtual_batch_size=virtual_batch_size,
-#             momentum=momentum,
-#             mask_type=mask_type,
-#             group_attention_matrix=self.embedder.embedding_group_matrix,
-#         )
-#         self.decoder = TabNetDecoder(
-#             self.post_embed_dim,
-#             n_d=n_d,
-#             n_steps=n_steps,
-#             n_independent=self.n_indep_decoder,
-#             n_shared=self.n_shared_decoder,
-#             virtual_batch_size=virtual_batch_size,
-#             momentum=momentum,
-#         )
-
-#     def forward(self, x):
-#         """
-#         Returns: res, embedded_x, obf_vars
-#             res : output of reconstruction
-#             embedded_x : embedded input
-#             obf_vars : which variable where obfuscated
-#         """
-#         embedded_x = self.embedder(x)
-#         if self.training:
-#             masked_x, obfuscated_groups, obfuscated_vars = self.masker(embedded_x)
-#             # set prior of encoder with obfuscated groups
-#             prior = 1 - obfuscated_groups
-#             steps_out, _ = self.encoder(masked_x, prior=prior)
-#             res = self.decoder(steps_out)
-#             return res, embedded_x, obfuscated_vars
-#         else:
-#             steps_out, _ = self.encoder(embedded_x)
-#             res = self.decoder(steps_out)
-#             return res, embedded_x, torch.ones(embedded_x.shape).to(x.device)
-
-#     def forward_masks(self, x):
-#         embedded_x = self.embedder(x)
-#         return self.encoder.forward_masks(embedded_x)
-
-
 class AttentiveTransformer(torch.nn.Module):
     def __init__(
         self,
@@ -789,9 +511,194 @@ class GLU_Layer(torch.nn.Module):
         return out
 
 
+# class TabNetDecoder(torch.nn.Module):
+#     def __init__(
+#         self,
+#         input_dim,
+#         n_d=8,
+#         n_steps=3,
+#         n_independent=1,
+#         n_shared=1,
+#         virtual_batch_size=128,
+#         momentum=0.02,
+#     ):
+#         """
+#         Defines main part of the TabNet network without the embedding layers.
+
+#         Parameters
+#         ----------
+#         input_dim : int
+#             Number of features
+#         output_dim : int or list of int for multi task classification
+#             Dimension of network output
+#             examples : one for regression, 2 for binary classification etc...
+#         n_d : int
+#             Dimension of the prediction  layer (usually between 4 and 64)
+#         n_steps : int
+#             Number of successive steps in the network (usually between 3 and 10)
+#         gamma : float
+#             Float above 1, scaling factor for attention updates (usually between 1.0 to 2.0)
+#         n_independent : int
+#             Number of independent GLU layer in each GLU block (default 1)
+#         n_shared : int
+#             Number of independent GLU layer in each GLU block (default 1)
+#         virtual_batch_size : int
+#             Batch size for Ghost Batch Normalization
+#         momentum : float
+#             Float value between 0 and 1 which will be used for momentum in all batch norm
+#         """
+#         super(TabNetDecoder, self).__init__()
+#         self.input_dim = input_dim
+#         self.n_d = n_d
+#         self.n_steps = n_steps
+#         self.n_independent = n_independent
+#         self.n_shared = n_shared
+#         self.virtual_batch_size = virtual_batch_size
+
+#         self.feat_transformers = torch.nn.ModuleList()
+
+#         if self.n_shared > 0:
+#             shared_feat_transform = torch.nn.ModuleList()
+#             for i in range(self.n_shared):
+#                 if i == 0:
+#                     shared_feat_transform.append(Linear(n_d, 2 * n_d, bias=False))
+#                 else:
+#                     shared_feat_transform.append(Linear(n_d, 2 * n_d, bias=False))
+
+#         else:
+#             shared_feat_transform = None
+
+#         for step in range(n_steps):
+#             transformer = FeatTransformer(
+#                 n_d,
+#                 n_d,
+#                 shared_feat_transform,
+#                 n_glu_independent=self.n_independent,
+#                 virtual_batch_size=self.virtual_batch_size,
+#                 momentum=momentum,
+#             )
+#             self.feat_transformers.append(transformer)
+
+#         self.reconstruction_layer = Linear(n_d, self.input_dim, bias=False)
+#         initialize_non_glu(self.reconstruction_layer, n_d, self.input_dim)
+
+#     def forward(self, steps_output):
+#         res = 0
+#         for step_nb, step_output in enumerate(steps_output):
+#             x = self.feat_transformers[step_nb](step_output)
+#             res = torch.add(res, x)
+#         res = self.reconstruction_layer(res)
+#         return res
+
+
+# class TabNetPretraining(torch.nn.Module):
+#     def __init__(
+#         self,
+#         input_dim,
+#         pretraining_ratio=0.2,
+#         n_d=8,
+#         n_a=8,
+#         n_steps=3,
+#         gamma=1.3,
+#         cat_idxs=[],
+#         cat_dims=[],
+#         cat_emb_dim=1,
+#         n_independent=2,
+#         n_shared=2,
+#         epsilon=1e-15,
+#         virtual_batch_size=128,
+#         momentum=0.02,
+#         mask_type="sparsemax",
+#         n_shared_decoder=1,
+#         n_indep_decoder=1,
+#         group_attention_matrix=None,
+#     ):
+#         super(TabNetPretraining, self).__init__()
+
+#         self.cat_idxs = cat_idxs or []
+#         self.cat_dims = cat_dims or []
+#         self.cat_emb_dim = cat_emb_dim
+
+#         self.input_dim = input_dim
+#         self.n_d = n_d
+#         self.n_a = n_a
+#         self.n_steps = n_steps
+#         self.gamma = gamma
+#         self.epsilon = epsilon
+#         self.n_independent = n_independent
+#         self.n_shared = n_shared
+#         self.mask_type = mask_type
+#         self.pretraining_ratio = pretraining_ratio
+#         self.n_shared_decoder = n_shared_decoder
+#         self.n_indep_decoder = n_indep_decoder
+
+#         if self.n_steps <= 0:
+#             raise ValueError("n_steps should be a positive integer.")
+#         if self.n_independent == 0 and self.n_shared == 0:
+#             raise ValueError("n_shared and n_independent can't be both zero.")
+
+#         self.virtual_batch_size = virtual_batch_size
+#         self.embedder = EmbeddingGenerator(
+#             input_dim, cat_dims, cat_idxs, cat_emb_dim, group_attention_matrix
+#         )
+#         self.post_embed_dim = self.embedder.post_embed_dim
+
+#         self.masker = RandomObfuscator(
+#             self.pretraining_ratio, group_matrix=self.embedder.embedding_group_matrix
+#         )
+#         self.encoder = TabNetEncoder(
+#             input_dim=self.post_embed_dim,
+#             output_dim=self.post_embed_dim,
+#             n_d=n_d,
+#             n_a=n_a,
+#             n_steps=n_steps,
+#             gamma=gamma,
+#             n_independent=n_independent,
+#             n_shared=n_shared,
+#             epsilon=epsilon,
+#             virtual_batch_size=virtual_batch_size,
+#             momentum=momentum,
+#             mask_type=mask_type,
+#             group_attention_matrix=self.embedder.embedding_group_matrix,
+#         )
+#         self.decoder = TabNetDecoder(
+#             self.post_embed_dim,
+#             n_d=n_d,
+#             n_steps=n_steps,
+#             n_independent=self.n_indep_decoder,
+#             n_shared=self.n_shared_decoder,
+#             virtual_batch_size=virtual_batch_size,
+#             momentum=momentum,
+#         )
+
+#     def forward(self, x):
+#         """
+#         Returns: res, embedded_x, obf_vars
+#             res : output of reconstruction
+#             embedded_x : embedded input
+#             obf_vars : which variable where obfuscated
+#         """
+#         embedded_x = self.embedder(x)
+#         if self.training:
+#             masked_x, obfuscated_groups, obfuscated_vars = self.masker(embedded_x)
+#             # set prior of encoder with obfuscated groups
+#             prior = 1 - obfuscated_groups
+#             steps_out, _ = self.encoder(masked_x, prior=prior)
+#             res = self.decoder(steps_out)
+#             return res, embedded_x, obfuscated_vars
+#         else:
+#             steps_out, _ = self.encoder(embedded_x)
+#             res = self.decoder(steps_out)
+#             return res, embedded_x, torch.ones(embedded_x.shape).to(x.device)
+
+#     def forward_masks(self, x):
+#         embedded_x = self.embedder(x)
+#         return self.encoder.forward_masks(embedded_x)
+
+
 # class EmbeddingGenerator(torch.nn.Module):
 #     """
-#     Classical embeddings generator
+#     Categorical embeddings generator
 #     """
 
 #     def __init__(self, input_dim, cat_dims, cat_idxs, cat_emb_dims, group_matrix):
