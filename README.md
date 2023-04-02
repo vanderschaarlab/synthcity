@@ -311,6 +311,19 @@ assert syn_model.name() == reloaded.name()
 |--- | --- | --- |
 |**nflow**| Normalizing Flows are generative models which produce tractable distributions where both sampling and density evaluation can be efficient and exact.| [Neural Spline Flows](https://arxiv.org/abs/1906.04032) |
 
+### Graph neural networks
+
+| Method | Description | Reference |
+|--- | --- | --- |
+|**goggle**| GOGGLE: Generative Modelling for Tabular Data by Learning Relational Structure | [Paper](https://openreview.net/forum?id=fPVRcJqspu) |
+
+
+### Diffusion models
+
+| Method | Description | Reference |
+|--- | --- | --- |
+|**ddpm**| TabDDPM: Modelling Tabular Data with Diffusion Models. | [Paper](https://arxiv.org/abs/2209.15421) |
+
 ### Static Survival analysis methods
 
 | Method | Description | Reference |
