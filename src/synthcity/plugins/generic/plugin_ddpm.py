@@ -48,14 +48,16 @@ class TabDDPMPlugin(Plugin):
             L2 weight decay.
         batch_size: int = 1024
             Size of mini-batches.
-        model_type: str = "mlp"
-            Type of model to use. Either "mlp" or "resnet".
         num_timesteps: int = 1000
             Number of timesteps to use in the diffusion process.
         gaussian_loss_type: str = "mse"
             Type of loss to use for the Gaussian diffusion process. Either "mse" or "kl".
         scheduler: str = "cosine"
             The scheduler of forward process variance 'beta' to use. Either "cosine" or "linear".
+        model_type: str = "mlp"
+            Type of diffusion model to use ("mlp", "resnet", or "tabnet").
+        model_params: dict = dict(n_layers_hidden=3, n_units_hidden=256, dropout=0.0)
+            Parameters of the diffusion model. Should be different for different model types.
         device: Any = DEVICE
             Device to use for training.
         callbacks: Sequence[Callback] = ()
@@ -101,7 +103,6 @@ class TabDDPMPlugin(Plugin):
         lr: float = 0.002,
         weight_decay: float = 1e-4,
         batch_size: int = 1024,
-        model_type: str = "mlp",
         num_timesteps: int = 1000,
         gaussian_loss_type: str = "mse",
         scheduler: str = "cosine",
@@ -109,11 +110,11 @@ class TabDDPMPlugin(Plugin):
         callbacks: Sequence[Callback] = (),
         log_interval: int = 100,
         print_interval: int = 500,
-        # model params
-        n_layers_hidden: int = 3,
-        dim_hidden: int = 256,
-        dropout: float = 0.0,
+        model_type: str = "mlp",
+        model_params: dict = {},
         dim_embed: int = 128,
+        continuous_encoder: str = "quantile",
+        cont_encoder_params: dict = {},
         # core plugin arguments
         random_state: int = 0,
         workspace: Path = Path("workspace"),
@@ -132,10 +133,6 @@ class TabDDPMPlugin(Plugin):
 
         self.is_classification = is_classification
 
-        mlp_params = dict(
-            n_layers_hidden=n_layers_hidden, n_units_hidden=dim_hidden, dropout=dropout
-        )
-
         self.model = TabDDPM(
             n_iter=n_iter,
             lr=lr,
@@ -150,14 +147,17 @@ class TabDDPMPlugin(Plugin):
             log_interval=log_interval,
             print_interval=print_interval,
             model_type=model_type,
-            mlp_params=mlp_params,
+            model_params=model_params.copy(),
             dim_embed=dim_embed,
         )
 
+        cont_encoder_params = cont_encoder_params.copy()
+        cont_encoder_params.update(random_state=random_state)
+
         self.encoder = TabularEncoder(
-            continuous_encoder="quantile",
-            categorical_encoder="passthrough",
-            cont_encoder_params=dict(random_state=random_state),
+            continuous_encoder=continuous_encoder,
+            cont_encoder_params=cont_encoder_params,
+            categorical_encoder="none",
             cat_encoder_params=dict(),
         )
 

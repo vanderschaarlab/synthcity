@@ -119,7 +119,7 @@ class FeatureEncoder(TransformerMixin, BaseEstimator):  # type: ignore
 
     @classmethod
     def wraps(
-        cls, encoder_class: TransformerMixin, **params: Any
+        cls: type, encoder_class: TransformerMixin, **params: Any
     ) -> Type[FeatureEncoder]:
         """Wraps sklearn transformer to FeatureEncoder."""
 
@@ -260,7 +260,7 @@ class GaussianQuantileTransformer(QuantileTransformer):
         subsample: int = 10000,
         random_state: Any = None,
         copy: bool = True,
-    ):
+    ) -> None:
         super().__init__(
             n_quantiles=None,
             output_distribution="normal",
@@ -273,38 +273,3 @@ class GaussianQuantileTransformer(QuantileTransformer):
     def fit(self, x: np.ndarray, y: Any = None) -> "GaussianQuantileTransformer":
         self.n_quantiles = max(min(len(x) // 30, 1000), 10)
         return super().fit(x, y)
-
-
-ENCODERS = {
-    "datetime": DatetimeEncoder,
-    "onehot": OneHotEncoder,
-    "label": LabelEncoder,
-    "standard": StandardScaler,
-    "minmax": MinMaxScaler,
-    "robust": RobustScaler,
-    "quantile": GaussianQuantileTransformer,
-    "bayesian_gmm": BayesianGMMEncoder,
-    "passthrough": FeatureEncoder,
-}
-
-
-def get_encoder(encoder: Union[str, type]) -> Type[FeatureEncoder]:
-    """Get a registered encoder.
-
-    Supported encoders:
-    - Datetime
-        - datetime
-    - Categorical
-        - onehot
-        - label
-    - Continuous
-        - standard
-        - minmax
-        - robust
-        - quantile
-        - bayesian_gmm
-    - Passthrough
-    """
-    if isinstance(encoder, type):  # custom encoder
-        return FeatureEncoder.wraps(encoder)
-    return ENCODERS[encoder]

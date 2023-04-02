@@ -40,7 +40,7 @@ class TabDDPM(nn.Module):
         print_interval: int = 100,
         # model params
         model_type: str = "mlp",
-        mlp_params: Optional[dict] = None,
+        model_params: Optional[dict] = None,
         dim_embed: int = 128,
         # early stopping
         n_iter_min: int = 100,
@@ -95,13 +95,6 @@ class TabDDPM(nn.Module):
             cat_counts = [0]
             self.feature_names_out = self.feature_names
 
-        model_params = dict(
-            num_classes=self.n_classes,
-            conditional=cond is not None,
-            mlp_params=self.mlp_params,
-            dim_emb=self.dim_embed,
-        )
-
         dataset = TensorDataset(
             torch.tensor(X.values, dtype=torch.float32, device=self.device),
             torch.tensor([torch.nan] * len(X), dtype=torch.float32, device=self.device)
@@ -117,11 +110,14 @@ class TabDDPM(nn.Module):
 
         self.diffusion = GaussianMultinomialDiffusion(
             model_type=self.model_type,
-            model_params=model_params,
+            model_params=self.model_params,
             num_categorical_features=cat_counts,
             num_numerical_features=X.shape[1] - len(cat_cols),
             gaussian_loss_type=self.gaussian_loss_type,
             num_timesteps=self.num_timesteps,
+            num_classes=self.n_classes,
+            conditional=cond is not None,
+            dim_emb=self.dim_embed,
             scheduler=self.scheduler,
             device=self.device,
         ).to(self.device)

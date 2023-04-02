@@ -18,7 +18,7 @@ from torch import Tensor
 from synthcity.logger import debug, info, warning
 
 # synthcity relative
-from .modules import MLPDiffusion, ResNetDiffusion
+from .modules import DiffusionModel
 from .utils import (
     discretized_gaussian_log_likelihood,
     index_to_log_onehot,
@@ -67,11 +67,15 @@ def get_beta_schedule(schedule_name: str, num_diffusion_timesteps: int) -> np.nd
 class GaussianMultinomialDiffusion(torch.nn.Module):
     def __init__(
         self,
+        *,
         num_numerical_features: int,
         num_categorical_features: tuple,
-        model_type: str = "mlp",
-        model_params: Optional[dict] = None,
+        model_type: str,
+        model_params: dict,
         num_timesteps: int = 1000,
+        num_classes: int = 0,
+        conditional: bool = False,
+        dim_emb: int = 128,
         gaussian_loss_type: str = "mse",
         gaussian_parametrization: str = "eps",
         multinomial_loss_type: str = "vb_stochastic",
@@ -110,24 +114,14 @@ class GaussianMultinomialDiffusion(torch.nn.Module):
             self.slices_for_classes.append(np.arange(offsets[i - 1], offsets[i]))
         self.offsets = torch.from_numpy(np.append([0], offsets)).to(device).long()
 
-        if model_params is None:
-            model_params = dict(
-                dim_in=self.dim_input, num_classes=0, conditional=False, mlp_params=None
-            )
-        else:
-            model_params["dim_in"] = self.dim_input
-
-        if model_params["mlp_params"] is None:
-            model_params["mlp_params"] = dict(
-                n_units_hidden=256, n_layers_hidden=3, dropout=0.0
-            )
-
-        if model_type == "mlp":
-            self.denoise_fn = MLPDiffusion(**model_params)
-        elif model_type == "resnet":
-            self.denoise_fn = ResNetDiffusion(**model_params)
-        else:
-            raise NotImplementedError(f"unknown model type: {model_type}")
+        self.denoise_fn = DiffusionModel(
+            dim_in=self.dim_input,
+            dim_emb=dim_emb,
+            num_classes=num_classes,
+            conditional=conditional,
+            model_type=model_type,
+            model_params=model_params,
+        )
 
         self.gaussian_loss_type = gaussian_loss_type
         self.gaussian_parametrization = gaussian_parametrization

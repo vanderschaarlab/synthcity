@@ -17,7 +17,7 @@ from synthcity.utils.dataframe import discrete_columns as find_cat_cols
 from synthcity.utils.serialization import dataframe_hash
 
 # synthcity relative
-from .data_encoder import get_encoder
+from .factory import get_feature_encoder
 
 
 class FeatureInfo(BaseModel):
@@ -114,9 +114,13 @@ class TabularEncoder(TransformerMixin, BaseEstimator):
                 Information of the fitted feature encoder.
         """
         if feature_type == "discrete":
-            encoder = get_encoder(self.categorical_encoder)(**self.cat_encoder_params)
+            encoder = get_feature_encoder(
+                self.categorical_encoder, self.cat_encoder_params
+            )
         else:
-            encoder = get_encoder(self.continuous_encoder)(**self.cont_encoder_params)
+            encoder = get_feature_encoder(
+                self.continuous_encoder, self.cont_encoder_params
+            )
 
         encoder.fit(feature)
 
