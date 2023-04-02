@@ -2,7 +2,7 @@
 Custom differentiable tensor functions.
 """
 # stdlib
-from typing import Any
+from typing import Any, Tuple
 
 # third party
 import torch
@@ -56,7 +56,7 @@ class SparsemaxFunction(Function):
         return output
 
     @staticmethod
-    def backward(ctx: Any, grad_output: torch.Tensor) -> tuple[torch.Tensor, None]:
+    def backward(ctx: Any, grad_output: torch.Tensor) -> Tuple[torch.Tensor, None]:
         supp_size, output = ctx.saved_tensors
         dim = ctx.dim
         grad_input = grad_output.clone()
@@ -70,7 +70,7 @@ class SparsemaxFunction(Function):
     @staticmethod
     def _threshold_and_support(
         input: torch.Tensor, dim: int = -1
-    ) -> tuple[torch.Tensor, torch.Tensor]:
+    ) -> Tuple[torch.Tensor, torch.Tensor]:
         """Sparsemax building block: compute the threshold
 
         Parameters
@@ -132,7 +132,7 @@ class EntmaxFunction(Function):
     @staticmethod
     def _threshold_and_support(
         input: torch.Tensor, dim: int = -1
-    ) -> tuple[torch.Tensor, torch.Tensor]:
+    ) -> Tuple[torch.Tensor, torch.Tensor]:
         Xsrt, _ = torch.sort(input, descending=True, dim=dim)
 
         rho = _make_ix_like(input, dim)
