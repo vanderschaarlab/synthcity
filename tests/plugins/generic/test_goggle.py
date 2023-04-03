@@ -1,5 +1,7 @@
+# Standard library imports
 # third party
 import numpy as np
+import pkg_resources
 import pytest
 from generic_helpers import generate_fixtures
 from sklearn.datasets import load_diabetes, load_iris
@@ -9,8 +11,15 @@ from synthcity.metrics.eval import PerformanceEvaluatorXGB
 from synthcity.plugins import Plugin
 from synthcity.plugins.core.constraints import Constraints
 from synthcity.plugins.core.dataloader import GenericDataLoader
-from synthcity.plugins.generic.plugin_goggle import plugin
 from synthcity.utils.serialization import load, save
+
+is_missing_goggle_deps = False
+try:
+    # synthcity absolute
+    from synthcity.plugins.generic.plugin_goggle import plugin
+except ImportError:
+    plugin = None
+    is_missing_goggle_deps = True
 
 plugin_name = "goggle"
 plugin_args = {
@@ -18,29 +27,56 @@ plugin_args = {
     "device": "cpu",
 }
 
+if not is_missing_goggle_deps:
+    goggle_dependencies = {"dgl", "torch-scatter", "torch-sparse", "torch-geometric"}
+    installed = {pkg.key for pkg in pkg_resources.working_set}
+    is_missing_goggle_deps = len(goggle_dependencies - installed) > 0
 
-@pytest.mark.parametrize("test_plugin", generate_fixtures(plugin_name, plugin))
+print(is_missing_goggle_deps)
+
+
+@pytest.mark.skipif(is_missing_goggle_deps, reason="Goggle dependencies not installed")
+@pytest.mark.parametrize(
+    "test_plugin",
+    generate_fixtures(plugin_name, plugin, use_dummy_fixtures=is_missing_goggle_deps),
+)
 def test_plugin_sanity(test_plugin: Plugin) -> None:
     assert test_plugin is not None
 
 
-@pytest.mark.parametrize("test_plugin", generate_fixtures(plugin_name, plugin))
+@pytest.mark.skipif(is_missing_goggle_deps, reason="Goggle dependencies not installed")
+@pytest.mark.parametrize(
+    "test_plugin",
+    generate_fixtures(plugin_name, plugin, use_dummy_fixtures=is_missing_goggle_deps),
+)
 def test_plugin_name(test_plugin: Plugin) -> None:
     assert test_plugin.name() == plugin_name
 
 
-@pytest.mark.parametrize("test_plugin", generate_fixtures(plugin_name, plugin))
+@pytest.mark.skipif(is_missing_goggle_deps, reason="Goggle dependencies not installed")
+@pytest.mark.parametrize(
+    "test_plugin",
+    generate_fixtures(plugin_name, plugin, use_dummy_fixtures=is_missing_goggle_deps),
+)
 def test_plugin_type(test_plugin: Plugin) -> None:
     assert test_plugin.type() == "generic"
 
 
-@pytest.mark.parametrize("test_plugin", generate_fixtures(plugin_name, plugin))
+@pytest.mark.skipif(is_missing_goggle_deps, reason="Goggle dependencies not installed")
+@pytest.mark.parametrize(
+    "test_plugin",
+    generate_fixtures(plugin_name, plugin, use_dummy_fixtures=is_missing_goggle_deps),
+)
 def test_plugin_hyperparams(test_plugin: Plugin) -> None:
     assert len(test_plugin.hyperparameter_space()) == 9
 
 
+@pytest.mark.skipif(is_missing_goggle_deps, reason="Goggle dependencies not installed")
 @pytest.mark.parametrize(
-    "test_plugin", generate_fixtures(plugin_name, plugin, plugin_args)
+    "test_plugin",
+    generate_fixtures(
+        plugin_name, plugin, plugin_args, use_dummy_fixtures=is_missing_goggle_deps
+    ),
 )
 def test_plugin_fit(test_plugin: Plugin) -> None:
     Xraw, y = load_diabetes(return_X_y=True, as_frame=True)
@@ -48,8 +84,12 @@ def test_plugin_fit(test_plugin: Plugin) -> None:
     test_plugin.fit(GenericDataLoader(Xraw))
 
 
+@pytest.mark.skipif(is_missing_goggle_deps, reason="Goggle dependencies not installed")
 @pytest.mark.parametrize(
-    "test_plugin", generate_fixtures(plugin_name, plugin, plugin_args)
+    "test_plugin",
+    generate_fixtures(
+        plugin_name, plugin, plugin_args, use_dummy_fixtures=is_missing_goggle_deps
+    ),
 )
 @pytest.mark.parametrize("serialize", [True, False])
 def test_plugin_generate(test_plugin: Plugin, serialize: bool) -> None:
@@ -78,8 +118,12 @@ def test_plugin_generate(test_plugin: Plugin, serialize: bool) -> None:
     assert (X_gen1.numpy() != X_gen3.numpy()).any()
 
 
+@pytest.mark.skipif(is_missing_goggle_deps, reason="Goggle dependencies not installed")
 @pytest.mark.parametrize(
-    "test_plugin", generate_fixtures(plugin_name, plugin, plugin_args)
+    "test_plugin",
+    generate_fixtures(
+        plugin_name, plugin, plugin_args, use_dummy_fixtures=is_missing_goggle_deps
+    ),
 )
 def test_plugin_generate_constraints_goggle(test_plugin: Plugin) -> None:
     X, y = load_iris(as_frame=True, return_X_y=True)
@@ -105,12 +149,14 @@ def test_plugin_generate_constraints_goggle(test_plugin: Plugin) -> None:
     assert list(X_gen.columns) == list(X.columns)
 
 
+@pytest.mark.skipif(is_missing_goggle_deps, reason="Goggle dependencies not installed")
 def test_sample_hyperparams() -> None:
     for i in range(100):
         args = plugin.sample_hyperparameters()
         assert plugin(**args) is not None
 
 
+@pytest.mark.skipif(is_missing_goggle_deps, reason="Goggle dependencies not installed")
 @pytest.mark.slow
 @pytest.mark.parametrize(
     "compress_dataset,decoder_arch",

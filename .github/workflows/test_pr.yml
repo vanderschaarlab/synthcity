@@ -57,6 +57,6 @@ jobs:
             pip install -r prereq.txt
 
             pip install --upgrade pip
-            pip install .[all]
+            pip install .[testing]
       - name: Test with pytest
         run: pytest -vvvs -m "not slow" --durations=50

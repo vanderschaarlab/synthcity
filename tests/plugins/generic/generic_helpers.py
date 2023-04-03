@@ -10,7 +10,9 @@ from synthcity.plugins.generic import GenericPlugins as Plugins
 from synthcity.utils.serialization import load, save
 
 
-def generate_fixtures(name: str, plugin: Type, plugin_args: Dict = {}) -> List:
+def generate_fixtures(
+    name: str, plugin: Type, plugin_args: Dict = {}, use_dummy_fixtures: bool = False
+) -> List:
     def from_api() -> Plugin:
         return Plugins().get(name, **plugin_args)
 
@@ -21,7 +23,10 @@ def generate_fixtures(name: str, plugin: Type, plugin_args: Dict = {}) -> List:
         buff = save(plugin(**plugin_args))
         return load(buff)
 
-    return [from_api(), from_module(), from_serde()]
+    if use_dummy_fixtures:
+        return [None, None, None]
+    else:
+        return [from_api(), from_module(), from_serde()]
 
 
 def get_airfoil_dataset() -> pd.DataFrame:

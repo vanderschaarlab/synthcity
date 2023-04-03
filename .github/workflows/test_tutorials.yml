@@ -35,7 +35,7 @@ jobs:
             pip install -r prereq.txt
             pip install --upgrade pip
 
-            pip install .[all]
+            pip install .[testing]
 
             python -m pip install ipykernel
             python -m ipykernel install --user
