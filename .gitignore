@@ -67,4 +67,4 @@ lightning_logs
 generated
 MNIST
 cifar-10*
-local_test.py
+local_test*.py

@@ -172,6 +172,8 @@ class DatetimeEncoder(FeatureEncoder):
 class BayesianGMMEncoder(FeatureEncoder):
     """Bayesian Gaussian Mixture encoder"""
 
+    n_dim_in = 2
+
     def __init__(
         self,
         n_components: int = 10,
@@ -181,7 +183,6 @@ class BayesianGMMEncoder(FeatureEncoder):
         std_multiplier: int = 4,
     ) -> None:
         self.n_components = n_components
-        self.random_state = random_state
         self.weight_threshold = weight_threshold
         self.clip_output = clip_output
         self.std_multiplier = std_multiplier
@@ -190,13 +191,12 @@ class BayesianGMMEncoder(FeatureEncoder):
             random_state=random_state,
             weight_concentration_prior=1e-3,
         )
-        self.weights: List[float]
 
     def _fit(self, x: np.ndarray, **kwargs: Any) -> "BayesianGaussianMixture":
         self.min_value = x.min()
         self.max_value = x.max()
 
-        self.model.fit(x.reshape(-1, 1))
+        self.model.fit(x)
         self.weights = self.model.weights_
         self.means = self.model.means_.reshape(-1)
         self.stds = np.sqrt(self.model.covariances_).reshape(-1)
@@ -204,7 +204,6 @@ class BayesianGMMEncoder(FeatureEncoder):
         return self
 
     def _transform(self, x: np.ndarray) -> np.ndarray:
-        x = x.reshape(-1, 1)
         means = self.means.reshape(1, -1)
         stds = self.stds.reshape(1, -1)
 

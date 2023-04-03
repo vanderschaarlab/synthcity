@@ -120,7 +120,7 @@ def test_plugin_generate_constraints(test_plugin: Plugin) -> None:
 
 @pytest.mark.parametrize("test_plugin", extend_fixtures())
 def test_plugin_hyperparams(test_plugin: Plugin) -> None:
-    assert len(test_plugin.hyperparameter_space()) == 6
+    assert len(test_plugin.hyperparameter_space()) == 4
 
 
 def test_sample_hyperparams() -> None:

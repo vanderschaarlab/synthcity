@@ -274,10 +274,18 @@ class TabularEncoder(TransformerMixin, BaseEstimator):
             - discrete, and with length <N>, the length of the one-hot encoding.
         """
         out = []
+        acts = dict(discrete=discrete_activation, continuous=continuous_activation)
+        # NOTE: be careful with the dim of softmax!
         for column_transform_info in self._column_transform_info_list:
+            ct = column_transform_info.trans_feature_types[0]
+            d = 0
             for t in column_transform_info.trans_feature_types:
-                act = discrete_activation if t == "discrete" else continuous_activation
-                out.append((act, 1))
+                if t != ct:
+                    out.append((acts[ct], d))
+                    ct = t
+                    d = 0
+                d += 1
+            out.append((acts[ct], d))
         return out
 
 
@@ -291,10 +299,8 @@ class BinEncoder(TabularEncoder):
     continuous_encoder = "bayesian_gmm"
     cont_encoder_params = dict(n_components=2)
     categorical_encoder = "passthrough"  # "onehot"
-    # ! onehot encoder does not pass the tests
     cat_encoder_params = dict()  # dict(handle_unknown="ignore", sparse=False)
 
-    # TODO: check if this is correct
     def _transform_feature(
         self, column_transform_info: FeatureInfo, feature: pd.Series
     ) -> pd.DataFrame:

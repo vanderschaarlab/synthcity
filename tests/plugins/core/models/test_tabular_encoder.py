@@ -105,21 +105,17 @@ def check_equal_layouts(
     layout: list, act_layout: list, disc_act: str, cont_act: str
 ) -> None:
     expected_act_layout = []
+
     for col_info in layout:
         if col_info.feature_type == "continuous":
-            expected_act_layout.append(cont_act)
-            for _ in range(col_info.output_dimensions - 1):
-                expected_act_layout.append(disc_act)
+            expected_act_layout.append((cont_act, 1))
+            r = col_info.output_dimensions - 1
+            if r > 0:
+                expected_act_layout.append((disc_act, r))
         else:
-            for _ in range(col_info.output_dimensions):
-                expected_act_layout.append(disc_act)
+            expected_act_layout.append((disc_act, col_info.output_dimensions))
 
-    expanded_act_layout = []
-    for act, num in act_layout:
-        for _ in range(num):
-            expanded_act_layout.append(act)
-
-    assert expanded_act_layout == expected_act_layout
+    assert expected_act_layout == act_layout
 
 
 def test_encoder_activation_layout() -> None:
