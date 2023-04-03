@@ -1,4 +1,4 @@
-name: Tests PR Python
+name: Tests Python
 
 on:
   push:
@@ -57,6 +57,6 @@ jobs:
             pip install -r prereq.txt
 
             pip install --upgrade pip
-            pip install .[testing]
+            pip install .[all]
       - name: Test with pytest
         run: pytest -vvvs -m "not slow" --durations=50

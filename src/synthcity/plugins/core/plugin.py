@@ -549,7 +549,6 @@ class PluginLoader:
         for plugin in plugins:
             stem = Path(plugin).stem.split("plugin_")[-1]
             self._available_plugins[stem] = plugin
-
         self._expected_type = expected_type
         self._categories = categories
 
@@ -616,9 +615,7 @@ class PluginLoader:
             raise ValueError(
                 f"Plugin {name} must derive the {self._expected_type} interface."
             )
-
         self._plugins[name] = cls
-
         return self
 
     @validate_arguments

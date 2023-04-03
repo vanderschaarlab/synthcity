@@ -30,6 +30,6 @@ jobs:
             pip install -r prereq.txt
 
             pip install --upgrade pip
-            pip install .[testing]
+            pip install .[all]
       - name: Test with pytest
         run: pytest -vvvs --durations=50

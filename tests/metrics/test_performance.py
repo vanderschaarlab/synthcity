@@ -94,6 +94,7 @@ def test_evaluate_performance_classifier(
 @pytest.mark.xfail
 @pytest.mark.skipif(sys.platform != "linux", reason="Linux only for faster results")
 @pytest.mark.skipif(sys.version_info < (3, 9), reason="requires python3.9 or higher")
+@pytest.mark.slow
 def test_evaluate_feature_importance_rank_dist_clf(
     distance: str, test_plugin: Plugin
 ) -> None:
@@ -182,6 +183,7 @@ def test_evaluate_performance_regression(
 @pytest.mark.xfail
 @pytest.mark.skipif(sys.platform != "linux", reason="Linux only for faster results")
 @pytest.mark.skipif(sys.version_info < (3, 9), reason="requires python3.9 or higher")
+@pytest.mark.slow
 def test_evaluate_feature_importance_rank_dist_reg(
     distance: str, test_plugin: Plugin
 ) -> None:
@@ -290,6 +292,7 @@ def test_evaluate_performance_survival_analysis(
 @pytest.mark.xfail
 @pytest.mark.skipif(sys.platform != "linux", reason="Linux only for faster results")
 @pytest.mark.skipif(sys.version_info < (3, 9), reason="requires python3.9 or higher")
+@pytest.mark.slow
 def test_evaluate_feature_importance_rank_dist_surv(
     distance: str, test_plugin: Plugin
 ) -> None:
