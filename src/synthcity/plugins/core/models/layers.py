@@ -44,41 +44,36 @@ class Transpose(nn.Module):
             return x.transpose(*self.dims)
 
 
+@validate_arguments(config=dict(arbitrary_types_allowed=True))
+def _forward_skip_connection(
+    self: nn.Module, X: torch.Tensor, *args: Any, **kwargs: Any
+) -> torch.Tensor:
+    # if X.shape[-1] == 0:
+    #     return torch.zeros((*X.shape[:-1], self.n_units_out)).to(self.device)
+    X = X.float().to(self.device)
+    out = self._forward(X, *args, **kwargs)
+    return torch.cat([out, X], dim=-1)
+
+
 def SkipConnection(cls: Type[nn.Module]) -> Type[nn.Module]:
     """Wraps a model to add a skip connection from the input to the output.
 
     Example:
     >>> ResidualBlock = SkipConnection(MLP)
-    >>> ResidualBlock(n_units_in=10, n_units_out=3, n_units_hidden=64)
-    SkipConnection(MLP)(
-        (model): Sequential(
-            (0): LinearLayer(
-                (model): Sequential(
-                    (0): Linear(in_features=10, out_features=64, bias=True)
-                    (1): ReLU()
-                )
-            )
-            (1): Linear(in_features=64, out_features=3, bias=True)
-        )
-        (loss): MSELoss()
-    )
+    >>> res_block = ResidualBlock(n_units_in=10, n_units_out=3, n_units_hidden=64)
+    >>> res_block(torch.ones(10, 10)).shape
+    (10, 13)
     """
 
-    class WrappedModule(cls):  # type: ignore
+    class Wrapper(cls):  # type: ignore
         device: torch.device = DEVICE
 
-        @validate_arguments(config=dict(arbitrary_types_allowed=True))
-        def forward(self, X: torch.Tensor) -> torch.Tensor:
-            # if X.shape[-1] == 0:
-            #     return torch.zeros((*X.shape[:-1], self.n_units_out)).to(self.device)
-            X = X.float().to(self.device)
-            out = super().forward(X)
-            return torch.cat([out, X], dim=-1)
-
-    WrappedModule.__name__ = f"SkipConnection({cls.__name__})"
-    WrappedModule.__qualname__ = f"SkipConnection({cls.__qualname__})"
-    WrappedModule.__doc__ = f"""(With skipped connection) {cls.__doc__}"""
-    return WrappedModule
+    Wrapper._forward = cls.forward
+    Wrapper.forward = _forward_skip_connection
+    Wrapper.__name__ = f"SkipConnection({cls.__name__})"
+    Wrapper.__qualname__ = f"SkipConnection({cls.__qualname__})"
+    Wrapper.__doc__ = f"""(With skipped connection) {cls.__doc__}"""
+    return Wrapper
 
 
 # class GLU(nn.Module):
