@@ -10,6 +10,7 @@ import torch
 from pydantic import validate_arguments
 from torch import nn
 from torch.utils.data import DataLoader, TensorDataset
+from tqdm import tqdm
 
 # synthcity absolute
 from synthcity.logger import info
@@ -146,7 +147,7 @@ class TabDDPM(nn.Module):
         curr_loss_gauss = 0.0
         curr_count = 0
 
-        for epoch in range(self.n_iter):
+        for epoch in tqdm(range(self.n_iter)):
             self.epoch = epoch + 1
             self.diffusion.train()
 
