@@ -1,4 +1,3 @@
-# Standard library imports
 # third party
 import numpy as np
 import pkg_resources
@@ -18,7 +17,14 @@ try:
     # synthcity absolute
     from synthcity.plugins.generic.plugin_goggle import plugin
 except ImportError:
-    plugin = None
+    """
+    Import dummy_sampler, but don't use it.
+    A valid plugin is required for generate_fixtures, but all tests should be skipped, if
+    the goggle dependencies are missing.
+    """
+    # synthcity absolute
+    from synthcity.plugins.generic.plugin_dummy_sampler import plugin
+
     is_missing_goggle_deps = True
 
 plugin_name = "goggle"
