@@ -111,9 +111,9 @@ class MLP(nn.Module):
     @validate_arguments(config=dict(arbitrary_types_allowed=True))
     def __init__(
         self,
-        *,
         n_units_in: int,
         n_units_out: int,
+        *,
         task_type: str = "regression",  # classification/regression
         n_layers_hidden: int = 1,
         n_units_hidden: int = 100,

@@ -1,17 +1,5 @@
-# stdlib
-import enum
-
 # third party
 import pandas as pd
-
-
-class TaskType(enum.Enum):
-    BINARY = "binary"
-    MULTICLASS = "multiclass"
-    REGRESSION = "regression"
-
-    def __str__(self) -> str:
-        return self.value
 
 
 def constant_columns(dataframe: pd.DataFrame) -> list:

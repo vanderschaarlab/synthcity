@@ -68,7 +68,7 @@ FEATURE_ENCODERS = dict(
 def _factory(type_: Union[str, type], params: dict, registry: dict) -> Any:
     if isinstance(type_, type):
         return type_(**params)
-    type_ = type_.lower().replace("_", "").replace("-", "")
+    type_ = type_.lower().replace("_", "")
     if type_ in registry:
         cls = registry[type_]
         if isinstance(cls, str):
