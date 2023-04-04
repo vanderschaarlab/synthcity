@@ -1,5 +1,5 @@
 # stdlib
-from typing import Dict, List, Type
+from typing import Dict, List, Optional, Type
 
 # third party
 import pandas as pd
@@ -11,22 +11,22 @@ from synthcity.utils.serialization import load, save
 
 
 def generate_fixtures(
-    name: str, plugin: Type, plugin_args: Dict = {}, use_dummy_fixtures: bool = False
+    name: str, plugin: Optional[Type], plugin_args: Dict = {}
 ) -> List:
+    if plugin is None:
+        return []
+
     def from_api() -> Plugin:
         return Plugins().get(name, **plugin_args)
 
     def from_module() -> Plugin:
-        return plugin(**plugin_args)
+        return plugin(**plugin_args)  # type: ignore
 
     def from_serde() -> Plugin:
-        buff = save(plugin(**plugin_args))
+        buff = save(plugin(**plugin_args))  # type: ignore
         return load(buff)
 
-    if use_dummy_fixtures:
-        return [None, None, None]
-    else:
-        return [from_api(), from_module(), from_serde()]
+    return [from_api(), from_module(), from_serde()]
 
 
 def get_airfoil_dataset() -> pd.DataFrame:
