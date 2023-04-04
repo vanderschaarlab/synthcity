@@ -254,7 +254,11 @@ def test_evaluate_performance_survival_analysis(
     assert "syn_ood.brier_score" in good_score
 
     sz = 100
-    X_rnd = pd.DataFrame(np.random.randn(sz, len(X.columns)), columns=X.columns)
+    X_rnd = pd.DataFrame(
+        np.random.randn(sz, len(X.columns) - 1),
+        columns=[col for col in X.columns if col != "week"],
+    )
+    X_rnd.insert(loc=0, column="week", value=np.random.randint(1, 52, size=sz))
     X_rnd["arrest"] = 1
     score = evaluator.evaluate(
         Xloader,
