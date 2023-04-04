@@ -548,13 +548,16 @@ class PluginLoader:
         self._available_plugins = {}
         for plugin in plugins:
             stem = Path(plugin).stem.split("plugin_")[-1]
+            cls = self._load_single_plugin_impl(plugin)
+            if cls is None:
+                continue
             self._available_plugins[stem] = plugin
         self._expected_type = expected_type
         self._categories = categories
 
     @validate_arguments
-    def _load_single_plugin(self, plugin_name: str) -> None:
-        """Helper for loading a single plugin"""
+    def _load_single_plugin_impl(self, plugin_name: str) -> Optional[Type]:
+        """Helper for loading a single plugin implementation"""
         plugin = Path(plugin_name)
         name = plugin.stem
         ptype = plugin.parent.name
@@ -579,6 +582,10 @@ class PluginLoader:
 
                     spec.loader.exec_module(mod)
                 cls = mod.plugin
+                if cls is None:
+                    log.critical(f"module disabled: {plugin_name}")
+                    return None
+
                 failed = False
                 break
             except BaseException as e:
@@ -587,10 +594,19 @@ class PluginLoader:
 
         if failed:
             log.critical(f"module {name} load failed")
-            return
+            return None
 
-        log.debug(f"Loaded plugin {cls.type()} - {cls.name()}")
+        return cls
+
+    @validate_arguments
+    def _load_single_plugin(self, plugin_name: str) -> bool:
+        """Helper for loading a single plugin"""
+        cls = self._load_single_plugin_impl(plugin_name)
+        if cls is None:
+            return False
+
         self.add(cls.name(), cls)
+        return True
 
     def list(self) -> List[str]:
         """Get all the available plugins."""
