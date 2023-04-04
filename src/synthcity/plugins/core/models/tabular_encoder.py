@@ -13,6 +13,7 @@ from sklearn.preprocessing import MinMaxScaler, OneHotEncoder
 
 # synthcity absolute
 import synthcity.logger as log
+from synthcity.utils.dataframe import discrete_columns as find_cat_cols
 from synthcity.utils.serialization import dataframe_hash
 
 # synthcity relative
@@ -103,18 +104,14 @@ class BinEncoder(TransformerMixin, BaseEstimator):
         )
 
     def fit(
-        self, raw_data: pd.Series, discrete_columns: Optional[List] = None
+        self, raw_data: pd.DataFrame, discrete_columns: Optional[List] = None
     ) -> "BinEncoder":
         """Fit the ``BinEncoder``.
 
         Fits a ``ContinuousDataEncoder`` for continuous columns
         """
         if discrete_columns is None:
-            discrete_columns = []
-
-            for col in raw_data.columns:
-                if len(raw_data[col].unique()) < self.categorical_limit:
-                    discrete_columns.append(col)
+            discrete_columns = find_cat_cols(raw_data, self.categorical_limit)
 
         self.output_dimensions = 0
 
@@ -247,11 +244,7 @@ class TabularEncoder(TransformerMixin, BaseEstimator):
         This step also counts the #columns in matrix data and span information.
         """
         if discrete_columns is None:
-            discrete_columns = []
-
-            for col in raw_data.columns:
-                if len(raw_data[col].unique()) < self.categorical_limit:
-                    discrete_columns.append(col)
+            discrete_columns = find_cat_cols(raw_data, self.categorical_limit)
         self.output_dimensions = 0
 
         self._column_raw_dtypes = raw_data.infer_objects().dtypes

@@ -12,7 +12,8 @@
 <div align="center">
 
 [![Test In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/drive/1Vr2PJswgfFYBkJCm3hhVkuH-9dXnHeYV?usp=sharing)
-[![Tests Python](https://github.com/vanderschaarlab/synthcity/actions/workflows/test.yml/badge.svg)](https://github.com/vanderschaarlab/synthcity/actions/workflows/test.yml)
+[![Tests Quick Python](https://github.com/vanderschaarlab/synthcity/actions/workflows/test_pr.yml/badge.svg)](https://github.com/vanderschaarlab/synthcity/actions/workflows/test_pr.yml)
+[![Tests Full Python](https://github.com/vanderschaarlab/synthcity/actions/workflows/test_full.yml/badge.svg)](https://github.com/vanderschaarlab/synthcity/actions/workflows/test_full.yml)
 [![Tutorials](https://github.com/vanderschaarlab/synthcity/actions/workflows/test_tutorials.yml/badge.svg)](https://github.com/vanderschaarlab/synthcity/actions/workflows/test_tutorials.yml)
 [![Documentation Status](https://readthedocs.org/projects/synthcity/badge/?version=latest)](https://synthcity.readthedocs.io/en/latest/?badge=latest)
 [![arXiv](https://img.shields.io/badge/arXiv-2301.07573-b31b1b.svg)](https://arxiv.org/abs/2301.07573)
@@ -51,6 +52,20 @@ or from source, using
 ```bash
 $ pip install .
 ```
+Other library extensions:
+ * Install the library with unit-testing support
+```bash
+ pip install synthcity[testing]
+```
+ * Install the library with GOGGLE support
+```bash
+ pip install synthcity[goggle]
+```
+ * Install the library with ALL the extensions
+```bash
+ pip install synthcity[all]
+```
+
 
 ## :boom: Sample Usage
 
@@ -295,6 +310,19 @@ assert syn_model.name() == reloaded.name()
 | Method | Description | Reference |
 |--- | --- | --- |
 |**nflow**| Normalizing Flows are generative models which produce tractable distributions where both sampling and density evaluation can be efficient and exact.| [Neural Spline Flows](https://arxiv.org/abs/1906.04032) |
+
+### Graph neural networks
+
+| Method | Description | Reference |
+|--- | --- | --- |
+|**goggle**| GOGGLE: Generative Modelling for Tabular Data by Learning Relational Structure | [Paper](https://openreview.net/forum?id=fPVRcJqspu) |
+
+
+### Diffusion models
+
+| Method | Description | Reference |
+|--- | --- | --- |
+|**ddpm**| TabDDPM: Modelling Tabular Data with Diffusion Models. | [Paper](https://arxiv.org/abs/2209.15421) |
 
 ### Static Survival analysis methods
 
