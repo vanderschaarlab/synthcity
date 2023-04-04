@@ -137,6 +137,7 @@ def test_plugin_generate_constraints_goggle(test_plugin: Plugin) -> None:
 
 @pytest.mark.skipif(is_missing_goggle_deps, reason="Goggle dependencies not installed")
 def test_sample_hyperparams() -> None:
+    assert plugin is not None
     for i in range(100):
         args = plugin.sample_hyperparameters()
         assert plugin(**args) is not None
@@ -162,6 +163,7 @@ def test_eval_performance_goggle(compress_dataset: bool, decoder_arch: str) -> N
     Xraw["target"] = y
     X = GenericDataLoader(Xraw)
 
+    assert plugin is not None
     for retry in range(2):
         test_plugin = plugin(
             n_iter=5000,
