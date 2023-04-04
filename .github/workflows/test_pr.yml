@@ -59,8 +59,8 @@ jobs:
       - name: Test Core
         run: |
           pip install .[testing]
-          pytest -vvvs -m "not slow" --durations=50
+          pytest -vvvsx -m "not slow" --durations=50
       - name: Test GOGGLE
         run: |
           pip install .[testing,goggle]
-          pytest -vvvs -m "not slow" -k goggle
+          pytest -vvvsx -m "not slow" -k goggle
