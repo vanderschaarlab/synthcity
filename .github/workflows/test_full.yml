@@ -28,7 +28,6 @@ jobs:
       - name: Install dependencies
         run: |
             pip install -r prereq.txt
-
             pip install --upgrade pip
       - name: Test Core
         run: |

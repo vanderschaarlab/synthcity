@@ -63,4 +63,4 @@ jobs:
       - name: Test GOGGLE
         run: |
           pip install .[testing,goggle]
-          pytest -vvvs -k goggle
+          pytest -vvvs -m "not slow" -k goggle
