@@ -28,8 +28,12 @@ jobs:
       - name: Install dependencies
         run: |
             pip install -r prereq.txt
-
             pip install --upgrade pip
-            pip install .[all]
-      - name: Test with pytest
-        run: pytest -vvvs --durations=50
+      - name: Test Core
+        run: |
+          pip install .[testing]
+          pytest -vvvs --durations=50
+      - name: Test GOGGLE
+        run: |
+          pip install .[testing,goggle]
+          pytest -vvvs -k goggle --durations=50
