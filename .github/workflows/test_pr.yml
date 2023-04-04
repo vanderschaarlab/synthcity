@@ -1,4 +1,4 @@
-name: Tests Python
+name: Tests Fast Python
 
 on:
   push:
