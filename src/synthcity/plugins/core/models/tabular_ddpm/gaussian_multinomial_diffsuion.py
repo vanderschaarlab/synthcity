@@ -286,7 +286,7 @@ class GaussianMultinomialDiffusion(torch.nn.Module):
 
         model_variance = torch.cat(
             [
-                self.posterior_variance[1].unsqueeze(0).to(x.device),
+                self.posterior_variance[1].unsqueeze(0),
                 (1.0 - self.alphas)[1:],
             ],
             dim=0,

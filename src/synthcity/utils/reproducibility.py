@@ -13,6 +13,8 @@ def enable_reproducible_results(random_state: int = 0) -> None:
     except BaseException:
         pass
     random.seed(random_state)
+    # TODO: Implement dgl seeding, like below:
+    # dgl.seed(random_state)
 
 
 def clear_cache() -> None:
