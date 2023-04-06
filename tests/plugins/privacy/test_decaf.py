@@ -140,6 +140,7 @@ def test_get_dag(struct_learning_search_method: str) -> None:
     ["hillclimb", "d-struct"],
 )
 @pytest.mark.skipif(sys.platform != "linux", reason="Linux only for faster results")
+@pytest.mark.slow
 def test_plugin_generate_and_learn_dag(struct_learning_search_method: str) -> None:
     test_plugin = plugin(
         struct_learning_enabled=True,

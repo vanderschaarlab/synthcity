@@ -1,4 +1,4 @@
-name: Tests PR Python
+name: Tests Fast Python
 
 on:
   push:
@@ -55,8 +55,12 @@ jobs:
       - name: Install dependencies
         run: |
             pip install -r prereq.txt
-
             pip install --upgrade pip
-            pip install .[testing]
-      - name: Test with pytest
-        run: pytest -vvvs -m "not slow" --durations=50
+      - name: Test Core
+        run: |
+          pip install .[testing]
+          pytest -vvvsx -m "not slow" --durations=50
+      - name: Test GOGGLE
+        run: |
+          pip install .[testing,goggle]
+          pytest -vvvsx -m "not slow" -k goggle
