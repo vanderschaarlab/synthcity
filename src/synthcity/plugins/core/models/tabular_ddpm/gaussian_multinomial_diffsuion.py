@@ -152,7 +152,8 @@ class GaussianMultinomialDiffusion(torch.nn.Module):
 
         self.posterior_variance = (
             betas * (1.0 - alphas_cumprod_prev) / (1.0 - alphas_cumprod)
-        )
+        ).to(device)
+
         self.posterior_log_variance_clipped = (
             torch.from_numpy(
                 np.log(
@@ -162,11 +163,13 @@ class GaussianMultinomialDiffusion(torch.nn.Module):
             .float()
             .to(device)
         )
+
         self.posterior_mean_coef1 = (
-            (betas * np.sqrt(alphas_cumprod_prev) / (1.0 - alphas_cumprod))
+            ((betas * np.sqrt(alphas_cumprod_prev) / (1.0 - alphas_cumprod)))
             .float()
             .to(device)
         )
+
         self.posterior_mean_coef2 = (
             (
                 (1.0 - alphas_cumprod_prev)
@@ -288,7 +291,6 @@ class GaussianMultinomialDiffusion(torch.nn.Module):
             ],
             dim=0,
         )
-        # model_variance = self.posterior_variance.to(x.device)
         model_log_variance = torch.log(model_variance)
 
         model_variance = perm_and_expand(model_variance, t, x.shape)
