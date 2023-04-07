@@ -383,25 +383,29 @@ class DatetimeDistribution(Distribution):
         :parts: 1
     """
 
+    offset: int = 120
     low: datetime = datetime.utcfromtimestamp(0)
     high: datetime = datetime.now()
-    offset: int = 120
+
+    @validator("offset", always=True)
+    def _validate_offset(cls: Any, v: int) -> int:
+        if v < 0:
+            raise ValueError("offset must be greater than 0")
+        return v
 
     @validator("low", always=True)
     def _validate_low_thresh(cls: Any, v: datetime, values: Dict) -> datetime:
         mkey = "marginal_distribution"
         if mkey in values and values[mkey] is not None:
             v = values[mkey].index.min()
-
-        return v - timedelta(seconds=cls.offset)
+        return v - timedelta(seconds=values["offset"])
 
     @validator("high", always=True)
     def _validate_high_thresh(cls: Any, v: datetime, values: Dict) -> datetime:
         mkey = "marginal_distribution"
         if mkey in values and values[mkey] is not None:
             v = values[mkey].index.max()
-
-        return v + timedelta(seconds=cls.offset)
+        return v + timedelta(seconds=values["offset"])
 
     def get(self) -> List[Any]:
         return [self.name, self.low, self.high]
