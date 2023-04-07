@@ -89,8 +89,9 @@ class TabDDPM(nn.Module):
 
         if cat_cols:
             cat_cols, cat_counts = zip(*cat_cols)
+            num_cols = X.columns.difference(cat_cols)
             # reorder the columns so that the categorical ones go to the end
-            X = X[np.hstack([X.columns[~X.keys().isin(cat_cols)], cat_cols])]
+            X = X[list(num_cols) + list(cat_cols)]
             self.feature_names_out = X.columns
         else:
             cat_counts = [0]
