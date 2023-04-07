@@ -12,9 +12,9 @@ from .feature_encoder import (
     DatetimeEncoder,
     FeatureEncoder,
     GaussianQuantileTransformer,
-    LabelEncoder,
     MinMaxScaler,
     OneHotEncoder,
+    OrdinalEncoder,
     RobustScaler,
     StandardScaler,
 )
@@ -54,7 +54,7 @@ ACTIVATIONS = dict(
 FEATURE_ENCODERS = dict(
     datetime=DatetimeEncoder,
     onehot=OneHotEncoder,
-    label=LabelEncoder,
+    ordinal=OrdinalEncoder,
     standard=StandardScaler,
     minmax=MinMaxScaler,
     robust=RobustScaler,
