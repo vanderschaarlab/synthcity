@@ -23,12 +23,6 @@ plugin_params = dict(
     num_timesteps=100,
     model_type="mlp",
 )
-# plugin_params = dict(
-#     n_iter=1000,
-#     batch_size=1000,
-#     num_timesteps=30,
-#     model_type="tabnet",
-# )
 
 
 def extend_fixtures(
