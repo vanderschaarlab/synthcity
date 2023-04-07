@@ -1,3 +1,10 @@
+"""
+TabNet: Attentive Interpretable Tabular Learning
+Reference:
+- https://arxiv.org/pdf/1908.07442.pdf
+- https://github.com/dreamquark-ai/tabnet
+"""
+
 # stdlib
 from typing import List, Optional, Tuple
 
