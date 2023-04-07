@@ -18,7 +18,7 @@ from synthcity.plugins.generic.plugin_ddpm import plugin
 
 plugin_name = "ddpm"
 plugin_params = dict(
-    n_iter=1000,
+    n_iter=500,
     batch_size=1000,
     num_timesteps=100,
     model_type="mlp",
