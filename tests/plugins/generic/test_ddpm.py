@@ -22,6 +22,7 @@ plugin_params = dict(
     batch_size=1000,
     num_timesteps=100,
     model_type="mlp",
+    sampling_patience=100,
 )
 
 
@@ -84,19 +85,21 @@ def test_plugin_generate(test_plugin: Plugin) -> None:
     "test_plugin", extend_fixtures(is_classification=[True, False])
 )
 def test_plugin_generate_constraints(test_plugin: Plugin) -> None:
-    X = pd.DataFrame(load_iris()["data"])
+    X, y = load_iris(as_frame=True, return_X_y=True)
+    X["target"] = y
     test_plugin.fit(GenericDataLoader(X))
 
     constraints = Constraints(
         rules=[
-            ("0", "le", 6),
-            ("0", "ge", 4.3),
-            ("1", "le", 4.4),
-            ("1", "ge", 3),
-            ("2", "le", 5.5),
-            ("2", "ge", 1.0),
-            ("3", "le", 2),
-            ("3", "ge", 0.1),
+            ("target", "eq", 1),
+            ("sepal length (cm)", "le", 6),
+            ("sepal length (cm)", "ge", 4.3),
+            ("sepal width (cm)", "le", 4.4),
+            ("sepal width (cm)", "ge", 3),
+            ("petal length (cm)", "le", 5.5),
+            ("petal length (cm)", "ge", 1.0),
+            ("petal width (cm)", "le", 2),
+            ("petal width (cm)", "ge", 0.1),
         ]
     )
 
@@ -104,6 +107,7 @@ def test_plugin_generate_constraints(test_plugin: Plugin) -> None:
     assert len(X_gen) == len(X)
     assert test_plugin.schema_includes(X_gen)
     assert constraints.filter(X_gen).sum() == len(X_gen)
+    assert (X_gen["target"] == 1).all()
 
     X_gen = test_plugin.generate(count=50, constraints=constraints).dataframe()
     assert len(X_gen) == 50

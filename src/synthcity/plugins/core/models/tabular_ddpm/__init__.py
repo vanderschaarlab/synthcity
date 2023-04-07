@@ -10,7 +10,7 @@ import torch
 from pydantic import validate_arguments
 from torch import nn
 from torch.utils.data import DataLoader, TensorDataset
-from tqdm import tqdm
+from tqdm import trange
 
 # synthcity absolute
 from synthcity.logger import info
@@ -38,7 +38,6 @@ class TabDDPM(nn.Module):
         callbacks: Sequence[Callback] = (),
         device: torch.device = DEVICE,
         log_interval: int = 10,
-        print_interval: int = 100,
         # model params
         model_type: str = "mlp",
         model_params: Optional[dict] = None,
@@ -141,8 +140,9 @@ class TabDDPM(nn.Module):
         curr_loss_multi = 0.0
         curr_loss_gauss = 0.0
         curr_count = 0
+        pbar = trange(self.n_iter, desc="Epoch", leave=True)
 
-        for epoch in tqdm(range(self.n_iter)):
+        for epoch in pbar:
             self.epoch = epoch + 1
             self.diffusion.train()
 
@@ -166,21 +166,19 @@ class TabDDPM(nn.Module):
                 if steps % self.log_interval == 0:
                     mloss = np.around(curr_loss_multi / curr_count, 4)
                     gloss = np.around(curr_loss_gauss / curr_count, 4)
-                    if steps % self.print_interval == 0:
-                        info(
-                            f"Step {steps}: MLoss: {mloss} GLoss: {gloss} Sum: {mloss + gloss}"
-                        )
+                    loss = mloss + gloss
                     self.loss_history.append(
                         [
                             steps,
                             mloss,
                             gloss,
-                            mloss + gloss,
+                            loss,
                         ]
                     )
                     curr_count = 0
                     curr_loss_gauss = 0.0
                     curr_loss_multi = 0.0
+                    pbar.set_postfix(loss=loss)
 
                 self._update_ema(
                     self.ema_model.parameters(), self.diffusion.parameters()
