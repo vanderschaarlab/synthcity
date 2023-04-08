@@ -111,17 +111,25 @@ class Distribution(BaseModel, metaclass=ABCMeta):
 
     @abstractmethod
     def min(self) -> Any:
-        "Get the min value of the distribution"
+        """Get the min value of the distribution."""
         ...
 
     @abstractmethod
     def max(self) -> Any:
-        "Get the max value of the distribution"
+        """Get the max value of the distribution."""
         ...
 
-    @abstractmethod
     def __eq__(self, other: Any) -> bool:
-        ...
+        return type(self) == type(other) and self.get() == other.get()
+
+    def __contains__(self, item: Any) -> bool:
+        """
+        Example:
+        >>> dist = CategoricalDistribution(name="foo", choices=["a", "b", "c"])
+        >>> "a" in dist
+        True
+        """
+        return self.has(item)
 
     @abstractmethod
     def dtype(self) -> str:
@@ -146,7 +154,7 @@ class CategoricalDistribution(Distribution):
             raise ValueError(
                 "Invalid choices for CategoricalDistribution. Provide data or choices params"
             )
-        return v
+        return sorted(set(v))
 
     def get(self) -> List[Any]:
         return [self.name, self.choices]
@@ -175,12 +183,6 @@ class CategoricalDistribution(Distribution):
 
     def max(self) -> Any:
         return max(self.choices)
-
-    def __eq__(self, other: Any) -> bool:
-        if not isinstance(other, CategoricalDistribution):
-            return False
-
-        return self.name == other.name and set(self.choices) == set(other.choices)
 
     def dtype(self) -> str:
         types = {
@@ -259,18 +261,24 @@ class FloatDistribution(Distribution):
     def max(self) -> Any:
         return self.high
 
-    def __eq__(self, other: Any) -> bool:
-        if not isinstance(other, FloatDistribution):
-            return False
-
-        return (
-            self.name == other.name
-            and self.low == other.low
-            and self.high == other.high
-        )
-
     def dtype(self) -> str:
         return "float"
+
+
+class LogDistribution(FloatDistribution):
+    low: float = np.finfo(np.float64).tiny
+    high: float = np.finfo(np.float64).max
+
+    def get(self) -> List[Any]:
+        return [self.name, self.low, self.high]
+
+    def sample(self, count: int = 1) -> Any:
+        np.random.seed(self.random_state)
+        msamples = self.sample_marginal(count)
+        if msamples is not None:
+            return msamples
+        lo, hi = np.log2(self.low), np.log2(self.high)
+        return 2.0 ** np.random.uniform(lo, hi, count)
 
 
 class IntegerDistribution(Distribution):
@@ -298,6 +306,12 @@ class IntegerDistribution(Distribution):
             return int(values[mkey].index.max())
         return v
 
+    @validator("step", always=True)
+    def _validate_step(cls: Any, v: int, values: Dict) -> int:
+        if v < 1:
+            raise ValueError("Step must be greater than 0")
+        return v
+
     def get(self) -> List[Any]:
         return [self.name, self.low, self.high, self.step]
 
@@ -307,8 +321,9 @@ class IntegerDistribution(Distribution):
         if msamples is not None:
             return msamples
 
-        choices = [val for val in range(self.low, self.high + 1, self.step)]
-        return np.random.choice(choices, count).tolist()
+        steps = (self.high - self.low) // self.step
+        samples = np.random.choice(steps + 1, count)
+        return samples * self.step + self.low
 
     def has(self, val: Any) -> bool:
         return self.low <= val and val <= self.high
@@ -331,21 +346,33 @@ class IntegerDistribution(Distribution):
     def max(self) -> Any:
         return self.high
 
-    def __eq__(self, other: Any) -> bool:
-        if not isinstance(other, IntegerDistribution):
-            return False
-
-        return (
-            self.name == other.name
-            and self.low == other.low
-            and self.high == other.high
-        )
-
     def dtype(self) -> str:
         return "int"
 
 
-OFFSET = 120
+class IntLogDistribution(IntegerDistribution):
+    low: int = 1
+    high: int = np.iinfo(np.int64).max
+    step: int = 2  # the next sample larger than x is step * x
+
+    @validator("step", always=True)
+    def _validate_step(cls: Any, v: int, values: Dict) -> int:
+        if v < 2:
+            raise ValueError("Step must be greater than 1")
+        return v
+
+    def get(self) -> List[Any]:
+        return [self.name, self.low, self.high, self.step]
+
+    def sample(self, count: int = 1) -> Any:
+        np.random.seed(self.random_state)
+        msamples = self.sample_marginal(count)
+        if msamples is not None:
+            return msamples
+        steps = int(np.log2(self.high / self.low) / np.log2(self.step))
+        samples = np.random.choice(steps + 1, count)
+        samples = self.low * self.step**samples
+        return samples.astype(int)
 
 
 class DatetimeDistribution(Distribution):
@@ -356,25 +383,25 @@ class DatetimeDistribution(Distribution):
 
     low: datetime = datetime.utcfromtimestamp(0)
     high: datetime = datetime.now()
+    step: timedelta = timedelta(microseconds=1)
+    offset: timedelta = timedelta(seconds=120)
 
     @validator("low", always=True)
     def _validate_low_thresh(cls: Any, v: datetime, values: Dict) -> datetime:
         mkey = "marginal_distribution"
         if mkey in values and values[mkey] is not None:
             v = values[mkey].index.min()
-
-        return v - timedelta(seconds=OFFSET)
+        return v
 
     @validator("high", always=True)
     def _validate_high_thresh(cls: Any, v: datetime, values: Dict) -> datetime:
         mkey = "marginal_distribution"
         if mkey in values and values[mkey] is not None:
             v = values[mkey].index.max()
-
-        return v + timedelta(seconds=OFFSET)
+        return v
 
     def get(self) -> List[Any]:
-        return [self.name, self.low, self.high]
+        return [self.name, self.low, self.high, self.step, self.offset]
 
     def sample(self, count: int = 1) -> Any:
         np.random.seed(self.random_state)
@@ -382,23 +409,18 @@ class DatetimeDistribution(Distribution):
         if msamples is not None:
             return msamples
 
-        samples = np.random.uniform(
-            datetime.timestamp(self.low), datetime.timestamp(self.high), count
-        )
-
-        samples_dt = []
-        for s in samples:
-            samples_dt.append(datetime.fromtimestamp(s))
-
-        return samples_dt
+        n = (self.high - self.low) // self.step + 1
+        samples = np.round(np.random.rand(count) * n - 0.5)
+        return self.low + samples * self.step
 
     def has(self, val: datetime) -> bool:
         return self.low <= val and val <= self.high
 
     def includes(self, other: "Distribution") -> bool:
-        return self.min() - timedelta(
-            seconds=OFFSET
-        ) <= other.min() and other.max() <= self.max() + timedelta(seconds=OFFSET)
+        return (
+            self.min() - self.offset <= other.min()
+            and other.max() <= self.max() + self.offset
+        )
 
     def as_constraint(self) -> Constraints:
         return Constraints(
@@ -414,16 +436,6 @@ class DatetimeDistribution(Distribution):
 
     def max(self) -> Any:
         return self.high
-
-    def __eq__(self, other: Any) -> bool:
-        if not isinstance(other, DatetimeDistribution):
-            return False
-
-        return (
-            self.name == other.name
-            and self.low == other.low
-            and self.high == other.high
-        )
 
     def dtype(self) -> str:
         return "datetime"

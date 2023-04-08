@@ -15,7 +15,12 @@ from pydantic import validate_arguments
 
 # synthcity absolute
 from synthcity.plugins.core.dataloader import DataLoader
-from synthcity.plugins.core.distribution import CategoricalDistribution, Distribution
+from synthcity.plugins.core.distribution import (
+    Distribution,
+    IntegerDistribution,
+    IntLogDistribution,
+    LogDistribution,
+)
 from synthcity.plugins.core.models.tabular_ddpm import TabDDPM
 from synthcity.plugins.core.plugin import Plugin
 from synthcity.plugins.core.schema import Schema
@@ -174,13 +179,12 @@ class TabDDPMPlugin(Plugin):
         Gaussian diffusion loss MSE
         """
         return [
-            # TODO: change to loguniform distribution
-            CategoricalDistribution(name="lr", choices=[1e-5, 1e-4, 1e-3, 2e-3, 3e-3]),
-            CategoricalDistribution(name="batch_size", choices=[256, 4096]),
-            CategoricalDistribution(name="num_timesteps", choices=[100, 1000]),
-            CategoricalDistribution(name="n_iter", choices=[5000, 10000, 20000]),
-            CategoricalDistribution(name="n_layers_hidden", choices=[2, 4, 6, 8]),
-            CategoricalDistribution(name="dim_hidden", choices=[128, 256, 512, 1024]),
+            LogDistribution(name="lr", low=1e-5, high=1e-1),
+            IntLogDistribution(name="batch_size", low=256, high=4096),
+            IntegerDistribution(name="num_timesteps", low=10, high=1000),
+            IntLogDistribution(name="n_iter", low=1000, high=10000),
+            IntegerDistribution(name="n_layers_hidden", low=2, high=8),
+            IntLogDistribution(name="dim_hidden", low=128, high=1024),
         ]
 
     def _fit(self, X: DataLoader, *args: Any, **kwargs: Any) -> "TabDDPMPlugin":
