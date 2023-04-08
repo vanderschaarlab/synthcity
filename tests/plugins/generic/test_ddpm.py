@@ -18,11 +18,10 @@ from synthcity.plugins.generic.plugin_ddpm import plugin
 
 plugin_name = "ddpm"
 plugin_params = dict(
-    n_iter=500,
+    n_iter=1000,
     batch_size=1000,
     num_timesteps=100,
     model_type="mlp",
-    sampling_patience=100,
 )
 
 
@@ -122,7 +121,7 @@ def test_plugin_hyperparams(test_plugin: Plugin) -> None:
 
 
 def test_sample_hyperparams() -> None:
-    for i in range(100):
+    for _ in range(100):
         args = plugin.sample_hyperparameters()
         assert plugin(**args) is not None
 
