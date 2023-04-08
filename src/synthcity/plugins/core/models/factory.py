@@ -66,7 +66,10 @@ ACTIVATIONS = dict(
     relu6=nn.ReLU6,
     celu=nn.CELU,
     glu=nn.GLU,
+    prelu=nn.PReLU,
+    relu6=nn.ReLU6,
     logsigmoid=nn.LogSigmoid,
+    logsoftmax=nn.LogSoftmax,
     softplus=nn.Softplus,
 )
 

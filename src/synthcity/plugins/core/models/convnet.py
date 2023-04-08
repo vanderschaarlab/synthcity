@@ -4,8 +4,6 @@ from typing import Any, Optional, Tuple
 # third party
 import numpy as np
 import torch
-
-# from monai.networks.layers.factories import Act
 from monai.networks.nets import Classifier, Discriminator, Generator
 from pydantic import validate_arguments
 from torch import nn
