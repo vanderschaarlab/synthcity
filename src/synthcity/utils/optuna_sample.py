@@ -16,15 +16,9 @@ def suggest(trial: optuna.Trial, dist: D.Distribution) -> Any:
     elif isinstance(dist, D.IntegerDistribution):
         return trial.suggest_int(dist.name, dist.low, dist.high, dist.step)
     elif isinstance(dist, D.IntLogDistribution):
-        # ! does not handle step yet
         return trial.suggest_int(dist.name, dist.low, dist.high, log=True)
     elif isinstance(dist, D.CategoricalDistribution):
         return trial.suggest_categorical(dist.name, dist.choices)
-    # ! the modification cannot be reflected in study.best_params
-    # elif isinstance(dist, D.DatetimeDistribution):
-    #     high = (dist.high - dist.low) / dist.step
-    #     s = trial.suggest_float(dist.name, 0, high)
-    #     return dist.low + dist.step * s
     else:
         raise ValueError(f"Unknown dist: {dist}")
 

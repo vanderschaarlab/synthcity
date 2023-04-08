@@ -353,25 +353,23 @@ class IntegerDistribution(Distribution):
 class IntLogDistribution(IntegerDistribution):
     low: int = 1
     high: int = np.iinfo(np.int64).max
-    step: int = 2  # the next sample larger than x is step * x
 
     @validator("step", always=True)
     def _validate_step(cls: Any, v: int, values: Dict) -> int:
-        if v < 2:
-            raise ValueError("Step must be greater than 1")
+        if v != 1:
+            raise ValueError("Step must be 1 for IntLogDistribution")
         return v
 
     def get(self) -> List[Any]:
-        return [self.name, self.low, self.high, self.step]
+        return [self.name, self.low, self.high]
 
     def sample(self, count: int = 1) -> Any:
         np.random.seed(self.random_state)
         msamples = self.sample_marginal(count)
         if msamples is not None:
             return msamples
-        steps = int(np.log2(self.high / self.low) / np.log2(self.step))
-        samples = np.random.choice(steps + 1, count)
-        samples = self.low * self.step**samples
+        lo, hi = np.log2(self.low), np.log2(self.high)
+        samples = 2.0 ** np.random.uniform(lo, hi, count)
         return samples.astype(int)
 
 
