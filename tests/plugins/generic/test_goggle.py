@@ -106,9 +106,6 @@ def test_plugin_generate(test_plugin: Plugin, serialize: bool) -> None:
     assert (X_gen1.numpy() != X_gen3.numpy()).any()
 
 
-is_missing_goggle_deps = True
-
-
 @pytest.mark.skipif(is_missing_goggle_deps, reason="Goggle dependencies not installed")
 @pytest.mark.parametrize(
     "test_plugin",
