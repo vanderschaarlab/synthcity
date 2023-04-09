@@ -23,17 +23,12 @@ from synthcity.plugins.core.distribution import (
     FloatDistribution,
     IntegerDistribution,
 )
+from synthcity.plugins.core.models.tabular_goggle import TabularGoggle
 from synthcity.plugins.core.plugin import Plugin
 from synthcity.plugins.core.schema import Schema
 from synthcity.utils.constants import DEVICE
 
-try:
-    # synthcity absolute
-    from synthcity.plugins.core.models.tabular_goggle import TabularGoggle
-
-    module_disabled = False
-except ImportError:
-    module_disabled = True
+module_disabled = False
 
 
 class GOGGLEPlugin(Plugin):
