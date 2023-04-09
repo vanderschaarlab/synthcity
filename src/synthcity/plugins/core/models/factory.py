@@ -28,7 +28,6 @@ from .feature_encoder import (
 )
 from .layers import GumbelSoftmax
 
-# should only contain nn modules that can be used as building blocks in larger models
 MODELS = dict(
     mlp=".mlp.MLP",
     # attention models
@@ -63,10 +62,12 @@ ACTIVATIONS = dict(
     silu=nn.SiLU,
     swish=nn.SiLU,
     hardtanh=nn.Hardtanh,
-    relu6=nn.ReLU6,
     celu=nn.CELU,
     glu=nn.GLU,
+    prelu=nn.PReLU,
+    relu6=nn.ReLU6,
     logsigmoid=nn.LogSigmoid,
+    logsoftmax=nn.LogSoftmax,
     softplus=nn.Softplus,
 )
 
@@ -114,6 +115,7 @@ def get_model(block: Union[str, type], params: dict) -> Any:
     Named models:
     - mlp
     - rnn
+    - gru
     - lstm
     - transformer
     - tabnet
