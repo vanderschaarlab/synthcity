@@ -7,7 +7,7 @@ from torchvision import datasets, transforms
 
 # synthcity absolute
 from synthcity.plugins.core.models.convnet import (
-    get_nonlin,
+    map_nonlin,
     suggest_image_classifier_arch,
     suggest_image_generator_discriminator_arch,
 )
@@ -16,7 +16,7 @@ from synthcity.utils.constants import DEVICE
 
 @pytest.mark.parametrize("nonlin", ["relu", "elu", "prelu", "leaky_relu"])
 def test_get_nonlin(nonlin: str) -> None:
-    assert get_nonlin(nonlin) is not None
+    assert map_nonlin(nonlin) is not None
 
 
 @pytest.mark.parametrize("n_channels", [1, 3])
