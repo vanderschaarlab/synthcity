@@ -164,7 +164,7 @@ class Constraints(BaseModel):
                 thresh,
             )
             if res.sum() < prev:
-                log.critical(
+                log.info(
                     f"[{feature}] quality loss for constraints {op} = {thresh}. Remaining {res.sum()}. prev length {prev}. Original dtype {X[feature].dtype}.",
                 )
         return res
