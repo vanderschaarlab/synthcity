@@ -286,7 +286,7 @@ class TabularEncoder(TransformerMixin, BaseEstimator):
                     d = 0
                 d += 1
             out.append((acts[ct], d))
-        log.info(out)
+        log.critical(out)
         return out
 
 
