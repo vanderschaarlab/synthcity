@@ -167,8 +167,6 @@ class Constraints(BaseModel):
                 log.critical(
                     f"[{feature}] quality loss for constraints {op} = {thresh}. Remaining {res.sum()}. prev length {prev}. Original dtype {X[feature].dtype}.",
                 )
-        if res.sum() < 5:
-            log.critical(str(X[~res]))
         return res
 
     @validate_arguments(config=dict(arbitrary_types_allowed=True))
