@@ -30,13 +30,13 @@ from .layers import GumbelSoftmax
 
 MODELS = dict(
     mlp=".mlp.MLP",
-    # attention models
-    transformer=".transformer.TransformerModel",
-    tabnet=".tabnet.TabNet",
     # rnn models
     rnn=nn.RNN,
     gru=nn.GRU,
     lstm=nn.LSTM,
+    # attention models
+    transformer=".transformer.TransformerModel",
+    tabnet=".tabnet.TabNet",
     # time series models
     inceptiontime=InceptionTime,
     omniscalecnn=OmniScaleCNN,
@@ -56,8 +56,8 @@ ACTIVATIONS = dict(
     selu=nn.SELU,
     tanh=nn.Tanh,
     sigmoid=nn.Sigmoid,
-    softmax=nn.Softmax,
-    gumbelsoftmax=GumbelSoftmax,
+    softmax=GumbelSoftmax,
+    vanilla_softmax=nn.Softmax,
     gelu=nn.GELU,
     silu=nn.SiLU,
     swish=nn.SiLU,
@@ -85,7 +85,7 @@ FEATURE_ENCODERS = dict(
 )
 
 
-def _factory(type_: Union[str, type], params: dict, registry: dict) -> Any:
+def _get(type_: Union[str, type], params: dict, registry: dict) -> Any:
     if isinstance(type_, type):
         return type_(**params)
     type_ = type_.lower().replace("_", "")
@@ -120,13 +120,13 @@ def get_model(block: Union[str, type], params: dict) -> Any:
     - transformer
     - tabnet
     """
-    return _factory(block, params, MODELS)
+    return _get(block, params, MODELS)
 
 
 @validate_arguments(config=dict(arbitrary_types_allowed=True))
 def get_nonlin(nonlin: Union[str, nn.Module], params: dict = {}) -> Any:
     """Get a nonlinearity layer from a name or a class."""
-    return _factory(nonlin, params, ACTIVATIONS)
+    return _get(nonlin, params, ACTIVATIONS)
 
 
 @validate_arguments(config=dict(arbitrary_types_allowed=True))
@@ -146,4 +146,4 @@ def get_feature_encoder(encoder: Union[str, type], params: dict = {}) -> Any:
     """
     if isinstance(encoder, type):  # custom encoder
         encoder = FeatureEncoder.wraps(encoder)
-    return _factory(encoder, params, FEATURE_ENCODERS)
+    return _get(encoder, params, FEATURE_ENCODERS)

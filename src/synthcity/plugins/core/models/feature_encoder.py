@@ -8,6 +8,7 @@ from pydantic import validate_arguments
 from sklearn.base import BaseEstimator, TransformerMixin
 from sklearn.mixture import BayesianGaussianMixture
 from sklearn.preprocessing import (
+    LabelEncoder,
     MinMaxScaler,
     OneHotEncoder,
     OrdinalEncoder,
@@ -150,8 +151,11 @@ class FeatureEncoder(TransformerMixin, BaseEstimator):  # type: ignore
         return WrappedEncoder
 
 
-OneHotEncoder = FeatureEncoder.wraps(OneHotEncoder, categorical=True)
+OneHotEncoder = FeatureEncoder.wraps(
+    OneHotEncoder, categorical=True, handle_unknown="ignore"
+)
 OrdinalEncoder = FeatureEncoder.wraps(OrdinalEncoder, categorical=True)
+LabelEncoder = FeatureEncoder.wraps(LabelEncoder, n_dim_out=1, categorical=True)
 StandardScaler = FeatureEncoder.wraps(StandardScaler)
 MinMaxScaler = FeatureEncoder.wraps(MinMaxScaler)
 RobustScaler = FeatureEncoder.wraps(RobustScaler)

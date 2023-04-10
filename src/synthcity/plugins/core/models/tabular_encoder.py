@@ -275,7 +275,6 @@ class TabularEncoder(TransformerMixin, BaseEstimator):
         """
         out = []
         acts = dict(discrete=discrete_activation, continuous=continuous_activation)
-        # NOTE: be careful with the dim of softmax!
         for column_transform_info in self._column_transform_info_list:
             ct = column_transform_info.trans_feature_types[0]
             d = 0
