@@ -43,7 +43,7 @@ class TabularGoggle:
         decoder_nonlin: str = "relu",
         encoder_max_clusters: int = 20,
         encoder_whitelist: list = [],
-        decoder_nonlin_out_discrete: str = "gumbel_softmax",
+        decoder_nonlin_out_discrete: str = "softmax",
         decoder_nonlin_out_continuous: str = "tanh",
         random_state: int = 0,
     ):
@@ -107,7 +107,7 @@ class TabularGoggle:
                 The max number of clusters to create for continuous columns when encoding with TabularEncoder. Defaults to 20.
             encoder_whitelist: list = []
                 Ignore columns from encoding with TabularEncoder. Defaults to [].
-            decoder_nonlin_out_discrete: str = "gumbel_softmax"
+            decoder_nonlin_out_discrete: str = "softmax"
                 Activation function for discrete columns. Useful with the TabularEncoder. Defaults to "softmax".
             decoder_nonlin_out_continuous: str = "tanh
                 Activation function for continuous columns. Useful with the TabularEncoder.. Defaults to "tanh".
