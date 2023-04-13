@@ -73,7 +73,7 @@ class Schema(BaseModel):
                     feature_domain[col] = CategoricalDistribution(
                         name=col, data=X[col], random_state=random_state
                     )
-                elif X[col].dtype.kind == "i":
+                elif X[col].dtype.kind in ["i", "u"]:
                     feature_domain[col] = IntegerDistribution(
                         name=col, data=X[col], random_state=random_state
                     )
@@ -95,7 +95,7 @@ class Schema(BaseModel):
                         choices=list(X[col].unique()),
                         random_state=random_state,
                     )
-                elif X[col].dtype.kind == "i":
+                elif X[col].dtype.kind in ["i", "u"]:
                     feature_domain[col] = IntegerDistribution(
                         name=col,
                         low=X[col].min(),
