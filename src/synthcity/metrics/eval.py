@@ -31,6 +31,7 @@ from .eval_performance import (
 )
 from .eval_privacy import (
     DeltaPresence,
+    DomiasMIA,
     IdentifiabilityScore,
     kAnonymization,
     kMap,
@@ -94,6 +95,7 @@ standard_metrics = [
     kMap,
     lDiversityDistinct,
     IdentifiabilityScore,
+    DomiasMIA,
 ]
 
 
@@ -101,8 +103,10 @@ class Metrics:
     @staticmethod
     @validate_arguments(config=dict(arbitrary_types_allowed=True))
     def evaluate(
+        X_train: Union[DataLoader, pd.DataFrame],
         X_gt: Union[DataLoader, pd.DataFrame],
         X_syn: Union[DataLoader, pd.DataFrame],
+        X_ref_syn: Union[DataLoader, pd.DataFrame],
         X_augmented: Optional[Union[DataLoader, pd.DataFrame]] = None,
         reduction: str = "mean",
         n_histogram_bins: int = 10,
@@ -114,10 +118,14 @@ class Metrics:
     ) -> pd.DataFrame:
         """Core evaluation logic for the metrics
 
+        X_train: Dataloader or DataFrame
+            The data used to train the synthetic model (used for domias metrics only).
         X_gt: Dataloader or DataFrame
             Reference real data
         X_syn: Dataloader or DataFrame
             Synthetic data
+        X_ref_syn: Dataloader or DataFrame
+            Reference synthetic data (used for domias metrics only).
         X_augmented: Dataloader or DataFrame
             Augmented data
         metrics: dict
@@ -157,29 +165,41 @@ class Metrics:
                 f"Invalid task type {task_type}. Supported: {supported_tasks}"
             )
 
+        if not isinstance(X_train, DataLoader):
+            X_train = GenericDataLoader(X_gt)
         if not isinstance(X_gt, DataLoader):
             X_gt = GenericDataLoader(X_gt)
         if not isinstance(X_syn, DataLoader):
             X_syn = create_from_info(X_syn, X_gt.info())
+        if not isinstance(X_ref_syn, DataLoader):
+            X_ref_syn = create_from_info(X_ref_syn, X_gt.info())
 
         if X_gt.type() != X_syn.type():
             raise ValueError("Different dataloader types")
 
         if task_type == "survival_analysis":
-            if X_gt.type() != "survival_analysis":
+            if (
+                X_gt.type() != "survival_analysis"
+                and X_train.type() != "survival_analysis"
+            ):
                 raise ValueError("Invalid dataloader for survival analysis")
         elif task_type == "time_series":
-            if X_gt.type() != "time_series":
+            if X_gt.type() != "time_series" and X_train.type() != "time_series":
                 raise ValueError("Invalid dataloader for time series")
         elif task_type == "time_series_survival":
-            if X_gt.type() != "time_series_survival":
+            if (
+                X_gt.type() != "time_series_survival"
+                and X_train.type() != "time_series_survival"
+            ):
                 raise ValueError("Invalid dataloader for time series survival analysis")
 
         if metrics is None:
             metrics = Metrics.list()
 
+        X_train, _ = X_train.encode()
         X_gt, _ = X_gt.encode()
         X_syn, _ = X_syn.encode()
+        X_ref_syn, _ = X_ref_syn.encode()
         if X_augmented:
             X_augmented, _ = X_augmented.encode()
 
@@ -204,6 +224,23 @@ class Metrics:
                     X_gt,
                     X_augmented,
                 )
+            elif metric.name() == "domias":
+                scores.queue(
+                    metric(
+                        reduction=reduction,
+                        n_histogram_bins=n_histogram_bins,
+                        task_type=task_type,
+                        random_state=random_state,
+                        workspace=workspace,
+                        use_cache=use_cache,
+                    ),
+                    X_gt,
+                    X_syn,
+                    X_train,
+                    X_ref_syn,
+                    reference_size=10,
+                )
+
             else:
                 scores.queue(
                     metric(
@@ -219,6 +256,7 @@ class Metrics:
                 )
 
         scores.compute()
+        print(scores)
 
         return scores.to_dataframe()
 

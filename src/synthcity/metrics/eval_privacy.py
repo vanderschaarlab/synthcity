@@ -2,10 +2,9 @@
 import platform
 from abc import abstractmethod
 from collections import Counter
-from typing import Any, Dict, Optional
+from typing import Any, Dict, Union
 
 # third party
-import domias
 import numpy as np
 import pandas as pd
 import torch
@@ -16,6 +15,7 @@ from sklearn.cluster import KMeans
 from sklearn.neighbors import NearestNeighbors
 
 # synthcity absolute
+import synthcity.logger as log
 from synthcity.metrics import _utils
 from synthcity.plugins.core.dataloader import DataLoader
 from synthcity.utils.constants import DEVICE
@@ -39,19 +39,22 @@ class PrivacyEvaluator(MetricEvaluator):
         return "privacy"
 
     @abstractmethod
-    def _evaluate(self, X_gt: DataLoader, X_syn: DataLoader) -> Dict:
+    def _evaluate(
+        self, X_gt: DataLoader, X_syn: DataLoader, *args: Any, **kwargs: Any
+    ) -> Dict:
         ...
 
     @validate_arguments(config=dict(arbitrary_types_allowed=True))
-    def evaluate(self, X_gt: DataLoader, X_syn: DataLoader) -> Dict:
+    def evaluate(
+        self, X_gt: DataLoader, X_syn: DataLoader, *args: Any, **kwargs: Any
+    ) -> Dict:
         cache_file = (
             self._workspace
             / f"sc_metric_cache_{self.type()}_{self.name()}_{X_gt.hash()}_{X_syn.hash()}_{self._reduction}_{platform.python_version()}.bkp"
         )
         if self.use_cache(cache_file):
             return load_from_file(cache_file)
-
-        results = self._evaluate(X_gt, X_syn)
+        results = self._evaluate(X_gt, X_syn, *args, **kwargs)
         save_to_file(cache_file, results)
         return results
 
@@ -86,7 +89,6 @@ class kAnonymization(PrivacyEvaluator):
 
     @validate_arguments(config=dict(arbitrary_types_allowed=True))
     def evaluate_data(self, X: DataLoader) -> int:
-
         features = _utils.get_features(X, X.sensitive_features)
 
         values = [999]
@@ -303,7 +305,7 @@ class IdentifiabilityScore(PrivacyEvaluator):
 
         for key in oc_results:
             results[key] = oc_results[key]
-
+        log.info("ID_score results: ", results)
         return results
 
     @validate_arguments(config=dict(arbitrary_types_allowed=True))
@@ -375,15 +377,24 @@ class IdentifiabilityScore(PrivacyEvaluator):
         return {f"score{emb}": identifiability_value}
 
 
-class DomiasScores(PrivacyEvaluator):
+class DomiasMIA(PrivacyEvaluator):
     """
     .. inheritance-diagram:: synthcity.metrics.eval_privacy.domias
         :parts: 1
 
+    DOMIAS is a membership inference attacker model against synthetic data, that incorporates
+    density estimation to detect generative model overfitting. That is it uses local overfitting to
+    detect whether a data point was used to train the generative model or not.
+
+    Returns:
     A dictionary with a key for each of the `synthetic_sizes` values.
     For each `synthetic_sizes` value, the dictionary contains the keys:
         * `MIA_performance` : accuracy and AUCROC for each attack
         * `MIA_scores`: output scores for each attack
+
+    Reference: Boris van Breugel, Hao Sun, Zhaozhi Qian,  Mihaela van der Schaar, AISTATS 2023.
+    DOMIAS: Membership Inference Attacks against Synthetic Data through Overfitting Detection.
+
     """
 
     def __init__(self, **kwargs: Any) -> None:
@@ -400,32 +411,15 @@ class DomiasScores(PrivacyEvaluator):
     @validate_arguments(config=dict(arbitrary_types_allowed=True))
     def _evaluate(
         self,
-        X_gt: DataLoader,
-        X_syn: DataLoader,
-    ) -> Dict:
-        results = self._evaluate_performance(X_gt, X_syn)
-
-        oc_results = self._evaluate_performance(X_gt, X_syn)
-
-        for key in oc_results:
-            results[key] = oc_results[key]
-
-        return results
-
-    @validate_arguments(config=dict(arbitrary_types_allowed=True))
-    def _evaluate_performance(
-        generator: domias.models.generator.GeneratorInterface,
-        dataset: np.ndarray,
-        mem_set_size: int,
-        reference_set_size: int,
-        training_epochs: int = 2000,
-        synthetic_sizes: list = [10000],
-        density_estimator: str = "prior",
-        seed: int = 0,
+        X_gt: Union[
+            DataLoader, Any
+        ],  # TODO: X_gt needs to be big enough that it can be split into non_mem_set and also ref_set
+        synth_set: Union[DataLoader, Any],
+        X_train: Union[DataLoader, Any],
+        synth_val_set: Union[DataLoader, Any],
+        reference_size: int = 100,  # look at default sizes
+        density_estimator: str = "bnaf",  # Can be "prior", "kde", bnaf. TODO: add nflows
         device: Any = DEVICE,
-        shifted_column: Optional[int] = None,
-        zero_quantile: float = 0.3,
-        reference_kept_p: float = 1.0,
     ) -> Dict:
         """
         Evaluate various Membership Inference Attacks, using the `generator` and the `dataset`.
@@ -454,7 +448,10 @@ class DomiasScores(PrivacyEvaluator):
             device: PyTorch device
                 CPU or CUDA
             shifted_column: Optional[int]
-                Shift a column
+                Shift a column. Because DOMIAS is primarily intended as a tool for data publishers
+                to test their own synthetic data vulnerability, it is recommended that testing is
+                conducted with a reference dataset from the same distribution (e.g. a hold-out
+                set): this effectively tests the worst-case vulnerability.
             zero_quantile: float
                 Threshold for shifting the column.
             reference_kept_p: float
@@ -466,163 +463,103 @@ class DomiasScores(PrivacyEvaluator):
                 * `MIA_performance` : accuracy and AUCROC for each attack
                 * `MIA_scores`: output scores for each attack
                 * `data`: the evaluation data
-            For both `MIA_performance` and `MIA_scores`, the following attacks are evaluated:
-                * "ablated_eq1"
-                * "ablated_eq2"
-                * "LOGAN_D1"
-                * "MC"
-                * "gan_leaks"
-                * "gan_leaks_cal"
-                * "LOGAN_0"
-                * "eq1"
-                * "domias"
+            For both `MIA_performance` and `MIA_scores`, the domias attacks are evaluated
         """
+
         performance_logger: Dict = {}
 
+        mem_set = X_train.dataframe()
+        non_mem_set, reference_set = (
+            X_gt.numpy()[:reference_size],
+            X_gt.numpy()[-reference_size:],
+        )
+
+        all_real_data = np.concatenate((X_train.numpy(), X_gt.numpy()), axis=0)
+
         continuous = []
-        for i in np.arange(dataset.shape[1]):
-            if len(np.unique(dataset[:, i])) < 10:
+        for i in np.arange(all_real_data.shape[1]):
+            if len(np.unique(all_real_data[:, i])) < 10:
                 continuous.append(0)
             else:
                 continuous.append(1)
 
-        norm = domias.evaluator.normal_func_feat(dataset, continuous)
-
-        # For experiment with domain shift in reference dataset
-        if shifted_column is not None:
-            thres = np.quantile(dataset[:, shifted_column], zero_quantile) + 0.01
-            dataset[:, shifted_column][dataset[:, shifted_column] < thres] = -999.0
-            dataset[:, shifted_column][dataset[:, shifted_column] > thres] = 999.0
-            dataset[:, shifted_column][dataset[:, shifted_column] == -999.0] = 0.0
-            dataset[:, shifted_column][dataset[:, shifted_column] == 999.0] = 1.0
-
-            mem_set = dataset[:mem_set_size]  # membership set
-            mem_set = mem_set[mem_set[:, shifted_column] == 1]
-
-            non_mem_set = dataset[mem_set_size : 2 * mem_set_size]  # set of non-members
-            non_mem_set = non_mem_set[: len(mem_set)]
-            reference_set = dataset[-reference_set_size:]
-
-            # Used for experiment with distributional shift in reference dataset
-            reference_set_A1 = reference_set[reference_set[:, shifted_column] == 1]
-            reference_set_A0 = reference_set[reference_set[:, shifted_column] == 0]
-            reference_set_A0_kept = reference_set_A0[
-                : int(len(reference_set_A0) * reference_kept_p)
-            ]
-            if reference_kept_p > 0:
-                reference_set = np.concatenate(
-                    (reference_set_A1, reference_set_A0_kept), 0
-                )
-            else:
-                reference_set = reference_set_A1
-                # non_mem_set = non_mem_set_A1
-
-            mem_set_size = len(mem_set)
-            reference_set_size = len(reference_set)
-
-            # hide column A
-            mem_set = np.delete(mem_set, shifted_column, 1)
-            non_mem_set = np.delete(non_mem_set, shifted_column, 1)
-            reference_set = np.delete(reference_set, shifted_column, 1)
-            dataset = np.delete(dataset, shifted_column, 1)
-        # For all other experiments
-        else:
-            mem_set = dataset[:mem_set_size]
-            non_mem_set = dataset[mem_set_size : 2 * mem_set_size]
-            reference_set = dataset[-reference_set_size:]
+        norm = _utils.normal_func_feat(
+            all_real_data, continuous
+        )  # TODO: move this to where it is used
 
         """ 3. Synthesis with the GeneratorInferface"""
-        df = pd.DataFrame(mem_set)
-        df.columns = [str(_) for _ in range(dataset.shape[1])]
 
-        # Train generator
-        generator.fit(df)
+        performance_logger = {
+            "MIA_performance": {},
+        }
 
-        for synthetic_size in synthetic_sizes:
-            performance_logger[synthetic_size] = {
-                "MIA_performance": {},
-                "MIA_scores": {},
-                "data": {},
-            }
-            synth_set = generator.generate(synthetic_size)
-            synth_val_set = generator.generate(synthetic_size)
+        # wd_n = min(len(synth_set), len(reference_set))
+        # eval_met_on_reference = _utils.compute_wd(
+        #     synth_set[:wd_n], reference_set[:wd_n]
+        # )
+        # performance_logger["MIA_performance"][
+        #     "sample_quality"
+        # ] = eval_met_on_reference
 
-            wd_n = min(len(synth_set), len(reference_set))
-            eval_met_on_reference = domias.metrics.wd.compute_wd(
-                synth_set[:wd_n], reference_set[:wd_n]
+        # get real test sets of members and non members
+        X_test = np.concatenate([mem_set, non_mem_set])
+        Y_test = np.concatenate(
+            [np.ones(mem_set.shape[0]), np.zeros(non_mem_set.shape[0])]
+        ).astype(bool)
+
+        """ 4. density estimation / evaluation of Eqn.(1) & Eqn.(2)"""
+        # First, estimate density of synthetic data
+        # BNAF for pG
+        if density_estimator == "bnaf":
+            _, p_G_model = _utils.density_estimator_trainer(
+                synth_set.values,
+                synth_val_set.values[: int(0.5 * synth_val_set.shape[0])],
+                synth_val_set.values[int(0.5 * synth_val_set.shape[0]) :],
             )
-            performance_logger[synthetic_size]["MIA_performance"][
-                "sample_quality"
-            ] = eval_met_on_reference
-
-            # get real test sets of members and non members
-            X_test = np.concatenate([mem_set, non_mem_set])
-            Y_test = np.concatenate(
-                [np.ones(mem_set.shape[0]), np.zeros(non_mem_set.shape[0])]
-            ).astype(bool)
-
-            performance_logger[synthetic_size]["data"]["Xtest"] = X_test
-            performance_logger[synthetic_size]["data"]["Ytest"] = Y_test
-
-            """ 4. density estimation / evaluation of Eqn.(1) & Eqn.(2)"""
-            # First, estimate density of synthetic data
-            # BNAF for pG
-            if density_estimator == "bnaf":
-                _, p_G_model = domias.bnaf.density_estimator.density_estimator_trainer(
-                    synth_set.values,
-                    synth_val_set.values[: int(0.5 * synthetic_size)],
-                    synth_val_set.values[int(0.5 * synthetic_size) :],
+            _, p_R_model = _utils.density_estimator_trainer(reference_set)
+            p_G_evaluated = np.exp(
+                _utils.compute_log_p_x(
+                    p_G_model, torch.as_tensor(X_test).float().to(device)
                 )
-                _, p_R_model = domias.bnaf.density_estimator.density_estimator_trainer(
-                    reference_set
+                .cpu()
+                .detach()
+                .numpy()
+            )
+
+        # KDE for pG
+        elif density_estimator == "kde" or "prior":
+            density_gen = stats.gaussian_kde(synth_set.values.transpose(1, 0))
+            density_data = stats.gaussian_kde(reference_set.transpose(1, 0))
+            p_G_evaluated = density_gen(X_test.transpose(1, 0))
+
+        # eqn2: \prop P_G(x_i)/P_X(x_i)
+        # DOMIAS (BNAF for p_R estimation)
+        if density_estimator == "bnaf":
+            p_R_evaluated = np.exp(
+                _utils.compute_log_p_x(
+                    p_R_model, torch.as_tensor(X_test).float().to(device)
                 )
-                p_G_evaluated = np.exp(
-                    domias.bnaf.density_estimator.compute_log_p_x(
-                        p_G_model, torch.as_tensor(X_test).float().to(device)
-                    )
-                    .cpu()
-                    .detach()
-                    .numpy()
-                )
+                .cpu()
+                .detach()
+                .numpy()
+            )
 
-            # KDE for pG
-            elif density_estimator == "kde":
-                density_gen = stats.gaussian_kde(synth_set.values.transpose(1, 0))
-                density_data = stats.gaussian_kde(reference_set.transpose(1, 0))
-                p_G_evaluated = density_gen(X_test.transpose(1, 0))
-            elif density_estimator == "prior":
-                density_gen = stats.gaussian_kde(synth_set.values.transpose(1, 0))
-                density_data = stats.gaussian_kde(reference_set.transpose(1, 0))
-                p_G_evaluated = density_gen(X_test.transpose(1, 0))
+        # DOMIAS (KDE for p_R estimation)
+        elif density_estimator == "kde":
+            p_R_evaluated = density_data(X_test.transpose(1, 0))
 
-            # eqn2: \prop P_G(x_i)/P_X(x_i)
-            # DOMIAS (BNAF for p_R estimation)
-            if density_estimator == "bnaf":
-                p_R_evaluated = np.exp(
-                    domias.bnaf.density_estimator.compute_log_p_x(
-                        p_R_model, torch.as_tensor(X_test).float().to(device)
-                    )
-                    .cpu()
-                    .detach()
-                    .numpy()
-                )
+        # DOMIAS (with prior for p_R, see Appendix experiment)
+        elif density_estimator == "prior":
+            p_R_evaluated = norm.pdf(X_test)
 
-            # DOMIAS (KDE for p_R estimation)
-            elif density_estimator == "kde":
-                p_R_evaluated = density_data(X_test.transpose(1, 0))
+        p_rel = p_G_evaluated / (p_R_evaluated + 1e-10)
 
-            # DOMIAS (with prior for p_R, see Appendix experiment)
-            elif density_estimator == "prior":
-                p_R_evaluated = norm.pdf(X_test)
+        acc, auc = _utils.compute_metrics_baseline(p_rel, Y_test)
+        performance_logger["MIA_performance"] = {
+            "accuracy": acc,
+            "aucroc": auc,
+        }
 
-            p_rel = p_G_evaluated / (p_R_evaluated + 1e-10)
-
-            acc, auc = domias.baselines.compute_metrics_baseline(p_rel, Y_test)
-            performance_logger[synthetic_size]["MIA_performance"]["domias"] = {
-                "accuracy": acc,
-                "aucroc": auc,
-            }
-
-            performance_logger[synthetic_size]["MIA_scores"]["domias"] = p_rel
+        # performance_logger["Domias_MIA_scores"] = p_rel
 
         return performance_logger

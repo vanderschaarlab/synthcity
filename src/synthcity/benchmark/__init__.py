@@ -162,6 +162,10 @@ class Benchmarks:
                     workspace
                     / f"{experiment_name}_{testcase}_{plugin}_{kwargs_hash}_{platform.python_version()}_{repeat}.bkp"
                 )
+                X_ref_syn_cache_file = (
+                    workspace
+                    / f"{experiment_name}_{testcase}_{plugin}_{kwargs_hash}_{platform.python_version()}_{repeat}_reference.bkp"
+                )
                 generator_file = (
                     workspace
                     / f"{experiment_name}_{testcase}_{plugin}_{kwargs_hash}_{platform.python_version()}_generator_{repeat}.bkp"
@@ -193,11 +197,21 @@ class Benchmarks:
                     if synthetic_cache:
                         save_to_file(generator_file, generator)
 
-                if X_syn_cache_file.exists() and synthetic_reuse_if_exists:
+                if (
+                    X_syn_cache_file.exists()
+                    and X_ref_syn_cache_file.exists()
+                    and synthetic_reuse_if_exists
+                ):
                     X_syn = load_from_file(X_syn_cache_file)
+                    X_ref_syn = load_from_file(X_ref_syn_cache_file)
                 else:
                     try:
                         X_syn = generator.generate(
+                            count=synthetic_size,
+                            constraints=synthetic_constraints,
+                            **generate_kwargs,
+                        )
+                        X_ref_syn = generator.generate(
                             count=synthetic_size,
                             constraints=synthetic_constraints,
                             **generate_kwargs,
@@ -209,7 +223,7 @@ class Benchmarks:
                         continue
 
                     if synthetic_cache:
-                        save_to_file(X_syn_cache_file, X_syn)
+                        save_to_file(X_ref_syn_cache_file, X_ref_syn)
 
                 # Augmentation
                 if metrics and any(
@@ -264,8 +278,10 @@ class Benchmarks:
                 else:
                     X_augmented = None
                 evaluation = Metrics.evaluate(
+                    X.train(),
                     X_test if X_test is not None else X.test(),
                     X_syn,
+                    X_ref_syn,
                     X_augmented,
                     metrics=metrics,
                     task_type=task_type,
