@@ -20,7 +20,9 @@ from tsai.models.XCM import XCM
 
 # synthcity absolute
 import synthcity.logger as log
-from synthcity.plugins.core.models.mlp import MLP, MultiActivationHead, get_nonlin
+from synthcity.plugins.core.models.factory import get_nonlin
+from synthcity.plugins.core.models.layers import MultiActivationHead
+from synthcity.plugins.core.models.mlp import MLP
 from synthcity.utils.constants import DEVICE
 from synthcity.utils.reproducibility import enable_reproducible_results
 from synthcity.utils.samplers import ImbalancedDatasetSampler

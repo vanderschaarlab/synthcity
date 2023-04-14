@@ -16,7 +16,7 @@ from torchvision import transforms
 # synthcity absolute
 from synthcity.plugins.core.constraints import Constraints
 from synthcity.plugins.core.dataset import FlexibleDataset, TensorDataset
-from synthcity.plugins.core.models.data_encoder import DatetimeEncoder
+from synthcity.plugins.core.models.feature_encoder import DatetimeEncoder
 from synthcity.utils.compression import compress_dataset, decompress_dataset
 from synthcity.utils.serialization import dataframe_hash
 

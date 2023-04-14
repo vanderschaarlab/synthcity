@@ -2,14 +2,14 @@
 """
 
 # stdlib
-from typing import Any, List, Optional, Sequence, Tuple
+from typing import Any, List, Optional, Sequence, Tuple, Union
 
 # third party
 import numpy as np
 import pandas as pd
 from pydantic import BaseModel, validate_arguments, validator
 from sklearn.base import BaseEstimator, TransformerMixin
-from sklearn.preprocessing import MinMaxScaler, OneHotEncoder
+from sklearn.preprocessing import MinMaxScaler
 
 # synthcity absolute
 import synthcity.logger as log
@@ -17,7 +17,7 @@ from synthcity.utils.dataframe import discrete_columns as find_cat_cols
 from synthcity.utils.serialization import dataframe_hash
 
 # synthcity relative
-from .data_encoder import ContinuousDataEncoder
+from .factory import get_feature_encoder
 
 
 class FeatureInfo(BaseModel):
@@ -26,6 +26,7 @@ class FeatureInfo(BaseModel):
     transform: Any
     output_dimensions: int
     transformed_features: List[str]
+    trans_feature_types: List[str]
 
     @validator("feature_type")
     def _feature_type_validator(cls: Any, v: str) -> str:
@@ -50,107 +51,6 @@ class FeatureInfo(BaseModel):
         return v
 
 
-class BinEncoder(TransformerMixin, BaseEstimator):
-    """Binary encoder (for SurvivalGAN).
-
-    Model continuous columns with a BayesianGMM and normalized to a scalar [0, 1] and a vector.
-    Discrete columns are encoded using a scikit-learn OneHotEncoder.
-    """
-
-    @validate_arguments(config=dict(arbitrary_types_allowed=True))
-    def __init__(
-        self,
-        max_clusters: int = 10,
-        categorical_limit: int = 10,
-    ) -> None:
-        """Create a data transformer.
-
-        Args:
-            max_clusters (int):
-                Maximum number of Gaussian distributions in Bayesian GMM.
-        """
-        self.max_clusters = max_clusters
-        self.categorical_limit = categorical_limit
-
-    @validate_arguments(config=dict(arbitrary_types_allowed=True))
-    def _fit_continuous(self, data: pd.Series) -> FeatureInfo:
-        """Train Bayesian GMM for continuous columns.
-
-        Args:
-            data (pd.Series):
-                A dataframe containing a column.
-
-        Returns:
-            namedtuple:
-                A ``FeatureInfo`` object.
-        """
-        name = data.name
-        encoder = ContinuousDataEncoder(
-            n_components=min(self.max_clusters, len(data)),
-        )
-        encoder.fit(data)
-        num_components = encoder.components()
-
-        transformed_features = [f"{name}.value"] + [
-            f"{name}.component_{i}" for i in range(num_components)
-        ]
-
-        return FeatureInfo(
-            name=name,
-            feature_type="continuous",
-            transform=encoder,
-            output_dimensions=1 + num_components,
-            transformed_features=transformed_features,
-        )
-
-    def fit(
-        self, raw_data: pd.DataFrame, discrete_columns: Optional[List] = None
-    ) -> "BinEncoder":
-        """Fit the ``BinEncoder``.
-
-        Fits a ``ContinuousDataEncoder`` for continuous columns
-        """
-        if discrete_columns is None:
-            discrete_columns = find_cat_cols(raw_data, self.categorical_limit)
-
-        self.output_dimensions = 0
-
-        self._column_transform_info = {}
-        for name in raw_data.columns:
-            if name not in discrete_columns:
-                column_transform_info = self._fit_continuous(raw_data[name])
-                self._column_transform_info[name] = column_transform_info
-
-        return self
-
-    def _transform_continuous(
-        self, column_transform_info: FeatureInfo, data: pd.Series
-    ) -> pd.Series:
-        name = data.name
-        encoder = column_transform_info.transform
-        transformed = encoder.transform(data)
-
-        return transformed[f"{name}.component"].to_numpy().astype(int)
-
-    @validate_arguments(config=dict(arbitrary_types_allowed=True))
-    def transform(self, raw_data: pd.DataFrame) -> pd.DataFrame:
-        """Take raw data and output a matrix data."""
-        output = raw_data.copy()
-
-        for name in self._column_transform_info:
-            column_transform_info = self._column_transform_info[name]
-
-            output[name] = self._transform_continuous(
-                column_transform_info, raw_data[name]
-            )
-
-        return output
-
-    @validate_arguments(config=dict(arbitrary_types_allowed=True))
-    def fit_transform(self, raw_data: pd.DataFrame) -> pd.DataFrame:
-        return self.fit(raw_data).transform(raw_data)
-
-
 class TabularEncoder(TransformerMixin, BaseEstimator):
     """Tabular encoder.
 
@@ -158,78 +58,79 @@ class TabularEncoder(TransformerMixin, BaseEstimator):
     Discrete columns are encoded using a scikit-learn OneHotEncoder.
     """
 
+    categorical_encoder: Union[str, type] = "onehot"
+    continuous_encoder: Union[str, type] = "bayesian_gmm"
+    cat_encoder_params: dict = dict(handle_unknown="ignore", sparse=False)
+    cont_encoder_params: dict = dict(n_components=10)
+
     @validate_arguments(config=dict(arbitrary_types_allowed=True))
     def __init__(
         self,
+        *,
+        whitelist: tuple = (),
         max_clusters: int = 10,
         categorical_limit: int = 10,
-        whitelist: list = [],
+        categorical_encoder: Optional[Union[str, type]] = None,
+        continuous_encoder: Optional[Union[str, type]] = None,
+        cat_encoder_params: Optional[dict] = None,
+        cont_encoder_params: Optional[dict] = None,
     ) -> None:
         """Create a data transformer.
 
         Args:
-            max_clusters (int):
-                Maximum number of Gaussian distributions in Bayesian GMM.
+            whitelist (tuple):
+                Columns that will not be transformed.
         """
-        self.max_clusters = max_clusters
-        self.categorical_limit = categorical_limit
         self.whitelist = whitelist
+        self.categorical_limit = categorical_limit
+        self.max_clusters = max_clusters
+        if categorical_encoder is not None:
+            self.categorical_encoder = categorical_encoder
+        if continuous_encoder is not None:
+            self.continuous_encoder = continuous_encoder
+        if cat_encoder_params is not None:
+            self.cat_encoder_params = cat_encoder_params
+        else:
+            self.cat_encoder_params = self.cat_encoder_params.copy()
+        if cont_encoder_params is not None:
+            self.cont_encoder_params = cont_encoder_params
+        else:
+            self.cont_encoder_params = self.cont_encoder_params.copy()
+        if self.continuous_encoder == "bayesian_gmm":
+            self.cont_encoder_params["n_components"] = max_clusters
 
     @validate_arguments(config=dict(arbitrary_types_allowed=True))
-    def _fit_continuous(self, data: pd.Series) -> FeatureInfo:
-        """Train Bayesian GMM for continuous columns.
+    def _fit_feature(self, feature: pd.Series, feature_type: str) -> FeatureInfo:
+        """Fit the feature encoder on a column.
 
         Args:
-            data (pd.DataFrame):
-                A dataframe containing a column.
+            feature (pd.Series):
+                A column of a dataframe.
+            feature_type (str):
+                Type of the feature ('discrete' or 'continuous').
 
         Returns:
-            namedtuple:
-                A ``FeatureInfo`` object.
+            FeatureInfo:
+                Information of the fitted feature encoder.
         """
-        name = data.name
-        encoder = ContinuousDataEncoder(
-            n_components=min(len(data), self.max_clusters),
-        )
-        encoder.fit(data)
-        num_components = encoder.components()
+        if feature_type == "discrete":
+            encoder = get_feature_encoder(
+                self.categorical_encoder, self.cat_encoder_params
+            )
+        else:
+            encoder = get_feature_encoder(
+                self.continuous_encoder, self.cont_encoder_params
+            )
 
-        transformed_features = [f"{name}.value"] + [
-            f"{name}.component_{i}" for i in range(num_components)
-        ]
+        encoder.fit(feature)
+
         return FeatureInfo(
-            name=name,
-            feature_type="continuous",
+            name=feature.name,
+            feature_type=feature_type,
             transform=encoder,
-            output_dimensions=1 + num_components,
-            transformed_features=transformed_features,
-        )
-
-    @validate_arguments(config=dict(arbitrary_types_allowed=True))
-    def _fit_discrete(self, data: pd.Series) -> FeatureInfo:
-        """Fit one hot encoder for discrete column.
-
-        Args:
-            data (pd.DataFrame):
-                A dataframe containing a column.
-
-        Returns:
-            namedtuple:
-                A ``FeatureInfo`` object.
-        """
-        name = data.name
-        ohe = OneHotEncoder(handle_unknown="ignore", sparse=False)
-        ohe.fit(data.values.reshape(-1, 1))
-        num_categories = len(ohe.categories_[0])
-
-        transformed_features = list(ohe.get_feature_names_out([data.name]))
-
-        return FeatureInfo(
-            name=name,
-            feature_type="discrete",
-            transform=ohe,
-            output_dimensions=num_categories,
-            transformed_features=transformed_features,
+            output_dimensions=encoder.n_features_out,
+            transformed_features=encoder.feature_names_out,
+            trans_feature_types=encoder.feature_types_out,
         )
 
     @validate_arguments(config=dict(arbitrary_types_allowed=True))
@@ -238,57 +139,35 @@ class TabularEncoder(TransformerMixin, BaseEstimator):
     ) -> Any:
         """Fit the ``TabularEncoder``.
 
-        Fits a ``ContinuousDataEncoder`` for continuous columns and a
-        ``OneHotEncoder`` for discrete columns.
-
         This step also counts the #columns in matrix data and span information.
         """
         if discrete_columns is None:
             discrete_columns = find_cat_cols(raw_data, self.categorical_limit)
+
         self.output_dimensions = 0
 
         self._column_raw_dtypes = raw_data.infer_objects().dtypes
-        self._column_transform_info_list = []
+        self._column_transform_info_list: Sequence[FeatureInfo] = []
 
         for name in raw_data.columns:
             if name in self.whitelist:
                 continue
             column_hash = dataframe_hash(raw_data[[name]])
             log.info(f"Encoding {name} {column_hash}")
-
-            if name in discrete_columns:
-                column_transform_info = self._fit_discrete(raw_data[name])
-            else:
-                column_transform_info = self._fit_continuous(raw_data[name])
+            ftype = "discrete" if name in discrete_columns else "continuous"
+            column_transform_info = self._fit_feature(raw_data[name], ftype)
 
             self.output_dimensions += column_transform_info.output_dimensions
             self._column_transform_info_list.append(column_transform_info)
+
         return self
 
-    def _transform_continuous(
-        self, column_transform_info: FeatureInfo, data: pd.Series
+    def _transform_feature(
+        self, column_transform_info: FeatureInfo, feature: pd.Series
     ) -> pd.DataFrame:
-        name = data.name
         encoder = column_transform_info.transform
-        transformed = encoder.transform(data)
-
-        #  Converts the transformed data to the appropriate output format.
-        output = np.zeros((len(transformed), column_transform_info.output_dimensions))
-        output[:, 0] = transformed[f"{name}.value"].to_numpy()
-        index = transformed[f"{name}.component"].to_numpy().astype(int)
-        output[np.arange(index.size), index + 1] = 1
-
         return pd.DataFrame(
-            output,
-            columns=column_transform_info.transformed_features,
-        )
-
-    def _transform_discrete(
-        self, column_transform_info: FeatureInfo, data: pd.Series
-    ) -> pd.DataFrame:
-        ohe = column_transform_info.transform
-        return pd.DataFrame(
-            ohe.transform(data.to_frame().values),
+            encoder.transform(feature).values,
             columns=column_transform_info.transformed_features,
         )
 
@@ -302,21 +181,14 @@ class TabularEncoder(TransformerMixin, BaseEstimator):
         for name in self.whitelist:
             if name not in raw_data.columns:
                 continue
-            data = raw_data[name]
-            column_data_list.append(data)
+            feature = raw_data[name]
+            column_data_list.append(feature)
 
         for column_transform_info in self._column_transform_info_list:
-            name = column_transform_info.name
-            data = raw_data[name]
-
-            if column_transform_info.feature_type == "continuous":
-                column_data_list.append(
-                    self._transform_continuous(column_transform_info, data)
-                )
-            else:
-                column_data_list.append(
-                    self._transform_discrete(column_transform_info, data)
-                )
+            feature = raw_data[column_transform_info.name]
+            column_data_list.append(
+                self._transform_feature(column_transform_info, feature)
+            )
 
         result = pd.concat(column_data_list, axis=1)
         result.index = raw_data.index
@@ -324,26 +196,13 @@ class TabularEncoder(TransformerMixin, BaseEstimator):
         return result
 
     @validate_arguments(config=dict(arbitrary_types_allowed=True))
-    def _inverse_transform_continuous(
+    def _inverse_transform_feature(
         self,
         column_transform_info: FeatureInfo,
         column_data: pd.DataFrame,
-    ) -> pd.DataFrame:
+    ) -> pd.Series:
         encoder = column_transform_info.transform
-        data = pd.DataFrame(column_data.values[:, :2], columns=["value", "component"])
-        data.iloc[:, 1] = np.argmax(column_data.values[:, 1:], axis=1)
-        return encoder.inverse_transform(data)
-
-    @validate_arguments(config=dict(arbitrary_types_allowed=True))
-    def _inverse_transform_discrete(
-        self, column_transform_info: FeatureInfo, column_data: pd.DataFrame
-    ) -> pd.DataFrame:
-        ohe = column_transform_info.transform
-        column = column_transform_info.name
-        return pd.DataFrame(
-            ohe.inverse_transform(column_data),
-            columns=[column],
-        )
+        return encoder.inverse_transform(column_data)
 
     @validate_arguments(config=dict(arbitrary_types_allowed=True))
     def inverse_transform(self, data: pd.DataFrame) -> pd.DataFrame:
@@ -355,41 +214,34 @@ class TabularEncoder(TransformerMixin, BaseEstimator):
             return pd.DataFrame(np.zeros((len(data), 0)))
 
         st = 0
-        recovered_column_data_list = []
         names = []
         feature_types = []
+        recovered_feature_list = []
 
         for name in self.whitelist:
             if name not in data.columns:
                 continue
-            local_data = data[name]
             names.append(name)
             feature_types.append(self._column_raw_dtypes)
-            recovered_column_data_list.append(local_data)
+            recovered_feature_list.append(data[name])
 
         for column_transform_info in self._column_transform_info_list:
             dim = column_transform_info.output_dimensions
             column_data = data.iloc[:, list(range(st, st + dim))]
-            if column_transform_info.feature_type == "continuous":
-                recovered_column_data = self._inverse_transform_continuous(
-                    column_transform_info, column_data
-                )
-            else:
-                recovered_column_data = self._inverse_transform_discrete(
-                    column_transform_info, column_data
-                )
-
-            recovered_column_data_list.append(recovered_column_data)
+            recovered_feature = self._inverse_transform_feature(
+                column_transform_info, column_data
+            )
+            recovered_feature_list.append(recovered_feature)
             names.append(column_transform_info.name)
             st += dim
 
-        recovered_data = np.column_stack(recovered_column_data_list)
+        recovered_data = np.column_stack(recovered_feature_list)
         recovered_data = pd.DataFrame(
             recovered_data, columns=names, index=data.index
         ).astype(self._column_raw_dtypes.filter(names))
         return recovered_data
 
-    def layout(self) -> List[Tuple]:
+    def layout(self) -> Sequence[FeatureInfo]:
         """Get the layout of the encoded dataset.
 
         Returns a list of tuple, describing each column as:
@@ -400,10 +252,8 @@ class TabularEncoder(TransformerMixin, BaseEstimator):
 
     def n_features(self) -> int:
         return np.sum(
-            [
-                column_transform_info.output_dimensions
-                for column_transform_info in self._column_transform_info_list
-            ]
+            column_transform_info.output_dimensions
+            for column_transform_info in self._column_transform_info_list
         )
 
     def get_column_info(self, name: str) -> FeatureInfo:
@@ -416,7 +266,7 @@ class TabularEncoder(TransformerMixin, BaseEstimator):
     @validate_arguments(config=dict(arbitrary_types_allowed=True))
     def activation_layout(
         self, discrete_activation: str, continuous_activation: str
-    ) -> Sequence[Tuple]:
+    ) -> Sequence[Tuple[str, int]]:
         """Get the layout of the activations.
 
         Returns a list of tuple, describing each column as:
@@ -424,23 +274,54 @@ class TabularEncoder(TransformerMixin, BaseEstimator):
             - discrete, and with length <N>, the length of the one-hot encoding.
         """
         out = []
+        acts = dict(discrete=discrete_activation, continuous=continuous_activation)
         for column_transform_info in self._column_transform_info_list:
-            if column_transform_info.feature_type == "continuous":
-                out.extend(
-                    [
-                        (continuous_activation, 1),
-                        (
-                            discrete_activation,
-                            column_transform_info.output_dimensions - 1,
-                        ),
-                    ]
-                )
-            else:
-                out.append(
-                    (discrete_activation, column_transform_info.output_dimensions)
-                )
-
+            ct = column_transform_info.trans_feature_types[0]
+            d = 0
+            for t in column_transform_info.trans_feature_types:
+                if t != ct:
+                    out.append((acts[ct], d))
+                    ct = t
+                    d = 0
+                d += 1
+            out.append((acts[ct], d))
         return out
+
+
+class BinEncoder(TabularEncoder):
+    """Binary encoder (for SurvivalGAN).
+
+    Model continuous columns with a BayesianGMM and normalized to a scalar [0, 1] and a vector.
+    Discrete columns are encoded using a scikit-learn OneHotEncoder.
+    """
+
+    continuous_encoder = "bayesian_gmm"
+    cont_encoder_params = dict(n_components=2)
+    categorical_encoder = "passthrough"  # "onehot"
+    cat_encoder_params = dict()  # dict(handle_unknown="ignore", sparse=False)
+
+    def _transform_feature(
+        self, column_transform_info: FeatureInfo, feature: pd.Series
+    ) -> pd.DataFrame:
+        if column_transform_info.feature_type == "discrete":
+            return super()._transform_feature(column_transform_info, feature)
+        bgm = column_transform_info.transform
+        out = bgm.transform(feature)
+        return pd.DataFrame(
+            out.values[:, 1:].argmax(axis=1), columns=[bgm.feature_name_in]
+        )
+
+    def _inverse_transform_feature(
+        self, column_transform_info: FeatureInfo, column_data: pd.DataFrame
+    ) -> pd.Series:
+        if column_transform_info == "discrete":
+            return super()._inverse_transform_feature(
+                column_transform_info, column_data
+            )
+        bgm = column_transform_info.transform
+        components = column_data.values.reshape(-1)
+        features = bgm.means[components]
+        return pd.Series(features, name=bgm.feature_name_in)
 
 
 class TimeSeriesTabularEncoder(TransformerMixin, BaseEstimator):
@@ -672,6 +553,7 @@ class TimeSeriesBinEncoder(TransformerMixin, BaseEstimator):
         self,
         max_clusters: int = 10,
         categorical_limit: int = 10,
+        continuous_encoder: str = "gmm",
     ) -> None:
         """Create a data transformer.
 
@@ -682,6 +564,7 @@ class TimeSeriesBinEncoder(TransformerMixin, BaseEstimator):
         self.encoder = BinEncoder(
             max_clusters=max_clusters,
             categorical_limit=categorical_limit,
+            continuous_encoder=continuous_encoder,
         )
 
     def _prepare(

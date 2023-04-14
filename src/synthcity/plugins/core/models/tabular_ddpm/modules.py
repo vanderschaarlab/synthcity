@@ -11,7 +11,7 @@ import torch.optim
 from torch import Tensor, nn
 
 # synthcity absolute
-from synthcity.plugins.core.models.mlp import MLP, get_nonlin
+from synthcity.plugins.core.models.factory import get_model, get_nonlin
 
 
 class TimeStepEmbedding(nn.Module):
@@ -59,16 +59,15 @@ class TimeStepEmbedding(nn.Module):
         return self.fc(emb)
 
 
-class MLPDiffusion(nn.Module):
-    add_residual = False
-
+class DiffusionModel(nn.Module):
     def __init__(
         self,
         dim_in: int,
         dim_emb: int = 128,
         *,
-        mlp_params: dict = {},
-        use_label: bool = False,
+        model_type: str = "mlp",
+        model_params: dict = {},
+        conditional: bool = False,
         num_classes: int = 0,
         emb_nonlin: Union[str, nn.Module] = "silu",
         max_time_period: int = 10000,
@@ -76,7 +75,7 @@ class MLPDiffusion(nn.Module):
         super().__init__()
         self.dim_t = dim_emb
         self.num_classes = num_classes
-        self.has_label = use_label
+        self.has_label = conditional
 
         if isinstance(emb_nonlin, str):
             self.emb_nonlin = get_nonlin(emb_nonlin)
@@ -86,33 +85,33 @@ class MLPDiffusion(nn.Module):
         self.proj = nn.Linear(dim_in, dim_emb)
         self.time_emb = TimeStepEmbedding(dim_emb, max_time_period)
 
-        if use_label:
+        if conditional:
             if self.num_classes > 0:
                 self.label_emb = nn.Embedding(self.num_classes, dim_emb)
             elif self.num_classes == 0:  # regression
                 self.label_emb = nn.Linear(1, dim_emb)
 
-        self.model = MLP(
-            n_units_in=dim_emb,
-            n_units_out=dim_in,
-            task_type="/",
-            residual=self.add_residual,
-            **mlp_params,
-        )
+        if not model_params:
+            model_params = {}  # avoid changing the default dict
+
+        if model_type == "mlp":
+            if not model_params:
+                model_params = dict(n_units_hidden=256, n_layers_hidden=3, dropout=0.0)
+            model_params.update(n_units_in=dim_emb, n_units_out=dim_in)
+        elif model_type == "tabnet":
+            model_params.update(input_dim=dim_emb, output_dim=dim_in)
+
+        self.model = get_model(model_type, model_params)
 
     def forward(self, x: Tensor, t: Tensor, y: Optional[Tensor] = None) -> Tensor:
         emb = self.time_emb(t)
         if self.has_label:
             if y is None:
-                raise ValueError("y must be provided if use_label is True")
+                raise ValueError("y must be provided if conditional is True")
             if self.num_classes == 0:
-                y = y.resize(-1, 1).float()
+                y = y.reshape(-1, 1).float()
             else:
                 y = y.squeeze().long()
             emb += self.emb_nonlin(self.label_emb(y))
         x = self.proj(x) + emb
         return self.model(x)
-
-
-class ResNetDiffusion(MLPDiffusion):
-    add_residual = True

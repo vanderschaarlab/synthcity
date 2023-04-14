@@ -1,84 +1,23 @@
 # stdlib
-from typing import Any, Callable, List, Optional, Tuple, Union
+from typing import Any, Callable, List, Optional, Tuple
 
 # third party
 import numpy as np
 import torch
 from pydantic import validate_arguments
-from torch import Tensor, nn
+from torch import nn
 from torch.utils.data import DataLoader, TensorDataset
 
 # synthcity absolute
 import synthcity.logger as log
+from synthcity.plugins.core.models.factory import get_nonlin
+from synthcity.plugins.core.models.layers import (
+    GumbelSoftmax,
+    MultiActivationHead,
+    SkipConnection,
+)
 from synthcity.utils.constants import DEVICE
 from synthcity.utils.reproducibility import enable_reproducible_results
-
-
-class GumbelSoftmax(nn.Module):
-    def __init__(
-        self, tau: float = 0.2, hard: bool = False, eps: float = 1e-10, dim: int = -1
-    ) -> None:
-        super(GumbelSoftmax, self).__init__()
-
-        self.tau = tau
-        self.hard = hard
-        self.eps = eps
-        self.dim = dim
-
-    def forward(self, logits: torch.Tensor) -> torch.Tensor:
-        return nn.functional.gumbel_softmax(
-            logits, tau=self.tau, hard=self.hard, eps=self.eps, dim=self.dim
-        )
-
-
-class GLU(nn.Module):
-    """Gated Linear Unit (GLU)."""
-
-    def __init__(self, activation: Union[str, nn.Module] = "sigmoid") -> None:
-        super().__init__()
-        if type(activation) == str:
-            self.non_lin = get_nonlin(activation)
-        else:
-            self.non_lin = activation
-
-    def forward(self, x: Tensor) -> Tensor:
-        if x.shape[-1] % 2:
-            raise ValueError("The last dimension of the input tensor must be even.")
-        a, b = x.chunk(2, dim=-1)
-        return a * self.non_lin(b)
-
-
-def get_nonlin(name: Union[str, nn.Module]) -> nn.Module:
-    if isinstance(name, nn.Module):
-        return name
-    elif name == "none":
-        return nn.Identity()
-    elif name == "elu":
-        return nn.ELU()
-    elif name == "relu":
-        return nn.ReLU()
-    elif name == "leaky_relu":
-        return nn.LeakyReLU()
-    elif name == "selu":
-        return nn.SELU()
-    elif name == "tanh":
-        return nn.Tanh()
-    elif name == "sigmoid":
-        return nn.Sigmoid()
-    elif name == "softmax":
-        return GumbelSoftmax()
-    elif name == "gelu":
-        return nn.GELU()
-    elif name == "glu":
-        return GLU()
-    elif name == "reglu":
-        return GLU("relu")
-    elif name == "geglu":
-        return GLU("gelu")
-    elif name in ("silu", "swish"):
-        return nn.SiLU()
-    else:
-        raise ValueError(f"Unknown nonlinearity {name}")
 
 
 class LinearLayer(nn.Module):
@@ -114,70 +53,7 @@ class LinearLayer(nn.Module):
         return self.model(X.float()).to(self.device)
 
 
-class ResidualLayer(LinearLayer):
-    @validate_arguments(config=dict(arbitrary_types_allowed=True))
-    def __init__(
-        self,
-        n_units_in: int,
-        n_units_out: int,
-        dropout: float = 0,
-        batch_norm: bool = False,
-        nonlin: Optional[str] = "relu",
-        device: Any = DEVICE,
-    ) -> None:
-        super(ResidualLayer, self).__init__(
-            n_units_in,
-            n_units_out,
-            dropout=dropout,
-            batch_norm=batch_norm,
-            nonlin=nonlin,
-            device=device,
-        )
-        self.device = device
-        self.n_units_out = n_units_out
-
-    @validate_arguments(config=dict(arbitrary_types_allowed=True))
-    def forward(self, X: torch.Tensor) -> torch.Tensor:
-        if X.shape[-1] == 0:
-            return torch.zeros((*X.shape[:-1], self.n_units_out)).to(self.device)
-
-        out = self.model(X.float())
-        return torch.cat([out, X], dim=-1).to(self.device)
-
-
-class MultiActivationHead(nn.Module):
-    """Final layer with multiple activations. Useful for tabular data."""
-
-    def __init__(
-        self,
-        activations: List[Tuple[nn.Module, int]],
-        device: Any = DEVICE,
-    ) -> None:
-        super(MultiActivationHead, self).__init__()
-        self.activations = []
-        self.activation_lengths = []
-        self.device = device
-
-        for activation, length in activations:
-            self.activations.append(activation)
-            self.activation_lengths.append(length)
-
-    @validate_arguments(config=dict(arbitrary_types_allowed=True))
-    def forward(self, X: torch.Tensor) -> torch.Tensor:
-        if X.shape[-1] != np.sum(self.activation_lengths):
-            raise RuntimeError(
-                f"Shape mismatch for the activations: expected {np.sum(self.activation_lengths)}. Got shape {X.shape}."
-            )
-
-        split = 0
-        out = torch.zeros(X.shape).to(self.device)
-
-        for activation, step in zip(self.activations, self.activation_lengths):
-            out[..., split : split + step] = activation(X[..., split : split + step])
-
-            split += step
-
-        return out
+ResidualLayer = SkipConnection(LinearLayer)
 
 
 class MLP(nn.Module):
@@ -235,9 +111,10 @@ class MLP(nn.Module):
     @validate_arguments(config=dict(arbitrary_types_allowed=True))
     def __init__(
         self,
-        task_type: str,  # classification/regression
         n_units_in: int,
         n_units_out: int,
+        *,
+        task_type: str = "regression",  # classification/regression
         n_layers_hidden: int = 1,
         n_units_hidden: int = 100,
         nonlin: str = "relu",

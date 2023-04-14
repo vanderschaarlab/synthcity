@@ -5,12 +5,8 @@ import torch
 from sklearn.datasets import load_diabetes, load_digits
 
 # synthcity absolute
-from synthcity.plugins.core.models.mlp import (
-    MLP,
-    LinearLayer,
-    MultiActivationHead,
-    ResidualLayer,
-)
+from synthcity.plugins.core.models.layers import MultiActivationHead
+from synthcity.plugins.core.models.mlp import MLP, LinearLayer, ResidualLayer
 
 
 def test_network_config() -> None:

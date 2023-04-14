@@ -157,7 +157,7 @@ class CategoricalDistribution(Distribution):
         if msamples is not None:
             return msamples
 
-        return np.random.choice(self.choices, count).tolist()
+        return np.random.choice(self.choices, count)
 
     def has(self, val: Any) -> bool:
         return val in self.choices
@@ -209,8 +209,8 @@ class FloatDistribution(Distribution):
         :parts: 1
     """
 
-    low: float = np.iinfo(np.int64).min
-    high: float = np.iinfo(np.int64).max
+    low: float = np.finfo(np.float64).min
+    high: float = np.finfo(np.float64).max
 
     @validator("low", always=True)
     def _validate_low_thresh(cls: Any, v: float, values: Dict) -> float:
@@ -260,7 +260,7 @@ class FloatDistribution(Distribution):
         return self.high
 
     def __eq__(self, other: Any) -> bool:
-        if not isinstance(other, FloatDistribution):
+        if not isinstance(other, type(self)):
             return False
 
         return (
@@ -271,6 +271,21 @@ class FloatDistribution(Distribution):
 
     def dtype(self) -> str:
         return "float"
+
+
+class LogDistribution(FloatDistribution):
+    low: float = np.finfo(np.float64).tiny
+    high: float = np.finfo(np.float64).max
+    base: float = 2.0
+
+    def sample(self, count: int = 1) -> Any:
+        np.random.seed(self.random_state)
+        msamples = self.sample_marginal(count)
+        if msamples is not None:
+            return msamples
+        lo = np.log2(self.low) / np.log2(self.base)
+        hi = np.log2(self.high) / np.log2(self.base)
+        return self.base ** np.random.uniform(lo, hi, count)
 
 
 class IntegerDistribution(Distribution):
@@ -307,8 +322,9 @@ class IntegerDistribution(Distribution):
         if msamples is not None:
             return msamples
 
-        choices = [val for val in range(self.low, self.high + 1, self.step)]
-        return np.random.choice(choices, count).tolist()
+        high = (self.high + 1 - self.low) // self.step
+        s = np.random.choice(high, count)
+        return s * self.step + self.low
 
     def has(self, val: Any) -> bool:
         return self.low <= val and val <= self.high
@@ -345,7 +361,20 @@ class IntegerDistribution(Distribution):
         return "int"
 
 
-OFFSET = 120
+class LogIntDistribution(FloatDistribution):
+    low: float = 1.0
+    high: float = float(np.iinfo(np.int64).max)
+    base: float = 2.0
+
+    def sample(self, count: int = 1) -> Any:
+        np.random.seed(self.random_state)
+        msamples = self.sample_marginal(count)
+        if msamples is not None:
+            return msamples
+        lo = np.log2(self.low) / np.log2(self.base)
+        hi = np.log2(self.high) / np.log2(self.base)
+        s = self.base ** np.random.uniform(lo, hi, count)
+        return s.astype(int)
 
 
 class DatetimeDistribution(Distribution):
@@ -354,24 +383,29 @@ class DatetimeDistribution(Distribution):
         :parts: 1
     """
 
+    offset: int = 120
     low: datetime = datetime.utcfromtimestamp(0)
     high: datetime = datetime.now()
+
+    @validator("offset", always=True)
+    def _validate_offset(cls: Any, v: int) -> int:
+        if v < 0:
+            raise ValueError("offset must be greater than 0")
+        return v
 
     @validator("low", always=True)
     def _validate_low_thresh(cls: Any, v: datetime, values: Dict) -> datetime:
         mkey = "marginal_distribution"
         if mkey in values and values[mkey] is not None:
             v = values[mkey].index.min()
-
-        return v - timedelta(seconds=OFFSET)
+        return v - timedelta(seconds=values["offset"])
 
     @validator("high", always=True)
     def _validate_high_thresh(cls: Any, v: datetime, values: Dict) -> datetime:
         mkey = "marginal_distribution"
         if mkey in values and values[mkey] is not None:
             v = values[mkey].index.max()
-
-        return v + timedelta(seconds=OFFSET)
+        return v + timedelta(seconds=values["offset"])
 
     def get(self) -> List[Any]:
         return [self.name, self.low, self.high]
@@ -382,23 +416,16 @@ class DatetimeDistribution(Distribution):
         if msamples is not None:
             return msamples
 
-        samples = np.random.uniform(
-            datetime.timestamp(self.low), datetime.timestamp(self.high), count
-        )
-
-        samples_dt = []
-        for s in samples:
-            samples_dt.append(datetime.fromtimestamp(s))
-
-        return samples_dt
+        delta = self.high - self.low
+        return self.low + delta * np.random.rand(count)
 
     def has(self, val: datetime) -> bool:
         return self.low <= val and val <= self.high
 
     def includes(self, other: "Distribution") -> bool:
         return self.min() - timedelta(
-            seconds=OFFSET
-        ) <= other.min() and other.max() <= self.max() + timedelta(seconds=OFFSET)
+            seconds=self.offset
+        ) <= other.min() and other.max() <= self.max() + timedelta(seconds=self.offset)
 
     def as_constraint(self) -> Constraints:
         return Constraints(

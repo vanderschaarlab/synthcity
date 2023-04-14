@@ -69,8 +69,8 @@ class ConvNet(nn.Module):
     @validate_arguments(config=dict(arbitrary_types_allowed=True))
     def __init__(
         self,
-        task_type: str,
-        model: nn.Module,  # classification/regression
+        task_type: str,  # classification/regression
+        model: nn.Module,
         lr: float = 1e-3,
         weight_decay: float = 1e-3,
         opt_betas: tuple = (0.9, 0.999),
