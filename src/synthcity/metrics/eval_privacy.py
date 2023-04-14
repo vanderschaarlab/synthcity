@@ -399,10 +399,11 @@ class DomiasMIA(PrivacyEvaluator):
 
     def __init__(self, **kwargs: Any) -> None:
         super().__init__(default_metric="syn", **kwargs)
+        print("init DomiasMIA")
 
     @staticmethod
     def name() -> str:
-        return "domias"
+        return "DomiasMIA"
 
     @staticmethod
     def direction() -> str:
@@ -418,7 +419,7 @@ class DomiasMIA(PrivacyEvaluator):
         X_train: Union[DataLoader, Any],
         synth_val_set: Union[DataLoader, Any],
         reference_size: int = 100,  # look at default sizes
-        density_estimator: str = "bnaf",  # Can be "prior", "kde", bnaf. TODO: add nflows
+        density_estimator: str = "kde",  # Can be "prior", "kde", bnaf. TODO: add nflows
         device: Any = DEVICE,
     ) -> Dict:
         """
@@ -465,7 +466,7 @@ class DomiasMIA(PrivacyEvaluator):
                 * `data`: the evaluation data
             For both `MIA_performance` and `MIA_scores`, the domias attacks are evaluated
         """
-
+        print("evaluate DomiasMIA")
         performance_logger: Dict = {}
 
         mem_set = X_train.dataframe()
@@ -528,6 +529,15 @@ class DomiasMIA(PrivacyEvaluator):
 
         # KDE for pG
         elif density_estimator == "kde" or "prior":
+            if synth_set.shape[0] < X_test.shape[0]:
+                raise ValueError(
+                    """
+                    The data appears to lie in a lower-dimensional subspace of the space in which it is expressed.
+This has resulted in a singular data covariance matrix, which cannot be treated using the algorithms
+implemented in `gaussian_kde`. If you wish to use the density estimator `kde` or `prior`, consider performing principle component analysis / dimensionality reduction
+and using `gaussian_kde` with the transformed data. Else consider using `bnaf` as the density estimator.
+                """
+                )
             density_gen = stats.gaussian_kde(synth_set.values.transpose(1, 0))
             density_data = stats.gaussian_kde(reference_set.transpose(1, 0))
             p_G_evaluated = density_gen(X_test.transpose(1, 0))

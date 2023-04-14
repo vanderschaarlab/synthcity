@@ -109,10 +109,12 @@ class ScoreEvaluator:
         ]
         output = pd.DataFrame([], columns=output_metrics)
         for metric in self.scores:
+            print(metric)
             errors = self.scores[metric]["errors"]
             direction = self.scores[metric]["direction"]
             durations = round(np.mean(self.scores[metric]["durations"]), 2)
             values = self.scores[metric]["values"]
+            print(values)
             score_min = np.min(values)
             score_max = np.max(values)
             score_mean = np.mean(values)

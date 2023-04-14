@@ -224,7 +224,7 @@ class Metrics:
                     X_gt,
                     X_augmented,
                 )
-            elif metric.name() == "domias":
+            elif metric.name() == "DomiasMIA":
                 scores.queue(
                     metric(
                         reduction=reduction,
@@ -240,7 +240,6 @@ class Metrics:
                     X_ref_syn,
                     reference_size=10,
                 )
-
             else:
                 scores.queue(
                     metric(
@@ -256,7 +255,6 @@ class Metrics:
                 )
 
         scores.compute()
-        print(scores)
 
         return scores.to_dataframe()
 

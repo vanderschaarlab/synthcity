@@ -59,7 +59,6 @@ class Benchmarks:
         use_metric_cache: bool = True,
         **generate_kwargs: Any,
     ) -> pd.DataFrame:
-
         """Benchmark the performance of several algorithms.
 
         Args:
@@ -77,7 +76,7 @@ class Benchmarks:
                     'stats': ['jensenshannon_dist', 'chi_squared_test', 'feature_corr', 'inv_kl_divergence', 'ks_test', 'max_mean_discrepancy', 'wasserstein_dist', 'prdc', 'alpha_precision', 'survival_km_distance'],
                     'performance': ['linear_model', 'mlp', 'xgb', 'feat_rank_distance'],
                     'detection': ['detection_xgb', 'detection_mlp', 'detection_gmm', 'detection_linear'],
-                    'privacy': ['delta-presence', 'k-anonymization', 'k-map', 'distinct l-diversity', 'identifiability_score']
+                    'privacy': ['delta-presence', 'k-anonymization', 'k-map', 'distinct l-diversity', 'identifiability_score', 'DomiasMIA]
                 }
             repeats:
                 Number of test repeats
