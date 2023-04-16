@@ -19,10 +19,13 @@ from tqdm import tqdm
 # synthcity absolute
 import synthcity.logger as log
 from synthcity.plugins.core.dataloader import DataLoader
-from synthcity.plugins.core.models.mlp import MultiActivationHead, get_nonlin
-from synthcity.plugins.core.models.RGCNConv import RGCNConv
 from synthcity.utils.constants import DEVICE
 from synthcity.utils.reproducibility import clear_cache, enable_reproducible_results
+
+# synthcity relative
+from .factory import get_nonlin
+from .layers import MultiActivationHead
+from .RGCNConv import RGCNConv
 
 
 class Goggle(nn.Module):

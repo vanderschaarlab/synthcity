@@ -165,7 +165,7 @@ class CategoricalDistribution(Distribution):
         if msamples is not None:
             return msamples
 
-        return np.random.choice(self.choices, count).tolist()
+        return np.random.choice(self.choices, count)
 
     def has(self, val: Any) -> bool:
         return val in self.choices
@@ -211,8 +211,8 @@ class FloatDistribution(Distribution):
         :parts: 1
     """
 
-    low: float = np.iinfo(np.int64).min
-    high: float = np.iinfo(np.int64).max
+    low: float = np.finfo(np.float64).min
+    high: float = np.finfo(np.float64).max
 
     @validator("low", always=True)
     def _validate_low_thresh(cls: Any, v: float, values: Dict) -> float:
@@ -379,10 +379,17 @@ class DatetimeDistribution(Distribution):
         :parts: 1
     """
 
+    offset: int = 120
     low: datetime = datetime.utcfromtimestamp(0)
     high: datetime = datetime.now()
     step: timedelta = timedelta(microseconds=1)
     offset: timedelta = timedelta(seconds=120)
+
+    @validator("offset", always=True)
+    def _validate_offset(cls: Any, v: int) -> int:
+        if v < 0:
+            raise ValueError("offset must be greater than 0")
+        return v
 
     @validator("low", always=True)
     def _validate_low_thresh(cls: Any, v: datetime, values: Dict) -> datetime:

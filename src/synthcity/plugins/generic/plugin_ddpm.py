@@ -22,6 +22,7 @@ from synthcity.plugins.core.distribution import (
     LogDistribution,
 )
 from synthcity.plugins.core.models.tabular_ddpm import TabDDPM
+from synthcity.plugins.core.models.tabular_encoder import TabularEncoder
 from synthcity.plugins.core.plugin import Plugin
 from synthcity.plugins.core.schema import Schema
 from synthcity.utils.callbacks import Callback
@@ -47,14 +48,16 @@ class TabDDPMPlugin(Plugin):
             L2 weight decay.
         batch_size: int = 1024
             Size of mini-batches.
-        model_type: str = "mlp"
-            Type of model to use. Either "mlp" or "resnet".
         num_timesteps: int = 1000
             Number of timesteps to use in the diffusion process.
         gaussian_loss_type: str = "mse"
             Type of loss to use for the Gaussian diffusion process. Either "mse" or "kl".
         scheduler: str = "cosine"
             The scheduler of forward process variance 'beta' to use. Either "cosine" or "linear".
+        model_type: str = "mlp"
+            Type of diffusion model to use ("mlp", "resnet", or "tabnet").
+        model_params: dict = dict(n_layers_hidden=3, n_units_hidden=256, dropout=0.0)
+            Parameters of the diffusion model. Should be different for different model types.
         device: Any = DEVICE
             Device to use for training.
         callbacks: Sequence[Callback] = ()
@@ -63,12 +66,6 @@ class TabDDPMPlugin(Plugin):
             Number of iterations between logging.
         print_interval: int = 500
             Number of iterations between printing.
-        n_layers_hidden: int = 3
-            Number of hidden layers in the MLP.
-        dim_hidden: int = 256
-            Number of hidden units per hidden layer in the MLP.
-        dropout: float = 0.0
-            Dropout rate.
         dim_embed: int = 128
             Dimensionality of the embedding space.
         random_state: int
@@ -100,19 +97,17 @@ class TabDDPMPlugin(Plugin):
         lr: float = 0.002,
         weight_decay: float = 1e-4,
         batch_size: int = 1024,
-        model_type: str = "mlp",
         num_timesteps: int = 1000,
         gaussian_loss_type: str = "mse",
         scheduler: str = "cosine",
         device: Any = DEVICE,
         callbacks: Sequence[Callback] = (),
         log_interval: int = 100,
-        print_interval: int = 500,
-        # model params
-        n_layers_hidden: int = 3,
-        dim_hidden: int = 256,
-        dropout: float = 0.0,
+        model_type: str = "mlp",
+        model_params: dict = {},
         dim_embed: int = 128,
+        continuous_encoder: str = "quantile",
+        cont_encoder_params: dict = {},
         # core plugin arguments
         random_state: int = 0,
         workspace: Path = Path("workspace"),
@@ -131,10 +126,6 @@ class TabDDPMPlugin(Plugin):
 
         self.is_classification = is_classification
 
-        mlp_params = dict(
-            n_layers_hidden=n_layers_hidden, n_units_hidden=dim_hidden, dropout=dropout
-        )
-
         self.model = TabDDPM(
             n_iter=n_iter,
             lr=lr,
@@ -147,10 +138,19 @@ class TabDDPMPlugin(Plugin):
             device=device,
             callbacks=callbacks,
             log_interval=log_interval,
-            print_interval=print_interval,
             model_type=model_type,
-            mlp_params=mlp_params,
+            model_params=model_params.copy(),
             dim_embed=dim_embed,
+        )
+
+        cont_encoder_params = cont_encoder_params.copy()
+        cont_encoder_params.update(random_state=random_state)
+
+        self.encoder = TabularEncoder(
+            continuous_encoder=continuous_encoder,
+            cont_encoder_params=cont_encoder_params,
+            categorical_encoder="none",
+            cat_encoder_params=dict(),
         )
 
     @staticmethod
@@ -198,11 +198,7 @@ class TabDDPMPlugin(Plugin):
         """
         df = X.dataframe()
         cond = kwargs.pop("cond", None)
-
-        # note that the TabularEncoder is not used in this plugin, because the
-        # Gaussian multinomial diffusion module needs to know the number of classes
-        # for each discrete feature before it applies torch.nn.functional.one_hot
-        # on these features, and it also preprocesses the continuous features differently.
+        self.loss_history = None
 
         if args:
             raise ValueError("Only keyword arguments are allowed")
@@ -212,18 +208,22 @@ class TabDDPMPlugin(Plugin):
                 raise ValueError(
                     "cond is already given by the labels for classification"
                 )
-            _, cond = X.unpack()
+            df, cond = X.unpack()
             self._labels, self._cond_dist = np.unique(cond, return_counts=True)
             self._cond_dist = self._cond_dist / self._cond_dist.sum()
-        else:
-            if type(cond) is str:
-                cond = df[cond]
+            self.target_name = cond.name
+
+        df = self.encoder.fit_transform(df)
 
         if cond is not None:
+            if type(cond) is str:
+                cond = df[cond]
             cond = pd.Series(cond, index=df.index)
+            self.expecting_conditional = True
 
         # NOTE: cond may also be included in the dataframe
         self.model.fit(df, cond, **kwargs)
+        self.loss_history = self.model.loss_history
 
         return self
 
@@ -234,8 +234,15 @@ class TabDDPMPlugin(Plugin):
             # randomly generate labels following the distribution of the training data
             cond = np.random.choice(self._labels, size=count, p=self._cond_dist)
 
+        if cond is not None and len(cond) > count:
+            raise ValueError("The length of cond is less than the required count")
+
         def callback(count):  # type: ignore
-            return self.model.generate(count, cond=cond)
+            df = self.model.generate(count, cond=cond)
+            df = self.encoder.inverse_transform(df)
+            if self.is_classification:
+                df = df.join(pd.Series(cond, name=self.target_name))
+            return df
 
         return self._safe_generate(callback, count, syn_schema, **kwargs)
 

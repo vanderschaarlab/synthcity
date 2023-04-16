@@ -19,6 +19,7 @@ plugin_name = "goggle"
 plugin_args = {
     "n_iter": 10,
     "device": "cpu",
+    "sampling_patience": 50,
 }
 
 if not is_missing_goggle_deps:

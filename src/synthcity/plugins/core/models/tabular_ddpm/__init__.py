@@ -10,7 +10,7 @@ import torch
 from pydantic import validate_arguments
 from torch import nn
 from torch.utils.data import DataLoader, TensorDataset
-from tqdm import tqdm
+from tqdm import trange
 
 # synthcity absolute
 from synthcity.logger import info
@@ -38,10 +38,9 @@ class TabDDPM(nn.Module):
         callbacks: Sequence[Callback] = (),
         device: torch.device = DEVICE,
         log_interval: int = 10,
-        print_interval: int = 100,
         # model params
         model_type: str = "mlp",
-        mlp_params: Optional[dict] = None,
+        model_params: Optional[dict] = None,
         dim_embed: int = 128,
         # early stopping
         n_iter_min: int = 100,
@@ -84,26 +83,18 @@ class TabDDPM(nn.Module):
         else:
             self.n_classes = 0
 
+        self.feature_names = X.columns
         cat_cols = discrete_columns(X, return_counts=True)
 
         if cat_cols:
-            ini_cols = X.columns
             cat_cols, cat_counts = zip(*cat_cols)
+            num_cols = X.columns.difference(cat_cols)
             # reorder the columns so that the categorical ones go to the end
-            X = X[np.hstack([X.columns[~X.keys().isin(cat_cols)], cat_cols])]
-            cur_cols = X.columns
-            # find the permutation from the reordered columns to the original ones
-            self._col_perm = np.argsort(cur_cols)[np.argsort(np.argsort(ini_cols))]
+            X = X[list(num_cols) + list(cat_cols)]
+            self.feature_names_out = X.columns
         else:
             cat_counts = [0]
-            self._col_perm = np.arange(X.shape[1])
-
-        model_params = dict(
-            num_classes=self.n_classes,
-            use_label=cond is not None,
-            mlp_params=self.mlp_params,
-            dim_emb=self.dim_embed,
-        )
+            self.feature_names_out = self.feature_names
 
         dataset = TensorDataset(
             torch.tensor(X.values, dtype=torch.float32, device=self.device),
@@ -120,11 +111,14 @@ class TabDDPM(nn.Module):
 
         self.diffusion = GaussianMultinomialDiffusion(
             model_type=self.model_type,
-            model_params=model_params,
+            model_params=self.model_params,
             num_categorical_features=cat_counts,
             num_numerical_features=X.shape[1] - len(cat_cols),
             gaussian_loss_type=self.gaussian_loss_type,
             num_timesteps=self.num_timesteps,
+            num_classes=self.n_classes,
+            conditional=cond is not None,
+            dim_emb=self.dim_embed,
             scheduler=self.scheduler,
             device=self.device,
         ).to(self.device)
@@ -140,14 +134,15 @@ class TabDDPM(nn.Module):
         for cbk in self.callbacks:
             cbk.on_fit_begin(self)
 
-        self.loss_history = pd.DataFrame(columns=["step", "mloss", "gloss", "loss"])
+        self.loss_history = []
 
         steps = 0
         curr_loss_multi = 0.0
         curr_loss_gauss = 0.0
         curr_count = 0
+        pbar = trange(self.n_iter, desc="Epoch", leave=True)
 
-        for epoch in tqdm(range(self.n_iter)):
+        for epoch in pbar:
             self.epoch = epoch + 1
             self.diffusion.train()
 
@@ -171,19 +166,19 @@ class TabDDPM(nn.Module):
                 if steps % self.log_interval == 0:
                     mloss = np.around(curr_loss_multi / curr_count, 4)
                     gloss = np.around(curr_loss_gauss / curr_count, 4)
-                    if steps % self.print_interval == 0:
-                        info(
-                            f"Step {steps}: MLoss: {mloss} GLoss: {gloss} Sum: {mloss + gloss}"
-                        )
-                    self.loss_history.loc[len(self.loss_history)] = [
-                        steps,
-                        mloss,
-                        gloss,
-                        mloss + gloss,
-                    ]
+                    loss = mloss + gloss
+                    self.loss_history.append(
+                        [
+                            steps,
+                            mloss,
+                            gloss,
+                            loss,
+                        ]
+                    )
                     curr_count = 0
                     curr_loss_gauss = 0.0
                     curr_loss_multi = 0.0
+                    pbar.set_postfix(loss=loss)
 
                 self._update_ema(
                     self.ema_model.parameters(), self.diffusion.parameters()
@@ -197,15 +192,19 @@ class TabDDPM(nn.Module):
                 info(f"Early stopped at epoch {epoch}")
                 break
 
+        self.loss_history = pd.DataFrame(
+            self.loss_history, columns=["step", "mloss", "gloss", "loss"]
+        ).set_index("step")
+
         for cbk in self.callbacks:
             cbk.on_fit_end(self)
 
         return self
 
-    def generate(self, count: int, cond: Any = None) -> np.ndarray:
+    def generate(self, count: int, cond: Any = None) -> pd.DataFrame:
         self.diffusion.eval()
         if cond is not None:
             cond = torch.tensor(cond, dtype=torch.long, device=self.device)
         sample = self.diffusion.sample_all(count, cond).detach().cpu().numpy()
-        sample = sample[:, self._col_perm]
-        return sample
+        df = pd.DataFrame(sample, columns=self.feature_names_out)
+        return df[self.feature_names]
