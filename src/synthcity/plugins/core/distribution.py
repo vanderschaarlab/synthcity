@@ -379,7 +379,6 @@ class DatetimeDistribution(Distribution):
         :parts: 1
     """
 
-    offset: int = 120
     low: datetime = datetime.utcfromtimestamp(0)
     high: datetime = datetime.now()
     step: timedelta = timedelta(microseconds=1)
