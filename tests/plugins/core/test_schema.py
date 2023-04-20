@@ -1,4 +1,5 @@
 # third party
+import numpy as np
 import pandas as pd
 import pydantic
 import pytest
@@ -14,7 +15,24 @@ def test_schema_fail() -> None:
 
 
 def test_schema_ok() -> None:
-    data = pd.DataFrame([[1, 2, 3]], columns=["a", "b", "c"])
+    data = pd.DataFrame(
+        {
+            "a": pd.Series(["a", "b", "c"], dtype="object"),
+            "b": pd.Series([True, False, True], dtype="boolean"),
+            "c": pd.Series([1, 2, 3], dtype="int8"),
+            "d": pd.Series([4.0, 5.0, 6.0], dtype="float32"),
+            "e": pd.Series([7, 8, 9], dtype="uint8"),
+            "f": pd.Series(["odd", "even", "odd"], dtype="category"),
+            "g": pd.Series(
+                [
+                    np.datetime64("2023-01-01"),
+                    np.datetime64("2023-01-02"),
+                    np.datetime64("2023-01-03"),
+                ],
+                dtype="datetime64[ns]",
+            ),
+        }
+    )
     schema = Schema(data=data)
 
     assert schema.get("a").name == "a"
@@ -23,12 +41,29 @@ def test_schema_ok() -> None:
 
 
 def test_schema_as_constraint() -> None:
-    data = pd.DataFrame([[1, 2, 3]], columns=["a", "b", "c"])
+    data = pd.DataFrame(
+        {
+            "a": pd.Series(["a", "b", "c"], dtype="object"),
+            "b": pd.Series([True, False, True], dtype="boolean"),
+            "c": pd.Series([1, 2, 3], dtype="int8"),
+            "d": pd.Series([4.0, 5.0, 6.0], dtype="float32"),
+            "e": pd.Series([7, 8, 9], dtype="uint8"),
+            "f": pd.Series(["odd", "even", "odd"], dtype="category"),
+            "g": pd.Series(
+                [
+                    np.datetime64("2023-01-01"),
+                    np.datetime64("2023-01-02"),
+                    np.datetime64("2023-01-03"),
+                ],
+                dtype="datetime64[ns]",
+            ),
+        }
+    )
     schema = Schema(data=data)
 
     cons = schema.as_constraints()
 
-    assert len(cons) == 3
+    assert len(cons) == 7
     for rule in cons:
         assert rule[1] == "in"
 

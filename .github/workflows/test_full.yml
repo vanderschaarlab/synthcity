@@ -27,8 +27,8 @@ jobs:
         if: ${{ matrix.os == 'macos-latest' }}
       - name: Install dependencies
         run: |
+            pip install pip==23.0.1
             pip install -r prereq.txt
-            pip install --upgrade pip
       - name: Test Core
         run: |
           pip install .[testing]
