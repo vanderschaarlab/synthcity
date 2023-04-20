@@ -384,12 +384,6 @@ class DatetimeDistribution(Distribution):
     step: timedelta = timedelta(microseconds=1)
     offset: timedelta = timedelta(seconds=120)
 
-    @validator("offset", always=True)
-    def _validate_offset(cls: Any, v: int) -> int:
-        if v < 0:
-            raise ValueError("offset must be greater than 0")
-        return v
-
     @validator("low", always=True)
     def _validate_low_thresh(cls: Any, v: datetime, values: Dict) -> datetime:
         mkey = "marginal_distribution"
