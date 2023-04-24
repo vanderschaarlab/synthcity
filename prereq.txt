@@ -1,4 +1,4 @@
-wheel>=0.40
 numpy
 torch>=1.10.0,<2.0
 tsai
+wheel>=0.40
