@@ -11,6 +11,7 @@ import pandas as pd
 from fflows import FourierFlow
 
 # synthcity absolute
+from synthcity.plugins import Plugins
 from synthcity.plugins.core.dataloader import DataLoader
 from synthcity.plugins.core.distribution import (
     CategoricalDistribution,
@@ -24,7 +25,6 @@ from synthcity.plugins.core.models.tabular_encoder import (
 from synthcity.plugins.core.models.ts_model import TimeSeriesModel
 from synthcity.plugins.core.plugin import Plugin
 from synthcity.plugins.core.schema import Schema
-from synthcity.plugins.generic import GenericPlugins
 from synthcity.utils.constants import DEVICE
 
 
@@ -134,9 +134,7 @@ class FourierFlowsPlugin(Plugin):
             normalize=normalize,
         ).to(device)
 
-        self.static_model = GenericPlugins().get(
-            self.static_model_name, device=self.device
-        )
+        self.static_model = Plugins().get(self.static_model_name, device=self.device)
 
         self.temporal_encoder = TimeSeriesTabularEncoder(
             max_clusters=encoder_max_clusters
