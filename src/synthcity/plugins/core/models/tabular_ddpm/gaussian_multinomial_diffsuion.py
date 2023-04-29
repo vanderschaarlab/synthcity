@@ -157,7 +157,7 @@ class GaussianMultinomialDiffusion(torch.nn.Module):
         self.posterior_log_variance_clipped = (
             torch.from_numpy(
                 np.log(
-                    np.append(self.posterior_variance[1], self.posterior_variance[1:])
+                    np.append(self.posterior_variance[1].cpu(), self.posterior_variance[1:].cpu())
                 )
             )
             .float()
