@@ -4,7 +4,7 @@ Reference: Kotelnikov, Akim et al. “TabDDPM: Modelling Tabular Data with Diffu
 
 # stdlib
 from pathlib import Path
-from typing import Any, List, Sequence
+from typing import Any, List, Optional, Sequence
 
 # third party
 import numpy as np
@@ -14,6 +14,7 @@ import pandas as pd
 from pydantic import validate_arguments
 
 # synthcity absolute
+from synthcity.metrics.weighted_metrics import WeightedMetrics
 from synthcity.plugins.core.dataloader import DataLoader
 from synthcity.plugins.core.distribution import (
     Distribution,
@@ -108,6 +109,8 @@ class TabDDPMPlugin(Plugin):
         dim_embed: int = 128,
         continuous_encoder: str = "quantile",
         cont_encoder_params: dict = {},
+        validation_size: float = 0,
+        validation_metric: Optional[WeightedMetrics] = None,
         # core plugin arguments
         random_state: int = 0,
         workspace: Path = Path("workspace"),
@@ -141,6 +144,8 @@ class TabDDPMPlugin(Plugin):
             model_type=model_type,
             model_params=model_params.copy(),
             dim_embed=dim_embed,
+            valid_size=validation_size,
+            valid_metric=validation_metric,
         )
 
         cont_encoder_params = cont_encoder_params.copy()
@@ -224,6 +229,7 @@ class TabDDPMPlugin(Plugin):
         # NOTE: cond may also be included in the dataframe
         self.model.fit(df, cond, **kwargs)
         self.loss_history = self.model.loss_history
+        self.validation_history = self.model.val_history
 
         return self
 
