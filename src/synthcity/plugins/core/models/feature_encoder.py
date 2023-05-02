@@ -68,7 +68,10 @@ class FeatureEncoder(TransformerMixin, BaseEstimator):  # type: ignore
         output = self._fit(input, **kwargs)._transform(input)
         self._out_shape = (-1, *output.shape[1:])  # for inverse_transform
         output = validate_shape(output, self.n_dim_out)
-        self.n_features_out = output.shape[1]
+        if self.n_dim_out == 1:
+            self.n_features_out = 1
+        else:
+            self.n_features_out = output.shape[1]
         self.feature_names_out = self.get_feature_names_out()
         self.feature_types_out = self.get_feature_types_out(output)
         return self
@@ -105,6 +108,8 @@ class FeatureEncoder(TransformerMixin, BaseEstimator):  # type: ignore
             return "discrete"
         elif np.issubdtype(x.dtype, np.floating):
             return "continuous"
+        elif np.issubdtype(x.dtype, np.datetime64):
+            return "datetime"
         else:
             return "discrete"
 
