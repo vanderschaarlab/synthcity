@@ -419,7 +419,7 @@ class DomiasMIA(PrivacyEvaluator):
         X_train: Union[DataLoader, Any],
         synth_val_set: Union[DataLoader, Any],
         reference_size: int = 100,  # look at default sizes
-        density_estimator: str = "kde",  # Can be "prior", "kde", bnaf. TODO: add nflows
+        density_estimator: str = "prior",  # Can be "prior", "kde", bnaf. TODO: add nflows
         device: Any = DEVICE,
     ) -> Dict:
         """
@@ -538,6 +538,9 @@ implemented in `gaussian_kde`. If you wish to use the density estimator `kde` or
 and using `gaussian_kde` with the transformed data. Else consider using `bnaf` as the density estimator.
                 """
                 )
+            print(synth_set.values.transpose(1, 0).shape)
+            print(synth_set.values.transpose(1, 0).min())
+            print(synth_set.values.transpose(1, 0).max())
             density_gen = stats.gaussian_kde(synth_set.values.transpose(1, 0))
             density_data = stats.gaussian_kde(reference_set.transpose(1, 0))
             p_G_evaluated = density_gen(X_test.transpose(1, 0))
