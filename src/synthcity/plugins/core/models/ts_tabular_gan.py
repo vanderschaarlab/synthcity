@@ -163,7 +163,7 @@ class TimeSeriesTabularGAN(torch.nn.Module):
         self.static_columns = static_data.columns
         self.temporal_columns = temporal_data[0].columns
         n_units_conditional = 0 if cond is None else cond.shape[-1]
-
+        print("n_features:", self.encoder.n_features())
         n_static_units, n_temporal_units = self.encoder.n_features()
         static_act, temporal_act = self.encoder.activation_layout(
             discrete_activation=generator_nonlin_out_discrete,
