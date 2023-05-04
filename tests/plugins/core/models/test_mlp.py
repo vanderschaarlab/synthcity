@@ -71,9 +71,8 @@ def test_basic_network(
 @pytest.mark.parametrize("layer", [LinearLayer, ResidualLayer])
 def test_custom_layers(layer: torch.nn.Module) -> None:
     X, _ = load_digits(return_X_y=True)
-    Xt = torch.from_numpy(X)
-
-    mod = layer(Xt.shape[1], 10).cpu()
+    Xt = torch.from_numpy(X).cpu()
+    mod = layer(Xt.shape[1], 10, device="cpu")
     assert mod(Xt).shape[0] == Xt.shape[0]
     assert mod(Xt).shape[1] >= 10
 
