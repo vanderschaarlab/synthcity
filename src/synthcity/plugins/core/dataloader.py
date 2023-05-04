@@ -5,6 +5,7 @@ from typing import Any, Dict, List, Optional, Tuple, Union
 
 # third party
 import numpy as np
+import numpy.ma as ma
 import pandas as pd
 import PIL
 import torch
@@ -928,10 +929,21 @@ class TimeSeriesDataLoader(DataLoader):
                 self.data["outcome"],
             )
         if as_numpy:
+            longest_observation_seq = max([len(seq) for seq in temporal_data])
             return (
                 np.asarray(static_data),
-                np.asarray(temporal_data),
-                np.asarray(observation_times),
+                np.asarray(pd.concat(temporal_data)),
+                # masked array to handle variable length sequences
+                ma.vstack(
+                    [
+                        ma.array(
+                            np.resize(ot, longest_observation_seq),
+                            mask=[True for i in range(len(ot))]
+                            + [False for j in range(longest_observation_seq - len(ot))],
+                        )
+                        for ot in observation_times
+                    ]
+                ),
                 np.asarray(outcome),
             )
         return (
@@ -1289,7 +1301,6 @@ class TimeSeriesDataLoader(DataLoader):
         fill: Any = np.nan,
         seq_offset: int = 0,
     ) -> pd.DataFrame:
-
         # Temporal data: (subjects, temporal_sequence, temporal_feature)
         temporal_features = TimeSeriesDataLoader.unique_temporal_features(temporal_data)
         temporal_features, mask_features = TimeSeriesDataLoader.extract_masked_features(

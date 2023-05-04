@@ -89,7 +89,7 @@ class DynamicDeephitTimeSeriesSurvival(TimeSeriesSurvivalPlugin):
         self,
         static: Optional[np.ndarray],
         temporal: np.ndarray,
-        observation_times: np.ndarray,
+        observation_times: Union[List, np.ndarray],
     ) -> np.ndarray:
         if static is None:
             static = np.zeros((len(temporal), 0))
@@ -121,7 +121,6 @@ class DynamicDeephitTimeSeriesSurvival(TimeSeriesSurvivalPlugin):
     ) -> TimeSeriesSurvivalPlugin:
         static = np.asarray(static)
         temporal = np.asarray(temporal)
-        observation_times = np.asarray(observation_times)
         T = np.asarray(T)
         E = np.asarray(E)
 
@@ -146,7 +145,6 @@ class DynamicDeephitTimeSeriesSurvival(TimeSeriesSurvivalPlugin):
         "Predict risk"
         static = np.asarray(static)
         temporal = np.asarray(temporal)
-        observation_times = np.asarray(observation_times)
 
         data = self._merge_data(static, temporal, observation_times)
 
