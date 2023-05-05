@@ -44,12 +44,21 @@ class Transpose(nn.Module):
             return x.transpose(*self.dims)
 
 
+def _get_out_features(self: nn.Module) -> int:
+    """Get the number of output features of a model."""
+    for i in reversed(range(len(self._modules["model"]))):
+        if isinstance(self._modules["model"][i], nn.Linear):
+            return self._modules["model"][i].out_features
+    raise ValueError("No linear layer found in the model.")
+
+
 @validate_arguments(config=dict(arbitrary_types_allowed=True))
 def _forward_skip_connection(
     self: nn.Module, X: torch.Tensor, *args: Any, **kwargs: Any
 ) -> torch.Tensor:
-    # if X.shape[-1] == 0:
-    #     return torch.zeros((*X.shape[:-1], self.n_units_out)).to(self.device)
+    if X.shape[-1] == 0:
+        out_shape = _get_out_features(self)
+        return torch.zeros((*X.shape[:-1], out_shape)).to(self.device)
     X = X.float().to(self.device)
     out = self._forward(X, *args, **kwargs)
     return torch.cat([out, X], dim=-1)
@@ -74,23 +83,6 @@ def SkipConnection(cls: Type[nn.Module]) -> Type[nn.Module]:
     Wrapper.__qualname__ = f"SkipConnection({cls.__qualname__})"
     Wrapper.__doc__ = f"""(With skipped connection) {cls.__doc__}"""
     return Wrapper
-
-
-# class GLU(nn.Module):
-#     """Gated Linear Unit (GLU)."""
-
-#     def __init__(self, activation: Union[str, nn.Module] = "sigmoid") -> None:
-#         super().__init__()
-#         if type(activation) == str:
-#             self.non_lin = get_nonlin(activation)
-#         else:
-#             self.non_lin = activation
-
-#     def forward(self, x: Tensor) -> Tensor:
-#         if x.shape[-1] % 2:
-#             raise ValueError("The last dimension of the input tensor must be even.")
-#         a, b = x.chunk(2, dim=-1)
-#         return a * self.non_lin(b)
 
 
 class GumbelSoftmax(nn.Module):
