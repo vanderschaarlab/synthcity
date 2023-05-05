@@ -5,14 +5,14 @@ on:
     branches: [main, release]
   pull_request:
     types: [opened, synchronize, reopened]
-
+  workflow_dispatch:
 
 jobs:
   Linter:
     runs-on: ${{ matrix.os }}
     strategy:
       matrix:
-        python-version: ['3.10']
+        python-version: ["3.10"]
         os: [ubuntu-latest]
     steps:
       - uses: actions/checkout@v2
@@ -24,19 +24,19 @@ jobs:
           python-version: ${{ matrix.python-version }}
       - name: Install dependencies
         run: |
-            pip install bandit pre-commit
+          pip install bandit pre-commit
       - name: pre-commit validation
         run: pre-commit run --all
       - name: Security checks
         run: |
-            bandit -r src/synthcity/*
+          bandit -r src/synthcity/*
 
   Library:
     needs: [Linter]
     runs-on: ${{ matrix.os }}
     strategy:
       matrix:
-        python-version: ['3.10']
+        python-version: ["3.10"]
         os: [macos-latest, ubuntu-latest, windows-latest]
     steps:
       - uses: actions/checkout@v2
@@ -47,15 +47,15 @@ jobs:
         uses: actions/setup-python@v4
         with:
           python-version: ${{ matrix.python-version }}
-          cache: 'pip' # caching pip dependencies
+          cache: "pip" # caching pip dependencies
       - name: Install MacOS dependencies
         run: |
-            brew install libomp
+          brew install libomp
         if: ${{ matrix.os == 'macos-latest' }}
       - name: Install dependencies
         run: |
-            python -m pip install -U pip
-            pip install -r prereq.txt
+          python -m pip install -U pip
+          pip install -r prereq.txt
       - name: Test Core
         run: |
           pip install .[testing]
