@@ -128,7 +128,9 @@ def perm_and_expand(a: Tensor, t: Tensor, x_shape: tuple) -> Tensor:
     """Permutes a tensor in the order specified by `t` and expands it to `x_shape`."""
     if not (a.ndim == 1 and t.shape == (x_shape[0],)):
         raise ValueError(f"dimensionality mismatch: {a.shape}, {t.shape}, {x_shape}")
-    out = a[t]
+    b, *_ = t.shape
+    t = t.to(a.device)
+    out = a.gather(-1, t)
     while len(out.shape) < len(x_shape):
         out = out[..., None]
     return out.expand(x_shape)
