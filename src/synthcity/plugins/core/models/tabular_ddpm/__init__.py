@@ -15,7 +15,7 @@ from tqdm import trange
 # synthcity absolute
 from synthcity.logger import info
 from synthcity.metrics.weighted_metrics import WeightedMetrics
-from synthcity.utils.callbacks import Callback
+from synthcity.utils.callbacks import Callback, ValidationMixin
 from synthcity.utils.constants import DEVICE
 from synthcity.utils.dataframe import discrete_columns
 
@@ -23,7 +23,7 @@ from synthcity.utils.dataframe import discrete_columns
 from .gaussian_multinomial_diffsuion import GaussianMultinomialDiffusion
 
 
-class TabDDPM(nn.Module):
+class TabDDPM(nn.Module, ValidationMixin):
     @validate_arguments(config=dict(arbitrary_types_allowed=True))
     def __init__(
         self,
@@ -38,6 +38,9 @@ class TabDDPM(nn.Module):
         callbacks: Sequence[Callback] = (),
         device: torch.device = DEVICE,
         log_interval: int = 10,
+        # validation
+        valid_size: float = 0,
+        valid_metric: Optional[WeightedMetrics] = None,
         # model params
         model_type: str = "mlp",
         model_params: Optional[dict] = None,
@@ -45,9 +48,14 @@ class TabDDPM(nn.Module):
         # early stopping
         n_iter_min: int = 100,
         patience: int = 5,
-        patience_metric: Optional[WeightedMetrics] = None,
     ) -> None:
-        super().__init__()
+        nn.Module.__init__(self)
+        ValidationMixin.__init__(
+            self,
+            valid_metric=valid_metric,  # type: ignore
+            valid_size=valid_size,
+            callbacks=callbacks,
+        )
         self.__dict__.update(locals())
         del self.self
 
@@ -76,6 +84,11 @@ class TabDDPM(nn.Module):
     def fit(
         self, X: pd.DataFrame, cond: Optional[pd.Series] = None, **kwargs: Any
     ) -> "TabDDPM":
+
+        X = self._set_val_data(X)
+
+        self.on_fit_begin()
+
         if self.is_classification and cond is not None:
             if np.ndim(cond) != 1:
                 raise ValueError("cond must be a 1D array")
@@ -131,10 +144,8 @@ class TabDDPM(nn.Module):
             self.diffusion.parameters(), lr=self.lr, weight_decay=self.weight_decay
         )
 
-        for cbk in self.callbacks:
-            cbk.on_fit_begin(self)
-
         self.loss_history = []
+        self.val_history = []
 
         steps = 0
         curr_loss_multi = 0.0
@@ -143,10 +154,8 @@ class TabDDPM(nn.Module):
         pbar = trange(self.n_iter, desc="Epoch", leave=True)
 
         for epoch in pbar:
-            self.epoch = epoch + 1
-            self.diffusion.train()
-
-            [cbk.on_epoch_begin(self, epoch) for cbk in self.callbacks]
+            self.train()
+            self.on_epoch_begin()
 
             for x, y in self.dataloader:
                 self.optimizer.zero_grad()
@@ -161,34 +170,32 @@ class TabDDPM(nn.Module):
                 curr_count += len(x)
                 curr_loss_multi += loss_multi.item() * len(x)
                 curr_loss_gauss += loss_gauss.item() * len(x)
-
                 steps += 1
-                if steps % self.log_interval == 0:
-                    mloss = np.around(curr_loss_multi / curr_count, 4)
-                    gloss = np.around(curr_loss_gauss / curr_count, 4)
-                    loss = mloss + gloss
-                    self.loss_history.append(
-                        [
-                            steps,
-                            mloss,
-                            gloss,
-                            loss,
-                        ]
-                    )
-                    curr_count = 0
-                    curr_loss_gauss = 0.0
-                    curr_loss_multi = 0.0
-                    pbar.set_postfix(loss=loss)
+
+                mloss = np.around(curr_loss_multi / curr_count, 4)
+                gloss = np.around(curr_loss_gauss / curr_count, 4)
+                loss = mloss + gloss
 
                 self._update_ema(
                     self.ema_model.parameters(), self.diffusion.parameters()
                 )
 
-            self.eval()
+                if steps % self.log_interval == 0:
+                    self.loss_history.append([steps, mloss, gloss, loss])
+                    curr_count = 0
+                    curr_loss_gauss = 0.0
+                    curr_loss_multi = 0.0
 
-            try:
-                [cbk.on_epoch_end(self, epoch) for cbk in self.callbacks]
-            except StopIteration:
+            self.eval()
+            self.on_epoch_end()
+
+            if self.valid_score is not None:
+                self.val_history.append(self.valid_score)  # type: ignore
+                pbar.set_postfix(loss=loss, val=self.valid_score)
+            else:
+                pbar.set_postfix(loss=loss)
+
+            if self.should_stop:
                 info(f"Early stopped at epoch {epoch}")
                 break
 
@@ -196,8 +203,7 @@ class TabDDPM(nn.Module):
             self.loss_history, columns=["step", "mloss", "gloss", "loss"]
         ).set_index("step")
 
-        for cbk in self.callbacks:
-            cbk.on_fit_end(self)
+        self.on_fit_end()
 
         return self
 

@@ -11,10 +11,12 @@ from sklearn.datasets import load_iris
 
 # synthcity absolute
 from synthcity.metrics.eval import PerformanceEvaluatorXGB
+from synthcity.metrics.weighted_metrics import WeightedMetrics
 from synthcity.plugins import Plugin
 from synthcity.plugins.core.constraints import Constraints
 from synthcity.plugins.core.dataloader import GenericDataLoader
 from synthcity.plugins.generic.plugin_ddpm import plugin
+from synthcity.utils.callbacks import EarlyStopping
 
 plugin_name = "ddpm"
 plugin_params = dict(
@@ -62,6 +64,32 @@ def test_plugin_type(test_plugin: Plugin) -> None:
 def test_plugin_fit(test_plugin: Plugin) -> None:
     X = pd.DataFrame(load_iris()["data"])
     test_plugin.fit(GenericDataLoader(X))
+
+
+def test_plugin_early_stop() -> None:
+    X = pd.DataFrame(load_iris()["data"])
+    early_stop = EarlyStopping(patience=10, min_epochs=50)
+    test_plugin = plugin(
+        validation_size=0.2,
+        validation_metric=WeightedMetrics(
+            metrics=[("detection", "detection_xgb")],
+            weights=[1],
+        ),
+        callbacks=[early_stop],
+        **plugin_params
+    )
+    test_plugin.fit(GenericDataLoader(X))
+    n_epochs = len(test_plugin.validation_history)
+    assert n_epochs >= early_stop.min_epochs
+    if n_epochs > early_stop.min_epochs:
+        assert early_stop.best_epoch == n_epochs - early_stop.patience - 1
+    assert (
+        early_stop.best_score == test_plugin.validation_history[early_stop.best_epoch]
+    )
+    assert early_stop.best_score == min(test_plugin.validation_history)
+
+
+test_plugin_early_stop()
 
 
 @pytest.mark.parametrize(
