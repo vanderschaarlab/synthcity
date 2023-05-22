@@ -42,6 +42,8 @@
 - :book: [Read the docs !](https://synthcity.readthedocs.io/)
 - :airplane: [Checkout the tutorials!](https://github.com/vanderschaarlab/synthcity#-tutorials)
 
+*Please note: synthcity does not handle missing data and so these values must be imputed first [HyperImpute](https://github.com/vanderschaarlab/hyperimpute) can be used to do this.*
+
 ## :rocket: Installation
 
 The library can be installed from PyPI using
