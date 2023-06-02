@@ -10,7 +10,7 @@ jobs:
     runs-on: ${{ matrix.os }}
     strategy:
       matrix:
-        python-version: ["3.7", "3.8", "3.9", "3.10"]
+        python-version: ["3.8", "3.9", "3.10"]
         os: [macos-latest]
 
     steps:
@@ -31,7 +31,6 @@ jobs:
     strategy:
       matrix:
         python-version:
-          - cp37-cp37m
           - cp38-cp38
           - cp39-cp39
           - cp310-cp310
@@ -55,7 +54,7 @@ jobs:
     runs-on: windows-latest
     strategy:
       matrix:
-        python-version: ["3.7", "3.8", "3.9", "3.10"]
+        python-version: ["3.8", "3.9", "3.10"]
 
     steps:
       - uses: actions/checkout@v2
