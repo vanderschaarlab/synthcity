@@ -31,7 +31,9 @@ from .eval_performance import (
 )
 from .eval_privacy import (
     DeltaPresence,
-    DomiasMIA,
+    DomiasMIABNAF,
+    DomiasMIAKDE,
+    DomiasMIAPrior,
     IdentifiabilityScore,
     kAnonymization,
     kMap,
@@ -95,7 +97,9 @@ standard_metrics = [
     kMap,
     lDiversityDistinct,
     IdentifiabilityScore,
-    DomiasMIA,
+    DomiasMIABNAF,
+    DomiasMIAKDE,
+    DomiasMIAPrior,
 ]
 
 
@@ -224,7 +228,7 @@ class Metrics:
                     X_gt,
                     X_augmented,
                 )
-            elif metric.name() == "DomiasMIA":
+            elif "DomiasMIA" in metric.name():
                 scores.queue(
                     metric(
                         reduction=reduction,

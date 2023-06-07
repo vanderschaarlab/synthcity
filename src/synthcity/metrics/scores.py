@@ -70,7 +70,6 @@ class ScoreEvaluator:
         self, key: str, results: Dict, failed: int, duration: float, direction: str
     ) -> None:
         for subkey in results:
-            print(f"{key}.{subkey}", results[subkey])
             self.add(f"{key}.{subkey}", results[subkey], failed, duration, direction)
 
     def queue(
@@ -89,9 +88,6 @@ class ScoreEvaluator:
         self.pending_tasks = []
 
         for key, result, failed, duration, direction in results:
-            print(
-                f"key: {key}, result: {result}, failed: {failed}, duration: {duration}, direction: {direction}"
-            )
             self.add_multiple(key, result, failed, duration, direction)
 
     def to_dataframe(self) -> pd.DataFrame:
@@ -109,12 +105,10 @@ class ScoreEvaluator:
         ]
         output = pd.DataFrame([], columns=output_metrics)
         for metric in self.scores:
-            print(metric)
             errors = self.scores[metric]["errors"]
             direction = self.scores[metric]["direction"]
             durations = round(np.mean(self.scores[metric]["durations"]), 2)
             values = self.scores[metric]["values"]
-            print(values)
             score_min = np.min(values)
             score_max = np.max(values)
             score_mean = np.mean(values)

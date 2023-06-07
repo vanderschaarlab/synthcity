@@ -2,7 +2,7 @@
 import platform
 from abc import abstractmethod
 from collections import Counter
-from typing import Any, Dict, Union
+from typing import Any, Dict, Tuple, Union
 
 # third party
 import numpy as np
@@ -399,7 +399,6 @@ class DomiasMIA(PrivacyEvaluator):
 
     def __init__(self, **kwargs: Any) -> None:
         super().__init__(default_metric="syn", **kwargs)
-        print("init DomiasMIA")
 
     @staticmethod
     def name() -> str:
@@ -408,6 +407,17 @@ class DomiasMIA(PrivacyEvaluator):
     @staticmethod
     def direction() -> str:
         return "minimize"
+
+    @abstractmethod
+    def evaluate_p_R(
+        self,
+        synth_set: Union[DataLoader, Any],
+        synth_val_set: Union[DataLoader, Any],
+        reference_set: np.ndarray,
+        X_test: np.ndarray,
+        device: Any,
+    ) -> Any:
+        ...
 
     @validate_arguments(config=dict(arbitrary_types_allowed=True))
     def _evaluate(
@@ -419,7 +429,6 @@ class DomiasMIA(PrivacyEvaluator):
         X_train: Union[DataLoader, Any],
         synth_val_set: Union[DataLoader, Any],
         reference_size: int = 100,  # look at default sizes
-        density_estimator: str = "prior",  # Can be "prior", "kde", bnaf. TODO: add nflows
         device: Any = DEVICE,
     ) -> Dict:
         """
@@ -429,45 +438,22 @@ class DomiasMIA(PrivacyEvaluator):
         Args:
             generator: GeneratorInterface
                 Generator with the `fit` and `generate` methods. The generator MUST not be fitted.
-            dataset: int
+            X_gt: Union[DataLoader, Any]
                 The evaluation dataset, used to derive the training and test datasets.
-            training_size: int
-                The split for the training (member) dataset out of `dataset`
+            synth_set: Union[DataLoader, Any]
+                The synthetic dataset.
+            X_train: Union[DataLoader, Any]
+                The dataset used to create the mem_set.
+            synth_val_set: Union[DataLoader, Any]
+                The dataset used to calculate the density of the synthetic data
             reference_size: int
-                The split for the reference dataset out of `dataset`.
-            training_epochs: int
-                Training epochs
-            synthetic_sizes: List[int]
-                For how many synthetic samples to test the attacks.
-            density_estimator: str, default = "prior"
-                Which density to use. Available options:
-                    * prior
-                    * bnaf
-                    * kde
-            seed: int
-                Random seed
+                The size of the reference dataset
             device: PyTorch device
                 CPU or CUDA
-            shifted_column: Optional[int]
-                Shift a column. Because DOMIAS is primarily intended as a tool for data publishers
-                to test their own synthetic data vulnerability, it is recommended that testing is
-                conducted with a reference dataset from the same distribution (e.g. a hold-out
-                set): this effectively tests the worst-case vulnerability.
-            zero_quantile: float
-                Threshold for shifting the column.
-            reference_kept_p: float
-                Reference dataset parameter (for distributional shift experiment)
 
         Returns:
-            A dictionary with a key for each of the `synthetic_sizes` values.
-            For each `synthetic_sizes` value, the dictionary contains the keys:
-                * `MIA_performance` : accuracy and AUCROC for each attack
-                * `MIA_scores`: output scores for each attack
-                * `data`: the evaluation data
-            For both `MIA_performance` and `MIA_scores`, the domias attacks are evaluated
+            A dictionary with the AUCROC and accuracy scores for the attack.
         """
-        print("evaluate DomiasMIA")
-        performance_logger: Dict = {}
 
         mem_set = X_train.dataframe()
         non_mem_set, reference_set = (
@@ -484,23 +470,9 @@ class DomiasMIA(PrivacyEvaluator):
             else:
                 continuous.append(1)
 
-        norm = _utils.normal_func_feat(
-            all_real_data, continuous
-        )  # TODO: move this to where it is used
+        self.norm = _utils.normal_func_feat(all_real_data, continuous)
 
         """ 3. Synthesis with the GeneratorInferface"""
-
-        performance_logger = {
-            "MIA_performance": {},
-        }
-
-        # wd_n = min(len(synth_set), len(reference_set))
-        # eval_met_on_reference = _utils.compute_wd(
-        #     synth_set[:wd_n], reference_set[:wd_n]
-        # )
-        # performance_logger["MIA_performance"][
-        #     "sample_quality"
-        # ] = eval_met_on_reference
 
         # get real test sets of members and non members
         X_test = np.concatenate([mem_set, non_mem_set])
@@ -509,70 +481,114 @@ class DomiasMIA(PrivacyEvaluator):
         ).astype(bool)
 
         """ 4. density estimation / evaluation of Eqn.(1) & Eqn.(2)"""
-        # First, estimate density of synthetic data
-        # BNAF for pG
-        if density_estimator == "bnaf":
-            _, p_G_model = _utils.density_estimator_trainer(
-                synth_set.values,
-                synth_val_set.values[: int(0.5 * synth_val_set.shape[0])],
-                synth_val_set.values[int(0.5 * synth_val_set.shape[0]) :],
-            )
-            _, p_R_model = _utils.density_estimator_trainer(reference_set)
-            p_G_evaluated = np.exp(
-                _utils.compute_log_p_x(
-                    p_G_model, torch.as_tensor(X_test).float().to(device)
-                )
-                .cpu()
-                .detach()
-                .numpy()
-            )
-
-        # KDE for pG
-        elif density_estimator == "kde" or "prior":
-            if synth_set.shape[0] < X_test.shape[0]:
-                raise ValueError(
-                    """
-                    The data appears to lie in a lower-dimensional subspace of the space in which it is expressed.
-This has resulted in a singular data covariance matrix, which cannot be treated using the algorithms
-implemented in `gaussian_kde`. If you wish to use the density estimator `kde` or `prior`, consider performing principle component analysis / dimensionality reduction
-and using `gaussian_kde` with the transformed data. Else consider using `bnaf` as the density estimator.
-                """
-                )
-            print(synth_set.values.transpose(1, 0).shape)
-            print(synth_set.values.transpose(1, 0).min())
-            print(synth_set.values.transpose(1, 0).max())
-            density_gen = stats.gaussian_kde(synth_set.values.transpose(1, 0))
-            density_data = stats.gaussian_kde(reference_set.transpose(1, 0))
-            p_G_evaluated = density_gen(X_test.transpose(1, 0))
-
+        # First, estimate density of synthetic data then
         # eqn2: \prop P_G(x_i)/P_X(x_i)
-        # DOMIAS (BNAF for p_R estimation)
-        if density_estimator == "bnaf":
-            p_R_evaluated = np.exp(
-                _utils.compute_log_p_x(
-                    p_R_model, torch.as_tensor(X_test).float().to(device)
-                )
-                .cpu()
-                .detach()
-                .numpy()
-            )
-
-        # DOMIAS (KDE for p_R estimation)
-        elif density_estimator == "kde":
-            p_R_evaluated = density_data(X_test.transpose(1, 0))
-
-        # DOMIAS (with prior for p_R, see Appendix experiment)
-        elif density_estimator == "prior":
-            p_R_evaluated = norm.pdf(X_test)
+        # p_R estimation
+        p_G_evaluated, p_R_evaluated = self.evaluate_p_R(
+            synth_set, synth_val_set, reference_set, X_test, device
+        )
 
         p_rel = p_G_evaluated / (p_R_evaluated + 1e-10)
 
         acc, auc = _utils.compute_metrics_baseline(p_rel, Y_test)
-        performance_logger["MIA_performance"] = {
+        # performance_logger["Domias_MIA_scores"] = p_rel
+        return {
             "accuracy": acc,
             "aucroc": auc,
         }
 
-        # performance_logger["Domias_MIA_scores"] = p_rel
 
-        return performance_logger
+class DomiasMIAPrior(DomiasMIA):
+    def __init__(self, **kwargs: Any) -> None:
+        super().__init__(**kwargs)
+
+    @staticmethod
+    def name() -> str:
+        return "DomiasMIA_prior"
+
+    def evaluate_p_R(
+        self,
+        synth_set: Union[DataLoader, Any],
+        synth_val_set: Union[DataLoader, Any],
+        reference_set: np.ndarray,
+        X_test: np.ndarray,
+        device: Any,
+    ) -> Tuple[np.ndarray, np.ndarray]:
+        density_gen = stats.gaussian_kde(synth_set.values.transpose(1, 0))
+        p_G_evaluated = density_gen(X_test.transpose(1, 0))
+        p_R_evaluated = self.norm.pdf(X_test)
+        return p_G_evaluated, p_R_evaluated
+
+
+class DomiasMIAKDE(DomiasMIA):
+    def __init__(self, **kwargs: Any) -> None:
+        super().__init__(**kwargs)
+
+    @staticmethod
+    def name() -> str:
+        return "DomiasMIA_KDE"
+
+    def evaluate_p_R(
+        self,
+        synth_set: Union[DataLoader, Any],
+        synth_val_set: Union[DataLoader, Any],
+        reference_set: np.ndarray,
+        X_test: np.ndarray,
+        device: Any,
+    ) -> Tuple[np.ndarray, np.ndarray]:
+        if synth_set.shape[0] > X_test.shape[0]:
+            log.critical(
+                """
+The data appears to lie in a lower-dimensional subspace of the space in which it is expressed.
+This has resulted in a singular data covariance matrix, which cannot be treated using the algorithms
+implemented in `gaussian_kde`. If you wish to use the density estimator `kde` or `prior`, consider performing principle component analysis / dimensionality reduction
+and using `gaussian_kde` with the transformed data. Else consider using `bnaf` as the density estimator.
+                """
+            )
+
+        density_gen = stats.gaussian_kde(synth_set.values.transpose(1, 0))
+        density_data = stats.gaussian_kde(reference_set.transpose(1, 0))
+        p_G_evaluated = density_gen(X_test.transpose(1, 0))
+        p_R_evaluated = density_data(X_test.transpose(1, 0))
+        return p_G_evaluated, p_R_evaluated
+
+
+class DomiasMIABNAF(DomiasMIA):
+    def __init__(self, **kwargs: Any) -> None:
+        super().__init__(**kwargs)
+
+    @staticmethod
+    def name() -> str:
+        return "DomiasMIA_BNAF"
+
+    def evaluate_p_R(
+        self,
+        synth_set: Union[DataLoader, Any],
+        synth_val_set: Union[DataLoader, Any],
+        reference_set: np.ndarray,
+        X_test: np.ndarray,
+        device: Any,
+    ) -> Tuple[np.ndarray, np.ndarray]:
+        _, p_G_model = _utils.density_estimator_trainer(
+            synth_set.values,
+            synth_val_set.values[: int(0.5 * synth_val_set.shape[0])],
+            synth_val_set.values[int(0.5 * synth_val_set.shape[0]) :],
+        )
+        _, p_R_model = _utils.density_estimator_trainer(reference_set)
+        p_G_evaluated = np.exp(
+            _utils.compute_log_p_x(
+                p_G_model, torch.as_tensor(X_test).float().to(device)
+            )
+            .cpu()
+            .detach()
+            .numpy()
+        )
+        p_R_evaluated = np.exp(
+            _utils.compute_log_p_x(
+                p_R_model, torch.as_tensor(X_test).float().to(device)
+            )
+            .cpu()
+            .detach()
+            .numpy()
+        )
+        return p_G_evaluated, p_R_evaluated

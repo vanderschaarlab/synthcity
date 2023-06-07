@@ -23,6 +23,7 @@ from torch import nn
 from tqdm import tqdm
 
 # synthcity absolute
+from synthcity.logger import logger as log
 from synthcity.plugins.core.models import bnaf
 
 # Synthcity absolute
@@ -91,7 +92,6 @@ def evaluate_auc(
     y_pred_proba: np.ndarray,
     classes: Union[np.ndarray, None] = None,
 ) -> Tuple[float, float]:
-
     y_test = np.asarray(y_test)
     y_pred_proba = np.asarray(y_pred_proba)
 
@@ -105,7 +105,6 @@ def evaluate_auc(
     y_pred_proba_tmp = get_y_pred_proba_hlpr(y_pred_proba, n_classes)
 
     if n_classes > 2:
-
         fpr = dict()
         tpr = dict()
         precision = dict()
@@ -134,7 +133,6 @@ def evaluate_auc(
         aucroc = roc_auc["micro"]
         aucprc = average_precision["micro"]
     else:
-
         aucroc = roc_auc_score(np.ravel(y_test), y_pred_proba_tmp, multi_class="ovr")
         aucprc = average_precision_score(np.ravel(y_test), y_pred_proba_tmp)
 
@@ -179,7 +177,7 @@ class normal_func_feat:  # TODO: rename with capital letters
 
         for i in np.arange(X.shape[1])[self.feat]:
             if len(np.unique(X[:, i])) < 10:
-                print(f"Warning: feature {i} does not seem continous. CHECK")
+                log.debug(f"Warning: feature {i} does not seem continous. CHECK")
 
         self.var = np.std(X[:, self.feat], axis=0) ** 2
         self.mean = np.mean(X[:, self.feat], axis=0)
@@ -239,10 +237,10 @@ def load_dataset(
             torch.from_numpy(data_train).float().to(device)
         )
         if data_valid is None:
-            print("No validation set passed")
+            log.debug("No validation set passed")
             data_valid = np.random.randn(*data_train.shape)
         if data_test is None:
-            print("No test set passed")
+            log.debug("No test set passed")
             data_test = np.random.randn(*data_train.shape)
 
         dataset_valid = torch.utils.data.TensorDataset(
@@ -280,7 +278,6 @@ def create_model(
     device: Any = DEVICE,
     batch_dim: int = 50,
 ) -> nn.Module:
-
     flows: List = []
     for f in range(n_flows):
         layers: List = []
@@ -327,14 +324,14 @@ def save_model(
 
     def f() -> None:
         if save:
-            print("Saving model..")
+            log.debug("Saving model..")
             torch.save(
                 {
                     "model": model.state_dict(),
                     "optimizer": optimizer.state_dict(),
                     "epoch": epoch,
                 },
-                workspace / "checkpoint.pt",
+                workspace / "DomiasMIA_bnaf_checkpoint.pt",
             )
 
     return f
@@ -349,7 +346,7 @@ def load_model(
         if workspace.exists():
             return
 
-        print("Loading model..")
+        log.info("Loading model..")
         if (workspace / "checkpoint.pt").exists():
             checkpoint = torch.load(workspace / "checkpoint.pt")
             model.load_state_dict(checkpoint["model"])
@@ -384,8 +381,7 @@ def train(
 ) -> Callable:
     epoch = start_epoch
     for epoch in range(start_epoch, start_epoch + epochs):
-
-        t = tqdm(data_loader_train, smoothing=0, ncols=80)
+        t = tqdm(data_loader_train, smoothing=0, ncols=80, disable=True)
         train_loss: torch.Tensor = []
 
         for (x_mb,) in t:
@@ -411,7 +407,7 @@ def train(
         ).mean()
         optimizer.swap()
 
-        print(
+        log.debug(
             "Epoch {:3}/{:3} -- train_loss: {:4.3f} -- validation_loss: {:4.3f}".format(
                 epoch + 1,
                 start_epoch + epochs,
@@ -441,15 +437,30 @@ def train(
         [compute_log_p_x(model, x_mb).mean().detach() for x_mb, in data_loader_test], -1
     ).mean()
 
-    print("###### Stop training after {} epochs!".format(epoch + 1))
-    print("Validation loss: {:4.3f}".format(validation_loss.item()))
-    print("Test loss:       {:4.3f}".format(test_loss.item()))
+    log.debug(
+        f"""
+###### Stop training after {epoch + 1} epochs!
+Validation loss: {validation_loss.item():4.3f}
+Test loss:       {test_loss.item():4.3f}
+"""
+    )
 
     if save:
-        with open(workspace / "results.txt", "a") as f:
-            print("###### Stop training after {} epochs!".format(epoch + 1), file=f)
-            print("Validation loss: {:4.3f}".format(validation_loss.item()), file=f)
-            print("Test loss:       {:4.3f}".format(test_loss.item()), file=f)
+        torch.save(
+            {
+                "model": model.state_dict(),
+                "optimizer": optimizer.state_dict(),
+                "epoch": epoch,
+            },
+            workspace / "checkpoint.pt",
+        )
+        log.debug(
+            f"""
+###### Stop training after {epoch + 1} epochs!
+Validation loss: {validation_loss.item():4.3f}
+Test loss:       {test_loss.item():4.3f}
+"""
+        )
 
     def p_func(x: np.ndarray) -> np.ndarray:
         return np.exp(compute_log_p_x(model, x))
@@ -480,7 +491,7 @@ def density_estimator_trainer(
     save: bool = True,
     load: bool = True,
 ) -> Tuple[Callable, nn.Module]:
-    print("Loading dataset..")
+    log.debug("Loading dataset..")
     data_loader_train, data_loader_valid, data_loader_test = load_dataset(
         data_train,
         data_val,
@@ -490,10 +501,10 @@ def density_estimator_trainer(
     )
 
     if save:
-        print("Creating directory experiment..")
+        log.debug("Creating directory experiment..")
         workspace.mkdir(parents=True, exist_ok=True)
 
-    print("Creating BNAF model..")
+    log.debug("Creating BNAF model..")
     model = create_model(
         data_train.shape[1],
         batch_dim=batch_dim,
@@ -504,12 +515,12 @@ def density_estimator_trainer(
         device=device,
     )
 
-    print("Creating optimizer..")
+    log.debug("Creating optimizer..")
     optimizer = bnaf.Adam(
         model.parameters(), lr=learning_rate, amsgrad=True, polyak=polyak
     )
 
-    print("Creating scheduler..")
+    log.debug("Creating scheduler..")
 
     scheduler = bnaf.ReduceLROnPlateau(
         optimizer,
@@ -525,7 +536,7 @@ def density_estimator_trainer(
     if load:
         load_model(model, optimizer, workspace=workspace)()
 
-    print("Training..")
+    log.debug("Training..")
     p_func = train(
         model,
         optimizer,
@@ -546,6 +557,10 @@ def compute_metrics_baseline(
     y_scores: np.ndarray, y_true: np.ndarray, sample_weight: Optional[np.ndarray] = None
 ) -> Tuple[float, float]:
     y_pred = y_scores > np.median(y_scores)
+    y_true = np.nan_to_num(y_true)
+    y_pred = np.nan_to_num(y_pred)
+    y_scores = np.nan_to_num(y_scores)
     acc = accuracy_score(y_true, y_pred, sample_weight=sample_weight)
     auc = roc_auc_score(y_true, y_scores, sample_weight=sample_weight)
+
     return acc, auc
