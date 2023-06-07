@@ -242,7 +242,7 @@ class Metrics:
                     X_syn,
                     X_train,
                     X_ref_syn,
-                    reference_size=10,
+                    reference_size=10,  # TODO: review this
                 )
             else:
                 scores.queue(

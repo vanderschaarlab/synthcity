@@ -398,7 +398,7 @@ class DomiasMIA(PrivacyEvaluator):
     """
 
     def __init__(self, **kwargs: Any) -> None:
-        super().__init__(default_metric="syn", **kwargs)
+        super().__init__(default_metric="aucroc", **kwargs)
 
     @staticmethod
     def name() -> str:
@@ -407,6 +407,23 @@ class DomiasMIA(PrivacyEvaluator):
     @staticmethod
     def direction() -> str:
         return "minimize"
+
+    @validate_arguments(config=dict(arbitrary_types_allowed=True))
+    def evaluate_default(
+        self,
+        X_gt: DataLoader,
+        X_syn: DataLoader,
+        X_train: DataLoader,
+        X_ref_syn: DataLoader,
+        reference_size: int,
+    ) -> float:
+        return self.evaluate(
+            X_gt,
+            X_syn,
+            X_train,
+            X_ref_syn,
+            reference_size=reference_size,
+        )[self._default_metric]
 
     @abstractmethod
     def evaluate_p_R(
@@ -491,7 +508,6 @@ class DomiasMIA(PrivacyEvaluator):
         p_rel = p_G_evaluated / (p_R_evaluated + 1e-10)
 
         acc, auc = _utils.compute_metrics_baseline(p_rel, Y_test)
-        # performance_logger["Domias_MIA_scores"] = p_rel
         return {
             "accuracy": acc,
             "aucroc": auc,
