@@ -76,8 +76,10 @@ class BNAF(torch.nn.Sequential):
             outputs, grad = module(outputs, grad)
 
             grad = grad if len(grad.shape) == 4 else grad.view(grad.shape + [1, 1])
-
-        assert inputs.shape[-1] == outputs.shape[-1]
+        if inputs.shape[-1] != outputs.shape[-1]:
+            raise AssertionError(
+                "Incompatible shapes for input and output in BNAF model for Domias."
+            )
         if grad is None:
             raise RuntimeError("Invalid grad")
 
