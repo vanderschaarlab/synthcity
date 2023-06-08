@@ -39,14 +39,16 @@ from synthcity.plugins.core.dataloader import GenericDataLoader, ImageDataLoader
 def test_evaluator(evaluator_t: Type, test_plugin: Plugin) -> None:
     X, y = load_iris(return_X_y=True, as_frame=True)
 
-    Xloader = GenericDataLoader(X, sensitive_features=["sex", "bmi"])
+    Xloader = GenericDataLoader(
+        X, sensitive_features=["sepal length (cm)", "sepal width (cm)"]
+    )
     test_plugin.fit(Xloader)
     X_gen = test_plugin.generate(2 * len(X))
 
     evaluator = evaluator_t(
         use_cache=False,
     )
-
+    print(evaluator.name())
     if "DomiasMIA" in evaluator.name():
         X_ref_syn = test_plugin.generate(2 * len(X))
         score = evaluator.evaluate(

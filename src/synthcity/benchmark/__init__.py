@@ -277,9 +277,9 @@ class Benchmarks:
                 else:
                     X_augmented = None
                 evaluation = Metrics.evaluate(
-                    X.train(),
                     X_test if X_test is not None else X.test(),
                     X_syn,
+                    X.train(),
                     X_ref_syn,
                     X_augmented,
                     metrics=metrics,

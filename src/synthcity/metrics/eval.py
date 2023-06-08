@@ -107,10 +107,10 @@ class Metrics:
     @staticmethod
     @validate_arguments(config=dict(arbitrary_types_allowed=True))
     def evaluate(
-        X_train: Union[DataLoader, pd.DataFrame],
         X_gt: Union[DataLoader, pd.DataFrame],
         X_syn: Union[DataLoader, pd.DataFrame],
-        X_ref_syn: Union[DataLoader, pd.DataFrame],
+        X_train: Optional[Union[DataLoader, pd.DataFrame]] = None,
+        X_ref_syn: Optional[Union[DataLoader, pd.DataFrame]] = None,
         X_augmented: Optional[Union[DataLoader, pd.DataFrame]] = None,
         reduction: str = "mean",
         n_histogram_bins: int = 10,
@@ -122,12 +122,12 @@ class Metrics:
     ) -> pd.DataFrame:
         """Core evaluation logic for the metrics
 
-        X_train: Dataloader or DataFrame
-            The data used to train the synthetic model (used for domias metrics only).
         X_gt: Dataloader or DataFrame
             Reference real data
         X_syn: Dataloader or DataFrame
             Synthetic data
+        X_train: Dataloader or DataFrame
+            The data used to train the synthetic model (used for domias metrics only).
         X_ref_syn: Dataloader or DataFrame
             Reference synthetic data (used for domias metrics only).
         X_augmented: Dataloader or DataFrame
@@ -169,13 +169,13 @@ class Metrics:
                 f"Invalid task type {task_type}. Supported: {supported_tasks}"
             )
 
-        if not isinstance(X_train, DataLoader):
-            X_train = GenericDataLoader(X_gt)
         if not isinstance(X_gt, DataLoader):
             X_gt = GenericDataLoader(X_gt)
         if not isinstance(X_syn, DataLoader):
             X_syn = create_from_info(X_syn, X_gt.info())
-        if not isinstance(X_ref_syn, DataLoader):
+        if X_train is not None and not isinstance(X_train, DataLoader):
+            X_train = GenericDataLoader(X_train)
+        if X_ref_syn is not None and not isinstance(X_ref_syn, DataLoader):
             X_ref_syn = create_from_info(X_ref_syn, X_gt.info())
 
         if X_gt.type() != X_syn.type():
@@ -200,10 +200,13 @@ class Metrics:
         if metrics is None:
             metrics = Metrics.list()
 
-        X_train, _ = X_train.encode()
         X_gt, _ = X_gt.encode()
         X_syn, _ = X_syn.encode()
-        X_ref_syn, _ = X_ref_syn.encode()
+
+        if X_train:
+            X_train, _ = X_train.encode()
+        if X_ref_syn:
+            X_ref_syn, _ = X_ref_syn.encode()
         if X_augmented:
             X_augmented, _ = X_augmented.encode()
 

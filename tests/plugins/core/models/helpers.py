@@ -4,10 +4,11 @@ import pandas as pd
 
 def get_airfoil_dataset() -> pd.DataFrame:
     df = pd.read_csv(
-        "https://archive.ics.uci.edu/ml/machine-learning-databases/00291/airfoil_self_noise.dat",
-        header=None,
-        sep="\\t",
+        "https://www.neuraldesigner.com/files/datasets/airfoil_self_noise.csv",
+        # "https://archive.ics.uci.edu/static/public/291/airfoil+self+noise.zip", # TODO: change to this source?
+        sep=";",
         engine="python",
+        compression="zip",
     )
     df.columns = df.columns.astype(str)
 
