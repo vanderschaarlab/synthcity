@@ -214,6 +214,7 @@ class Benchmarks:
                     if synthetic_cache:
                         save_to_file(X_syn_cache_file, X_syn)
 
+                # X_ref_syn is the reference synthetic data used for DomiasMIA metrics
                 if X_ref_syn_cache_file.exists() and synthetic_reuse_if_exists:
                     X_ref_syn = load_from_file(X_ref_syn_cache_file)
                 else:

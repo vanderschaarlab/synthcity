@@ -12,7 +12,6 @@ def get_airfoil_dataset() -> pd.DataFrame:
         # "https://archive.ics.uci.edu/static/public/291/airfoil+self+noise.zip", # TODO: change to this source?
         sep=";",
         engine="python",
-        compression="zip",
     )
     df.columns = df.columns.astype(str)
 
