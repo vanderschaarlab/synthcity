@@ -196,21 +196,11 @@ class Benchmarks:
                     if synthetic_cache:
                         save_to_file(generator_file, generator)
 
-                if (
-                    X_syn_cache_file.exists()
-                    and X_ref_syn_cache_file.exists()
-                    and synthetic_reuse_if_exists
-                ):
+                if X_syn_cache_file.exists() and synthetic_reuse_if_exists:
                     X_syn = load_from_file(X_syn_cache_file)
-                    X_ref_syn = load_from_file(X_ref_syn_cache_file)
                 else:
                     try:
                         X_syn = generator.generate(
-                            count=synthetic_size,
-                            constraints=synthetic_constraints,
-                            **generate_kwargs,
-                        )
-                        X_ref_syn = generator.generate(
                             count=synthetic_size,
                             constraints=synthetic_constraints,
                             **generate_kwargs,
@@ -223,6 +213,23 @@ class Benchmarks:
 
                     if synthetic_cache:
                         save_to_file(X_syn_cache_file, X_syn)
+
+                if X_ref_syn_cache_file.exists() and synthetic_reuse_if_exists:
+                    X_ref_syn = load_from_file(X_ref_syn_cache_file)
+                else:
+                    try:
+                        X_ref_syn = generator.generate(
+                            count=synthetic_size,
+                            constraints=synthetic_constraints,
+                            **generate_kwargs,
+                        )
+                        if len(X_syn) == 0:
+                            raise RuntimeError("Plugin failed to generate data")
+                    except BaseException as e:
+                        log.critical(f"[{plugin}][take {repeat}] failed: {e}")
+                        continue
+
+                    if synthetic_cache:
                         save_to_file(X_ref_syn_cache_file, X_ref_syn)
 
                 # Augmentation
