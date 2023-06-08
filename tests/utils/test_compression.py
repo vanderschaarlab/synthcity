@@ -112,7 +112,7 @@ def test_compression_sanity_airfoil() -> None:
 def test_decompression_sanity_airfoil() -> None:
     df = get_airfoil_dataset()
     df.columns = df.columns.astype(str)
-    df["2"] = df["2"].astype(str)
+    df["chord_length"] = df["chord_length"].astype(str)
 
     compressed_df, context = compress_dataset(df)
 
@@ -121,4 +121,4 @@ def test_decompression_sanity_airfoil() -> None:
     assert sorted(df.columns.values) != sorted(compressed_df.columns.values)
     assert sorted(df.columns.values) == sorted(decompressed_df.columns.values)
 
-    assert decompressed_df["2"].dtype == "object"
+    assert decompressed_df["chord_length"].dtype == "object"
