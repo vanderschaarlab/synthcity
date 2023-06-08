@@ -134,7 +134,7 @@ def test_eval_performance_arf(compress_dataset: bool) -> None:
         evaluator = PerformanceEvaluatorXGB()
 
         test_plugin.fit(X)
-        X_syn = test_plugin.generate()
+        X_syn = test_plugin.generate(count=100)
 
         results.append(evaluator.evaluate(X, X_syn)["syn_id"])
 

@@ -58,6 +58,7 @@ class ARFPlugin(Plugin):
         early_stop: bool = True,
         verbose: bool = True,
         min_node_size: int = 5,
+        max_attempts: int = 10,
         # core plugin arguments
         device: Union[str, torch.device] = DEVICE,
         random_state: int = 0,
@@ -112,6 +113,7 @@ class ARFPlugin(Plugin):
         self.early_stop = early_stop
         self.verbose = verbose
         self.min_node_size = min_node_size
+        self.max_attempts = max_attempts
 
     @staticmethod
     def name() -> str:
@@ -154,6 +156,7 @@ class ARFPlugin(Plugin):
             self.early_stop,
             self.verbose,
             self.min_node_size,
+            self.max_attempts,
             **kwargs,
         )
         if "cond" in kwargs and kwargs["cond"] is not None:

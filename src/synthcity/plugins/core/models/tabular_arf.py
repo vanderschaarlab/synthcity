@@ -8,6 +8,7 @@ from arfpy import arf
 from pydantic import validate_arguments
 
 # synthcity absolute
+import synthcity.logger as log
 from synthcity.utils.constants import DEVICE
 
 
@@ -22,6 +23,7 @@ class TabularARF:
         early_stop: bool = True,
         verbose: bool = True,
         min_node_size: int = 5,
+        max_attempts: int = 10,
         # ARF forde parameters
         dist: str = "truncnorm",
         oob: bool = False,
@@ -53,6 +55,7 @@ class TabularARF:
             early_stop (bool, optional): Terminate loop if performance fails to improve from one round to the next?. Defaults to True.
             verbose (bool, optional): Print discriminator accuracy after each round?. Defaults to True.
             min_node_size (int, optional): minimum number of samples in terminal node. Defaults to 5.
+            max_attempts (int, optional): Maximum number of attempts to generate new records. Defaults to 10.
 
             # ARF forde parameters
             dist (str, optional): Distribution to use for density estimation of continuous features. Distributions implemented so far: "truncnorm", defaults to "truncnorm"
@@ -72,6 +75,7 @@ class TabularARF:
         self.early_stop = early_stop
         self.verbose = verbose
         self.min_node_size = min_node_size
+        self.max_attempts = max_attempts
 
         self.dist = dist
         self.oob = oob
@@ -98,5 +102,12 @@ class TabularARF:
         count: int,
     ) -> pd.DataFrame:
         self.model.forde(dist=self.dist, oob=self.oob, alpha=self.alpha)
+        for i in range(self.max_attempts - 1):
+            try:
+                samples = self.model.forge(n=count)
+                return pd.DataFrame(samples)
+            except Exception as e:
+                log.debug(f"Attempt {i} failed due to error: {e}. Trying again")
+                pass
         samples = self.model.forge(n=count)
         return pd.DataFrame(samples)
