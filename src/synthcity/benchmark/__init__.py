@@ -222,6 +222,7 @@ class Benchmarks:
                         continue
 
                     if synthetic_cache:
+                        save_to_file(X_syn_cache_file, X_syn)
                         save_to_file(X_ref_syn_cache_file, X_ref_syn)
 
                 # Augmentation
