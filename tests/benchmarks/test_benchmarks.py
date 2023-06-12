@@ -263,7 +263,6 @@ def test_benchmark_workspace_cache() -> None:
     assert workspace.exists()
 
     for repeat in range(repeats):
-
         X_syn_cache_file = (
             workspace
             / f"{experiment_name}_{testcase}_{plugin}_{kwargs_hash}_{platform.python_version()}_{repeat}.bkp"

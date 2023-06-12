@@ -109,7 +109,6 @@ class ScoreEvaluator:
             direction = self.scores[metric]["direction"]
             durations = round(np.mean(self.scores[metric]["durations"]), 2)
             values = self.scores[metric]["values"]
-
             score_min = np.min(values)
             score_max = np.max(values)
             score_mean = np.mean(values)

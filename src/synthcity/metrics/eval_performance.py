@@ -134,9 +134,9 @@ class PerformanceEvaluator(MetricEvaluator):
             The lower the negative value, the bigger the error in the predictions.
         """
 
-        X_train = np.asarray(X_test)
+        X_train = np.asarray(X_train)
         X_test = np.asarray(X_test)
-        y_train = np.asarray(y_test)
+        y_train = np.asarray(y_train)
         y_test = np.asarray(y_test)
 
         try:

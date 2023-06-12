@@ -31,6 +31,9 @@ from .eval_performance import (
 )
 from .eval_privacy import (
     DeltaPresence,
+    DomiasMIABNAF,
+    DomiasMIAKDE,
+    DomiasMIAPrior,
     IdentifiabilityScore,
     kAnonymization,
     kMap,
@@ -94,6 +97,9 @@ standard_metrics = [
     kMap,
     lDiversityDistinct,
     IdentifiabilityScore,
+    DomiasMIABNAF,
+    DomiasMIAKDE,
+    DomiasMIAPrior,
 ]
 
 
@@ -103,6 +109,8 @@ class Metrics:
     def evaluate(
         X_gt: Union[DataLoader, pd.DataFrame],
         X_syn: Union[DataLoader, pd.DataFrame],
+        X_train: Optional[Union[DataLoader, pd.DataFrame]] = None,
+        X_ref_syn: Optional[Union[DataLoader, pd.DataFrame]] = None,
         X_augmented: Optional[Union[DataLoader, pd.DataFrame]] = None,
         reduction: str = "mean",
         n_histogram_bins: int = 10,
@@ -118,6 +126,10 @@ class Metrics:
             Reference real data
         X_syn: Dataloader or DataFrame
             Synthetic data
+        X_train: Dataloader or DataFrame
+            The data used to train the synthetic model (used for domias metrics only).
+        X_ref_syn: Dataloader or DataFrame
+            Reference synthetic data (used for domias metrics only).
         X_augmented: Dataloader or DataFrame
             Augmented data
         metrics: dict
@@ -161,18 +173,28 @@ class Metrics:
             X_gt = GenericDataLoader(X_gt)
         if not isinstance(X_syn, DataLoader):
             X_syn = create_from_info(X_syn, X_gt.info())
+        if X_train is not None and not isinstance(X_train, DataLoader):
+            X_train = GenericDataLoader(X_train)
+        if X_ref_syn is not None and not isinstance(X_ref_syn, DataLoader):
+            X_ref_syn = create_from_info(X_ref_syn, X_gt.info())
 
         if X_gt.type() != X_syn.type():
             raise ValueError("Different dataloader types")
 
         if task_type == "survival_analysis":
-            if X_gt.type() != "survival_analysis":
+            if (
+                X_gt.type() != "survival_analysis"
+                and X_train.type() != "survival_analysis"
+            ):
                 raise ValueError("Invalid dataloader for survival analysis")
         elif task_type == "time_series":
-            if X_gt.type() != "time_series":
+            if X_gt.type() != "time_series" and X_train.type() != "time_series":
                 raise ValueError("Invalid dataloader for time series")
         elif task_type == "time_series_survival":
-            if X_gt.type() != "time_series_survival":
+            if (
+                X_gt.type() != "time_series_survival"
+                and X_train.type() != "time_series_survival"
+            ):
                 raise ValueError("Invalid dataloader for time series survival analysis")
 
         if metrics is None:
@@ -180,6 +202,11 @@ class Metrics:
 
         X_gt, _ = X_gt.encode()
         X_syn, _ = X_syn.encode()
+
+        if X_train:
+            X_train, _ = X_train.encode()
+        if X_ref_syn:
+            X_ref_syn, _ = X_ref_syn.encode()
         if X_augmented:
             X_augmented, _ = X_augmented.encode()
 
@@ -203,6 +230,22 @@ class Metrics:
                     ),
                     X_gt,
                     X_augmented,
+                )
+            elif "DomiasMIA" in metric.name():
+                scores.queue(
+                    metric(
+                        reduction=reduction,
+                        n_histogram_bins=n_histogram_bins,
+                        task_type=task_type,
+                        random_state=random_state,
+                        workspace=workspace,
+                        use_cache=use_cache,
+                    ),
+                    X_gt,
+                    X_syn,
+                    X_train,
+                    X_ref_syn,
+                    reference_size=10,  # TODO: review this
                 )
             else:
                 scores.queue(

@@ -4,12 +4,15 @@ from typing import Type
 # third party
 import numpy as np
 import pytest
-from sklearn.datasets import load_diabetes
+from sklearn.datasets import load_iris
 from torchvision import datasets
 
 # synthcity absolute
 from synthcity.metrics.eval_privacy import (
     DeltaPresence,
+    DomiasMIABNAF,
+    DomiasMIAKDE,
+    DomiasMIAPrior,
     IdentifiabilityScore,
     kAnonymization,
     kMap,
@@ -27,28 +30,53 @@ from synthcity.plugins.core.dataloader import GenericDataLoader, ImageDataLoader
         kMap,
         lDiversityDistinct,
         IdentifiabilityScore,
+        DomiasMIABNAF,
+        DomiasMIAKDE,
+        DomiasMIAPrior,
     ],
 )
 @pytest.mark.parametrize("test_plugin", [Plugins().get("dummy_sampler")])
 def test_evaluator(evaluator_t: Type, test_plugin: Plugin) -> None:
-    X, y = load_diabetes(return_X_y=True, as_frame=True)
+    X, y = load_iris(return_X_y=True, as_frame=True)
 
-    Xloader = GenericDataLoader(X, sensitive_features=["sex", "bmi"])
+    Xloader = GenericDataLoader(
+        X, sensitive_features=["sepal length (cm)", "sepal width (cm)"]
+    )
     test_plugin.fit(Xloader)
     X_gen = test_plugin.generate(2 * len(X))
 
     evaluator = evaluator_t(
         use_cache=False,
     )
-
-    score = evaluator.evaluate(Xloader, X_gen)
+    print(evaluator.name())
+    if "DomiasMIA" in evaluator.name():
+        X_ref_syn = test_plugin.generate(2 * len(X))
+        score = evaluator.evaluate(
+            Xloader,
+            X_gen,
+            Xloader.train(),
+            X_ref_syn,
+            reference_size=10,
+        )
+    else:
+        score = evaluator.evaluate(Xloader, X_gen)
 
     for submetric in score:
         assert score[submetric] > 0
 
     assert evaluator.type() == "privacy"
 
-    def_score = evaluator.evaluate_default(Xloader, X_gen)
+    if "DomiasMIA" in evaluator.name():
+        X_ref_syn = test_plugin.generate(2 * len(X))
+        def_score = evaluator.evaluate_default(
+            Xloader,
+            X_gen,
+            Xloader.train(),
+            X_ref_syn,
+            reference_size=10,
+        )
+    else:
+        def_score = evaluator.evaluate_default(Xloader, X_gen)
 
     assert isinstance(def_score, (float, int))
 
