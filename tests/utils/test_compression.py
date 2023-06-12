@@ -8,10 +8,13 @@ from synthcity.utils.compression import compress_dataset, decompress_dataset
 
 def get_airfoil_dataset() -> pd.DataFrame:
     df = pd.read_csv(
-        "https://archive.ics.uci.edu/ml/machine-learning-databases/00291/airfoil_self_noise.dat",
-        header=None,
-        sep="\\t",
+        "https://www.neuraldesigner.com/files/datasets/airfoil_self_noise.csv",
+        # "https://archive.ics.uci.edu/static/public/291/airfoil+self+noise.zip", # TODO: change to this source?
+        sep=";",
+        engine="python",
     )
+    df.columns = df.columns.astype(str)
+
     return df
 
 
@@ -73,9 +76,11 @@ def test_compression_sanity2() -> None:
 
 def test_compression_sanity_airfoil() -> None:
     df = get_airfoil_dataset()
-    df[2] = df[2].astype(str)
-
+    df["chord_length"] = df["chord_length"].astype(str)
+    print(df.head())
     compressed_df, context = compress_dataset(df)
+    print(compressed_df)
+    print(context)
 
     assert len(compressed_df) == len(df)
     assert compressed_df.shape[1] > 0
@@ -85,17 +90,19 @@ def test_compression_sanity_airfoil() -> None:
     assert "compressers" in context
     assert "compressers_categoricals" in context
 
-    assert sorted(context["encoders"].keys()) == ["2"]
+    assert sorted(context["encoders"].keys()) == ["chord_length"]
     for key in context["encoders"]:
         assert context["encoders"][key].__class__.__name__ == "LabelEncoder"
 
-    assert sorted(context["compressers"].keys()) == ["1"]
+    assert sorted(context["compressers"].keys()) == ["angle_of_attack"]
     for key in context["compressers"]:
         assert "cols" in context["compressers"][key]
         assert len(context["compressers"][key]["cols"]) > 0
         assert "model" in context["compressers"][key]
 
-    assert sorted(context["compressers_categoricals"].keys()) == ["2 3"]
+    assert sorted(context["compressers_categoricals"].keys()) == [
+        "chord_length free_stream_velocity"
+    ]
     for key in context["compressers_categoricals"]:
         assert "cols" in context["compressers_categoricals"][key]
         assert len(context["compressers_categoricals"][key]["cols"]) > 0
@@ -105,7 +112,7 @@ def test_compression_sanity_airfoil() -> None:
 def test_decompression_sanity_airfoil() -> None:
     df = get_airfoil_dataset()
     df.columns = df.columns.astype(str)
-    df["2"] = df["2"].astype(str)
+    df["chord_length"] = df["chord_length"].astype(str)
 
     compressed_df, context = compress_dataset(df)
 
@@ -114,4 +121,4 @@ def test_decompression_sanity_airfoil() -> None:
     assert sorted(df.columns.values) != sorted(compressed_df.columns.values)
     assert sorted(df.columns.values) == sorted(decompressed_df.columns.values)
 
-    assert decompressed_df["2"].dtype == "object"
+    assert decompressed_df["chord_length"].dtype == "object"
