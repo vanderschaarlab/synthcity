@@ -24,7 +24,7 @@ plugin_args = {
     "max_iters": 15,
     "early_stop": True,
     "verbose": True,
-    "min_node_size": 3,
+    "min_node_size": 10,
 }
 
 

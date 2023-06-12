@@ -29,6 +29,8 @@ class TabularARF:
         oob: bool = False,
         alpha: float = 0,
         # core plugin arguments
+        encoder_max_clusters: int = 20,
+        encoder_whitelist: list = [],
         device: Union[str, torch.device] = DEVICE,
         learning_rate: float = 5e-3,
         weight_decay: float = 1e-3,
@@ -54,8 +56,7 @@ class TabularARF:
             max_iters (int, optional): Maximum iterations for the adversarial loop. Defaults to 10.
             early_stop (bool, optional): Terminate loop if performance fails to improve from one round to the next?. Defaults to True.
             verbose (bool, optional): Print discriminator accuracy after each round?. Defaults to True.
-            min_node_size (int, optional): minimum number of samples in terminal node. Defaults to 5.
-            max_attempts (int, optional): Maximum number of attempts to generate new records. Defaults to 10.
+            min_node_size (int, optional): minimum number of samples in terminal node. If there is a domain error, when generating, increasing this parameter can fix the issue. Defaults to 5.
 
             # ARF forde parameters
             dist (str, optional): Distribution to use for density estimation of continuous features. Distributions implemented so far: "truncnorm", defaults to "truncnorm"
@@ -63,6 +64,8 @@ class TabularARF:
             alpha (float, optional): Optional pseudocount for Laplace smoothing of categorical features. This avoids zero-mass points when test data fall outside the support of training data. Effectively parametrizes a flat Dirichlet prior on multinomial likelihoods, defaults to 0
 
             # core plugin arguments
+            encoder_max_clusters (int = 20): The max number of clusters to create for continuous columns when encoding with TabularEncoder. Defaults to 20.
+            encoder_whitelist (list = []): Ignore columns from encoding with TabularEncoder. Defaults to [].
             device: Union[str, torch.device] = DEVICE, # This is not used for this model, as it is built with sklearn, which is cpu only
             random_state (int, optional): _description_. Defaults to 0. # This is not used for this model
             **kwargs (Any): The keyword arguments are passed to a SKLearn RandomForestClassifier - https://scikit-learn.org/stable/modules/generated/sklearn.ensemble.RandomForestClassifier.html.
@@ -75,17 +78,36 @@ class TabularARF:
         self.early_stop = early_stop
         self.verbose = verbose
         self.min_node_size = min_node_size
-        self.max_attempts = max_attempts
 
         self.dist = dist
         self.oob = oob
         self.alpha = alpha
 
+    def get_low_variance_cols(self, X: pd.DataFrame, var_threshold: int) -> list:
+        """_summary_
+
+        Args:
+            X (pd.DataFrame): _description_
+            var_threshold (int): _description_
+
+        Returns:
+            list: _description_
+        """
+        low_variance_cols = []
+        for col in X.columns:
+            if X[col].nunique() <= var_threshold:
+                low_variance_cols.append(col)
+        return low_variance_cols
+
     @validate_arguments(config=dict(arbitrary_types_allowed=True))
     def fit(
         self,
         X: pd.DataFrame,
+        var_threshold: int = 10,
     ) -> None:
+        object_cols = self.get_low_variance_cols(X, var_threshold)
+        for col in object_cols:
+            X[col] = X[col].astype(object)
         self.model = arf.arf(
             x=X,
             num_trees=self.num_trees,
@@ -102,12 +124,12 @@ class TabularARF:
         count: int,
     ) -> pd.DataFrame:
         self.model.forde(dist=self.dist, oob=self.oob, alpha=self.alpha)
-        for i in range(self.max_attempts - 1):
-            try:
-                samples = self.model.forge(n=count)
-                return pd.DataFrame(samples)
-            except Exception as e:
-                log.debug(f"Attempt {i} failed due to error: {e}. Trying again")
-                pass
+        try:
+            samples = self.model.forge(n=count)
+            return pd.DataFrame(samples)
+        except Exception as e:
+            log.critical(
+                f"Failed due to error: {e} Try with a higher values of min_node_size."
+            )
         samples = self.model.forge(n=count)
         return pd.DataFrame(samples)
