@@ -460,7 +460,7 @@ First create a new environment. It is recommended that you use conda. This can b
 conda create -n your-synthcity-env python=3.9
 conda activate your-synthcity-env
 ```
-*Python versions 3.7, 3.8, 3.9, and 3.10 are all compatible*
+*Python versions 3.8, 3.9, and 3.10 are all compatible*
 
 To get the development installation with all the necessary dependencies for
 linting, testing, auto-formatting, and pre-commit etc. run the following:
