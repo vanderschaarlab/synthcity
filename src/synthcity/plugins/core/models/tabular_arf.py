@@ -23,7 +23,6 @@ class TabularARF:
         early_stop: bool = True,
         verbose: bool = True,
         min_node_size: int = 5,
-        max_attempts: int = 10,
         # ARF forde parameters
         dist: str = "truncnorm",
         oob: bool = False,
@@ -83,21 +82,24 @@ class TabularARF:
         self.oob = oob
         self.alpha = alpha
 
-    def get_low_variance_cols(self, X: pd.DataFrame, var_threshold: int) -> list:
-        """_summary_
+    def get_categorical_cols(self, X: pd.DataFrame, var_threshold: int) -> list:
+        """
+        Finds columns with a low number of unique values, and returns them as a list.
+        This is used so that the model can treat them as categorical features even if they are numeric.
+        This is important for the ARF model, as it cannot handle zero variance floats in terminal nodes.
 
         Args:
-            X (pd.DataFrame): _description_
-            var_threshold (int): _description_
+            X (pd.DataFrame): The dataframe to check for categorical columns
+            var_threshold (int): The maximum number of unique values a column can have to be considered categorical
 
         Returns:
-            list: _description_
+            list: The list of categorical columns
         """
-        low_variance_cols = []
+        categorical_cols = []
         for col in X.columns:
             if X[col].nunique() <= var_threshold:
-                low_variance_cols.append(col)
-        return low_variance_cols
+                categorical_cols.append(col)
+        return categorical_cols
 
     @validate_arguments(config=dict(arbitrary_types_allowed=True))
     def fit(
@@ -105,9 +107,11 @@ class TabularARF:
         X: pd.DataFrame,
         var_threshold: int = 10,
     ) -> None:
-        object_cols = self.get_low_variance_cols(X, var_threshold)
+        # Make low variance columns are passed as objects
+        object_cols = self.get_categorical_cols(X, var_threshold)
         for col in object_cols:
             X[col] = X[col].astype(object)
+
         self.model = arf.arf(
             x=X,
             num_trees=self.num_trees,
