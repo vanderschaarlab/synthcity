@@ -4,9 +4,18 @@ from typing import Any, Union
 # third party
 import pandas as pd
 import torch
-from arfpy import arf
 from pydantic import validate_arguments
 
+try:
+    # third party
+    from arfpy import arf
+except ImportError:
+    raise ImportError(
+        """
+arfpy is not installed. Please install it with pip install arfpy.
+Please be aware that arfpy is only available for python >= 3.8.
+"""
+    )
 # synthcity absolute
 import synthcity.logger as log
 from synthcity.utils.constants import DEVICE
