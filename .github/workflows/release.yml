@@ -23,8 +23,8 @@ jobs:
           python-version: ${{ matrix.python-version }}
       - name: Build and publish
         env:
-          TWINE_USERNAME: ${{ secrets.PYPI_USERNAME }}
-          TWINE_PASSWORD: ${{ secrets.PYPI_PASSWORD }}
+          TWINE_USERNAME: ${{ secrets.PYPI_USERNAME_SYNTHCITY }}
+          TWINE_PASSWORD: ${{ secrets.PYPI_PASSWORD_SYNTHCITY }}
         run: ${GITHUB_WORKSPACE}/.github/workflows/scripts/release_osx.sh
 
   deploy_linux:
