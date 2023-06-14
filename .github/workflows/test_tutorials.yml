@@ -14,7 +14,7 @@ jobs:
     runs-on: ${{ matrix.os }}
     strategy:
       matrix:
-        python-version: ["3.7", "3.8", "3.9", "3.10"]
+        python-version: ["3.8", "3.9", "3.10"]
         os: [ubuntu-latest]
     steps:
       - uses: actions/checkout@v2
@@ -35,7 +35,7 @@ jobs:
           python -m pip install -U pip
           pip install -r prereq.txt
 
-          pip install .[all]
+          pip install .[testing]
 
           python -m pip install ipykernel
           python -m ipykernel install --user
