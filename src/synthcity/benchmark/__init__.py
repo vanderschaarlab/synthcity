@@ -111,7 +111,7 @@ class Benchmarks:
 
         workspace.mkdir(parents=True, exist_ok=True)
 
-        plugin_cats = ["generic", "privacy"]
+        plugin_cats = ["generic", "privacy", "domain_adaptation"]
         if X.type() == "images":
             plugin_cats.append("images")
         elif task_type == "survival_analysis":
