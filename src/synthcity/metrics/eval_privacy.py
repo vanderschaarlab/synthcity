@@ -553,7 +553,7 @@ class DomiasMIAKDE(DomiasMIA):
         device: Any,
     ) -> Tuple[np.ndarray, np.ndarray]:
         if synth_set.shape[0] > X_test.shape[0]:
-            log.critical(
+            log.debug(
                 """
 The data appears to lie in a lower-dimensional subspace of the space in which it is expressed.
 This has resulted in a singular data covariance matrix, which cannot be treated using the algorithms

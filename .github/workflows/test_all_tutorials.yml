@@ -1,12 +1,8 @@
 name: Tutorials
 
 on:
-  push:
-    branches: [main, release]
-  pull_request:
-    types: [opened, synchronize, reopened]
   schedule:
-    - cron: "2 3 * * 4"
+    - cron: "2 4 17 * *"
   workflow_dispatch:
 
 jobs:
@@ -40,4 +36,4 @@ jobs:
           python -m pip install ipykernel
           python -m ipykernel install --user
       - name: Run the tutorials
-        run: python tests/nb_eval.py --nb_dir tutorials/ --tutorial_tests minimal_tests
+        run: python tests/nb_eval.py --nb_dir tutorials/ --tutorial_tests all_tests
