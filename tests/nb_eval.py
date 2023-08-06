@@ -1,6 +1,7 @@
 # stdlib
 from pathlib import Path
 from time import time
+from typing import List
 
 # third party
 import click
@@ -20,7 +21,36 @@ def run_notebook(notebook_path: Path) -> None:
     proc.preprocess(nb, {"metadata": {"path": workspace}})
 
 
-enabled_tests = [
+all_tests = [
+    "basic_examples",
+    "benchmarks",
+    "survival_analysis",
+    "time_series",
+    "time_series_data_preparation",
+    "hyperparameter_optimization",
+    "plugin_adsgan",
+    "plugin_ctgan",
+    "plugin_nflow",
+    "plugin_tvae",
+    "plugin_timegan",
+    "plugin_radialgan" "plugin_arf",
+    "plugin_bayesian_network",
+    "plugin_ddpm",
+    "plugin_dummy_sampler",
+    "plugin_marginal_distribution",
+    "plugin_uniform_sampler",
+    "plugin_image_adsgan",
+    "plugin_image_cgan",
+    "plugin_decaf",
+    "plugin_dpgan",
+    "plugin_pategan",
+    "plugin_privbayes",
+    "plugin_ctgan(generic)",
+    "plugin_fourier_flows",
+    "plugin_timegan",
+]
+
+minimal_tests = [
     "basic_examples",
     "plugin_adsgan",
     "plugin_ctgan",
@@ -32,8 +62,18 @@ enabled_tests = [
 
 @click.command()
 @click.option("--nb_dir", type=str, default=".")
-def main(nb_dir: Path) -> None:
+@click.option(
+    "--tutorial_tests",
+    type=click.Choice(["minimal_tests", "all_tests"], case_sensitive=False),
+    default="minimal_tests",
+)
+def main(nb_dir: Path, tutorial_tests: str) -> None:
     nb_dir = Path(nb_dir)
+    enabled_tests: List = []
+    if tutorial_tests == "all_tests":
+        enabled_tests = all_tests
+    elif tutorial_tests == "minimal_tests":
+        enabled_tests = minimal_tests
 
     for p in nb_dir.rglob("*"):
         if p.suffix != ".ipynb":

@@ -23,6 +23,10 @@ except ImportError:
         raise NotImplementedError
 
 
+# synthcity absolute
+from synthcity import logger as log
+
+
 def masked_edge_index(
     edge_index: Tensor, edge_mask: Tensor
 ) -> Union[SparseTensor, Tensor]:
@@ -231,45 +235,24 @@ class RGCNConv(MessagePassing):
                 out = out + h.contiguous().view(-1, self.out_channels)
 
         else:
-            if self._WITH_PYG_LIB and isinstance(edge_index, Tensor):
-                # print("yes to self._WITH_PYG_LIB")
-                """
-                if not self.is_sorted:
-                    if (edge_type[1:] < edge_type[:-1]).any():
-                        edge_type, perm = edge_type.sort()
-                        edge_index = edge_index[:, perm]
-                edge_type_ptr = torch.ops.torch_sparse.ind2ptr(
-                    edge_type, self.num_relations)
-                out = self.propagate(edge_index, x=x_l,
-                                     edge_type_ptr=edge_type_ptr, size=size)
-                """
-            else:
-                for i in range(self.num_relations):
-                    tmp = masked_edge_index(edge_index, edge_type == i)
-                    if edge_weight is not None:
-                        tmp_weight = edge_weight[edge_type == i]
-                    else:
-                        tmp_weight = None
+            for i in range(self.num_relations):
+                tmp = masked_edge_index(edge_index, edge_type == i)
+                if edge_weight is not None:
+                    tmp_weight = edge_weight[edge_type == i]
+                else:
+                    tmp_weight = None
 
-                    if x_l.dtype == torch.long:
-                        print("here and x_l.dtype is torch.long")
-                        """
-                        out = out + self.propagate(
-                            tmp,
-                            x=weight[i, x_l],
-                            edge_type_ptr=None,
-                            size=size,
-                        )
-                        """
-                    else:
-                        h = self.propagate(
-                            tmp,
-                            x=x_l,
-                            edge_type_ptr=None,
-                            edge_weight=tmp_weight,
-                            size=size,
-                        )
-                        out = out + (h @ weight[i])
+                if x_l.dtype == torch.long:
+                    log.warning("x_l.dtype is torch.long, which is not expected.")
+                else:
+                    h = self.propagate(
+                        tmp,
+                        x=x_l,
+                        edge_type_ptr=None,
+                        edge_weight=tmp_weight,
+                        size=size,
+                    )
+                    out = out + (h @ weight[i])
         root = self.root
         if root is not None:
             out = out + (root[x_r] if x_r.dtype == torch.long else x_r @ root)
@@ -283,7 +266,6 @@ class RGCNConv(MessagePassing):
         self, x_j: Tensor, edge_type_ptr: OptTensor, edge_weight: OptTensor
     ) -> Tensor:
         if edge_type_ptr is not None:
-            print("definitely not here")
             return segment_matmul(x_j, edge_type_ptr, self.weight)
 
         return x_j if edge_weight is None else edge_weight.view(-1, 1) * x_j

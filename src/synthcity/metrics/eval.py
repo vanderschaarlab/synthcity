@@ -97,7 +97,7 @@ standard_metrics = [
     kMap,
     lDiversityDistinct,
     IdentifiabilityScore,
-    DomiasMIABNAF,
+    DomiasMIABNAF,  # TODO: This takes too long to include as default
     DomiasMIAKDE,
     DomiasMIAPrior,
 ]
