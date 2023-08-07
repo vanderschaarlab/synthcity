@@ -11,6 +11,8 @@ build:
     python: "3.8"
   apt_packages:
     - graphviz
+  commands:
+    - pip install torch numpy
 
 # Build documentation in the docs/ directory with Sphinx
 sphinx:
@@ -23,4 +25,7 @@ formats:
 python:
   install:
     - requirements: docs/requirements.txt
-    - { path: ., method: pip }
+    - method: pip
+      path: .
+      extra_requirements:
+        - all
