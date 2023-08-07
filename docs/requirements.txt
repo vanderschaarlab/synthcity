@@ -1,5 +1,5 @@
-arfpy ; python_version >= "3.8"
 #docs
+arfpy ; python_version >= "3.8"
 autodoc
 bandit
 black
@@ -8,6 +8,9 @@ click
 cloudpickle
 darglint
 decaf-synthetic-data>=0.1.6
+
+# synthcity.[google]
+dgl
 doc8
 fflows
 flake8
@@ -68,6 +71,9 @@ sphinxcontrib-napoleon
 sphinxemoji
 tabulate
 torch>=1.10.0,<2.0
+torch_geometric
+torch_scatter
+torch_sparse
 tqdm
 tsai; python_version>"3.7"
 xgboost
