@@ -80,7 +80,6 @@ extensions = [
     "IPython.sphinxext.ipython_console_highlighting",
     "sphinx.ext.graphviz",
     "sphinx.ext.inheritance_diagram",
-    # "sphinx_pyreverse",
 ]
 
 autodoc_default_options = {
