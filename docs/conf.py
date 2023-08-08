@@ -32,12 +32,8 @@ subprocess.run(
         "-t",
         "_templates",
         "../src/synthcity/",
-        "../src/synthcity/*goggle*",
-        "../src/synthcity/*RGCNConv*",
     ]
 )
-
-# sphinx_pyreverse_ignore = "../src/synthcity/*eval_statistical*"
 
 emojis = [
     ":rocket:",
@@ -144,7 +140,7 @@ autodoc_mock_imports = [
     "pycox",
     "pykeops",
     "pyod",
-    # "rdt",
+    "rdt",
     "redis",
     "scikit-learn",
     "sklearn",
@@ -154,7 +150,7 @@ autodoc_mock_imports = [
     "copulas",
     "geomloss",
     "joblib",
-    # "sdv",
+    "sdv",
     "shap",
     "tsai",
     "xgboost",
