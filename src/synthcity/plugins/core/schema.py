@@ -41,7 +41,7 @@ class Schema(BaseModel):
     """
 
     sampling_strategy: str = "marginal"  # uniform or marginal
-    protected_cols = ["seq_id"]
+    protected_cols: List[str] = ["seq_id"]
     random_state: int = 0
     data: Any = None
     domain: Dict = {}

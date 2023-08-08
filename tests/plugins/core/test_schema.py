@@ -10,8 +10,12 @@ from synthcity.plugins.core.schema import Schema
 
 
 def test_schema_fail() -> None:
-    with pytest.raises(pydantic.error_wrappers.ValidationError):
-        Schema(data="sdfsfs")
+    if pydantic.__version__ < "2":
+        with pytest.raises(pydantic.error_wrappers.ValidationError):
+            Schema(data="sdfsfs")
+    else:
+        with pytest.raises(pydantic.pydantic_core._pydantic_core.ValidationError):
+            Schema(data="sdfsfs")
 
 
 def test_schema_ok() -> None:
