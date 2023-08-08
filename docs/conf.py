@@ -37,7 +37,7 @@ subprocess.run(
     ]
 )
 
-sphinx_pyreverse_ignore = "*eval_statistical*"
+# sphinx_pyreverse_ignore = "../src/synthcity/*eval_statistical*"
 
 emojis = [
     ":rocket:",
@@ -80,7 +80,7 @@ extensions = [
     "IPython.sphinxext.ipython_console_highlighting",
     "sphinx.ext.graphviz",
     "sphinx.ext.inheritance_diagram",
-    "sphinx_pyreverse",
+    # "sphinx_pyreverse",
 ]
 
 autodoc_default_options = {
