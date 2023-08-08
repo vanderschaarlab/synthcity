@@ -13,7 +13,6 @@ build:
     - graphviz
   jobs:
     post_install:
-      - python -m dgl.backend.set_default_backend pytorch
       - python test_doc_imports.py
 
 # Build documentation in the docs/ directory with Sphinx
