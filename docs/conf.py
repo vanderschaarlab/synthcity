@@ -37,11 +37,7 @@ subprocess.run(
     ]
 )
 
-# sphinx_pyreverse_ignore = [
-#     "*goggle*",
-#     "*tabular_goggle*",
-#     "*RGCNConv*",
-# ]
+sphinx_pyreverse_ignore = "*eval_statistical*"
 
 emojis = [
     ":rocket:",
