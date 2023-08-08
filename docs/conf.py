@@ -32,9 +32,16 @@ subprocess.run(
         "-t",
         "_templates",
         "../src/synthcity/",
+        "../src/synthcity/*goggle*",
+        "../src/synthcity/*RGCNConv*",
     ]
 )
 
+sphinx_pyreverse_ignore = [
+    "*goggle*",
+    "*tabular_goggle*",
+    "*RGCNConv*",
+]
 
 emojis = [
     ":rocket:",
@@ -77,7 +84,7 @@ extensions = [
     "IPython.sphinxext.ipython_console_highlighting",
     "sphinx.ext.graphviz",
     "sphinx.ext.inheritance_diagram",
-    "sphinx_pyreverse",
+    # "sphinx_pyreverse",
 ]
 
 autodoc_default_options = {
@@ -142,7 +149,7 @@ autodoc_mock_imports = [
     "pycox",
     "pykeops",
     "pyod",
-    "rdt",
+    # "rdt",
     "redis",
     "scikit-learn",
     "sklearn",
@@ -152,7 +159,7 @@ autodoc_mock_imports = [
     "copulas",
     "geomloss",
     "joblib",
-    "sdv",
+    # "sdv",
     "shap",
     "tsai",
     "xgboost",
