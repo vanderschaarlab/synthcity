@@ -310,7 +310,6 @@ class JensenShannonDistance(StatisticalEvaluator):
         X_gt: DataLoader,
         X_syn: DataLoader,
     ) -> Tuple[Dict, Dict, Dict]:
-
         stats_gt = {}
         stats_syn = {}
         stats_ = {}
@@ -711,7 +710,6 @@ class AlphaPrecision(StatisticalEvaluator):
         X: DataLoader,
         X_syn: DataLoader,
     ) -> Dict:
-
         results = {}
 
         X_ = X.numpy().reshape(len(X), -1)

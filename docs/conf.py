@@ -29,11 +29,11 @@ subprocess.run(
         "-f",
         "-o",
         "generated",
-        "-t", "_templates",
+        "-t",
+        "_templates",
         "../src/synthcity/",
     ]
 )
-
 
 emojis = [
     ":rocket:",
@@ -52,7 +52,7 @@ emojis = [
     ":rotating_light:",
 ]
 
-#with open("../README.md", "rt") as fin:
+# with open("../README.md", "rt") as fin:
 #    with open("README.md", "wt") as fout:
 #        for line in fin:
 #            for emoji in emojis:
@@ -73,9 +73,9 @@ extensions = [
     "sphinxemoji.sphinxemoji",
     "nbsphinx",
     "sphinx_diagrams",
-    'IPython.sphinxext.ipython_console_highlighting',
-    'sphinx.ext.graphviz','sphinx.ext.inheritance_diagram',
-    "sphinx_pyreverse",
+    "IPython.sphinxext.ipython_console_highlighting",
+    "sphinx.ext.graphviz",
+    "sphinx.ext.inheritance_diagram",
 ]
 
 autodoc_default_options = {
