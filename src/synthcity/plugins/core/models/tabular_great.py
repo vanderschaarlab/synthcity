@@ -17,11 +17,7 @@ Please be aware that GReaT is only available for python >= 3.9.
 """
     )
 # synthcity absolute
-# import synthcity.logger as log
 from synthcity.utils.constants import DEVICE
-
-# synthcity relative
-from .tabular_encoder import TabularEncoder
 
 
 class TabularGReaT:
@@ -36,7 +32,7 @@ class TabularGReaT:
 
     Args:
         # GReaT parameters
-        X (pd.DataFrame): Reference dataset, used for training the tabular encoder # TODO: check if this is needed
+        X (pd.DataFrame): Reference dataset, used for training the tabular encoder
         llm (str): HuggingFace checkpoint of a pretrained large language model, used a basis of our model
         n_iter (int = 100): Number of training iterations to fine-tune the model
         experiment_dir (str = trainer_great):  Directory, where the training checkpoints will be saved
@@ -58,11 +54,10 @@ class TabularGReaT:
         self,
         # GReaT parameters
         X: pd.DataFrame,
-        llm: str,
+        llm: str = "distilgpt2",
         n_iter: int = 100,
         experiment_dir: str = "trainer_great",
         batch_size: int = 8,
-        efficient_finetuning: str = "",
         train_kwargs: Dict = {},
         # core plugin arguments
         encoder_max_clusters: int = 20,
@@ -80,33 +75,16 @@ class TabularGReaT:
         self.n_iter = n_iter
         self.experiment_dir = experiment_dir
         self.batch_size = batch_size
-        self.efficient_finetuning = efficient_finetuning
         self.train_kwargs = train_kwargs
         self.device = device
-
-        self.encoder = TabularEncoder(
-            max_clusters=encoder_max_clusters, whitelist=encoder_whitelist
-        ).fit(X)
 
         self.model = be_great.GReaT(
             llm=self.llm,
             experiment_dir=self.experiment_dir,
             epochs=self.n_iter,
             batch_size=self.batch_size,
-            efficient_finetuning=self.efficient_finetuning,
-            train_kwargs=self.train_kwargs,
+            **self.train_kwargs,
         )
-
-    @validate_arguments(config=dict(arbitrary_types_allowed=True))
-    def encode(self, X: pd.DataFrame) -> pd.DataFrame:
-        return self.encoder.transform(X)
-
-    @validate_arguments(config=dict(arbitrary_types_allowed=True))
-    def decode(self, X: pd.DataFrame) -> pd.DataFrame:
-        return self.encoder.inverse_transform(X)
-
-    def get_encoder(self) -> TabularEncoder:
-        return self.encoder
 
     @validate_arguments(config=dict(arbitrary_types_allowed=True))
     def fit(
@@ -128,9 +106,8 @@ class TabularGReaT:
         Returns:
             GReaTTrainer used for the fine-tuning process
         """
-        X_enc = self.encode(X)
         self.model.fit(
-            data=X_enc,
+            data=X,
             conditional_col=conditional_col,
             resume_from_checkpoint=resume_from_checkpoint,
         )

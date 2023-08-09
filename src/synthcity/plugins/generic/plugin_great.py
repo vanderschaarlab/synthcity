@@ -4,7 +4,7 @@ Reference: "Language Models are Realistic Tabular Data Generators" Authors: Vadi
 
 # stdlib
 from pathlib import Path
-from typing import Any, List, Union
+from typing import Any, Dict, List, Optional, Union
 
 # third party
 import pandas as pd
@@ -14,11 +14,9 @@ import torch
 from pydantic import validate_arguments
 
 # synthcity absolute
+import synthcity.logger as log
 from synthcity.plugins.core.dataloader import DataLoader
-from synthcity.plugins.core.distribution import (  # CategoricalDistribution,
-    Distribution,
-    IntegerDistribution,
-)
+from synthcity.plugins.core.distribution import Distribution, IntegerDistribution
 from synthcity.plugins.core.models.tabular_great import TabularGReaT
 from synthcity.plugins.core.plugin import Plugin
 from synthcity.plugins.core.schema import Schema
@@ -50,8 +48,13 @@ class GReaTPlugin(Plugin):
     @validate_arguments(config=dict(arbitrary_types_allowed=True))
     def __init__(
         self,
-        # n_iter: int = 1000,
+        n_iter: int = 100,
+        llm: str = "distilgpt2",
+        experiment_dir: str = "trainer_great",
+        batch_size: int = 8,
+        train_kwargs: Dict = {},
         # core plugin arguments
+        logging_epoch: int = 100,
         device: Union[str, torch.device] = DEVICE,
         random_state: int = 0,
         sampling_patience: int = 500,
@@ -67,7 +70,24 @@ class GReaTPlugin(Plugin):
         Based on: https://openreview.net/forum?id=cEygmQNOeI
 
         Args:
-
+            n_iter: Optional[int]
+                Number of iterations or epochs to train the model. Defaults to 100.
+            llm: Optional[str]
+                The language model to use. HuggingFace checkpoint of a pretrained large
+                language model, used a basis of our model. Defaults to "distilgpt2".
+            experiment_dir: Optional[str]
+                The directory to save the model checkpoints and logs inside the workspace. Defaults to "trainer_great".
+            batch_size: Optional[int]
+                Batch size for training the model. Defaults to 8.
+            train_kwargs: Optional[int]
+                Additional hyperparameters added to the TrainingArguments used by the
+                HuggingFaceLibrary, see here the full list of all possible values
+                https://huggingface.co/docs/transformers/main/en/main_classes/trainer#transformers.TrainingArguments.
+                Defaults to {}.
+            conditional_col: [str] = "target"
+                The column to condition the generation on. Defaults to "target".
+            conditional_col_dist: Union[dict, List] = {}
+                The distribution of the conditional column. Defaults to {}.
             device: Union[str, torch.device] = synthcity.utils.constants.DEVICE
                 The device that the model is run on. Defaults to "cuda" if cuda is available else "cpu".
             random_state: int = 0
@@ -89,7 +109,11 @@ class GReaTPlugin(Plugin):
             compress_dataset=compress_dataset,
             **kwargs,
         )
-        # self.num_trees = num_trees # TODO: check if this is needed for great
+        self.n_iter = n_iter
+        self.llm = llm
+        self.experiment_dir = str((self.workspace / Path(experiment_dir)).resolve())
+        self.batch_size = batch_size
+        self.train_kwargs = train_kwargs
 
     @staticmethod
     def name() -> str:
@@ -103,39 +127,66 @@ class GReaTPlugin(Plugin):
     def hyperparameter_space(**kwargs: Any) -> List[Distribution]:
         return [
             IntegerDistribution(name="n_iter", low=50, high=500, step=50),
-            # TODO: Add more parameters here like llm select from categorical, etc.
         ]
 
-    def _fit(self, X: DataLoader, *args: Any, **kwargs: Any) -> "GReaTPlugin":
-        """_summary_
+    def _fit(
+        self,
+        X: DataLoader,
+        conditional_col: Optional[str] = None,
+        resume_from_checkpoint: Union[str, bool] = False,
+        *args: Any,
+        **kwargs: Any,
+    ) -> "GReaTPlugin":
+        """
+        Internal fit method for the GReaT plugin.
 
         Args:
-            X (DataLoader): _description_
-            kwargs (Any): keyword arguments passed on to an SKLearn RandomForestClassifier
+            X (DataLoader): The data to fit the model on.
 
         Raises:
-            NotImplementedError: _description_
+            NotImplementedError: _description_ # TODO: update this
 
         Returns:
-            ARFPlugin: _description_
+            GReaTPlugin: The fitted plugin.
         """
         self.model = TabularGReaT(
             X.dataframe(),
-            # self.num_trees,
-            **kwargs,
+            n_iter=self.n_iter,
+            llm=self.llm,
+            experiment_dir=self.experiment_dir,
+            batch_size=self.batch_size,
+            train_kwargs=self.train_kwargs,
         )
         if "cond" in kwargs and kwargs["cond"] is not None:
             raise NotImplementedError(
-                "conditional generation is not currently available for the Generation of Realistic Tabular data with pretrained Transformer-based language models (GReaT) plugin."
-            )
-        self.model.fit(X.dataframe(), **kwargs)
+                "Conditional generation is not currently available for the Generation of Realistic Tabular data with pretrained Transformer-based language models (GReaT) plugin."
+            )  # TODO: understand conditional col and update this
+        self.model.fit(
+            X.dataframe(),
+            conditional_col=conditional_col,
+            resume_from_checkpoint=resume_from_checkpoint,
+        )
+        log.debug(self.model)
         return self
 
     def _generate(self, count: int, syn_schema: Schema, **kwargs: Any) -> pd.DataFrame:
+        """
+        Internal generate method for the GReaT plugin.
+
+        Args:
+            count (int): The number of rows to generate.
+            syn_schema (Schema): The schema to generate data for.
+
+        Raises:
+            NotImplementedError: _description_ # TODO: update this
+
+        Returns:
+            pd.DataFrame: The generated data.
+        """
         if "cond" in kwargs and kwargs["cond"] is not None:
             raise NotImplementedError(
                 "conditional generation is not currently available for the Generation of Realistic Tabular data with pretrained Transformer-based language models (GReaT) plugin."
-            )
+            )  # TODO: understand conditional col and update this
 
         return self._safe_generate(self.model.generate, count, syn_schema)
 
