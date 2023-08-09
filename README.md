@@ -33,7 +33,7 @@
 - :key: Easy to extend pluginable architecture.
 - :cyclone: Several evaluation metrics for correctness and privacy.
 - :fire: Several reference models, by type:
-    - General purpose: GAN-based (AdsGAN, CTGAN, PATEGAN, DP-GAN),VAE-based(TVAE, RTVAE), Normalizing flows, Bayesian Networks(PrivBayes, BN).
+    - General purpose: GAN-based (AdsGAN, CTGAN, PATEGAN, DP-GAN),VAE-based(TVAE, RTVAE), Normalizing flows, Bayesian Networks(PrivBayes, BN), Random Forrest (arfpy), LLM-based (GReaT).
     - Time Series & Time-Series Survival generators: TimeGAN, FourierFlows, TimeVAE.
     - Static Survival Analysis: SurvivalGAN, SurVAE.
     - Privacy-focused: DECAF, DP-GAN, AdsGAN, PATEGAN, PrivBayes.
@@ -63,9 +63,19 @@ Other library extensions:
 ```bash
  pip install synthcity[goggle]
 ```
- * Install the library with ALL the extensions
+ * Install the library with ALL the extensions that are compatible with all others
 ```bash
  pip install synthcity[all]
+```
+However, there are two plugins that are not compatible with each other. The only way to use either of these plugins is to specifically install their respective extra. These methods are `arfpy` which is an Adversarial Random Forrest method and `GReaT`, which uses pre-trained Transformer-based language models to generate records.
+
+ * Install the library arfpy
+```bash
+ pip install synthcity[arfpy]
+```
+ * Install the library GReaT
+```bash
+ pip install synthcity[great]
 ```
 
 
@@ -327,6 +337,18 @@ assert syn_model.name() == reloaded.name()
 | Method | Description | Reference |
 |--- | --- | --- |
 |**ddpm**| TabDDPM: Modelling Tabular Data with Diffusion Models. | [Paper](https://arxiv.org/abs/2209.15421) |
+
+### Random Forest models
+
+| Method | Description | Reference |
+|--- | --- | --- |
+|**arfpy**| Adversarial Random Forests for Density Estimation and Generative Modeling | [Paper](https://proceedings.mlr.press/v206/watson23a.html) |
+
+### LLM-based models
+
+| Method | Description | Reference |
+|--- | --- | --- |
+|**GReaT**| Language Models are Realistic Tabular Data Generators | [Paper](https://openreview.net/forum?id=cEygmQNOeI) |
 
 ### Static Survival analysis methods
 
