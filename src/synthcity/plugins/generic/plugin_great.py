@@ -1,5 +1,5 @@
 """
-Reference: "Adversarial random forests for density estimation and generative modeling" Authors: David S. Watson, Kristin Blesch, Jan Kapar, and Marvin N. Wright
+Reference: "Language Models are Realistic Tabular Data Generators" Authors: Vadim Borisov and Kathrin Sessler and Tobias Leemann and Martin Pawelczyk and Gjergji Kasneci
 """
 
 # stdlib
@@ -15,20 +15,19 @@ from pydantic import validate_arguments
 
 # synthcity absolute
 from synthcity.plugins.core.dataloader import DataLoader
-from synthcity.plugins.core.distribution import (
-    CategoricalDistribution,
+from synthcity.plugins.core.distribution import (  # CategoricalDistribution,
     Distribution,
     IntegerDistribution,
 )
-from synthcity.plugins.core.models.tabular_arf import TabularARF
+from synthcity.plugins.core.models.tabular_great import TabularGReaT
 from synthcity.plugins.core.plugin import Plugin
 from synthcity.plugins.core.schema import Schema
 from synthcity.utils.constants import DEVICE
 
 
-class ARFPlugin(Plugin):
+class GReaTPlugin(Plugin):
     """
-    .. inheritance-diagram:: synthcity.plugins.generic.plugin_arf.ARFPlugin
+    .. inheritance-diagram:: synthcity.plugins.generic.plugin_great.GReaTPlugin
         :parts: 1
 
     Args:
@@ -52,12 +51,6 @@ class ARFPlugin(Plugin):
     def __init__(
         self,
         # n_iter: int = 1000,
-        num_trees: int = 30,
-        delta: int = 0,
-        max_iters: int = 10,
-        early_stop: bool = True,
-        verbose: bool = True,
-        min_node_size: int = 5,
         # core plugin arguments
         device: Union[str, torch.device] = DEVICE,
         random_state: int = 0,
@@ -67,24 +60,14 @@ class ARFPlugin(Plugin):
         **kwargs: Any,
     ) -> None:
         """
-        .. inheritance-diagram:: synthcity.plugins.generic.plugin_arf.ARFPlugin
+        .. inheritance-diagram:: synthcity.plugins.generic.plugin_great.GReaTPlugin
         :parts: 1
 
-        Adversarial Random Forest implementation.
+        Generation of Realistic Tabular data with pretrained Transformer-based language models (GReaT) implementation.
+        Based on: https://openreview.net/forum?id=cEygmQNOeI
 
         Args:
-            n_iter: int = 1000
-                Maximum number of iterations in the Generator. Defaults to 1000.
-            learning_rate: float = 5e-3
-                Generator learning rate, used by the Adam optimizer. Defaults to 5e-3.
-            weight_decay: float = 1e-3
-                Generator weight decay, used by the Adam optimizer. Defaults to 1e-3.
-            batch_size: int = 32
-                batch size. Defaults to 32.
-            patience: int = 50
-                Max number of iterations without any improvement before early stopping is triggered. Defaults to 50.
-            logging_epoch: int = 100
-                The number of epochs after which information is sent to the debugging level of the logger. Defaults to 100.
+
             device: Union[str, torch.device] = synthcity.utils.constants.DEVICE
                 The device that the model is run on. Defaults to "cuda" if cuda is available else "cpu".
             random_state: int = 0
@@ -106,16 +89,11 @@ class ARFPlugin(Plugin):
             compress_dataset=compress_dataset,
             **kwargs,
         )
-        self.num_trees = num_trees
-        self.delta = delta
-        self.max_iters = max_iters
-        self.early_stop = early_stop
-        self.verbose = verbose
-        self.min_node_size = min_node_size
+        # self.num_trees = num_trees # TODO: check if this is needed for great
 
     @staticmethod
     def name() -> str:
-        return "arf"
+        return "great"
 
     @staticmethod
     def type() -> str:
@@ -124,16 +102,11 @@ class ARFPlugin(Plugin):
     @staticmethod
     def hyperparameter_space(**kwargs: Any) -> List[Distribution]:
         return [
-            IntegerDistribution(name="num_trees", low=10, high=100, step=10),
-            IntegerDistribution(
-                name="delta", low=0, high=50, step=2
-            ),  # TODO: check if this is the right range
-            IntegerDistribution(name="max_iters", low=1, high=5, step=1),
-            CategoricalDistribution(name="early_stop", choices=[True, False]),
-            IntegerDistribution(name="min_node_size", low=2, high=20, step=2),
+            IntegerDistribution(name="n_iter", low=50, high=500, step=50),
+            # TODO: Add more parameters here like llm select from categorical, etc.
         ]
 
-    def _fit(self, X: DataLoader, *args: Any, **kwargs: Any) -> "ARFPlugin":
+    def _fit(self, X: DataLoader, *args: Any, **kwargs: Any) -> "GReaTPlugin":
         """_summary_
 
         Args:
@@ -146,19 +119,14 @@ class ARFPlugin(Plugin):
         Returns:
             ARFPlugin: _description_
         """
-        self.model = TabularARF(
+        self.model = TabularGReaT(
             X.dataframe(),
-            self.num_trees,
-            self.delta,
-            self.max_iters,
-            self.early_stop,
-            self.verbose,
-            self.min_node_size,
+            # self.num_trees,
             **kwargs,
         )
         if "cond" in kwargs and kwargs["cond"] is not None:
             raise NotImplementedError(
-                "conditional generation is not currently available for the Adversarial Random Forest (ARF) plugin."
+                "conditional generation is not currently available for the Generation of Realistic Tabular data with pretrained Transformer-based language models (GReaT) plugin."
             )
         self.model.fit(X.dataframe(), **kwargs)
         return self
@@ -166,10 +134,10 @@ class ARFPlugin(Plugin):
     def _generate(self, count: int, syn_schema: Schema, **kwargs: Any) -> pd.DataFrame:
         if "cond" in kwargs and kwargs["cond"] is not None:
             raise NotImplementedError(
-                "conditional generation is not currently available for the Adversarial Random Forest (ARF) plugin."
+                "conditional generation is not currently available for the Generation of Realistic Tabular data with pretrained Transformer-based language models (GReaT) plugin."
             )
 
         return self._safe_generate(self.model.generate, count, syn_schema)
 
 
-plugin = ARFPlugin
+plugin = GReaTPlugin
