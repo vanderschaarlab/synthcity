@@ -38,3 +38,12 @@ jobs:
         run: |
           pip install .[testing,goggle]
           pytest -vvvs -k goggle --durations=50
+      - name: Test arf
+        run: |
+          pip install .[arf]
+          pytest -vvvsx -m "not slow" -k arf
+      - name: Test GReaT
+        run: |
+          pip uninstall numpy -y
+          pip install .[great]
+          pytest -vvvsx -m "not slow" -k great

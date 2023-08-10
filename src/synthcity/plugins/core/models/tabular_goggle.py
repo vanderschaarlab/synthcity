@@ -217,7 +217,7 @@ class TabularGoggle:
         X: pd.DataFrame,
         encoded: bool = False,
         **kwargs: Any,
-    ) -> None:
+    ) -> Any:
         X_enc = self.encode(X)
         self.model.fit(
             X_enc,
@@ -226,6 +226,7 @@ class TabularGoggle:
             optimiser=self.optimiser,
             **kwargs,
         )
+        return self
 
     @validate_arguments(config=dict(arbitrary_types_allowed=True))
     def generate(

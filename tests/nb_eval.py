@@ -21,6 +21,30 @@ def run_notebook(notebook_path: Path) -> None:
     proc.preprocess(nb, {"metadata": {"path": workspace}})
 
 
+try:
+    # synthcity absolute
+    from synthcity.plugins.core.models.tabular_goggle import TabularGoggle  # noqa: F401
+
+    goggle_disabled = False
+except ImportError:
+    goggle_disabled = True
+
+try:
+    # synthcity absolute
+    from synthcity.plugins.core.models.tabular_arf import TabularARF  # noqa: F401
+
+    arf_disabled = False
+except ImportError:
+    arf_disabled = True
+
+try:
+    # synthcity absolute
+    from synthcity.plugins.core.models.tabular_great import TabularGReaT  # noqa: F401
+
+    great_disabled = False
+except ImportError:
+    great_disabled = True
+
 all_tests = [
     "basic_examples",
     "benchmarks",
@@ -50,6 +74,13 @@ all_tests = [
     "plugin_timegan",
 ]
 
+if not goggle_disabled:
+    all_tests.append("plugin_goggle")
+if not arf_disabled:
+    all_tests.append("plugin_arf")
+if not great_disabled:
+    all_tests.append("plugin_great")
+
 minimal_tests = [
     "basic_examples",
     "plugin_adsgan",
@@ -59,12 +90,20 @@ minimal_tests = [
     "plugin_timegan",
 ]
 
+# For extras
+goggle_tests = ["plugin_goggle"]
+arf_tests = ["plugin_arf"]
+great_tests = ["plugin_great"]
+
 
 @click.command()
 @click.option("--nb_dir", type=str, default=".")
 @click.option(
     "--tutorial_tests",
-    type=click.Choice(["minimal_tests", "all_tests"], case_sensitive=False),
+    type=click.Choice(
+        ["minimal_tests", "all_tests", "goggle_tests", "plugin_arf", "plugin_great"],
+        case_sensitive=False,
+    ),
     default="minimal_tests",
 )
 def main(nb_dir: Path, tutorial_tests: str) -> None:

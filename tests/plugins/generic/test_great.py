@@ -7,75 +7,72 @@ import numpy as np
 import pandas as pd
 import pkg_resources
 import pytest
-from generic_helpers import generate_fixtures, get_airfoil_dataset
-from sklearn.datasets import load_diabetes, load_iris
+from generic_helpers import generate_fixtures
+from sklearn.datasets import load_iris
 
 # synthcity absolute
 from synthcity.metrics.eval import PerformanceEvaluatorXGB
 from synthcity.plugins import Plugin
 from synthcity.plugins.core.constraints import Constraints
 from synthcity.plugins.core.dataloader import GenericDataLoader
-from synthcity.plugins.generic.plugin_arf import plugin
+from synthcity.plugins.generic.plugin_great import plugin
 from synthcity.utils.serialization import load, save
 
-arf_extra_not_installed = plugin is None
-if not arf_extra_not_installed:
-    arf_dependencies = {"arfpy"}
+great_extra_not_installed = plugin is None
+if not great_extra_not_installed:
+    great_dependencies = {"be_great"}
     installed = {pkg.key for pkg in pkg_resources.working_set}
-    arf_extra_not_installed = len(arf_dependencies - installed) > 0
+    great_extra_not_installed = len(great_dependencies - installed) > 0
 
-plugin_name = "arf"
+plugin_name = "great"
 plugin_args = {
-    "num_trees": 10,
-    "delta": 0,
-    "max_iters": 15,
-    "early_stop": True,
-    "verbose": True,
-    "min_node_size": 10,
+    "batch_size": 16,
+    "n_iter": 50,
+    "llm": "distilgpt2",
 }
 
 
-@pytest.mark.skipif(arf_extra_not_installed, reason="ARF extra not installed")
+@pytest.mark.skipif(great_extra_not_installed, reason="great extra not installed")
 @pytest.mark.parametrize("test_plugin", generate_fixtures(plugin_name, plugin))
 def test_plugin_sanity(test_plugin: Plugin) -> None:
     assert test_plugin is not None
 
 
-@pytest.mark.skipif(arf_extra_not_installed, reason="ARF extra not installed")
+@pytest.mark.skipif(great_extra_not_installed, reason="great extra not installed")
 @pytest.mark.parametrize("test_plugin", generate_fixtures(plugin_name, plugin))
 def test_plugin_name(test_plugin: Plugin) -> None:
     assert test_plugin.name() == plugin_name
 
 
-@pytest.mark.skipif(arf_extra_not_installed, reason="ARF extra not installed")
+@pytest.mark.skipif(great_extra_not_installed, reason="great extra not installed")
 @pytest.mark.parametrize("test_plugin", generate_fixtures(plugin_name, plugin))
 def test_plugin_type(test_plugin: Plugin) -> None:
     assert test_plugin.type() == "generic"
 
 
-@pytest.mark.skipif(arf_extra_not_installed, reason="ARF extra not installed")
+@pytest.mark.skipif(great_extra_not_installed, reason="great extra not installed")
 @pytest.mark.parametrize("test_plugin", generate_fixtures(plugin_name, plugin))
 def test_plugin_hyperparams(test_plugin: Plugin) -> None:
-    assert len(test_plugin.hyperparameter_space()) == 5
+    assert len(test_plugin.hyperparameter_space()) == 1
 
 
-@pytest.mark.skipif(arf_extra_not_installed, reason="ARF extra not installed")
+@pytest.mark.skipif(great_extra_not_installed, reason="great extra not installed")
 @pytest.mark.parametrize(
     "test_plugin", generate_fixtures(plugin_name, plugin, plugin_args)
 )
 def test_plugin_fit(test_plugin: Plugin) -> None:
-    X = get_airfoil_dataset()
+    X, _ = load_iris(as_frame=True, return_X_y=True)
     test_plugin.fit(GenericDataLoader(X))
 
 
-@pytest.mark.skipif(arf_extra_not_installed, reason="ARF extra not installed")
+@pytest.mark.skipif(great_extra_not_installed, reason="great extra not installed")
 @pytest.mark.parametrize(
     "test_plugin",
     generate_fixtures(plugin_name, plugin, plugin_args),
 )
 @pytest.mark.parametrize("serialize", [True, False])
 def test_plugin_generate(test_plugin: Plugin, serialize: bool) -> None:
-    X, y = load_diabetes(return_X_y=True, as_frame=True)
+    X, y = load_iris(return_X_y=True, as_frame=True)
     X["target"] = y
     test_plugin.fit(GenericDataLoader(X))
 
@@ -83,7 +80,7 @@ def test_plugin_generate(test_plugin: Plugin, serialize: bool) -> None:
         saved = save(test_plugin)
         test_plugin = load(saved)
 
-    X_gen = test_plugin.generate()
+    X_gen = test_plugin.generate(max_length=1000)
     assert len(X_gen) == len(X)
     assert X_gen.shape[1] == X.shape[1]
     assert test_plugin.schema_includes(X_gen)
@@ -100,11 +97,11 @@ def test_plugin_generate(test_plugin: Plugin, serialize: bool) -> None:
     assert (X_gen1.numpy() != X_gen3.numpy()).any()
 
 
-@pytest.mark.skipif(arf_extra_not_installed, reason="ARF extra not installed")
+@pytest.mark.skipif(great_extra_not_installed, reason="great extra not installed")
 @pytest.mark.parametrize(
     "test_plugin", generate_fixtures(plugin_name, plugin, plugin_args)
 )
-def test_plugin_generate_constraints_arf(test_plugin: Plugin) -> None:
+def test_plugin_generate_constraints_great(test_plugin: Plugin) -> None:
     X, y = load_iris(as_frame=True, return_X_y=True)
     X["target"] = y
     test_plugin.fit(GenericDataLoader(X))
@@ -115,20 +112,22 @@ def test_plugin_generate_constraints_arf(test_plugin: Plugin) -> None:
         ]
     )
 
-    X_gen = test_plugin.generate(constraints=constraints).dataframe()
+    X_gen = test_plugin.generate(max_length=1000, constraints=constraints).dataframe()
     assert len(X_gen) == len(X)
     assert test_plugin.schema_includes(X_gen)
     assert constraints.filter(X_gen).sum() == len(X_gen)
     assert (X_gen["target"] == 1).all()
 
-    X_gen = test_plugin.generate(count=50, constraints=constraints).dataframe()
-    assert len(X_gen) == 50
+    X_gen = test_plugin.generate(
+        count=10, max_length=1000, constraints=constraints
+    ).dataframe()
+    assert len(X_gen) == 10
     assert test_plugin.schema_includes(X_gen)
     assert constraints.filter(X_gen).sum() == len(X_gen)
     assert list(X_gen.columns) == list(X.columns)
 
 
-@pytest.mark.skipif(arf_extra_not_installed, reason="ARF extra not installed")
+@pytest.mark.skipif(great_extra_not_installed, reason="great extra not installed")
 def test_sample_hyperparams() -> None:
     assert plugin is not None
     for i in range(100):
@@ -136,10 +135,10 @@ def test_sample_hyperparams() -> None:
         assert plugin(**args) is not None
 
 
-@pytest.mark.skipif(arf_extra_not_installed, reason="ARF extra not installed")
+@pytest.mark.skipif(great_extra_not_installed, reason="great extra not installed")
 @pytest.mark.slow
 @pytest.mark.parametrize("compress_dataset", [True, False])
-def test_eval_performance_arf(compress_dataset: bool) -> None:
+def test_eval_performance_great(compress_dataset: bool) -> None:
     assert plugin is not None
     results = []
 
@@ -152,13 +151,14 @@ def test_eval_performance_arf(compress_dataset: bool) -> None:
         evaluator = PerformanceEvaluatorXGB()
 
         test_plugin.fit(X)
-        X_syn = test_plugin.generate(count=100)
+        X_syn = test_plugin.generate(count=100, max_length=1000)
 
         results.append(evaluator.evaluate(X, X_syn)["syn_id"])
 
     assert np.mean(results) > 0.7
 
 
+@pytest.mark.skipif(great_extra_not_installed, reason="great extra not installed")
 def gen_datetime(min_year: int = 2000, max_year: int = datetime.now().year) -> datetime:
     # generate a datetime in format yyyy-mm-dd hh:mm:ss.000000
     start = datetime(min_year, 1, 1, 00, 00, 00)
@@ -167,7 +167,7 @@ def gen_datetime(min_year: int = 2000, max_year: int = datetime.now().year) -> d
     return start + (end - start) * random.random()
 
 
-@pytest.mark.skipif(arf_extra_not_installed, reason="ARF extra not installed")
+@pytest.mark.skipif(great_extra_not_installed, reason="great extra not installed")
 @pytest.mark.slow
 def test_plugin_encoding() -> None:
     assert plugin is not None
@@ -177,7 +177,7 @@ def test_plugin_encoding() -> None:
     test_plugin = plugin(**plugin_args)
     test_plugin.fit(df)
 
-    syn = test_plugin.generate(10)
+    syn = test_plugin.generate(10, max_length=1000)
 
     assert len(syn) == 10
     assert test_plugin.schema_includes(syn)

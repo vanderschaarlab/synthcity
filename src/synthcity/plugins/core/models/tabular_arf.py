@@ -54,7 +54,7 @@ class TabularARF:
 
         Adversarial random forests for tabular data.
 
-        This class cis a simple wrapper around the arfpy module which implements Adversarial random forests for tabular data.
+        This class is a simple wrapper around the arfpy module which implements Adversarial random forests for tabular data.
 
         Args:
             # ARF parameters
@@ -115,7 +115,7 @@ class TabularARF:
         self,
         X: pd.DataFrame,
         var_threshold: int = 10,
-    ) -> None:
+    ) -> Any:
         # Make low variance columns are passed as objects
         object_cols = self.get_categorical_cols(X, var_threshold)
         for col in object_cols:
@@ -130,6 +130,7 @@ class TabularARF:
             verbose=self.verbose,
             min_node_size=self.min_node_size,
         )
+        return self
 
     @validate_arguments(config=dict(arbitrary_types_allowed=True))
     def generate(

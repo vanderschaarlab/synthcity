@@ -20,10 +20,17 @@ from synthcity.plugins.core.distribution import (
     Distribution,
     IntegerDistribution,
 )
-from synthcity.plugins.core.models.tabular_arf import TabularARF
 from synthcity.plugins.core.plugin import Plugin
 from synthcity.plugins.core.schema import Schema
 from synthcity.utils.constants import DEVICE
+
+try:
+    # synthcity absolute
+    from synthcity.plugins.core.models.tabular_arf import TabularARF
+
+    module_disabled = False
+except ImportError:
+    module_disabled = True
 
 
 class ARFPlugin(Plugin):
@@ -166,10 +173,13 @@ class ARFPlugin(Plugin):
     def _generate(self, count: int, syn_schema: Schema, **kwargs: Any) -> pd.DataFrame:
         if "cond" in kwargs and kwargs["cond"] is not None:
             raise NotImplementedError(
-                "conditional generation is not currently available for the goggle plugin."
+                "conditional generation is not currently available for the Adversarial Random Forest (ARF) plugin."
             )
 
         return self._safe_generate(self.model.generate, count, syn_schema)
 
 
-plugin = ARFPlugin
+if module_disabled:
+    plugin = None
+else:
+    plugin = ARFPlugin
