@@ -5,6 +5,7 @@ from datetime import datetime, timedelta
 # third party
 import numpy as np
 import pandas as pd
+import pkg_resources
 import pytest
 from generic_helpers import generate_fixtures
 from sklearn.datasets import load_iris
@@ -17,6 +18,12 @@ from synthcity.plugins.core.dataloader import GenericDataLoader
 from synthcity.plugins.generic.plugin_great import plugin
 from synthcity.utils.serialization import load, save
 
+great_extra_not_installed = plugin is None
+if not great_extra_not_installed:
+    great_dependencies = {"be_great"}
+    installed = {pkg.key for pkg in pkg_resources.working_set}
+    great_extra_not_installed = len(great_dependencies - installed) > 0
+
 plugin_name = "great"
 plugin_args = {
     "batch_size": 16,
@@ -25,6 +32,7 @@ plugin_args = {
 }
 
 
+@pytest.mark.skipif(great_extra_not_installed, reason="great extra not installed")
 @pytest.mark.parametrize("test_plugin", generate_fixtures(plugin_name, plugin))
 def test_plugin_sanity(test_plugin: Plugin) -> None:
     assert test_plugin is not None

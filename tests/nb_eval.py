@@ -90,12 +90,20 @@ minimal_tests = [
     "plugin_timegan",
 ]
 
+# For extras
+goggle_tests = ["plugin_goggle"]
+arf_tests = ["plugin_arf"]
+great_tests = ["plugin_great"]
+
 
 @click.command()
 @click.option("--nb_dir", type=str, default=".")
 @click.option(
     "--tutorial_tests",
-    type=click.Choice(["minimal_tests", "all_tests"], case_sensitive=False),
+    type=click.Choice(
+        ["minimal_tests", "all_tests", "goggle_tests", "plugin_arf", "plugin_great"],
+        case_sensitive=False,
+    ),
     default="minimal_tests",
 )
 def main(nb_dir: Path, tutorial_tests: str) -> None:
