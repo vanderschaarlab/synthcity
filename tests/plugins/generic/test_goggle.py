@@ -179,5 +179,4 @@ def test_eval_performance_goggle(compress_dataset: bool, decoder_arch: str) -> N
 
         results.append(evaluator.evaluate(X, X_syn)["syn_id"])
 
-    print(plugin.name(), compress_dataset, decoder_arch, results)
     assert np.mean(results) > 0.7

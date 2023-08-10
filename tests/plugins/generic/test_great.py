@@ -38,21 +38,25 @@ def test_plugin_sanity(test_plugin: Plugin) -> None:
     assert test_plugin is not None
 
 
+@pytest.mark.skipif(great_extra_not_installed, reason="great extra not installed")
 @pytest.mark.parametrize("test_plugin", generate_fixtures(plugin_name, plugin))
 def test_plugin_name(test_plugin: Plugin) -> None:
     assert test_plugin.name() == plugin_name
 
 
+@pytest.mark.skipif(great_extra_not_installed, reason="great extra not installed")
 @pytest.mark.parametrize("test_plugin", generate_fixtures(plugin_name, plugin))
 def test_plugin_type(test_plugin: Plugin) -> None:
     assert test_plugin.type() == "generic"
 
 
+@pytest.mark.skipif(great_extra_not_installed, reason="great extra not installed")
 @pytest.mark.parametrize("test_plugin", generate_fixtures(plugin_name, plugin))
 def test_plugin_hyperparams(test_plugin: Plugin) -> None:
     assert len(test_plugin.hyperparameter_space()) == 1
 
 
+@pytest.mark.skipif(great_extra_not_installed, reason="great extra not installed")
 @pytest.mark.parametrize(
     "test_plugin", generate_fixtures(plugin_name, plugin, plugin_args)
 )
@@ -61,6 +65,7 @@ def test_plugin_fit(test_plugin: Plugin) -> None:
     test_plugin.fit(GenericDataLoader(X))
 
 
+@pytest.mark.skipif(great_extra_not_installed, reason="great extra not installed")
 @pytest.mark.parametrize(
     "test_plugin",
     generate_fixtures(plugin_name, plugin, plugin_args),
@@ -92,6 +97,7 @@ def test_plugin_generate(test_plugin: Plugin, serialize: bool) -> None:
     assert (X_gen1.numpy() != X_gen3.numpy()).any()
 
 
+@pytest.mark.skipif(great_extra_not_installed, reason="great extra not installed")
 @pytest.mark.parametrize(
     "test_plugin", generate_fixtures(plugin_name, plugin, plugin_args)
 )
@@ -121,15 +127,19 @@ def test_plugin_generate_constraints_great(test_plugin: Plugin) -> None:
     assert list(X_gen.columns) == list(X.columns)
 
 
+@pytest.mark.skipif(great_extra_not_installed, reason="great extra not installed")
 def test_sample_hyperparams() -> None:
+    assert plugin is not None
     for i in range(100):
         args = plugin.sample_hyperparameters()
         assert plugin(**args) is not None
 
 
+@pytest.mark.skipif(great_extra_not_installed, reason="great extra not installed")
 @pytest.mark.slow
 @pytest.mark.parametrize("compress_dataset", [True, False])
 def test_eval_performance_great(compress_dataset: bool) -> None:
+    assert plugin is not None
     results = []
 
     Xraw, y = load_iris(return_X_y=True, as_frame=True)
@@ -145,10 +155,10 @@ def test_eval_performance_great(compress_dataset: bool) -> None:
 
         results.append(evaluator.evaluate(X, X_syn)["syn_id"])
 
-    print(plugin.name(), compress_dataset, results)
     assert np.mean(results) > 0.7
 
 
+@pytest.mark.skipif(great_extra_not_installed, reason="great extra not installed")
 def gen_datetime(min_year: int = 2000, max_year: int = datetime.now().year) -> datetime:
     # generate a datetime in format yyyy-mm-dd hh:mm:ss.000000
     start = datetime(min_year, 1, 1, 00, 00, 00)
@@ -157,8 +167,10 @@ def gen_datetime(min_year: int = 2000, max_year: int = datetime.now().year) -> d
     return start + (end - start) * random.random()
 
 
+@pytest.mark.skipif(great_extra_not_installed, reason="great extra not installed")
 @pytest.mark.slow
 def test_plugin_encoding() -> None:
+    assert plugin is not None
     data = [[gen_datetime(), i % 2 == 0, i] for i in range(1000)]
 
     df = pd.DataFrame(data, columns=["date", "bool", "int"])

@@ -130,6 +130,7 @@ def test_plugin_generate_constraints_arf(test_plugin: Plugin) -> None:
 
 @pytest.mark.skipif(arf_extra_not_installed, reason="ARF extra not installed")
 def test_sample_hyperparams() -> None:
+    assert plugin is not None
     for i in range(100):
         args = plugin.sample_hyperparameters()
         assert plugin(**args) is not None
@@ -139,6 +140,7 @@ def test_sample_hyperparams() -> None:
 @pytest.mark.slow
 @pytest.mark.parametrize("compress_dataset", [True, False])
 def test_eval_performance_arf(compress_dataset: bool) -> None:
+    assert plugin is not None
     results = []
 
     Xraw, y = load_iris(return_X_y=True, as_frame=True)
@@ -154,7 +156,6 @@ def test_eval_performance_arf(compress_dataset: bool) -> None:
 
         results.append(evaluator.evaluate(X, X_syn)["syn_id"])
 
-    print(plugin.name(), compress_dataset, results)
     assert np.mean(results) > 0.7
 
 
@@ -169,6 +170,7 @@ def gen_datetime(min_year: int = 2000, max_year: int = datetime.now().year) -> d
 @pytest.mark.skipif(arf_extra_not_installed, reason="ARF extra not installed")
 @pytest.mark.slow
 def test_plugin_encoding() -> None:
+    assert plugin is not None
     data = [[gen_datetime(), i % 2 == 0, i] for i in range(1000)]
 
     df = pd.DataFrame(data, columns=["date", "bool", "int"])
