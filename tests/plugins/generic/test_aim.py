@@ -91,7 +91,7 @@ def test_plugin_generate(test_plugin: Plugin, serialize: bool) -> None:
 @pytest.mark.parametrize(
     "test_plugin", generate_fixtures(plugin_name, plugin, plugin_args)
 )
-def test_plugin_generate_constraints_arf(test_plugin: Plugin) -> None:
+def test_plugin_generate_constraints_aim(test_plugin: Plugin) -> None:
     X = CategoricalAdultDataloader().load()
     test_plugin.fit(GenericDataLoader(X))
 
@@ -123,7 +123,7 @@ def test_sample_hyperparams() -> None:
 
 @pytest.mark.slow
 @pytest.mark.parametrize("compress_dataset", [True, False])
-def test_eval_performance_arf(compress_dataset: bool) -> None:
+def test_eval_performance_aim(compress_dataset: bool) -> None:
     assert plugin is not None
     results = []
 
