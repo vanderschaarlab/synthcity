@@ -12,6 +12,9 @@ General purpose
     Normalizing Flows <generated/synthcity.plugins.generic.plugin_nflow.rst>
     RTVAE <generated/synthcity.plugins.generic.plugin_rtvae.rst>
     TVAE <generated/synthcity.plugins.generic.plugin_tvae.rst>
+    GOGGLE <generated/synthcity.plugins.generic.plugin_goggle.rst>
+    ARF <generated/synthcity.plugins.generic.plugin_arf.rst>
+    GReaT <generated/synthcity.plugins.generic.plugin_great.rst>
 
 Privacy-focused
 -----------------
@@ -24,6 +27,7 @@ Privacy-focused
     PrivBayes <generated/synthcity.plugins.privacy.plugin_privbayes.rst>
     DP-GAN <generated/synthcity.plugins.privacy.plugin_dpgan.rst>
     DECAF <generated/synthcity.plugins.privacy.plugin_decaf.rst>
+    AIM <generated/synthcity.plugins.generic.plugin_aim.rst>
 
 Domain adaptation
 -------------------

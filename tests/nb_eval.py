@@ -72,6 +72,7 @@ all_tests = [
     "plugin_ctgan(generic)",
     "plugin_fourier_flows",
     "plugin_timegan",
+    "plugin_aim",
 ]
 
 if not goggle_disabled:
