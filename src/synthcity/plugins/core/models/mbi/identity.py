@@ -192,7 +192,8 @@ class Ones(EkteloMatrix):
         return c * Ones(self.n, self.m, self.dtype)
 
     def trace(self):
-        assert self.n == self.m, "matrix is not square"
+        if self.n != self.m:
+            raise ValueError("matrix is not square")
         return self.n
 
     @property
@@ -284,7 +285,8 @@ class Weighted(EkteloMatrix):
 
 class Product(EkteloMatrix):
     def __init__(self, A, B):
-        assert A.shape[1] == B.shape[0]
+        if A.shape[1] != B.shape[0]:
+            raise ValueError("inner dimensions do not match")
         self._A = A
         self._B = B
         self.shape = (A.shape[0], B.shape[1])
@@ -324,7 +326,8 @@ class Identity(EkteloMatrix):
         return sparse.eye(self.n, dtype=self.dtype)
 
     def __mul__(self, other):
-        assert other.shape[0] == self.n, "dimension mismatch"
+        if other.shape[0] != self.n:
+            raise ValueError("dimension mismatch")
         return other
 
     def inv(self):

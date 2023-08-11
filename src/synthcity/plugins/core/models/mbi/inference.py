@@ -109,30 +109,26 @@ class FactoredInference:
         return self.model
 
     def fix_measurements(self, measurements):
-        assert type(measurements) is list, (
-            "measurements must be a list, given " + measurements
-        )
-        assert all(
-            len(m) == 4 for m in measurements
-        ), "each measurement must be a 4-tuple (Q, y, noise,proj)"
+        if not isinstance(measurements, list):
+            raise TypeError("measurements must be a list")
+        if any(len(m) != 4 for m in measurements):
+            raise ValueError("each measurement must be a 4-tuple (Q, y, noise,proj)")
         ans = []
         for Q, y, noise, proj in measurements:
-            assert (
-                Q is None or Q.shape[0] == y.size
-            ), "shapes of Q and y are not compatible"
+            if Q is not None and Q.shape[0] != y.size:
+                raise ValueError("shapes of Q and y are not compatible")
             if type(proj) is list:
                 proj = tuple(proj)
             if type(proj) is not tuple:
                 proj = (proj,)
             if Q is None:
                 Q = sparse.eye(self.domain.size(proj))
-            assert np.isscalar(noise), "noise must be a real value, given " + str(noise)
-            assert all(a in self.domain for a in proj), (
-                str(proj) + " not contained in domain"
-            )
-            assert Q.shape[1] == self.domain.size(
-                proj
-            ), "shapes of Q and proj are not compatible"
+            if not np.isscalar(noise):
+                raise TypeError("noise must be a real value, given " + str(noise))
+            if any(a not in self.domain for a in proj):
+                raise ValueError(str(proj) + " not contained in domain")
+            if Q.shape[1] != self.domain.size(proj):
+                raise ValueError("shapes of Q and proj are not compatible")
             ans.append((Q, y, noise, proj))
         return ans
 
@@ -155,10 +151,10 @@ class FactoredInference:
         :param c, sigma: parameters of the algorithm
         :param callback: a function to be called after each iteration of optimization
         """
-        assert self.metric != "L1", "dual_averaging cannot be used with metric=L1"
-        assert (
-            not callable(self.metric) or lipschitz is not None
-        ), "lipschitz constant must be supplied"
+        if self.metric == "L1":
+            raise ValueError("dual_averaging cannot be used with metric=L1")
+        if callable(self.metric) and lipschitz is None:
+            raise ValueError("lipschitz constant must be supplied")
         self._setup(measurements, total)
         # what are c and sigma?  For now using 1
         model = self.model
@@ -203,10 +199,10 @@ class FactoredInference:
             - must be supplied for custom callable metrics
         :param callback: a function to be called after each iteration of optimization
         """
-        assert self.metric != "L1", "dual_averaging cannot be used with metric=L1"
-        assert (
-            not callable(self.metric) or lipschitz is not None
-        ), "lipschitz constant must be supplied"
+        if self.metric == "L1":
+            raise ValueError("dual_averaging cannot be used with metric=L1")
+        if callable(self.metric) and lipschitz is None:
+            raise ValueError("lipschitz constant must be supplied")
         self._setup(measurements, total)
         model = self.model
         domain, cliques, total = model.domain, model.cliques, model.total
@@ -253,9 +249,8 @@ class FactoredInference:
         :param total: The total number of records (if known)
         :param callback: a function to be called after each iteration of optimization
         """
-        assert not (
-            self.metric == "L1" and stepsize is None
-        ), "loss function not smooth, cannot use line search (specify stepsize)"
+        if self.metric == "L1" and stepsize is None:
+            raise ValueError("loss function not smooth, cannot use line search")
 
         self._setup(measurements, total)
         model = self.model

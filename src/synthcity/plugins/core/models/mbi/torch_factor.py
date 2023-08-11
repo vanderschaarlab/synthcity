@@ -16,12 +16,10 @@ class Factor:
         """
         if type(values) == np.ndarray:
             values = torch.tensor(values, dtype=torch.float32, device=Factor.device)
-        assert (
-            domain.size() == values.nelement()
-        ), "domain size does not match values size"
-        assert (
-            len(values.shape) == 1 or values.shape == domain.shape
-        ), "invalid shape for values array"
+        if domain.size() != values.nelement():
+            raise ValueError("domain size does not match values size")
+        if len(values.shape) != 1 and values.shape != domain.shape:
+            raise ValueError("invalid shape for values array")
         self.domain = domain
         self.values = values.reshape(domain.shape).to(Factor.device)
 
@@ -55,9 +53,8 @@ class Factor:
         return Factor(domain, vals)
 
     def expand(self, domain):
-        assert domain.contains(
-            self.domain
-        ), "expanded domain must contain current domain"
+        if not domain.contains(self.domain):
+            raise AssertionError("expanded domain must contain current domain")
         dims = len(domain) - len(self.domain)
         values = self.values.view(self.values.size() + tuple([1] * dims))
         ax = domain.axes(self.domain.attrs)
@@ -69,9 +66,8 @@ class Factor:
         return Factor(domain, values)
 
     def transpose(self, attrs):
-        assert set(attrs) == set(
-            self.domain.attrs
-        ), "attrs must be same as domain attributes"
+        if set(attrs) != set(self.domain.attrs):
+            raise AssertionError("attrs must be same as domain attributes")
         newdom = self.domain.project(attrs)
         ax = newdom.axes(self.domain.attrs)
         ax = tuple(np.argsort(ax))
@@ -83,7 +79,8 @@ class Factor:
         project the factor onto a list of attributes (in order)
         using either sum or logsumexp to aggregate along other attributes
         """
-        assert agg in ["sum", "logsumexp"], "agg must be sum or logsumexp"
+        if agg not in ["sum", "logsumexp"]:
+            raise ValueError("agg must be sum or logsumexp")
         marginalized = self.domain.marginalize(attrs)
         if agg == "sum":
             ans = self.sum(marginalized.attrs)
@@ -184,7 +181,6 @@ class Factor:
         return self + other
 
     def __truediv__(self, other):
-        # assert np.isscalar(other), 'divisor must be a scalar'
         if np.isscalar(other):
             return self * (1.0 / other)
         tmp = other.expand(self.domain)

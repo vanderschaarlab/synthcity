@@ -9,7 +9,8 @@ class Domain:
         :param attrs: a list or tuple of attribute names
         :param shape: a list or tuple of domain sizes for each attribute
         """
-        assert len(attrs) == len(shape), "dimensions must be equal"
+        if len(attrs) != len(shape):
+            raise AssertionError("dimensions must be equal")
         self.attrs = tuple(attrs)
         self.shape = tuple(shape)
         self.config = dict(zip(attrs, shape))

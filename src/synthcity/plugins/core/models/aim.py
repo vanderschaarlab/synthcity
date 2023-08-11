@@ -68,8 +68,10 @@ def filter_candidates(
 
 
 def cdp_delta(rho: Union[float, int], eps: Union[float, int]) -> Union[float, int]:
-    assert rho >= 0
-    assert eps >= 0
+    if rho < 0:
+        raise ValueError("rho must be positive")
+    if eps < 0:
+        raise ValueError("eps must be positive")
     if rho == 0:
         return 0  # degenerate case
 
@@ -100,8 +102,11 @@ def cdp_delta(rho: Union[float, int], eps: Union[float, int]) -> Union[float, in
 
 
 def cdp_rho(eps: float, delta: float) -> float:
-    assert eps >= 0
-    assert delta > 0
+    if eps < 0:
+        raise ValueError("eps must be positive")
+    if delta <= 0:
+        raise ValueError("delta must be positive")
+
     if delta >= 1:
         return 0.0  # if delta>=1 anything goes
     rho_min = 0.0  # maintain cdp_delta(rho,eps)<=delta

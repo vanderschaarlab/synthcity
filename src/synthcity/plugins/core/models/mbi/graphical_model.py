@@ -87,9 +87,8 @@ class GraphicalModel:
         :param matrices: a list of matrices for each attribute in the domain
         :return: the vector of query answers
         """
-        assert all(
-            M.shape[1] == n for M, n in zip(matrices, self.domain.shape)
-        ), "matrices must conform to the shape of the domain"
+        if any(M.shape[1] != n for M, n in zip(matrices, self.domain.shape)):
+            raise ValueError("matrices must conform to the shape of the domain")
         logZ = self.belief_propagation(self.potentials, logZ=True)
         factors = [self.potentials[cl].exp() for cl in self.cliques]
         Factor = type(factors[0])  # infer the type of the factors
@@ -211,12 +210,11 @@ class GraphicalModel:
         return CliqueVector(potentials)
 
     def fit(self, data):
-        # third party
-        from mbi import Factor
+        # synthcity relative
+        from .factor import Factor
 
-        assert data.domain.contains(
-            self.domain
-        ), "model domain not compatible with data domain"
+        if not data.domain.contains(self.domain):
+            raise ValueError("data domain not compatible with model domain")
         marginals = {}
         for cl in self.cliques:
             x = data.project(cl).datavector()

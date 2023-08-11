@@ -17,10 +17,10 @@ class Dataset:
         :param domain: a domain object
         :param weight: weight for each row
         """
-        assert set(domain.attrs) <= set(
-            df.columns
-        ), "data must contain domain attributes"
-        assert weights is None or df.shape[0] == weights.size
+        if set(domain.attrs) > set(df.columns):
+            raise AssertionError("data must contain domain attributes")
+        if weights is not None and df.shape[0] != weights.size:
+            raise AssertionError("weights must be the same size as the data")
         self.domain = domain
         self.df = df.loc[:, domain.attrs]
         self.weights = weights

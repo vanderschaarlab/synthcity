@@ -56,9 +56,8 @@ class Factor:
         return Factor(domain, vals)
 
     def expand(self, domain):
-        assert domain.contains(
-            self.domain
-        ), "expanded domain must contain current domain"
+        if not domain.contains(self.domain):
+            raise AssertionError("expanded domain must contain current domain")
         dims = len(domain) - len(self.domain)
         values = self.values.reshape(self.domain.shape + tuple([1] * dims))
         ax = domain.axes(self.domain.attrs)
@@ -67,9 +66,8 @@ class Factor:
         return Factor(domain, values)
 
     def transpose(self, attrs):
-        assert set(attrs) == set(
-            self.domain.attrs
-        ), "attrs must be same as domain attributes"
+        if set(attrs) != set(self.domain.attrs):
+            raise AssertionError("attrs must be same as domain attributes")
         newdom = self.domain.project(attrs)
         ax = newdom.axes(self.domain.attrs)
         values = np.moveaxis(self.values, range(len(ax)), ax)
@@ -80,7 +78,8 @@ class Factor:
         project the factor onto a list of attributes (in order)
         using either sum or logsumexp to aggregate along other attributes
         """
-        assert agg in ["sum", "logsumexp"], "agg must be sum or logsumexp"
+        if agg not in ["sum", "logsumexp"]:
+            raise AssertionError("agg must be sum or logsumexp")
         marginalized = self.domain.marginalize(attrs)
         if agg == "sum":
             ans = self.sum(marginalized.attrs)
@@ -181,7 +180,6 @@ class Factor:
         return self + other
 
     def __truediv__(self, other):
-        # assert np.isscalar(other), 'divisor must be a scalar'
         if np.isscalar(other):
             new_values = self.values / other
             new_values = np.nan_to_num(new_values)
