@@ -93,11 +93,11 @@ def test_plugin_generate(test_plugin: Plugin, serialize: bool) -> None:
 )
 def test_plugin_generate_constraints_aim(test_plugin: Plugin) -> None:
     X = CategoricalAdultDataloader().load()
-    test_plugin.fit(GenericDataLoader(X))
+    test_plugin.fit(GenericDataLoader(X, target_column="income>50K"))
 
     constraints = Constraints(
         rules=[
-            ("target", "eq", 1),
+            ("income>50K", "eq", 1),
         ]
     )
 
@@ -105,7 +105,7 @@ def test_plugin_generate_constraints_aim(test_plugin: Plugin) -> None:
     assert len(X_gen) == len(X)
     assert test_plugin.schema_includes(X_gen)
     assert constraints.filter(X_gen).sum() == len(X_gen)
-    assert (X_gen["target"] == 1).all()
+    assert (X_gen["income>50K"] == 1).all()
 
     X_gen = test_plugin.generate(count=50, constraints=constraints).dataframe()
     assert len(X_gen) == 50
