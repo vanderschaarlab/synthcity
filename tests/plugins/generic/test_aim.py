@@ -55,7 +55,7 @@ def test_plugin_hyperparams(test_plugin: Plugin) -> None:
     "test_plugin", generate_fixtures(plugin_name, plugin, plugin_args)
 )
 def test_plugin_fit(test_plugin: Plugin) -> None:
-    X = CategoricalAdultDataloader().load().header()
+    X = CategoricalAdultDataloader().load().head()
     test_plugin.fit(GenericDataLoader(X))
 
 
@@ -65,7 +65,7 @@ def test_plugin_fit(test_plugin: Plugin) -> None:
 )
 @pytest.mark.parametrize("serialize", [True, False])
 def test_plugin_generate(test_plugin: Plugin, serialize: bool) -> None:
-    X = CategoricalAdultDataloader().load().header()
+    X = CategoricalAdultDataloader().load().head()
     test_plugin.fit(GenericDataLoader(X))
 
     if serialize:
@@ -93,7 +93,7 @@ def test_plugin_generate(test_plugin: Plugin, serialize: bool) -> None:
     "test_plugin", generate_fixtures(plugin_name, plugin, plugin_args)
 )
 def test_plugin_generate_constraints_aim(test_plugin: Plugin) -> None:
-    X = CategoricalAdultDataloader().load().header()
+    X = CategoricalAdultDataloader().load().head()
     test_plugin.fit(GenericDataLoader(X, target_column="income>50K"))
 
     constraints = Constraints(
