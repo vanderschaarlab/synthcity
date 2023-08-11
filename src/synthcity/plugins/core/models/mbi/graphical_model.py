@@ -1,9 +1,9 @@
 # stdlib
 import itertools
-import pickle
 from functools import reduce
 
 # third party
+import cloudpickle
 import networkx as nx
 import numpy as np
 import pandas as pd
@@ -51,11 +51,11 @@ class GraphicalModel:
 
     @staticmethod
     def save(model, path):
-        pickle.dump(model, open(path, "wb"))
+        cloudpickle.dump(model, open(path, "wb"))
 
     @staticmethod
     def load(path):
-        return pickle.load(open(path, "rb"))
+        return cloudpickle.load(open(path, "rb"))
 
     def project(self, attrs):
         """Project the distribution onto a subset of attributes.
