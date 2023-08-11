@@ -26,6 +26,9 @@ General-purpose generators
     CTGAN <tutorials/plugins/generic/plugin_ctgan.ipynb>
     Normalizing Flows <tutorials/plugins/generic/plugin_nflow.ipynb>
     TVAE <tutorials/plugins/generic/plugin_tvae.ipynb>
+    GOGGLE <generated/synthcity.plugins.generic.plugin_goggle.rst>
+    ARF <generated/synthcity.plugins.generic.plugin_arf.rst>
+    GReaT <generated/synthcity.plugins.generic.plugin_great.rst>
 
 
 Time-series generators
@@ -49,6 +52,7 @@ Privacy-related generators
     AdsGAN <tutorials/plugins/privacy/plugin_adsgan.ipynb>
     PATEGAN <tutorials/plugins/privacy/plugin_pategan.ipynb>
     PrivBayes <tutorials/plugins/privacy/plugin_privbayes.ipynb>
+    AIM <generated/synthcity.plugins.generic.plugin_aim.rst>
 
 Domain adaptation generators
 ------------------------------

@@ -6,7 +6,7 @@ from datetime import datetime, timedelta
 import numpy as np
 import pandas as pd
 import pytest
-from generic_helpers import generate_fixtures
+from fhelpers import generate_fixtures
 from sklearn.datasets import load_iris
 
 # synthcity absolute
@@ -14,7 +14,7 @@ from synthcity.metrics.eval import PerformanceEvaluatorXGB
 from synthcity.plugins import Plugin
 from synthcity.plugins.core.constraints import Constraints
 from synthcity.plugins.core.dataloader import GenericDataLoader
-from synthcity.plugins.generic.plugin_aim import plugin
+from synthcity.plugins.privacy.plugin_aim import plugin
 from synthcity.utils.datasets.categorical.categorical_adult import (
     CategoricalAdultDataloader,
 )

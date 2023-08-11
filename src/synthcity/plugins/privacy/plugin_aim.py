@@ -29,7 +29,7 @@ from synthcity.utils.constants import DEVICE
 
 class AIMPlugin(Plugin):
     """
-    .. inheritance-diagram:: synthcity.plugins.generic.plugin_aim.AIMPlugin
+    .. inheritance-diagram:: synthcity.plugins.privacy.plugin_adsgan.AdsGANPlugin
         :parts: 1
 
     Args:
