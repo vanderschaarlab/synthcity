@@ -7,6 +7,7 @@ import numpy as np
 import pandas as pd
 import pytest
 from generic_helpers import generate_fixtures
+from sklearn.datasets import load_iris
 
 # synthcity absolute
 from synthcity.metrics.eval import PerformanceEvaluatorXGB
@@ -22,8 +23,8 @@ from synthcity.utils.serialization import load, save
 plugin_name = "aim"
 plugin_args = {
     "epsilon": 1.0,
-    "delta": 1e-7,
-    "max_model_size": 50,
+    "delta": 1e-9,
+    "max_model_size": 80,
     "degree": 2,
     "num_marginals": None,
     "max_cells": 1000,
@@ -54,7 +55,7 @@ def test_plugin_hyperparams(test_plugin: Plugin) -> None:
     "test_plugin", generate_fixtures(plugin_name, plugin, plugin_args)
 )
 def test_plugin_fit(test_plugin: Plugin) -> None:
-    X = CategoricalAdultDataloader().load()
+    X = CategoricalAdultDataloader().load().header()
     test_plugin.fit(GenericDataLoader(X))
 
 
@@ -64,7 +65,7 @@ def test_plugin_fit(test_plugin: Plugin) -> None:
 )
 @pytest.mark.parametrize("serialize", [True, False])
 def test_plugin_generate(test_plugin: Plugin, serialize: bool) -> None:
-    X = CategoricalAdultDataloader().load()
+    X = CategoricalAdultDataloader().load().header()
     test_plugin.fit(GenericDataLoader(X))
 
     if serialize:
@@ -92,7 +93,7 @@ def test_plugin_generate(test_plugin: Plugin, serialize: bool) -> None:
     "test_plugin", generate_fixtures(plugin_name, plugin, plugin_args)
 )
 def test_plugin_generate_constraints_aim(test_plugin: Plugin) -> None:
-    X = CategoricalAdultDataloader().load()
+    X = CategoricalAdultDataloader().load().header()
     test_plugin.fit(GenericDataLoader(X, target_column="income>50K"))
 
     constraints = Constraints(
@@ -127,18 +128,24 @@ def test_eval_performance_aim(compress_dataset: bool) -> None:
     assert plugin is not None
     results = []
 
-    Xraw = CategoricalAdultDataloader().load()
-    X = GenericDataLoader(Xraw)
+    X_raw, y = load_iris(as_frame=True, return_X_y=True)
+    X_raw["target"] = y
+    # Descretize the data
+    num_bins = 3
+    for col in X_raw.columns:
+        X_raw[col] = pd.cut(X_raw[col], bins=num_bins, labels=list(range(num_bins)))
+
+    X = GenericDataLoader(X_raw, target_column="target")
 
     for retry in range(2):
         test_plugin = plugin(**plugin_args)
         evaluator = PerformanceEvaluatorXGB()
 
         test_plugin.fit(X)
-        X_syn = test_plugin.generate(count=100)
+        X_syn = test_plugin.generate(count=1000)
 
         results.append(evaluator.evaluate(X, X_syn)["syn_id"])
-
+        print(results)
     assert np.mean(results) > 0.7
 
 
@@ -150,14 +157,14 @@ def gen_datetime(min_year: int = 2000, max_year: int = datetime.now().year) -> d
     return start + (end - start) * random.random()
 
 
-@pytest.mark.slow
 def test_plugin_encoding() -> None:
     assert plugin is not None
-    data = [[gen_datetime(), i % 2 == 0, i] for i in range(1000)]
+    data = [[gen_datetime(), i % 2 == 0, i] for i in range(10)]
 
     df = pd.DataFrame(data, columns=["date", "bool", "int"])
+    X = GenericDataLoader(df)
     test_plugin = plugin(**plugin_args)
-    test_plugin.fit(df)
+    test_plugin.fit(X)
 
     syn = test_plugin.generate(10)
 

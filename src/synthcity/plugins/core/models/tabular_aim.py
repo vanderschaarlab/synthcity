@@ -89,9 +89,15 @@ class TabularAIM:
         self.dataset = Dataset(X, mbi_domain)
 
         workload = list(itertools.combinations(self.dataset.domain, self.degree))
+        if len(workload) == 0:
+            raise ValueError("No workload found. Is the dataset empty?")
         workload = [
             cl for cl in workload if self.dataset.domain.size(cl) <= self.max_cells
         ]
+        if len(workload) == 0:
+            raise ValueError(
+                "Domain sizes for the cells are too large. Increase max_cells values or further discretize the data."
+            )
         if self.num_marginals is not None:
             workload = [
                 workload[i]

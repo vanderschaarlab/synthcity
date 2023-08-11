@@ -270,7 +270,6 @@ class AIM(Mechanism):
             xest = model.project(cl).datavector()
             errors[cl] = wgt * (np.linalg.norm(x - xest, 1) - bias)
             sensitivity[cl] = abs(wgt)
-
         max_sensitivity = max(
             sensitivity.values()
         )  # if all weights are 0, could be a problem
@@ -320,7 +319,6 @@ class AIM(Mechanism):
 
             rho_used += 1.0 / 8 * epsilon**2 + 0.5 / sigma**2
             size_limit = self.max_model_size * rho_used / self.rho
-
             small_candidates = filter_candidates(candidates, model, size_limit)
             cl = self.worst_approximated(
                 small_candidates, answers, model, epsilon, sigma
