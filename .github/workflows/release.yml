@@ -24,7 +24,9 @@ jobs:
           python-version: ${{ matrix.python-version }}
       - name: Build and publish
         env:
-          password: ${{ secrets.PYPI_API_TOKEN }}
+          TWINE_USERNAME: ${{ secrets.PYPI_USERNAME }}
+          TWINE_PASSWORD: ${{ secrets.PYPI_API_TOKEN }}
+
         run: ${GITHUB_WORKSPACE}/.github/workflows/scripts/release_osx.sh
 
   deploy_linux:
@@ -46,7 +48,8 @@ jobs:
             echo "/opt/python/${{ matrix.python-version }}/bin" >> $GITHUB_PATH
       - name: Build and publish
         env:
-          password: ${{ secrets.PYPI_API_TOKEN }}
+          TWINE_USERNAME: ${{ secrets.PYPI_USERNAME }}
+          TWINE_PASSWORD: ${{ secrets.PYPI_API_TOKEN }}
         run: ${GITHUB_WORKSPACE}/.github/workflows/scripts/release_linux.sh
 
   deploy_windows:
@@ -65,6 +68,7 @@ jobs:
           python-version: ${{ matrix.python-version }}
       - name: Build and publish
         env:
-          password: ${{ secrets.PYPI_API_TOKEN }}
+          TWINE_USERNAME: ${{ secrets.PYPI_USERNAME }}
+          TWINE_PASSWORD: ${{ secrets.PYPI_API_TOKEN }}
         run: |
           ../../.github/workflows/scripts/release_windows.bat
