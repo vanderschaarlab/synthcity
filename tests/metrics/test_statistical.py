@@ -301,7 +301,6 @@ def test_image_support() -> None:
         FrechetInceptionDistance,
     ]:
         score = evaluator().evaluate(X1, X2)
-        print(score)
         assert isinstance(score, dict), evaluator
         for k in score:
             assert score[k] >= 0, evaluator

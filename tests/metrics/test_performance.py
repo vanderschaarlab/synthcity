@@ -463,7 +463,6 @@ def test_evaluate_performance_time_series_survival(
     assert "syn_id.brier_score" in good_score
     assert "syn_ood.c_index" in good_score
     assert "syn_ood.brier_score" in good_score
-    print(evaluator_t, good_score)
 
     assert good_score["syn_id.c_index"] < 1
     assert good_score["syn_ood.c_index"] < 1
