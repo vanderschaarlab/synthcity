@@ -34,6 +34,9 @@ from synthcity.utils.constants import DEVICE
 from synthcity.utils.reproducibility import enable_reproducible_results
 from synthcity.utils.serialization import load_from_file, save_to_file
 
+PLUGIN_NAME_NOT_SET: str = "plugin_name_not_set"
+PLUGIN_TYPE_NOT_SET: str = "plugin_type_not_set"
+
 
 class Plugin(Serializable, metaclass=ABCMeta):
     """
@@ -82,6 +85,15 @@ class Plugin(Serializable, metaclass=ABCMeta):
         compress_dataset: bool = False,
         sampling_strategy: str = "marginal",  # uniform, marginal
     ) -> None:
+        if self.name() == PLUGIN_NAME_NOT_SET:
+            raise ValueError(
+                f"Plugin {self.__class__.__name__} `name` was not set, use Plugins().add({self.__class__.__name__}, {self.__class__})"
+            )
+        if self.type() == PLUGIN_TYPE_NOT_SET:
+            raise ValueError(
+                f"Plugin {self.__class__.__name__} `type` was not set, use Plugins().add({self.__class__.__name__}, {self.__class__})"
+            )
+
         super().__init__()
 
         enable_reproducible_results(random_state)
@@ -145,13 +157,13 @@ class Plugin(Serializable, metaclass=ABCMeta):
     @abstractmethod
     def name() -> str:
         """The name of the plugin."""
-        ...
+        return PLUGIN_NAME_NOT_SET
 
     @staticmethod
     @abstractmethod
     def type() -> str:
         """The type of the plugin."""
-        ...
+        return PLUGIN_TYPE_NOT_SET
 
     @classmethod
     def fqdn(cls) -> str:
@@ -537,6 +549,10 @@ class Plugin(Serializable, metaclass=ABCMeta):
             plot_tsne(plt, X, X_syn)
 
 
+PLUGIN_CATEGORY_REGISTRY: Dict[str, Type[Plugin]] = dict()
+PLUGIN_REGISTRY: Dict[str, Type[Plugin]] = dict()
+
+
 class PluginLoader:
     """Plugin loading utility class.
     Used to load the plugins from the current folder.
@@ -544,7 +560,7 @@ class PluginLoader:
 
     @validate_arguments
     def __init__(self, plugins: list, expected_type: Type, categories: list) -> None:
-        self._plugins: Dict[str, Type] = {}
+        self._refresh()
         self._available_plugins = {}
         for plugin in plugins:
             stem = Path(plugin).stem.split("plugin_")[-1]
@@ -554,6 +570,9 @@ class PluginLoader:
             self._available_plugins[stem] = plugin
         self._expected_type = expected_type
         self._categories = categories
+
+    def _refresh(self) -> None:
+        self._plugins: Dict[str, Type[Plugin]] = PLUGIN_REGISTRY
 
     @validate_arguments
     def _load_single_plugin_impl(self, plugin_name: str) -> Optional[Type]:
@@ -610,6 +629,7 @@ class PluginLoader:
 
     def list(self) -> List[str]:
         """Get all the available plugins."""
+        self._refresh()
         all_plugins = list(self._plugins.keys()) + list(self._available_plugins.keys())
         plugins = []
         for plugin in all_plugins:
@@ -620,10 +640,24 @@ class PluginLoader:
 
     def types(self) -> List[Type]:
         """Get the loaded plugins types"""
+        self._refresh()
         return list(self._plugins.values())
+
+    def _add_category(self, category: str, expected_class: Type) -> "PluginLoader":
+        """Add a new plugin category"""
+        log.debug(f"Registering plugin category {category}")
+        if category in PLUGIN_CATEGORY_REGISTRY:
+            raise TypeError(f"Plugin category {category} already registered")
+        if not issubclass(expected_class, Plugin):
+            raise TypeError(
+                f"Plugin expected class for category should be a subclass of {Plugin} but was {expected_class}"
+            )
+        PLUGIN_CATEGORY_REGISTRY[category] = expected_class
+        return self
 
     def add(self, name: str, cls: Type) -> "PluginLoader":
         """Add a new plugin"""
+        self._refresh()
         if name in self._plugins:
             log.info(f"Plugin {name} already exists. Overwriting")
 
@@ -631,7 +665,9 @@ class PluginLoader:
             raise ValueError(
                 f"Plugin {name} must derive the {self._expected_type} interface."
             )
-        self._plugins[name] = cls
+        if cls not in PLUGIN_CATEGORY_REGISTRY.values():
+            self._add_category(cls.type, cls)
+        PLUGIN_REGISTRY[name] = cls
         return self
 
     @validate_arguments
@@ -649,6 +685,7 @@ class PluginLoader:
         Returns:
             The new object
         """
+        self._refresh()
         if name not in self._plugins and name not in self._available_plugins:
             raise ValueError(f"Plugin {name} doesn't exist.")
 
@@ -669,6 +706,7 @@ class PluginLoader:
         Returns:
             The class of the plugin
         """
+        self._refresh()
         if name not in self._plugins and name not in self._available_plugins:
             raise ValueError(f"Plugin {name} doesn't exist.")
 
@@ -682,6 +720,7 @@ class PluginLoader:
 
     def __iter__(self) -> Generator:
         """Iterate the loaded plugins."""
+        self._refresh()
         for x in self._plugins:
             yield x
 
