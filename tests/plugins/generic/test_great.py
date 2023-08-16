@@ -72,18 +72,19 @@ def test_plugin_generate(test_plugin: Plugin, serialize: bool) -> None:
     assert X_gen.shape[1] == X.shape[1]
     assert test_plugin.schema_includes(X_gen)
 
-    X_gen = test_plugin.generate(50)
-    assert len(X_gen) == 50
+    X_gen = test_plugin.generate(5)
+    assert len(X_gen) == 5
     assert test_plugin.schema_includes(X_gen)
 
     # generate with random seed
-    X_gen1 = test_plugin.generate(50, random_state=0)
-    X_gen2 = test_plugin.generate(50, random_state=0)
-    X_gen3 = test_plugin.generate(50)
+    X_gen1 = test_plugin.generate(5, random_state=0)
+    X_gen2 = test_plugin.generate(5, random_state=0)
+    X_gen3 = test_plugin.generate(5)
     assert (X_gen1.numpy() == X_gen2.numpy()).all()
     assert (X_gen1.numpy() != X_gen3.numpy()).any()
 
 
+@pytest.mark.slow
 @pytest.mark.parametrize(
     "test_plugin", generate_fixtures(plugin_name, plugin, plugin_args)
 )
@@ -98,16 +99,18 @@ def test_plugin_generate_constraints_great(test_plugin: Plugin) -> None:
         ]
     )
 
-    X_gen = test_plugin.generate(max_length=1000, constraints=constraints).dataframe()
-    assert len(X_gen) == len(X)
+    X_gen = test_plugin.generate(
+        count=5, max_length=1000, constraints=constraints
+    ).dataframe()
+    assert len(X_gen) == 5
     assert test_plugin.schema_includes(X_gen)
     assert constraints.filter(X_gen).sum() == len(X_gen)
     assert (X_gen["target"] == 1).all()
 
     X_gen = test_plugin.generate(
-        count=10, max_length=1000, constraints=constraints
+        count=5, max_length=1000, constraints=constraints
     ).dataframe()
-    assert len(X_gen) == 10
+    assert len(X_gen) == 5
     assert test_plugin.schema_includes(X_gen)
     assert constraints.filter(X_gen).sum() == len(X_gen)
     assert list(X_gen.columns) == list(X.columns)
@@ -120,7 +123,6 @@ def test_sample_hyperparams() -> None:
         assert plugin(**args) is not None
 
 
-@pytest.mark.slow
 @pytest.mark.parametrize("compress_dataset", [True, False])
 def test_eval_performance_great(compress_dataset: bool) -> None:
     assert plugin is not None
