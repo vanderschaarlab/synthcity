@@ -67,7 +67,7 @@ def test_plugin_generate(test_plugin: Plugin, serialize: bool) -> None:
         saved = save(test_plugin)
         test_plugin = load(saved)
 
-    X_gen = test_plugin.generate(max_length=1000)
+    X_gen = test_plugin.generate(max_length=100)
     assert len(X_gen) == len(X)
     assert X_gen.shape[1] == X.shape[1]
     assert test_plugin.schema_includes(X_gen)
@@ -100,7 +100,7 @@ def test_plugin_generate_constraints_great(test_plugin: Plugin) -> None:
     )
 
     X_gen = test_plugin.generate(
-        count=5, max_length=1000, constraints=constraints
+        count=5, max_length=100, constraints=constraints
     ).dataframe()
     assert len(X_gen) == 5
     assert test_plugin.schema_includes(X_gen)
@@ -108,7 +108,7 @@ def test_plugin_generate_constraints_great(test_plugin: Plugin) -> None:
     assert (X_gen["target"] == 1).all()
 
     X_gen = test_plugin.generate(
-        count=5, max_length=1000, constraints=constraints
+        count=5, max_length=100, constraints=constraints
     ).dataframe()
     assert len(X_gen) == 5
     assert test_plugin.schema_includes(X_gen)
@@ -137,7 +137,7 @@ def test_eval_performance_great(compress_dataset: bool) -> None:
         evaluator = PerformanceEvaluatorXGB()
 
         test_plugin.fit(X)
-        X_syn = test_plugin.generate(count=100, max_length=1000)
+        X_syn = test_plugin.generate(count=100, max_length=100)
 
         results.append(evaluator.evaluate(X, X_syn)["syn_id"])
 
@@ -161,7 +161,7 @@ def test_plugin_encoding() -> None:
     test_plugin = plugin(**plugin_args)
     test_plugin.fit(df)
 
-    syn = test_plugin.generate(10, max_length=1000)
+    syn = test_plugin.generate(10, max_length=100)
 
     assert len(syn) == 10
     assert test_plugin.schema_includes(syn)
