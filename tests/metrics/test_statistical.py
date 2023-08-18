@@ -285,8 +285,9 @@ def test_evaluate_survival_km_distance(test_plugin: Plugin) -> None:
 
 def test_image_support() -> None:
     dataset = datasets.MNIST(".", download=True)
-    X1 = ImageDataLoader(dataset, random_state=1)
-    X2 = ImageDataLoader(dataset, random_state=1)
+
+    X1 = ImageDataLoader(dataset).sample(100)
+    X2 = ImageDataLoader(dataset).sample(100)
 
     for evaluator in [
         AlphaPrecision,
@@ -297,9 +298,21 @@ def test_image_support() -> None:
         MaximumMeanDiscrepancy,
         PRDCScore,
         WassersteinDistance,
+    ]:
+        score = evaluator().evaluate(X1, X2)
+        assert isinstance(score, dict), evaluator
+        for k in score:
+            assert score[k] >= 0, evaluator
+            assert not np.isnan(score[k]), evaluator
+
+    # FID needs a bigger sample
+    X1 = ImageDataLoader(dataset).sample(10000)
+    X2 = ImageDataLoader(dataset).sample(10000)
+    for evaluator in [
         FrechetInceptionDistance,
     ]:
         score = evaluator().evaluate(X1, X2)
+        print(score)
         assert isinstance(score, dict), evaluator
         for k in score:
             assert score[k] >= 0, evaluator
