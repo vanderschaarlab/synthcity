@@ -285,9 +285,8 @@ def test_evaluate_survival_km_distance(test_plugin: Plugin) -> None:
 
 def test_image_support() -> None:
     dataset = datasets.MNIST(".", download=True)
-
-    X1 = ImageDataLoader(dataset, random_state=1).sample(1000)
-    X2 = ImageDataLoader(dataset, random_state=1).sample(1000)
+    X1 = ImageDataLoader(dataset, random_state=1)
+    X2 = ImageDataLoader(dataset, random_state=1)
 
     for evaluator in [
         AlphaPrecision,
