@@ -56,14 +56,10 @@ jobs:
         run: |
           python -m pip install -U pip
           pip install -r prereq.txt
-      - name: Setup upterm session
-        uses: lhotari/action-upterm@v1
-        with:
-          ## limits ssh access and adds the ssh public key for the user which triggered the workflow
-          limit-access-to-actor: false
       - name: Test Core
         run: |
           pip install .[testing]
+          pip freeze
           pytest -vvvsx -m "not slow" --durations=50
       - name: Test GOGGLE
         run: |
