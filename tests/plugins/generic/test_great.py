@@ -1,4 +1,5 @@
 # stdlib
+import os
 import random
 from datetime import datetime, timedelta
 
@@ -16,6 +17,8 @@ from synthcity.plugins.core.constraints import Constraints
 from synthcity.plugins.core.dataloader import GenericDataLoader
 from synthcity.plugins.generic.plugin_great import plugin
 from synthcity.utils.serialization import load, save
+
+IN_GITHUB_ACTIONS: bool = os.getenv("GITHUB_ACTIONS") == "true"
 
 plugin_name = "great"
 plugin_args = {
@@ -53,6 +56,10 @@ def test_plugin_fit(test_plugin: Plugin) -> None:
     test_plugin.fit(GenericDataLoader(X))
 
 
+@pytest.mark.skipif(
+    IN_GITHUB_ACTIONS,
+    reason="GReaT generate required too much memory to reliably run in GitHub Actions",
+)
 @pytest.mark.parametrize(
     "test_plugin",
     generate_fixtures(plugin_name, plugin, plugin_args),
@@ -85,6 +92,10 @@ def test_plugin_generate(test_plugin: Plugin, serialize: bool) -> None:
 
 
 @pytest.mark.slow
+@pytest.mark.skipif(
+    IN_GITHUB_ACTIONS,
+    reason="GReaT generate required too much memory to reliably run in GitHub Actions",
+)
 @pytest.mark.parametrize(
     "test_plugin", generate_fixtures(plugin_name, plugin, plugin_args)
 )
@@ -123,6 +134,10 @@ def test_sample_hyperparams() -> None:
         assert plugin(**args) is not None
 
 
+@pytest.mark.skipif(
+    IN_GITHUB_ACTIONS,
+    reason="GReaT generate required too much memory to reliably run in GitHub Actions",
+)
 @pytest.mark.parametrize("compress_dataset", [True, False])
 def test_eval_performance_great(compress_dataset: bool) -> None:
     assert plugin is not None
@@ -153,6 +168,10 @@ def gen_datetime(min_year: int = 2000, max_year: int = datetime.now().year) -> d
 
 
 @pytest.mark.slow
+@pytest.mark.skipif(
+    IN_GITHUB_ACTIONS,
+    reason="GReaT generate required too much memory to reliably run in GitHub Actions",
+)
 def test_plugin_encoding() -> None:
     assert plugin is not None
     data = [[gen_datetime(), i % 2 == 0, i] for i in range(1000)]
