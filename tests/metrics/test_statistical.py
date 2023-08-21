@@ -298,6 +298,17 @@ def test_image_support() -> None:
         MaximumMeanDiscrepancy,
         PRDCScore,
         WassersteinDistance,
+    ]:
+        score = evaluator().evaluate(X1, X2)
+        assert isinstance(score, dict), evaluator
+        for k in score:
+            assert score[k] >= 0, evaluator
+            assert not np.isnan(score[k]), evaluator
+
+    # FID needs a bigger sample
+    X1 = ImageDataLoader(dataset).sample(10000)
+    X2 = ImageDataLoader(dataset).sample(10000)
+    for evaluator in [
         FrechetInceptionDistance,
     ]:
         score = evaluator().evaluate(X1, X2)

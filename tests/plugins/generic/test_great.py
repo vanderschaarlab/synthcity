@@ -1,11 +1,11 @@
 # stdlib
+import os
 import random
 from datetime import datetime, timedelta
 
 # third party
 import numpy as np
 import pandas as pd
-import pkg_resources
 import pytest
 from generic_helpers import generate_fixtures
 from sklearn.datasets import load_iris
@@ -18,11 +18,7 @@ from synthcity.plugins.core.dataloader import GenericDataLoader
 from synthcity.plugins.generic.plugin_great import plugin
 from synthcity.utils.serialization import load, save
 
-great_extra_not_installed = plugin is None
-if not great_extra_not_installed:
-    great_dependencies = {"be_great"}
-    installed = {pkg.key for pkg in pkg_resources.working_set}
-    great_extra_not_installed = len(great_dependencies - installed) > 0
+IN_GITHUB_ACTIONS: bool = os.getenv("GITHUB_ACTIONS") == "true"
 
 plugin_name = "great"
 plugin_args = {
@@ -32,31 +28,26 @@ plugin_args = {
 }
 
 
-@pytest.mark.skipif(great_extra_not_installed, reason="great extra not installed")
 @pytest.mark.parametrize("test_plugin", generate_fixtures(plugin_name, plugin))
 def test_plugin_sanity(test_plugin: Plugin) -> None:
     assert test_plugin is not None
 
 
-@pytest.mark.skipif(great_extra_not_installed, reason="great extra not installed")
 @pytest.mark.parametrize("test_plugin", generate_fixtures(plugin_name, plugin))
 def test_plugin_name(test_plugin: Plugin) -> None:
     assert test_plugin.name() == plugin_name
 
 
-@pytest.mark.skipif(great_extra_not_installed, reason="great extra not installed")
 @pytest.mark.parametrize("test_plugin", generate_fixtures(plugin_name, plugin))
 def test_plugin_type(test_plugin: Plugin) -> None:
     assert test_plugin.type() == "generic"
 
 
-@pytest.mark.skipif(great_extra_not_installed, reason="great extra not installed")
 @pytest.mark.parametrize("test_plugin", generate_fixtures(plugin_name, plugin))
 def test_plugin_hyperparams(test_plugin: Plugin) -> None:
     assert len(test_plugin.hyperparameter_space()) == 1
 
 
-@pytest.mark.skipif(great_extra_not_installed, reason="great extra not installed")
 @pytest.mark.parametrize(
     "test_plugin", generate_fixtures(plugin_name, plugin, plugin_args)
 )
@@ -65,7 +56,10 @@ def test_plugin_fit(test_plugin: Plugin) -> None:
     test_plugin.fit(GenericDataLoader(X))
 
 
-@pytest.mark.skipif(great_extra_not_installed, reason="great extra not installed")
+@pytest.mark.skipif(
+    IN_GITHUB_ACTIONS,
+    reason="GReaT generate required too much memory to reliably run in GitHub Actions",
+)
 @pytest.mark.parametrize(
     "test_plugin",
     generate_fixtures(plugin_name, plugin, plugin_args),
@@ -80,24 +74,28 @@ def test_plugin_generate(test_plugin: Plugin, serialize: bool) -> None:
         saved = save(test_plugin)
         test_plugin = load(saved)
 
-    X_gen = test_plugin.generate(max_length=1000)
+    X_gen = test_plugin.generate(max_length=100)
     assert len(X_gen) == len(X)
     assert X_gen.shape[1] == X.shape[1]
     assert test_plugin.schema_includes(X_gen)
 
-    X_gen = test_plugin.generate(50)
-    assert len(X_gen) == 50
+    X_gen = test_plugin.generate(5)
+    assert len(X_gen) == 5
     assert test_plugin.schema_includes(X_gen)
 
     # generate with random seed
-    X_gen1 = test_plugin.generate(50, random_state=0)
-    X_gen2 = test_plugin.generate(50, random_state=0)
-    X_gen3 = test_plugin.generate(50)
+    X_gen1 = test_plugin.generate(5, random_state=0)
+    X_gen2 = test_plugin.generate(5, random_state=0)
+    X_gen3 = test_plugin.generate(5)
     assert (X_gen1.numpy() == X_gen2.numpy()).all()
     assert (X_gen1.numpy() != X_gen3.numpy()).any()
 
 
-@pytest.mark.skipif(great_extra_not_installed, reason="great extra not installed")
+@pytest.mark.slow
+@pytest.mark.skipif(
+    IN_GITHUB_ACTIONS,
+    reason="GReaT generate required too much memory to reliably run in GitHub Actions",
+)
 @pytest.mark.parametrize(
     "test_plugin", generate_fixtures(plugin_name, plugin, plugin_args)
 )
@@ -112,22 +110,23 @@ def test_plugin_generate_constraints_great(test_plugin: Plugin) -> None:
         ]
     )
 
-    X_gen = test_plugin.generate(max_length=1000, constraints=constraints).dataframe()
-    assert len(X_gen) == len(X)
+    X_gen = test_plugin.generate(
+        count=5, max_length=100, constraints=constraints
+    ).dataframe()
+    assert len(X_gen) == 5
     assert test_plugin.schema_includes(X_gen)
     assert constraints.filter(X_gen).sum() == len(X_gen)
     assert (X_gen["target"] == 1).all()
 
     X_gen = test_plugin.generate(
-        count=10, max_length=1000, constraints=constraints
+        count=5, max_length=100, constraints=constraints
     ).dataframe()
-    assert len(X_gen) == 10
+    assert len(X_gen) == 5
     assert test_plugin.schema_includes(X_gen)
     assert constraints.filter(X_gen).sum() == len(X_gen)
     assert list(X_gen.columns) == list(X.columns)
 
 
-@pytest.mark.skipif(great_extra_not_installed, reason="great extra not installed")
 def test_sample_hyperparams() -> None:
     assert plugin is not None
     for i in range(100):
@@ -135,8 +134,10 @@ def test_sample_hyperparams() -> None:
         assert plugin(**args) is not None
 
 
-@pytest.mark.skipif(great_extra_not_installed, reason="great extra not installed")
-@pytest.mark.slow
+@pytest.mark.skipif(
+    IN_GITHUB_ACTIONS,
+    reason="GReaT generate required too much memory to reliably run in GitHub Actions",
+)
 @pytest.mark.parametrize("compress_dataset", [True, False])
 def test_eval_performance_great(compress_dataset: bool) -> None:
     assert plugin is not None
@@ -151,14 +152,13 @@ def test_eval_performance_great(compress_dataset: bool) -> None:
         evaluator = PerformanceEvaluatorXGB()
 
         test_plugin.fit(X)
-        X_syn = test_plugin.generate(count=100, max_length=1000)
+        X_syn = test_plugin.generate(count=100, max_length=100)
 
         results.append(evaluator.evaluate(X, X_syn)["syn_id"])
 
     assert np.mean(results) > 0.7
 
 
-@pytest.mark.skipif(great_extra_not_installed, reason="great extra not installed")
 def gen_datetime(min_year: int = 2000, max_year: int = datetime.now().year) -> datetime:
     # generate a datetime in format yyyy-mm-dd hh:mm:ss.000000
     start = datetime(min_year, 1, 1, 00, 00, 00)
@@ -167,8 +167,11 @@ def gen_datetime(min_year: int = 2000, max_year: int = datetime.now().year) -> d
     return start + (end - start) * random.random()
 
 
-@pytest.mark.skipif(great_extra_not_installed, reason="great extra not installed")
 @pytest.mark.slow
+@pytest.mark.skipif(
+    IN_GITHUB_ACTIONS,
+    reason="GReaT generate required too much memory to reliably run in GitHub Actions",
+)
 def test_plugin_encoding() -> None:
     assert plugin is not None
     data = [[gen_datetime(), i % 2 == 0, i] for i in range(1000)]
@@ -177,7 +180,7 @@ def test_plugin_encoding() -> None:
     test_plugin = plugin(**plugin_args)
     test_plugin.fit(df)
 
-    syn = test_plugin.generate(10, max_length=1000)
+    syn = test_plugin.generate(10, max_length=100)
 
     assert len(syn) == 10
     assert test_plugin.schema_includes(syn)

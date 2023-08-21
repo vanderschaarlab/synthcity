@@ -17,17 +17,10 @@ from pydantic import validate_arguments
 import synthcity.logger as log
 from synthcity.plugins.core.dataloader import DataLoader
 from synthcity.plugins.core.distribution import Distribution, IntegerDistribution
+from synthcity.plugins.core.models.tabular_great import TabularGReaT
 from synthcity.plugins.core.plugin import Plugin
 from synthcity.plugins.core.schema import Schema
 from synthcity.utils.constants import DEVICE
-
-try:
-    # synthcity absolute
-    from synthcity.plugins.core.models.tabular_great import TabularGReaT
-
-    module_disabled = False
-except ImportError:
-    module_disabled = True
 
 
 class GReaTPlugin(Plugin):
@@ -198,7 +191,4 @@ class GReaTPlugin(Plugin):
         return self._safe_generate(self.model.generate, count, syn_schema)
 
 
-if module_disabled:
-    plugin = None
-else:
-    plugin = GReaTPlugin
+plugin = GReaTPlugin

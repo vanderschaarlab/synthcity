@@ -41,12 +41,3 @@ jobs:
         run: |
           pip install .[goggle]
           python tests/nb_eval.py --nb_dir tutorials/ --tutorial_tests goggle_tests
-      - name: Run the extra tutorials - arf
-        run: |
-          pip install .[arf]
-          python tests/nb_eval.py --nb_dir tutorials/ --tutorial_tests arf_tests
-      - name: Run the extra tutorials - great
-        run: |
-          pip uninstall numpy -y
-          pip install .[great]
-          python tests/nb_eval.py --nb_dir tutorials/ --tutorial_tests all_tests

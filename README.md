@@ -63,19 +63,9 @@ Other library extensions:
 ```bash
  pip install synthcity[goggle]
 ```
- * Install the library with ALL the extensions that are compatible with all others
+ * Install the library with ALL the extensions
 ```bash
  pip install synthcity[all]
-```
-However, there are two plugins that are not compatible with each other. The only way to use either of these plugins is to specifically install their respective extra. These methods are `arfpy` which is an Adversarial Random Forrest method and `GReaT`, which uses pre-trained Transformer-based language models to generate records.
-
- * Install the library arfpy
-```bash
- pip install synthcity[arfpy]
-```
- * Install the library GReaT
-```bash
- pip install synthcity[great]
 ```
 
 
