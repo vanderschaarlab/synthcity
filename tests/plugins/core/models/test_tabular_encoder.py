@@ -82,7 +82,6 @@ def test_encoder_fit_transform(max_clusters: int) -> None:
             assert f"{column.name}.value" in encoded.columns
             for enc_col in encoded.columns:
                 if column.name in enc_col and "value" not in enc_col:
-                    print(enc_col, encoded[enc_col])
                     assert set(encoded[enc_col].unique()).issubset(set([0, 1]))
 
 

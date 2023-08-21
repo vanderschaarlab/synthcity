@@ -59,17 +59,9 @@ jobs:
       - name: Test Core
         run: |
           pip install .[testing]
+          pip freeze
           pytest -vvvsx -m "not slow" --durations=50
       - name: Test GOGGLE
         run: |
           pip install .[testing,goggle]
           pytest -vvvsx -m "not slow" -k goggle
-      - name: Test arf
-        run: |
-          pip install .[arf]
-          pytest -vvvsx -m "not slow" -k arf
-      - name: Test GReaT
-        run: |
-          pip uninstall numpy -y
-          pip install .[great]
-          pytest -vvvsx -m "not slow" -k great

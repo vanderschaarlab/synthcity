@@ -48,7 +48,6 @@ def test_evaluator(evaluator_t: Type, test_plugin: Plugin) -> None:
     evaluator = evaluator_t(
         use_cache=False,
     )
-    print(evaluator.name())
     if "DomiasMIA" in evaluator.name():
         X_ref_syn = test_plugin.generate(2 * len(X))
         score = evaluator.evaluate(

@@ -5,7 +5,6 @@ from datetime import datetime, timedelta
 # third party
 import numpy as np
 import pandas as pd
-import pkg_resources
 import pytest
 from generic_helpers import generate_fixtures, get_airfoil_dataset
 from sklearn.datasets import load_diabetes, load_iris
@@ -18,12 +17,6 @@ from synthcity.plugins.core.dataloader import GenericDataLoader
 from synthcity.plugins.generic.plugin_arf import plugin
 from synthcity.utils.serialization import load, save
 
-arf_extra_not_installed = plugin is None
-if not arf_extra_not_installed:
-    arf_dependencies = {"arfpy"}
-    installed = {pkg.key for pkg in pkg_resources.working_set}
-    arf_extra_not_installed = len(arf_dependencies - installed) > 0
-
 plugin_name = "arf"
 plugin_args = {
     "num_trees": 10,
@@ -35,31 +28,26 @@ plugin_args = {
 }
 
 
-@pytest.mark.skipif(arf_extra_not_installed, reason="ARF extra not installed")
 @pytest.mark.parametrize("test_plugin", generate_fixtures(plugin_name, plugin))
 def test_plugin_sanity(test_plugin: Plugin) -> None:
     assert test_plugin is not None
 
 
-@pytest.mark.skipif(arf_extra_not_installed, reason="ARF extra not installed")
 @pytest.mark.parametrize("test_plugin", generate_fixtures(plugin_name, plugin))
 def test_plugin_name(test_plugin: Plugin) -> None:
     assert test_plugin.name() == plugin_name
 
 
-@pytest.mark.skipif(arf_extra_not_installed, reason="ARF extra not installed")
 @pytest.mark.parametrize("test_plugin", generate_fixtures(plugin_name, plugin))
 def test_plugin_type(test_plugin: Plugin) -> None:
     assert test_plugin.type() == "generic"
 
 
-@pytest.mark.skipif(arf_extra_not_installed, reason="ARF extra not installed")
 @pytest.mark.parametrize("test_plugin", generate_fixtures(plugin_name, plugin))
 def test_plugin_hyperparams(test_plugin: Plugin) -> None:
     assert len(test_plugin.hyperparameter_space()) == 5
 
 
-@pytest.mark.skipif(arf_extra_not_installed, reason="ARF extra not installed")
 @pytest.mark.parametrize(
     "test_plugin", generate_fixtures(plugin_name, plugin, plugin_args)
 )
@@ -68,7 +56,6 @@ def test_plugin_fit(test_plugin: Plugin) -> None:
     test_plugin.fit(GenericDataLoader(X))
 
 
-@pytest.mark.skipif(arf_extra_not_installed, reason="ARF extra not installed")
 @pytest.mark.parametrize(
     "test_plugin",
     generate_fixtures(plugin_name, plugin, plugin_args),
@@ -100,7 +87,6 @@ def test_plugin_generate(test_plugin: Plugin, serialize: bool) -> None:
     assert (X_gen1.numpy() != X_gen3.numpy()).any()
 
 
-@pytest.mark.skipif(arf_extra_not_installed, reason="ARF extra not installed")
 @pytest.mark.parametrize(
     "test_plugin", generate_fixtures(plugin_name, plugin, plugin_args)
 )
@@ -128,7 +114,6 @@ def test_plugin_generate_constraints_arf(test_plugin: Plugin) -> None:
     assert list(X_gen.columns) == list(X.columns)
 
 
-@pytest.mark.skipif(arf_extra_not_installed, reason="ARF extra not installed")
 def test_sample_hyperparams() -> None:
     assert plugin is not None
     for i in range(100):
@@ -136,7 +121,6 @@ def test_sample_hyperparams() -> None:
         assert plugin(**args) is not None
 
 
-@pytest.mark.skipif(arf_extra_not_installed, reason="ARF extra not installed")
 @pytest.mark.slow
 @pytest.mark.parametrize("compress_dataset", [True, False])
 def test_eval_performance_arf(compress_dataset: bool) -> None:
@@ -167,7 +151,6 @@ def gen_datetime(min_year: int = 2000, max_year: int = datetime.now().year) -> d
     return start + (end - start) * random.random()
 
 
-@pytest.mark.skipif(arf_extra_not_installed, reason="ARF extra not installed")
 @pytest.mark.slow
 def test_plugin_encoding() -> None:
     assert plugin is not None

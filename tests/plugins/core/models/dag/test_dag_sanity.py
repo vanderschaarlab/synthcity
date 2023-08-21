@@ -124,7 +124,6 @@ def test_sanity() -> None:
 
     assert len(dag) > 0
     acc = count_accuracy(orig_dag, dag)
-    print(acc)
 
     assert acc["fdr"] < 0.4
     assert acc["tpr"] > 0.7
