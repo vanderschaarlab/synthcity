@@ -549,7 +549,7 @@ class Plugin(Serializable, metaclass=ABCMeta):
             plot_tsne(plt, X, X_syn)
 
 
-PLUGIN_CATEGORY_REGISTRY: Dict[str, Type[Plugin]] = dict()
+PLUGIN_CATEGORY_REGISTRY: Dict[str, List[str]] = dict()
 PLUGIN_REGISTRY: Dict[str, Type[Plugin]] = dict()
 
 
@@ -569,10 +569,11 @@ class PluginLoader:
                 continue
             self._available_plugins[stem] = plugin
         self._expected_type = expected_type
-        self._categories = categories
 
     def _refresh(self) -> None:
+        """Refresh the list of available plugins"""
         self._plugins: Dict[str, Type[Plugin]] = PLUGIN_REGISTRY
+        self._categories: Dict[str, List[str]] = PLUGIN_CATEGORY_REGISTRY
 
     @validate_arguments
     def _load_single_plugin_impl(self, plugin_name: str) -> Optional[Type]:
@@ -643,16 +644,20 @@ class PluginLoader:
         self._refresh()
         return list(self._plugins.values())
 
-    def _add_category(self, category: str, expected_class: Type) -> "PluginLoader":
+    def _add_category(self, category: str, name: str) -> "PluginLoader":
         """Add a new plugin category"""
         log.debug(f"Registering plugin category {category}")
-        if category in PLUGIN_CATEGORY_REGISTRY:
-            raise TypeError(f"Plugin category {category} already registered")
-        if not issubclass(expected_class, Plugin):
+        if (
+            category in PLUGIN_CATEGORY_REGISTRY
+            and name in PLUGIN_CATEGORY_REGISTRY[category]
+        ):
             raise TypeError(
-                f"Plugin expected class for category should be a subclass of {Plugin} but was {expected_class}"
+                f"Plugin {name} is already registered as category: {category}"
             )
-        PLUGIN_CATEGORY_REGISTRY[category] = expected_class
+        if PLUGIN_CATEGORY_REGISTRY.get(category, None) is not None:
+            PLUGIN_CATEGORY_REGISTRY[category].append(name)
+        else:
+            PLUGIN_CATEGORY_REGISTRY[category] = [name]
         return self
 
     def add(self, name: str, cls: Type) -> "PluginLoader":
@@ -665,8 +670,12 @@ class PluginLoader:
             raise ValueError(
                 f"Plugin {name} must derive the {self._expected_type} interface."
             )
-        if cls not in PLUGIN_CATEGORY_REGISTRY.values():
-            self._add_category(cls.type, cls)
+
+        if (
+            cls.type() not in PLUGIN_CATEGORY_REGISTRY.keys()
+            or name not in PLUGIN_CATEGORY_REGISTRY.get(cls.type(), [])
+        ):
+            self._add_category(str(cls.type()), name)
         PLUGIN_REGISTRY[name] = cls
         return self
 

@@ -58,6 +58,6 @@ def test_add_dummy_plugin() -> None:
     gen.generate(count=10)
 
     # Test that the new plugin is in the list of available plugins
-    generators = Plugins()
-    available_plugins = generators.list()
+    available_plugins = Plugins().list()
+    print(available_plugins)
     assert "copy_data" in available_plugins
