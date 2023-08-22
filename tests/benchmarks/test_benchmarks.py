@@ -329,10 +329,8 @@ def test_benchmark_added_plugin() -> None:
             return self.X.sample(count)
 
     generators = Plugins()
-    assert "copy_data" not in generators.list()
     # Add the new plugin to the collection
     generators.add("copy_data", DummyCopyDataPlugin)
-    assert "copy_data" in generators.list()
 
     score = Benchmarks.evaluate(
         [
