@@ -41,9 +41,11 @@ class DummyCopyDataPlugin(Plugin):
 
 def test_add_dummy_plugin() -> None:
     generators = Plugins()
+    print(Plugins().list())
     assert "copy_data" not in generators.list()
     # Add the new plugin to the collection
     generators.add("copy_data", DummyCopyDataPlugin)
+    print(Plugins().list())
 
     # Load reference data
     X, y = load_breast_cancer(return_X_y=True, as_frame=True)
@@ -59,5 +61,4 @@ def test_add_dummy_plugin() -> None:
 
     # Test that the new plugin is in the list of available plugins
     available_plugins = Plugins().list()
-    print(available_plugins)
     assert "copy_data" in available_plugins
