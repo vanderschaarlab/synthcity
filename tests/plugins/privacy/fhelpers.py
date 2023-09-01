@@ -25,9 +25,8 @@ def generate_fixtures(name: str, plugin: Type, plugin_args: Dict = {}) -> List:
 
 def get_airfoil_dataset() -> pd.DataFrame:
     df = pd.read_csv(
-        "https://www.neuraldesigner.com/files/datasets/airfoil_self_noise.csv",
-        # "https://archive.ics.uci.edu/static/public/291/airfoil+self+noise.zip", # TODO: change to this source?
-        sep=";",
+        "https://archive.ics.uci.edu/static/public/291/airfoil+self+noise.zip",
+        sep="\t",
         engine="python",
     )
     df.columns = df.columns.astype(str)
