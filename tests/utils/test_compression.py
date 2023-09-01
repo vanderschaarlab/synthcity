@@ -11,6 +11,15 @@ def get_airfoil_dataset() -> pd.DataFrame:
         "https://archive.ics.uci.edu/static/public/291/airfoil+self+noise.zip",
         sep="\t",
         engine="python",
+        header=None,
+        names=[
+            "frequency",
+            "angle_of_attack",
+            "chord_length",
+            "free_stream_velocity",
+            "suction_side_displacement_thickness",
+            "scaled_sound_pressure_level",
+        ],
     )
     df.columns = df.columns.astype(str)
 
@@ -76,10 +85,7 @@ def test_compression_sanity2() -> None:
 def test_compression_sanity_airfoil() -> None:
     df = get_airfoil_dataset()
     df["chord_length"] = df["chord_length"].astype(str)
-    print(df.head())
     compressed_df, context = compress_dataset(df)
-    print(compressed_df)
-    print(context)
 
     assert len(compressed_df) == len(df)
     assert compressed_df.shape[1] > 0
