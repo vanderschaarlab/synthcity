@@ -385,8 +385,6 @@ def test_evaluate_performance_time_series(
         static_data=static_data,
         outcome=outcome,
     )
-    print(111111111111, data.data.get("temporal_data")[0])
-    print(222222222222, data.data.get("observation_times")[0])
 
     test_plugin.fit(data)
     data_gen = test_plugin.generate(100)
