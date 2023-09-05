@@ -371,21 +371,27 @@ class PerformanceEvaluator(MetricEvaluator):
         if self.use_cache(cache_file):
             return load_from_file(cache_file)
 
+        print("X_gt.train().unpack()")
         (
             id_static_gt,
             id_temporal_gt,
             id_observation_times_gt,
             id_outcome_gt,
         ) = X_gt.train().unpack(as_numpy=True)
+        print(444444444444444444, id_temporal_gt.shape, id_observation_times_gt.shape)
+        print("X_gt.test().unpack()")
         (
             ood_static_gt,
             ood_temporal_gt,
             ood_observation_times_gt,
             ood_outcome_gt,
         ) = X_gt.test().unpack(as_numpy=True)
+
         static_syn, temporal_syn, observation_times_syn, outcome_syn = X_syn.unpack(
             as_numpy=True
         )
+        print("X_syn.unpack()")
+        print(444444444444444444, temporal_syn.shape, observation_times_syn.shape)
 
         skf = KFold(
             n_splits=self._n_folds, shuffle=True, random_state=self._random_state
@@ -405,18 +411,18 @@ class PerformanceEvaluator(MetricEvaluator):
             observation_times_test: np.ndarray,
             outcome_test: np.ndarray,
         ) -> float:
-            try:
-                estimator = model(**model_args).fit(
-                    static_train, temporal_train, observation_times_train, outcome_train
-                )
-                preds = estimator.predict(
-                    static_test, temporal_test, observation_times_test
-                )
+            # try:
+            estimator = model(**model_args).fit(
+                static_train, temporal_train, observation_times_train, outcome_train
+            )
+            preds = estimator.predict(
+                static_test, temporal_test, observation_times_test
+            )
 
-                score = r2_score(outcome_test, preds)
-            except BaseException as e:
-                log.error(f"regression evaluation failed {e}")
-                score = -1
+            score = r2_score(outcome_test, preds)
+            # except BaseException as e:
+            #     log.error(f"regression evaluation failed {e}")
+            #     score = -1
 
             return score
 

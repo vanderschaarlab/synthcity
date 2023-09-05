@@ -363,7 +363,7 @@ def test_evaluate_performance_custom_labels(
 
 
 @pytest.mark.slow
-@pytest.mark.parametrize("test_plugin", [Plugins().get("marginal_distributions")])
+@pytest.mark.parametrize("test_plugin", [Plugins().get("timegan")])
 @pytest.mark.parametrize(
     "evaluator_t",
     [
@@ -385,9 +385,16 @@ def test_evaluate_performance_time_series(
         static_data=static_data,
         outcome=outcome,
     )
+    print(111111111111, "temp: ", np.asarray(data.data.get("temp: oral_data")).shape)
+    print(111111111111, "obs: ", np.asarray(data.data.get("observation_times")).shape)
 
     test_plugin.fit(data)
     data_gen = test_plugin.generate(100)
+
+    print(222222222222, "temp", np.asarray(data_gen.data.get("temporal_data")).shape)
+    print(
+        222222222222, "obs: ", np.asarray(data_gen.data.get("observation_times")).shape
+    )
 
     evaluator = evaluator_t(
         task_type="time_series",

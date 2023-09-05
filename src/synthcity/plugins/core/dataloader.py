@@ -930,6 +930,20 @@ class TimeSeriesDataLoader(DataLoader):
             )
         if as_numpy:
             longest_observation_seq = max([len(seq) for seq in temporal_data])
+            print(np.asarray(pd.concat(temporal_data)).shape)
+            print(
+                66666666666666,
+                ma.vstack(
+                    [
+                        ma.array(
+                            np.resize(ot, longest_observation_seq),
+                            mask=[True for i in range(len(ot))]
+                            + [False for j in range(longest_observation_seq - len(ot))],
+                        )
+                        for ot in observation_times
+                    ]
+                ).shape,
+            )
             return (
                 np.asarray(static_data),
                 np.asarray(pd.concat(temporal_data)),
