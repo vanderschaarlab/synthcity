@@ -16,6 +16,7 @@ from scipy.special import softmax
 
 # synthcity absolute
 import synthcity.logger as log
+from synthcity.plugins.core.serializable import Serializable
 
 # synthcity relative
 from .mbi.dataset import Dataset
@@ -120,18 +121,16 @@ def cdp_rho(eps: float, delta: float) -> float:
     return rho_min
 
 
-class Mechanism:
+class Mechanism(Serializable):
     def __init__(self, epsilon: float, delta: float):
         """
         Base class for a mechanism.
         :param epsilon: privacy parameter
         :param delta: privacy parameter
-        :param prng: pseudo random number generator
         """
         self.epsilon = epsilon
         self.delta = delta
         self.rho = 0 if delta == 0 else cdp_rho(epsilon, delta)
-        self.prng = np.random
 
     def run(self, dataset: Dataset, workload: List[Tuple]) -> Any:
         pass
@@ -204,7 +203,7 @@ class Mechanism:
         else:
             p = softmax(0.5 * epsilon / sensitivity * q + base_measure)
 
-        return keys[self.prng.choice(p.size, p=p)]
+        return keys[np.random.choice(p.size, p=p)]
 
     # def gaussian_noise_scale(self, l2_sensitivity, epsilon, delta):
     #     """Return the Gaussian noise necessary to attain (epsilon, delta)-DP"""
@@ -223,11 +222,11 @@ class Mechanism:
 
     def gaussian_noise(self, sigma: float, size: Union[int, Tuple]) -> np.ndarray:
         """Generate iid Gaussian noise  of a given scale and size"""
-        return self.prng.normal(0, sigma, size)
+        return np.random.normal(0, sigma, size)
 
     # def laplace_noise(self, b, size):
     #     """Generate iid Laplace noise  of a given scale and size"""
-    #     return self.prng.laplace(0, b, size)
+    #     return np.random.laplace(0, b, size)
 
     # def best_noise_distribution(self, l1_sensitivity, l2_sensitivity, epsilon, delta):
     #     """Adaptively determine if Laplace or Gaussian noise will be better, and

@@ -52,6 +52,7 @@ def verify_serialization(model: Any, generate: bool = False) -> None:
     sanity_check(model, reloaded, generate=generate)
 
     # API test
+    print(1111, model)
     buff = model.save()
 
     reloaded = Plugin.load(buff)

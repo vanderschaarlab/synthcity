@@ -255,14 +255,25 @@ class TimeSeriesModel(nn.Module):
             raise ValueError("NaNs detected in the temporal horizons")
 
         if self.use_horizon_condition:
-            print(
-                3333333333333333,
-                temporal_data.shape,
-                observation_times.shape,
-            )
+            # TODO: ADD error handling for len(temporal_data.shape) != 3 or len(observation_times.shape) != 2
+            # try:
             temporal_data_merged = torch.cat(
                 [temporal_data, observation_times.unsqueeze(2)], dim=2
             )
+            # print(
+            #     3333333333333333,
+            #     temporal_data.shape, # when  passing, = 3d tensor
+            #     observation_times.shape, # when  passing, 2d tensor
+            # )
+            # except Exception as e:
+            #     print(temporal_data.shape, observation_times.shape)
+            #     print(temporal_data, observation_times)
+            #     print(
+            #         3333333333333333,
+            #         temporal_data.shape,
+            #         observation_times.shape,
+            #     )
+            #     raise e
         else:
             temporal_data_merged = temporal_data
 

@@ -371,27 +371,47 @@ class PerformanceEvaluator(MetricEvaluator):
         if self.use_cache(cache_file):
             return load_from_file(cache_file)
 
-        print("X_gt.train().unpack()")
+        # print("X_gt.train().unpack()")
         (
             id_static_gt,
             id_temporal_gt,
             id_observation_times_gt,
             id_outcome_gt,
         ) = X_gt.train().unpack(as_numpy=True)
-        print(444444444444444444, id_temporal_gt.shape, id_observation_times_gt.shape)
-        print("X_gt.test().unpack()")
+        # print(
+        #     444444444444444444,
+        #     "temp: ",
+        #     id_temporal_gt.shape,
+        #     "obs: ",
+        #     id_observation_times_gt.shape,
+        # )
+        # print("X_gt.test().unpack()")
+        # print(X_gt.test().dataframe().shape)
         (
             ood_static_gt,
             ood_temporal_gt,
             ood_observation_times_gt,
             ood_outcome_gt,
         ) = X_gt.test().unpack(as_numpy=True)
-
+        # print(
+        #     444444444444444444,
+        #     "temp: ",
+        #     ood_temporal_gt.shape,
+        #     "obs: ",
+        #     ood_observation_times_gt.shape,
+        # )
+        # print("X_syn.unpack()")
+        # print(X_syn.dataframe().shape)
         static_syn, temporal_syn, observation_times_syn, outcome_syn = X_syn.unpack(
             as_numpy=True
         )
-        print("X_syn.unpack()")
-        print(444444444444444444, temporal_syn.shape, observation_times_syn.shape)
+        # print(
+        #     444444444444444444,
+        #     "temp: ",
+        #     temporal_syn.shape,
+        #     "obs: ",
+        #     observation_times_syn.shape,
+        # )
 
         skf = KFold(
             n_splits=self._n_folds, shuffle=True, random_state=self._random_state
@@ -411,32 +431,37 @@ class PerformanceEvaluator(MetricEvaluator):
             observation_times_test: np.ndarray,
             outcome_test: np.ndarray,
         ) -> float:
-            # try:
-            estimator = model(**model_args).fit(
-                static_train, temporal_train, observation_times_train, outcome_train
-            )
-            preds = estimator.predict(
-                static_test, temporal_test, observation_times_test
-            )
+            try:
+                # print(777777777777, temporal_train.shape, observation_times_train.shape)
+                estimator = model(**model_args).fit(
+                    static_train, temporal_train, observation_times_train, outcome_train
+                )
+                preds = estimator.predict(
+                    static_test, temporal_test, observation_times_test
+                )
 
-            score = r2_score(outcome_test, preds)
-            # except BaseException as e:
-            #     log.error(f"regression evaluation failed {e}")
-            #     score = -1
+                score = r2_score(outcome_test, preds)
+            except BaseException as e:
+                log.error(f"regression evaluation failed {e}")
+                score = -1
 
             return score
 
         for train_idx, test_idx in skf.split(id_static_gt):
             static_train_data = id_static_gt[train_idx]
             temporal_train_data = id_temporal_gt[train_idx]
+            # print(88888888888888888888, end=" | ")
+            # print("temp: ", id_temporal_gt.shape, end=" | ")
+            # print("obs: ", id_observation_times_gt.shape)
+            # print(id_temporal_gt[train_idx])
+            # print(id_observation_times_gt[train_idx])
             observation_times_train_data = id_observation_times_gt[train_idx]
             outcome_train_data = id_outcome_gt[train_idx]
-
             static_test_data = id_static_gt[test_idx]
             temporal_test_data = id_temporal_gt[test_idx]
             observation_times_test_data = id_observation_times_gt[test_idx]
             outcome_test_data = id_outcome_gt[test_idx]
-
+            # print("call 1")
             real_score = ts_eval_cbk(
                 static_train_data,
                 temporal_train_data,
@@ -447,6 +472,7 @@ class PerformanceEvaluator(MetricEvaluator):
                 observation_times_test_data,
                 outcome_test_data,
             )
+            # print("call 2")
             synth_score_id = ts_eval_cbk(
                 static_syn,
                 temporal_syn,
@@ -457,6 +483,7 @@ class PerformanceEvaluator(MetricEvaluator):
                 observation_times_test_data,
                 outcome_test_data,
             )
+            # print("call 3")
             synth_score_ood = ts_eval_cbk(
                 static_syn,
                 temporal_syn,
@@ -886,6 +913,11 @@ class PerformanceEvaluatorMLP(PerformanceEvaluator):
         X_gt: DataLoader,
         X_syn: DataLoader,
     ) -> Dict:
+        # print("evaluate")
+        # print("gt - temp: ", len(X_gt.info()["temporal_features"]))
+        # print("gt - obs: ", X_gt.info()["window_len"])
+        # print("syn - temp: ", len(X_syn.info()["temporal_features"]))
+        # print("syn - obs: ", X_syn.info()["window_len"])
         if self._task_type == "survival_analysis":
             return self._evaluate_survival_model(
                 DeephitSurvivalAnalysis, {}, X_gt, X_syn

@@ -57,10 +57,12 @@ class Serializable:
         for key in self.__dict__:
             data = self.__dict__[key]
             if isinstance(data, Serializable):
+                print(222, key, data)
                 members[key] = self.__dict__[key].save_dict()
             else:
+                print(333, key, data)
                 members[key] = copy.deepcopy(self.__dict__[key])
-
+        print(self.__class__.__qualname__)
         return {
             "source": "synthcity",
             "data": members,
