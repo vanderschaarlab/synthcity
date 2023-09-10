@@ -43,7 +43,7 @@ def test_plugin_name(test_plugin: Plugin) -> None:
 
 @pytest.mark.parametrize("test_plugin", generate_fixtures(plugin_name, plugin))
 def test_plugin_type(test_plugin: Plugin) -> None:
-    assert test_plugin.type() == "generic"
+    assert test_plugin.type() == "privacy"
 
 
 @pytest.mark.parametrize("test_plugin", generate_fixtures(plugin_name, plugin))

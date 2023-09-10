@@ -1,4 +1,5 @@
 # stdlib
+import inspect
 from typing import Any
 
 # third party
@@ -52,7 +53,6 @@ def verify_serialization(model: Any, generate: bool = False) -> None:
     sanity_check(model, reloaded, generate=generate)
 
     # API test
-    print(1111, model)
     buff = model.save()
 
     reloaded = Plugin.load(buff)
@@ -122,7 +122,14 @@ def test_serialization_ts_plugins(plugin: str) -> None:
     )
 
     ts_plugins = Plugins(categories=["time_series"])
-    syn_model = ts_plugins.get(plugin, n_iter=10, strict=False)
+
+    # Use n_iter to limit the number of iterations for testing purposes, if possible
+    # TODO: consider removing this filter step and add n_iter to all models even if it's not used
+    test_params = {"n_iter": 10, "strict": False}
+    accepted_params = inspect.signature(ts_plugins.get).parameters
+    filtered_kwargs = {k: v for k, v in test_params.items() if k in accepted_params}
+
+    syn_model = ts_plugins.get(plugin, **filtered_kwargs)
 
     # pre-training
     verify_serialization(syn_model)

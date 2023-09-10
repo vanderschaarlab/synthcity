@@ -1,5 +1,6 @@
 # stdlib
 import itertools
+from abc import ABCMeta
 from typing import Any, Optional, Union
 
 # third party
@@ -9,7 +10,6 @@ import torch
 from pydantic import validate_arguments
 
 # synthcity absolute
-from synthcity.plugins.core.serializable import Serializable
 from synthcity.utils.constants import DEVICE
 
 # synthcity relative
@@ -18,7 +18,7 @@ from .mbi.dataset import Dataset
 from .mbi.domain import Domain
 
 
-class TabularAIM(Serializable):
+class TabularAIM(metaclass=ABCMeta):
     """
     .. inheritance-diagram:: synthcity.plugins.core.models.tabular_aim.TabularAIM
     :parts: 1

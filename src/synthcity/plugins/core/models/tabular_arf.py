@@ -1,4 +1,5 @@
 # stdlib
+from abc import ABCMeta
 from typing import Any, Union
 
 # third party
@@ -21,7 +22,7 @@ import synthcity.logger as log
 from synthcity.utils.constants import DEVICE
 
 
-class TabularARF:
+class TabularARF(metaclass=ABCMeta):
     def __init__(
         self,
         # ARF parameters

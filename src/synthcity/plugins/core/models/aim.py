@@ -16,7 +16,6 @@ from scipy.special import softmax
 
 # synthcity absolute
 import synthcity.logger as log
-from synthcity.plugins.core.serializable import Serializable
 
 # synthcity relative
 from .mbi.dataset import Dataset
@@ -121,7 +120,7 @@ def cdp_rho(eps: float, delta: float) -> float:
     return rho_min
 
 
-class Mechanism(Serializable):
+class Mechanism:
     def __init__(self, epsilon: float, delta: float):
         """
         Base class for a mechanism.

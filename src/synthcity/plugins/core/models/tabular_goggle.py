@@ -1,4 +1,5 @@
 # stdlib
+from abc import ABCMeta
 from typing import Any, Optional, Union
 
 # third party
@@ -15,7 +16,7 @@ from .goggle import Goggle, GoggleLoss
 from .tabular_encoder import TabularEncoder
 
 
-class TabularGoggle:
+class TabularGoggle(metaclass=ABCMeta):
     def __init__(
         self,
         X: pd.DataFrame,

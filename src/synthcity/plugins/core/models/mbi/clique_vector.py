@@ -36,21 +36,21 @@ class CliqueVector(dict):
         return CliqueVector({cl: Factor.uniform(domain.project(cl)) for cl in cliques})
 
     @staticmethod
-    def random(domain, cliques, prng=np.random):
+    def random(domain, cliques):
         # synthcity relative
         from .factor import Factor
 
         return CliqueVector(
-            {cl: Factor.random(domain.project(cl), prng) for cl in cliques}
+            {cl: Factor.random(domain.project(cl), np.random) for cl in cliques}
         )
 
     @staticmethod
-    def normal(domain, cliques, prng=np.random):
+    def normal(domain, cliques):
         # synthcity relative
         from .factor import Factor
 
         return CliqueVector(
-            {cl: Factor.normal(domain.project(cl), prng) for cl in cliques}
+            {cl: Factor.normal(domain.project(cl), np.random) for cl in cliques}
         )
 
     @staticmethod
