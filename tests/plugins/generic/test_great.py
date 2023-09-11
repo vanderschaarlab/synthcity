@@ -1,6 +1,7 @@
 # stdlib
 import os
 import random
+import sys
 from datetime import datetime, timedelta
 
 # third party
@@ -15,8 +16,13 @@ from synthcity.metrics.eval import PerformanceEvaluatorXGB
 from synthcity.plugins import Plugin
 from synthcity.plugins.core.constraints import Constraints
 from synthcity.plugins.core.dataloader import GenericDataLoader
-from synthcity.plugins.generic.plugin_great import plugin
 from synthcity.utils.serialization import load, save
+
+if sys.version_info >= (3, 9):
+    # synthcity absolute
+    from synthcity.plugins.generic.plugin_great import plugin
+else:
+    plugin = None
 
 IN_GITHUB_ACTIONS: bool = os.getenv("GITHUB_ACTIONS") == "true"
 
@@ -28,26 +34,31 @@ plugin_args = {
 }
 
 
+@pytest.mark.skipif(sys.version_info < (3, 9))
 @pytest.mark.parametrize("test_plugin", generate_fixtures(plugin_name, plugin))
 def test_plugin_sanity(test_plugin: Plugin) -> None:
     assert test_plugin is not None
 
 
+@pytest.mark.skipif(sys.version_info < (3, 9))
 @pytest.mark.parametrize("test_plugin", generate_fixtures(plugin_name, plugin))
 def test_plugin_name(test_plugin: Plugin) -> None:
     assert test_plugin.name() == plugin_name
 
 
+@pytest.mark.skipif(sys.version_info < (3, 9))
 @pytest.mark.parametrize("test_plugin", generate_fixtures(plugin_name, plugin))
 def test_plugin_type(test_plugin: Plugin) -> None:
     assert test_plugin.type() == "generic"
 
 
+@pytest.mark.skipif(sys.version_info < (3, 9))
 @pytest.mark.parametrize("test_plugin", generate_fixtures(plugin_name, plugin))
 def test_plugin_hyperparams(test_plugin: Plugin) -> None:
     assert len(test_plugin.hyperparameter_space()) == 1
 
 
+@pytest.mark.skipif(sys.version_info < (3, 9))
 @pytest.mark.parametrize(
     "test_plugin", generate_fixtures(plugin_name, plugin, plugin_args)
 )
@@ -56,6 +67,7 @@ def test_plugin_fit(test_plugin: Plugin) -> None:
     test_plugin.fit(GenericDataLoader(X))
 
 
+@pytest.mark.skipif(sys.version_info < (3, 9))
 @pytest.mark.skipif(
     IN_GITHUB_ACTIONS,
     reason="GReaT generate required too much memory to reliably run in GitHub Actions",
@@ -92,6 +104,7 @@ def test_plugin_generate(test_plugin: Plugin, serialize: bool) -> None:
 
 
 @pytest.mark.slow
+@pytest.mark.skipif(sys.version_info < (3, 9))
 @pytest.mark.skipif(
     IN_GITHUB_ACTIONS,
     reason="GReaT generate required too much memory to reliably run in GitHub Actions",
@@ -134,6 +147,7 @@ def test_sample_hyperparams() -> None:
         assert plugin(**args) is not None
 
 
+@pytest.mark.skipif(sys.version_info < (3, 9))
 @pytest.mark.skipif(
     IN_GITHUB_ACTIONS,
     reason="GReaT generate required too much memory to reliably run in GitHub Actions",
@@ -168,6 +182,7 @@ def gen_datetime(min_year: int = 2000, max_year: int = datetime.now().year) -> d
 
 
 @pytest.mark.slow
+@pytest.mark.skipif(sys.version_info < (3, 9))
 @pytest.mark.skipif(
     IN_GITHUB_ACTIONS,
     reason="GReaT generate required too much memory to reliably run in GitHub Actions",
