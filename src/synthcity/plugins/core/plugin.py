@@ -560,6 +560,9 @@ class PluginLoader:
 
     @validate_arguments
     def __init__(self, plugins: list, expected_type: Type, categories: list) -> None:
+        self.reload()
+        global PLUGIN_CATEGORY_REGISTRY
+        PLUGIN_CATEGORY_REGISTRY = {cat: [] for cat in categories}
         self._refresh()
         self._available_plugins = {}
         for plugin in plugins:
@@ -742,5 +745,8 @@ class PluginLoader:
         return self.get(key)
 
     def reload(self) -> "PluginLoader":
-        self._plugins = {}
+        global PLUGIN_CATEGORY_REGISTRY
+        PLUGIN_CATEGORY_REGISTRY = dict()
+        global PLUGIN_REGISTRY
+        PLUGIN_REGISTRY = dict()
         return self
