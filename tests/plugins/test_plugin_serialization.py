@@ -18,6 +18,10 @@ from synthcity.utils.datasets.time_series.google_stocks import GoogleStocksDatal
 from synthcity.utils.serialization import load, save
 from synthcity.version import MAJOR_VERSION
 
+generic_plugins = Plugins(categories=["generic"]).list()
+privacy_plugins = Plugins(categories=["privacy"]).list()
+time_series_plugins = Plugins(categories=["time_series"]).list()
+
 
 def test_version() -> None:
     for plugin in Plugins().list():
@@ -75,7 +79,7 @@ def test_serialization_sanity() -> None:
     verify_serialization(syn_model, generate=True)
 
 
-@pytest.mark.parametrize("plugin", Plugins(categories=["privacy"]).list())
+@pytest.mark.parametrize("plugin", privacy_plugins)
 @pytest.mark.slow
 def test_serialization_privacy_plugins(plugin: str) -> None:
     generic_data = pd.DataFrame(load_iris()["data"])
@@ -90,7 +94,7 @@ def test_serialization_privacy_plugins(plugin: str) -> None:
     verify_serialization(syn_model, generate=True)
 
 
-@pytest.mark.parametrize("plugin", Plugins(categories=["generic"]).list())
+@pytest.mark.parametrize("plugin", generic_plugins)
 @pytest.mark.slow
 def test_serialization_generic_plugins(plugin: str) -> None:
     generic_data = pd.DataFrame(load_iris()["data"])
@@ -105,7 +109,7 @@ def test_serialization_generic_plugins(plugin: str) -> None:
     verify_serialization(syn_model, generate=True)
 
 
-@pytest.mark.parametrize("plugin", Plugins(categories=["time_series"]).list())
+@pytest.mark.parametrize("plugin", time_series_plugins)
 @pytest.mark.slow
 def test_serialization_ts_plugins(plugin: str) -> None:
     (
