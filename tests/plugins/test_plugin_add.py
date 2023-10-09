@@ -1,6 +1,4 @@
 # stdlib
-import glob
-from pathlib import Path
 from typing import Any, List
 
 # third party
@@ -45,15 +43,17 @@ def test_add_dummy_plugin() -> None:
     # get the list of plugins that are loaded
     generators = Plugins()
 
-    # Get the list of plugins that come with the package
-    plugins_dir = Path.cwd() / "src/synthcity/plugins"
-    plugins_list = []
-    for plugin_type in plugins_dir.iterdir():
-        plugin_paths = glob.glob(str(plugins_dir / plugin_type / "plugin*.py"))
-        plugins_list.extend([Path(path).stem for path in plugin_paths])
+    # # Get the list of plugins that come with the package
+    # plugins_dir = Path.cwd() / "src/synthcity/plugins"
+    # plugins_list = []
+    # for plugin_type in plugins_dir.iterdir():
+    #     plugin_paths = glob.glob(str(plugins_dir / plugin_type / "plugin*.py"))
+    #     plugins_list.extend([Path(path).stem for path in plugin_paths])
+    available_plugins = Plugins().list()
+    print(sorted(available_plugins))
 
     # Test that the new plugin is not in the list plugins in the package
-    assert "copy_data" not in plugins_list
+    assert "copy_data" not in available_plugins
 
     # Add the new plugin
     generators.add("copy_data", DummyCopyDataPlugin)
@@ -71,5 +71,6 @@ def test_add_dummy_plugin() -> None:
     gen.generate(count=10)
 
     # Test that the new plugin is now in the list of available plugins
-    available_plugins = Plugins().list()
+    available_plugins = Plugins(categories=["debug"]).list()
+    print(sorted(available_plugins))
     assert "copy_data" in available_plugins

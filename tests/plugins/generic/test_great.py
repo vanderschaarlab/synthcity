@@ -34,31 +34,31 @@ plugin_args = {
 }
 
 
-@pytest.mark.skipif(sys.version_info < (3, 9))
+@pytest.mark.skipif(sys.version_info < (3, 9), reason="GReaT requires Python 3.9+")
 @pytest.mark.parametrize("test_plugin", generate_fixtures(plugin_name, plugin))
 def test_plugin_sanity(test_plugin: Plugin) -> None:
     assert test_plugin is not None
 
 
-@pytest.mark.skipif(sys.version_info < (3, 9))
+@pytest.mark.skipif(sys.version_info < (3, 9), reason="GReaT requires Python 3.9+")
 @pytest.mark.parametrize("test_plugin", generate_fixtures(plugin_name, plugin))
 def test_plugin_name(test_plugin: Plugin) -> None:
     assert test_plugin.name() == plugin_name
 
 
-@pytest.mark.skipif(sys.version_info < (3, 9))
+@pytest.mark.skipif(sys.version_info < (3, 9), reason="GReaT requires Python 3.9+")
 @pytest.mark.parametrize("test_plugin", generate_fixtures(plugin_name, plugin))
 def test_plugin_type(test_plugin: Plugin) -> None:
     assert test_plugin.type() == "generic"
 
 
-@pytest.mark.skipif(sys.version_info < (3, 9))
+@pytest.mark.skipif(sys.version_info < (3, 9), reason="GReaT requires Python 3.9+")
 @pytest.mark.parametrize("test_plugin", generate_fixtures(plugin_name, plugin))
 def test_plugin_hyperparams(test_plugin: Plugin) -> None:
     assert len(test_plugin.hyperparameter_space()) == 1
 
 
-@pytest.mark.skipif(sys.version_info < (3, 9))
+@pytest.mark.skipif(sys.version_info < (3, 9), reason="GReaT requires Python 3.9+")
 @pytest.mark.parametrize(
     "test_plugin", generate_fixtures(plugin_name, plugin, plugin_args)
 )
@@ -67,7 +67,7 @@ def test_plugin_fit(test_plugin: Plugin) -> None:
     test_plugin.fit(GenericDataLoader(X))
 
 
-@pytest.mark.skipif(sys.version_info < (3, 9))
+@pytest.mark.skipif(sys.version_info < (3, 9), reason="GReaT requires Python 3.9+")
 @pytest.mark.skipif(
     IN_GITHUB_ACTIONS,
     reason="GReaT generate required too much memory to reliably run in GitHub Actions",
@@ -104,7 +104,7 @@ def test_plugin_generate(test_plugin: Plugin, serialize: bool) -> None:
 
 
 @pytest.mark.slow
-@pytest.mark.skipif(sys.version_info < (3, 9))
+@pytest.mark.skipif(sys.version_info < (3, 9), reason="GReaT requires Python 3.9+")
 @pytest.mark.skipif(
     IN_GITHUB_ACTIONS,
     reason="GReaT generate required too much memory to reliably run in GitHub Actions",
@@ -147,7 +147,7 @@ def test_sample_hyperparams() -> None:
         assert plugin(**args) is not None
 
 
-@pytest.mark.skipif(sys.version_info < (3, 9))
+@pytest.mark.skipif(sys.version_info < (3, 9), reason="GReaT requires Python 3.9+")
 @pytest.mark.skipif(
     IN_GITHUB_ACTIONS,
     reason="GReaT generate required too much memory to reliably run in GitHub Actions",
@@ -182,7 +182,7 @@ def gen_datetime(min_year: int = 2000, max_year: int = datetime.now().year) -> d
 
 
 @pytest.mark.slow
-@pytest.mark.skipif(sys.version_info < (3, 9))
+@pytest.mark.skipif(sys.version_info < (3, 9), reason="GReaT requires Python 3.9+")
 @pytest.mark.skipif(
     IN_GITHUB_ACTIONS,
     reason="GReaT generate required too much memory to reliably run in GitHub Actions",

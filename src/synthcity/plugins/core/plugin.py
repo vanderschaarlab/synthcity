@@ -560,7 +560,7 @@ class PluginLoader:
 
     @validate_arguments
     def __init__(self, plugins: list, expected_type: Type, categories: list) -> None:
-        self.reload()
+        # self.reload()
         global PLUGIN_CATEGORY_REGISTRY
         PLUGIN_CATEGORY_REGISTRY = {cat: [] for cat in categories}
         self._refresh()
@@ -577,7 +577,6 @@ class PluginLoader:
         """Refresh the list of available plugins"""
         self._plugins: Dict[str, Type[Plugin]] = PLUGIN_REGISTRY
         self._categories: Dict[str, List[str]] = PLUGIN_CATEGORY_REGISTRY
-        print("Refreshing: ", self._plugins, self._categories)
 
     @validate_arguments
     def _load_single_plugin_impl(self, plugin_name: str) -> Optional[Type]:
@@ -666,7 +665,8 @@ class PluginLoader:
 
     def add(self, name: str, cls: Type) -> "PluginLoader":
         """Add a new plugin"""
-        print("Adding: ", name, cls)
+        global PLUGIN_REGISTRY
+        global PLUGIN_CATEGORY_REGISTRY
         self._refresh()
         if name in self._plugins:
             log.info(f"Plugin {name} already exists. Overwriting")
@@ -701,7 +701,6 @@ class PluginLoader:
         """
         self._refresh()
         if name not in self._plugins and name not in self._available_plugins:
-            print(self._plugins, self._available_plugins)
             raise ValueError(f"Plugin {name} doesn't exist.")
 
         if name not in self._plugins:
@@ -748,9 +747,8 @@ class PluginLoader:
         return self.get(key)
 
     def reload(self) -> "PluginLoader":
-        print("Reloading")
         global PLUGIN_CATEGORY_REGISTRY
-        PLUGIN_CATEGORY_REGISTRY = dict()
         global PLUGIN_REGISTRY
+        PLUGIN_CATEGORY_REGISTRY = dict()
         PLUGIN_REGISTRY = dict()
         return self
