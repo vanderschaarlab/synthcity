@@ -115,7 +115,7 @@ def test_plugin_generate(test_plugin: Plugin, serialize: bool) -> None:
 def test_plugin_generate_constraints_great(test_plugin: Plugin) -> None:
     X, y = load_iris(as_frame=True, return_X_y=True)
     X["target"] = y
-    test_plugin.fit(GenericDataLoader(X))
+    test_plugin.fit(GenericDataLoader(X), device="cpu")
 
     constraints = Constraints(
         rules=[
