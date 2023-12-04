@@ -450,6 +450,13 @@ _Quasi-identifiers_ : pieces of information that are not of themselves unique id
 |**sensitive_data_reidentification_xgb**|Sensitive data prediction from the quasi-identifiers using an XGBoost.|0 for no risk.|
 |**sensitive_data_reidentification_mlp**|Sensitive data prediction from the quasi-identifiers using a Neural Net.|0 for no risk.|
 
+## :mag: Interesting use-cases of synthetic data beyond fidelity & privacy
+- Benchmarking: https://github.com/vanderschaarlab/synthcity-benchmark
+- Synthetic data capturing nuances of real data: https://github.com/vanderschaarlab/data-centric-synthetic-data
+- Model Evaluation/Testing: https://github.com/vanderschaarlab/3S-Testing
+- Generative uncertainty: https://github.com/vanderschaarlab/deep_generative_ensemble
+
+
 ## :hammer: Tests
 
 Install the testing dependencies using
