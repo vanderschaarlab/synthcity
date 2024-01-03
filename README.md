@@ -450,6 +450,17 @@ _Quasi-identifiers_ : pieces of information that are not of themselves unique id
 |**sensitive_data_reidentification_xgb**|Sensitive data prediction from the quasi-identifiers using an XGBoost.|0 for no risk.|
 |**sensitive_data_reidentification_mlp**|Sensitive data prediction from the quasi-identifiers using a Neural Net.|0 for no risk.|
 
+## :mag: Use-cases of synthetic data beyond fidelity & privacy
+
+The following table contains research projects and papers that have been completed using Synthcity. Feel free to explore them and be inspired to use Synthcity in your own research project!
+
+|Project|Description|Code|Paper|
+|-------|-----------|----|-----|
+|Synthetic data capturing nuances of real data|Ensuring that synthetic data mirrors the complex nuances of real-world data is a challenging task. This paper addresses this issue by exploring the potential of integrating data-centric AI techniques which profile the data to guide the synthetic data generation process.| [Code](https://github.com/vanderschaarlab/data-centric-synthetic-data)|[NeurIPS 2023 paper](https://arxiv.org/abs/2310.16981)|
+|Model Evaluation/Testing|This paper aim to improve model evaluation with synthetic test data|[Code](https://github.com/vanderschaarlab/3S-Testing)|[NeurIPS 2023 paper](https://neurips.cc/virtual/2023/poster/70210)|
+|Generative uncertainty|This paper explores how the generative process affects the downstream ML task. |[Code](https://github.com/vanderschaarlab/deep_generative_ensemble)|[ICML 2023 paper](https://arxiv.org/abs/2305.09235)|
+|Benchmarking Synthcity|This paper employs synthcity's benchmarking pipeline to compare different SOTA methods across multiple openml datasets. The paper aims to introduce the wider ML community to Synthcity.| [Code](https://github.com/vanderschaarlab/synthcity-benchmark)|[NeurIPS 2023 paper](https://arxiv.org/abs/2301.07573)|
+
 ## :hammer: Tests
 
 Install the testing dependencies using
