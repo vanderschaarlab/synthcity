@@ -43,14 +43,7 @@ def test_add_dummy_plugin() -> None:
     # get the list of plugins that are loaded
     generators = Plugins()
 
-    # # Get the list of plugins that come with the package
-    # plugins_dir = Path.cwd() / "src/synthcity/plugins"
-    # plugins_list = []
-    # for plugin_type in plugins_dir.iterdir():
-    #     plugin_paths = glob.glob(str(plugins_dir / plugin_type / "plugin*.py"))
-    #     plugins_list.extend([Path(path).stem for path in plugin_paths])
     available_plugins = Plugins().list()
-    print(sorted(available_plugins))
 
     # Test that the new plugin is not in the list plugins in the package
     assert "copy_data" not in available_plugins
