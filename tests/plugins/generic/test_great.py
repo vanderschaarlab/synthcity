@@ -62,6 +62,10 @@ def test_plugin_hyperparams(test_plugin: Plugin) -> None:
 @pytest.mark.parametrize(
     "test_plugin", generate_fixtures(plugin_name, plugin, plugin_args)
 )
+@pytest.mark.skipif(
+    IN_GITHUB_ACTIONS,
+    reason="GReaT generate required too much memory to reliably run in GitHub Actions",
+)
 def test_plugin_fit(test_plugin: Plugin) -> None:
     X, _ = load_iris(as_frame=True, return_X_y=True)
     test_plugin.fit(GenericDataLoader(X))
