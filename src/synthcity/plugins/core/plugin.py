@@ -560,6 +560,9 @@ class PluginLoader:
 
     @validate_arguments
     def __init__(self, plugins: list, expected_type: Type, categories: list) -> None:
+        # self.reload()
+        global PLUGIN_CATEGORY_REGISTRY
+        PLUGIN_CATEGORY_REGISTRY = {cat: [] for cat in categories}
         self._refresh()
         self._available_plugins = {}
         for plugin in plugins:
@@ -662,6 +665,8 @@ class PluginLoader:
 
     def add(self, name: str, cls: Type) -> "PluginLoader":
         """Add a new plugin"""
+        global PLUGIN_REGISTRY
+        global PLUGIN_CATEGORY_REGISTRY
         self._refresh()
         if name in self._plugins:
             log.info(f"Plugin {name} already exists. Overwriting")
@@ -742,5 +747,8 @@ class PluginLoader:
         return self.get(key)
 
     def reload(self) -> "PluginLoader":
-        self._plugins = {}
+        global PLUGIN_CATEGORY_REGISTRY
+        global PLUGIN_REGISTRY
+        PLUGIN_CATEGORY_REGISTRY = dict()
+        PLUGIN_REGISTRY = dict()
         return self

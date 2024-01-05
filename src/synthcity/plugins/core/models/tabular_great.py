@@ -1,4 +1,5 @@
 # stdlib
+from abc import ABCMeta
 from typing import Any, Dict, Optional, Union
 
 # third party
@@ -20,7 +21,7 @@ Please be aware that GReaT is only available for python >= 3.9.
 from synthcity.utils.constants import DEVICE
 
 
-class TabularGReaT:
+class TabularGReaT(metaclass=ABCMeta):
     """
     .. inheritance-diagram:: synthcity.plugins.core.models.tabular_great.TabularGReaT
     :parts: 1

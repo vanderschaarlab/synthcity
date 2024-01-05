@@ -363,7 +363,7 @@ def test_evaluate_performance_custom_labels(
 
 
 @pytest.mark.slow
-@pytest.mark.parametrize("test_plugin", [Plugins().get("marginal_distributions")])
+@pytest.mark.parametrize("test_plugin", [Plugins().get("timegan")])
 @pytest.mark.parametrize(
     "evaluator_t",
     [

@@ -1,8 +1,8 @@
 # third party
 import numpy as np
-import pkg_resources
 import pytest
 from generic_helpers import generate_fixtures
+from importlib_metadata import PackageNotFoundError, distribution
 from sklearn.datasets import load_diabetes, load_iris
 
 # synthcity absolute
@@ -24,8 +24,13 @@ plugin_args = {
 
 if not is_missing_goggle_deps:
     goggle_dependencies = {"dgl", "torch-scatter", "torch-sparse", "torch-geometric"}
-    installed = {pkg.key for pkg in pkg_resources.working_set}
-    is_missing_goggle_deps = len(goggle_dependencies - installed) > 0
+    missing_deps = []
+    for dep in goggle_dependencies:
+        try:
+            distribution(dep)
+        except PackageNotFoundError:
+            missing_deps.append(dep)
+    is_missing_goggle_deps = len(missing_deps) > 0
 
 
 @pytest.mark.skipif(is_missing_goggle_deps, reason="Goggle dependencies not installed")

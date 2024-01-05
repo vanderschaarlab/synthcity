@@ -74,7 +74,6 @@ class GoogleStocksDataloader:
                 np.asarray(observation_times),
                 np.asarray(outcome, dtype=np.float32),
             )
-
         return (
             pd.DataFrame(np.zeros((len(temporal_data), 0))),
             temporal_data,

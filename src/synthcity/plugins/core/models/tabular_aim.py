@@ -1,5 +1,6 @@
 # stdlib
 import itertools
+from abc import ABCMeta
 from typing import Any, Optional, Union
 
 # third party
@@ -17,7 +18,7 @@ from .mbi.dataset import Dataset
 from .mbi.domain import Domain
 
 
-class TabularAIM:
+class TabularAIM(metaclass=ABCMeta):
     """
     .. inheritance-diagram:: synthcity.plugins.core.models.tabular_aim.TabularAIM
     :parts: 1
@@ -68,7 +69,6 @@ class TabularAIM:
         self.degree = degree
         self.num_marginals = num_marginals
         self.max_cells = max_cells
-        self.prng = np.random
 
     @validate_arguments(config=dict(arbitrary_types_allowed=True))
     def fit(
@@ -101,7 +101,7 @@ class TabularAIM:
         if self.num_marginals is not None:
             workload = [
                 workload[i]
-                for i in self.prng.choice(
+                for i in np.random.choice(
                     len(workload), self.num_marginals, replace=False
                 )
             ]

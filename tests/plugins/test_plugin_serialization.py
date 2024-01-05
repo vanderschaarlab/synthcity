@@ -1,4 +1,5 @@
 # stdlib
+import inspect
 from typing import Any
 
 # third party
@@ -16,6 +17,10 @@ from synthcity.plugins.core.dataloader import (
 from synthcity.utils.datasets.time_series.google_stocks import GoogleStocksDataloader
 from synthcity.utils.serialization import load, save
 from synthcity.version import MAJOR_VERSION
+
+generic_plugins = Plugins(categories=["generic"]).list()
+privacy_plugins = Plugins(categories=["privacy"]).list()
+time_series_plugins = Plugins(categories=["time_series"]).list()
 
 
 def test_version() -> None:
@@ -74,7 +79,7 @@ def test_serialization_sanity() -> None:
     verify_serialization(syn_model, generate=True)
 
 
-@pytest.mark.parametrize("plugin", Plugins(categories=["privacy"]).list())
+@pytest.mark.parametrize("plugin", privacy_plugins)
 @pytest.mark.slow
 def test_serialization_privacy_plugins(plugin: str) -> None:
     generic_data = pd.DataFrame(load_iris()["data"])
@@ -89,7 +94,7 @@ def test_serialization_privacy_plugins(plugin: str) -> None:
     verify_serialization(syn_model, generate=True)
 
 
-@pytest.mark.parametrize("plugin", Plugins(categories=["generic"]).list())
+@pytest.mark.parametrize("plugin", generic_plugins)
 @pytest.mark.slow
 def test_serialization_generic_plugins(plugin: str) -> None:
     generic_data = pd.DataFrame(load_iris()["data"])
@@ -104,7 +109,7 @@ def test_serialization_generic_plugins(plugin: str) -> None:
     verify_serialization(syn_model, generate=True)
 
 
-@pytest.mark.parametrize("plugin", Plugins(categories=["time_series"]).list())
+@pytest.mark.parametrize("plugin", time_series_plugins)
 @pytest.mark.slow
 def test_serialization_ts_plugins(plugin: str) -> None:
     (
@@ -121,7 +126,14 @@ def test_serialization_ts_plugins(plugin: str) -> None:
     )
 
     ts_plugins = Plugins(categories=["time_series"])
-    syn_model = ts_plugins.get(plugin, n_iter=10, strict=False)
+
+    # Use n_iter to limit the number of iterations for testing purposes, if possible
+    # TODO: consider removing this filter step and add n_iter to all models even if it's not used
+    test_params = {"n_iter": 10, "strict": False}
+    accepted_params = inspect.signature(ts_plugins.get).parameters
+    filtered_kwargs = {k: v for k, v in test_params.items() if k in accepted_params}
+
+    syn_model = ts_plugins.get(plugin, **filtered_kwargs)
 
     # pre-training
     verify_serialization(syn_model)

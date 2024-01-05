@@ -932,7 +932,9 @@ class TimeSeriesDataLoader(DataLoader):
             longest_observation_seq = max([len(seq) for seq in temporal_data])
             return (
                 np.asarray(static_data),
-                np.asarray(temporal_data),
+                np.asarray(
+                    pd.concat(temporal_data)
+                ),  # TODO: check this works with time series benchmarks
                 # masked array to handle variable length sequences
                 ma.vstack(
                     [

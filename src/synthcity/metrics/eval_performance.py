@@ -425,12 +425,10 @@ class PerformanceEvaluator(MetricEvaluator):
             temporal_train_data = id_temporal_gt[train_idx]
             observation_times_train_data = id_observation_times_gt[train_idx]
             outcome_train_data = id_outcome_gt[train_idx]
-
             static_test_data = id_static_gt[test_idx]
             temporal_test_data = id_temporal_gt[test_idx]
             observation_times_test_data = id_observation_times_gt[test_idx]
             outcome_test_data = id_outcome_gt[test_idx]
-
             real_score = ts_eval_cbk(
                 static_train_data,
                 temporal_train_data,
