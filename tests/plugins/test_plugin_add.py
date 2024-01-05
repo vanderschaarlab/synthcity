@@ -41,7 +41,7 @@ class DummyCopyDataPlugin(Plugin):
 
 def test_add_dummy_plugin() -> None:
     # get the list of plugins that are loaded
-    generators = Plugins()
+    generators = Plugins().reload()
 
     available_plugins = Plugins().list()
 
@@ -65,5 +65,4 @@ def test_add_dummy_plugin() -> None:
 
     # Test that the new plugin is now in the list of available plugins
     available_plugins = Plugins(categories=["debug"]).list()
-    print(sorted(available_plugins))
     assert "copy_data" in available_plugins
