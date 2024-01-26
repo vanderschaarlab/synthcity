@@ -200,15 +200,15 @@ class Metrics:
         if metrics is None:
             metrics = Metrics.list()
 
-        X_gt, _ = X_gt.encode()
-        X_syn, _ = X_syn.encode()
+        X_gt, encoders = X_gt.encode()
+        X_syn, _ = X_syn.encode(encoders)
 
         if X_train:
-            X_train, _ = X_train.encode()
+            X_train, _ = X_train.encode(encoders)
         if X_ref_syn:
-            X_ref_syn, _ = X_ref_syn.encode()
+            X_ref_syn, _ = X_ref_syn.encode(encoders)
         if X_augmented:
-            X_augmented, _ = X_augmented.encode()
+            X_augmented, _ = X_augmented.encode(encoders)
 
         scores = ScoreEvaluator()
 
