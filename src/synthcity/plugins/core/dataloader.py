@@ -928,12 +928,16 @@ class TimeSeriesDataLoader(DataLoader):
                 self.data["observation_times"],
                 self.data["outcome"],
             )
+        # print(
+        #     f"concat(temporal_data).shape: {np.asarray(pd.concat(temporal_data)).shape}"
+        # )
+        # print(f"temporal_data.shape: {np.asarray(temporal_data).shape}")
         if as_numpy:
             longest_observation_seq = max([len(seq) for seq in temporal_data])
             return (
                 np.asarray(static_data),
                 np.asarray(
-                    pd.concat(temporal_data)
+                    temporal_data
                 ),  # TODO: check this works with time series benchmarks
                 # masked array to handle variable length sequences
                 ma.vstack(
