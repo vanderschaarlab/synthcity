@@ -39,6 +39,7 @@ class DummyCopyDataPlugin(Plugin):
         return self.X.sample(count)
 
 
+# TODO: fix this test
 def test_add_dummy_plugin() -> None:
     # get the list of plugins that are loaded
     generators = Plugins().reload()

@@ -18,10 +18,6 @@ from synthcity.utils.datasets.time_series.google_stocks import GoogleStocksDatal
 from synthcity.utils.serialization import load, save
 from synthcity.version import MAJOR_VERSION
 
-generic_plugins = Plugins(categories=["generic"]).list()
-privacy_plugins = Plugins(categories=["privacy"]).list()
-time_series_plugins = Plugins(categories=["time_series"]).list()
-
 
 def test_version() -> None:
     for plugin in Plugins().list():
@@ -79,11 +75,11 @@ def test_serialization_sanity() -> None:
     verify_serialization(syn_model, generate=True)
 
 
-@pytest.mark.parametrize("plugin", privacy_plugins)
+@pytest.mark.parametrize("plugin", Plugins(categories=["privacy"]).reload().list())
 @pytest.mark.slow
 def test_serialization_privacy_plugins(plugin: str) -> None:
     generic_data = pd.DataFrame(load_iris()["data"])
-    plugins = Plugins(categories=["privacy"])
+    plugins = Plugins(categories=["privacy"]).reload()
 
     # pre-training
     syn_model = plugins.get(plugin, strict=False)
@@ -94,11 +90,12 @@ def test_serialization_privacy_plugins(plugin: str) -> None:
     verify_serialization(syn_model, generate=True)
 
 
-@pytest.mark.parametrize("plugin", generic_plugins)
+# TODO: fix this test[bayesian_network, aim, timegan]
+@pytest.mark.parametrize("plugin", Plugins(categories=["generic"]).reload().list())
 @pytest.mark.slow
 def test_serialization_generic_plugins(plugin: str) -> None:
     generic_data = pd.DataFrame(load_iris()["data"])
-    plugins = Plugins(categories=["generic"])
+    plugins = Plugins(categories=["generic"]).reload()
 
     # pre-training
     syn_model = plugins.get(plugin, strict=False)
@@ -109,7 +106,7 @@ def test_serialization_generic_plugins(plugin: str) -> None:
     verify_serialization(syn_model, generate=True)
 
 
-@pytest.mark.parametrize("plugin", time_series_plugins)
+@pytest.mark.parametrize("plugin", Plugins(categories=["time_series"]).reload().list())
 @pytest.mark.slow
 def test_serialization_ts_plugins(plugin: str) -> None:
     (
@@ -125,7 +122,7 @@ def test_serialization_ts_plugins(plugin: str) -> None:
         outcome=outcome,
     )
 
-    ts_plugins = Plugins(categories=["time_series"])
+    ts_plugins = Plugins(categories=["time_series"]).reload()
 
     # Use n_iter to limit the number of iterations for testing purposes, if possible
     # TODO: consider removing this filter step and add n_iter to all models even if it's not used
@@ -152,7 +149,7 @@ def test_serialization_surv_plugins(plugin: str) -> None:
         target_column="arrest",
         time_to_event_column="week",
     )
-    surv_plugins = Plugins(categories=["survival_analysis"])
+    surv_plugins = Plugins(categories=["survival_analysis"]).reload()
     syn_model = surv_plugins.get(plugin, n_iter=10, strict=False)
 
     # pre-training
