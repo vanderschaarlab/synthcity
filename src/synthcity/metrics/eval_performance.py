@@ -405,22 +405,18 @@ class PerformanceEvaluator(MetricEvaluator):
             observation_times_test: np.ndarray,
             outcome_test: np.ndarray,
         ) -> float:
-            # try:
-            estimator = model(**model_args).fit(
-                static_train, temporal_train, observation_times_train, outcome_train
-            )
-            preds = estimator.predict(
-                static_test, temporal_test, observation_times_test
-            )
-            # print(
-            #     f"temporal_test.shape: {temporal_test.shape}, outcome_test.shape: {outcome_test.shape}"
-            # )
+            try:
+                estimator = model(**model_args).fit(
+                    static_train, temporal_train, observation_times_train, outcome_train
+                )
+                preds = estimator.predict(
+                    static_test, temporal_test, observation_times_test
+                )
 
-            score = r2_score(outcome_test, preds)
-            # except BaseException as e:
-            #     log.error(f"regression evaluation failed {e}")
-            #     print(f"regression evaluation failed {e}")
-            #     score = -1
+                score = r2_score(outcome_test, preds)
+            except BaseException as e:
+                log.error(f"regression evaluation failed {e}")
+                score = -1
 
             return score
 
