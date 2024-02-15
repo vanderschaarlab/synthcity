@@ -63,6 +63,7 @@ def test_train_prediction_dyn_deephit(rnn_type: str, output_type: str) -> None:
     assert score["clf"]["c_index"][0] > 0.5
 
 
+@pytest.mark.slow_1
 @pytest.mark.slow
 def test_hyperparam_search() -> None:
     static, temporal, observation_times, outcome = PBCDataloader(as_numpy=True).load()

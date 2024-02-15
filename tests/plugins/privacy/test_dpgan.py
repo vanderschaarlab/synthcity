@@ -111,6 +111,7 @@ def test_sample_hyperparams() -> None:
         assert plugin(**args) is not None
 
 
+@pytest.mark.slow_2
 @pytest.mark.slow
 @pytest.mark.skipif(sys.platform != "linux", reason="Linux only for faster results")
 def test_eval_performance_dpgan() -> None:
@@ -136,6 +137,7 @@ def test_eval_performance_dpgan() -> None:
 # ISSUE: Conditional generation for DPGAN currently not working
 # Issue with the training step for training GANs with conditionals with dp_enabled set to True
 # As is the case for DPGAN
+# @pytest.mark.slow_2
 # @pytest.mark.slow
 # def test_plugin_conditional_dpgan() -> None:
 #     test_plugin = plugin(generator_n_units_hidden=5)

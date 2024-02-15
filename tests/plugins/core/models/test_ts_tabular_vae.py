@@ -75,6 +75,7 @@ def test_ts_vae_generation(source: Any) -> None:
     )
 
 
+@pytest.mark.slow_1
 @pytest.mark.slow
 @pytest.mark.parametrize("source", [GoogleStocksDataloader])
 def test_ts_vae_generation_schema(source: Any) -> None:

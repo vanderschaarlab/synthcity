@@ -59,6 +59,7 @@ def test_plugin_fit(test_plugin: Plugin) -> None:
     test_plugin.fit(GenericDataLoader(X))
 
 
+@pytest.mark.slow_2
 @pytest.mark.slow
 @pytest.mark.parametrize(
     "test_plugin",
@@ -90,6 +91,7 @@ def test_plugin_generate(test_plugin: Plugin, serialize: bool) -> None:
     assert (X_gen1.numpy() != X_gen3.numpy()).any()
 
 
+@pytest.mark.slow_2
 @pytest.mark.slow
 @pytest.mark.parametrize(
     "test_plugin", generate_fixtures(plugin_name, plugin, plugin_args)
@@ -126,6 +128,7 @@ def test_sample_hyperparams() -> None:
         assert plugin(**args) is not None
 
 
+@pytest.mark.slow_2
 @pytest.mark.slow
 @pytest.mark.parametrize("compress_dataset", [True, False])
 def test_eval_performance_aim(compress_dataset: bool) -> None:

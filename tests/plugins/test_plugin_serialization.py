@@ -76,6 +76,7 @@ def test_serialization_sanity() -> None:
 
 
 @pytest.mark.parametrize("plugin", Plugins(categories=["privacy"]).reload().list())
+@pytest.mark.slow_1
 @pytest.mark.slow
 def test_serialization_privacy_plugins(plugin: str) -> None:
     generic_data = pd.DataFrame(load_iris()["data"])
@@ -92,6 +93,7 @@ def test_serialization_privacy_plugins(plugin: str) -> None:
 
 # TODO: fix this test[bayesian_network, aim, timegan]
 @pytest.mark.parametrize("plugin", Plugins(categories=["generic"]).reload().list())
+@pytest.mark.slow_1
 @pytest.mark.slow
 def test_serialization_generic_plugins(plugin: str) -> None:
     generic_data = pd.DataFrame(load_iris()["data"])
@@ -107,6 +109,7 @@ def test_serialization_generic_plugins(plugin: str) -> None:
 
 
 @pytest.mark.parametrize("plugin", Plugins(categories=["time_series"]).reload().list())
+@pytest.mark.slow_1
 @pytest.mark.slow
 def test_serialization_ts_plugins(plugin: str) -> None:
     (
@@ -141,6 +144,7 @@ def test_serialization_ts_plugins(plugin: str) -> None:
 
 
 @pytest.mark.parametrize("plugin", ["survival_gan"])
+@pytest.mark.slow_1
 @pytest.mark.slow
 def test_serialization_surv_plugins(plugin: str) -> None:
     X = load_rossi()

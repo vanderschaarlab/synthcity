@@ -107,6 +107,7 @@ def test_plugin_generate(test_plugin: Plugin, serialize: bool) -> None:
     assert (X_gen1.numpy() != X_gen3.numpy()).any()
 
 
+@pytest.mark.slow_2
 @pytest.mark.slow
 @pytest.mark.skipif(sys.version_info < (3, 9), reason="GReaT requires Python 3.9+")
 @pytest.mark.skipif(
@@ -185,6 +186,7 @@ def gen_datetime(min_year: int = 2000, max_year: int = datetime.now().year) -> d
     return start + (end - start) * random.random()
 
 
+@pytest.mark.slow_2
 @pytest.mark.slow
 @pytest.mark.skipif(sys.version_info < (3, 9), reason="GReaT requires Python 3.9+")
 @pytest.mark.skipif(

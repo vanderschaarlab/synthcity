@@ -155,6 +155,7 @@ def test_sample_hyperparams() -> None:
         assert plugin(**args) is not None
 
 
+@pytest.mark.slow_2
 @pytest.mark.slow
 def test_timegan_plugin_generate_survival() -> None:
     (

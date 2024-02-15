@@ -152,6 +152,7 @@ def test_sample_hyperparams() -> None:
 # TODO: Known issue goggle seems to have a performance issue.
 # Testing fidelity instead. Also need to test more architectures
 @pytest.mark.skipif(is_missing_goggle_deps, reason="Goggle dependencies not installed")
+@pytest.mark.slow_2
 @pytest.mark.slow
 def test_eval_fidelity_goggle(compress_dataset: bool, decoder_arch: str) -> None:
     results = []
