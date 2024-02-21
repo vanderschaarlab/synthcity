@@ -1,9 +1,12 @@
 # stdlib
+import copy
 from pathlib import Path
 from typing import Dict, List, Optional, Union
 
 # third party
+import numpy as np
 import pandas as pd
+import torch
 from pydantic import validate_arguments
 
 # synthcity absolute
@@ -200,9 +203,26 @@ class Metrics:
         if metrics is None:
             metrics = Metrics.list()
 
+        """
+        We need to encode the categorical data in the real and synthetic data. 
+        To ensure each category in the two datasets are mapped to the same index, we merge X_syn into X_gt for computing the encoder.
+        """
+        len_x_gt = len(X_gt.data)
+        if isinstance(X_gt.data, pd.DataFrame):
+            X_gt.data = pd.concat([X_gt.data, X_syn.data],axis=0)
+        elif isinstance(X_gt.data, torch.Tensor):
+            X_gt.data = torch.cat([X_gt.data, X_syn.data],axis=0)
+        elif isinstance(X_gt.data, np.ndarray):
+            X_gt.data = np.concatenate([X_gt.data, X_syn.data],axis=0)
+
         X_gt, encoders = X_gt.encode()
+        # Reset the data to the original length, to remove the synthetic data
+        X_gt.data = X_gt.data.iloc[:len_x_gt]
+
+        # Encode the synthetic data and other datasets
         X_syn, _ = X_syn.encode(encoders)
 
+        # TODO: Check whether the below also need to share the same encoders
         if X_train:
             X_train, _ = X_train.encode(encoders)
         if X_ref_syn:
