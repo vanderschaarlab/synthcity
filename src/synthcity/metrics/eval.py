@@ -201,7 +201,7 @@ class Metrics:
             metrics = Metrics.list()
 
         """
-        We need to encode the categorical data in the real and synthetic data. 
+        We need to encode the categorical data in the real and synthetic data.
         To ensure each category in the two datasets are mapped to the same index, we merge X_syn into X_gt for computing the encoder.
         """
         X_gt_df = X_gt.dataframe()
@@ -212,7 +212,8 @@ class Metrics:
         X_gt, _ = X_gt.encode(encoders)
         X_syn, _ = X_syn.encode(encoders)
 
-        # TODO: Check whether the below also need to share the same encoders
+        # TODO: Check whether the below also need to share the same encoders, and whether it's necessary to warn the user when
+        # there are classes that are not present in the training data but are present in one of these
         if X_train:
             X_train, _ = X_train.encode(encoders)
         if X_ref_syn:
