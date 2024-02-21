@@ -207,19 +207,12 @@ class Metrics:
         We need to encode the categorical data in the real and synthetic data. 
         To ensure each category in the two datasets are mapped to the same index, we merge X_syn into X_gt for computing the encoder.
         """
-        len_x_gt = len(X_gt.data)
-        if isinstance(X_gt.data, pd.DataFrame):
-            X_gt.data = pd.concat([X_gt.data, X_syn.data],axis=0)
-        elif isinstance(X_gt.data, torch.Tensor):
-            X_gt.data = torch.cat([X_gt.data, X_syn.data],axis=0)
-        elif isinstance(X_gt.data, np.ndarray):
-            X_gt.data = np.concatenate([X_gt.data, X_syn.data],axis=0)
+        X_gt_df = X_gt.dataframe()
+        X_syn_df = X_syn.dataframe()
+        X_enc = create_from_info(pd.concat([X_gt_df, X_syn_df]), X_gt.info())
+        _, encoders = X_enc.encode()
 
-        X_gt, encoders = X_gt.encode()
-        # Reset the data to the original length, to remove the synthetic data
-        X_gt.data = X_gt.data.iloc[:len_x_gt]
-
-        # Encode the synthetic data and other datasets
+        X_gt, _ = X_gt.encode(encoders)
         X_syn, _ = X_syn.encode(encoders)
 
         # TODO: Check whether the below also need to share the same encoders
