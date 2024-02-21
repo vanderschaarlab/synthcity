@@ -60,7 +60,7 @@ class TabularEncoder(TransformerMixin, BaseEstimator):
 
     categorical_encoder: Union[str, type] = "onehot"
     continuous_encoder: Union[str, type] = "bayesian_gmm"
-    cat_encoder_params: dict = dict(handle_unknown="ignore", sparse=False)
+    cat_encoder_params: dict = dict(handle_unknown="ignore", sparse_output=False)
     cont_encoder_params: dict = dict(n_components=10)
 
     @validate_arguments(config=dict(arbitrary_types_allowed=True))
