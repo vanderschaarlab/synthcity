@@ -130,6 +130,7 @@ def test_sample_hyperparams() -> None:
         assert plugin(**args) is not None
 
 
+@pytest.mark.slow_2
 @pytest.mark.slow
 @pytest.mark.parametrize("compress_dataset", [True, False])
 def test_eval_performance(compress_dataset: bool) -> None:

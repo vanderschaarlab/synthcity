@@ -129,6 +129,7 @@ def test_ts_gan_generation(source: Any) -> None:
     assert observation_times_gen.shape == (10, temporal.shape[1])
 
 
+@pytest.mark.slow_1
 @pytest.mark.slow
 @pytest.mark.parametrize("source", [GoogleStocksDataloader])
 def test_ts_gan_generation_schema(source: Any) -> None:

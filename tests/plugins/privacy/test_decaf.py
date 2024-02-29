@@ -86,6 +86,7 @@ def test_plugin_hyperparams(test_plugin: Plugin) -> None:
     ["hillclimb", "d-struct"],
 )
 @pytest.mark.parametrize("struct_learning_score", ["k2", "bdeu"])
+@pytest.mark.slow_2
 @pytest.mark.slow
 def test_plugin_fit(
     struct_learning_search_method: str, struct_learning_score: str
@@ -140,6 +141,7 @@ def test_get_dag(struct_learning_search_method: str) -> None:
     ["hillclimb", "d-struct"],
 )
 @pytest.mark.skipif(sys.platform != "linux", reason="Linux only for faster results")
+@pytest.mark.slow_2
 @pytest.mark.slow
 def test_plugin_generate_and_learn_dag(struct_learning_search_method: str) -> None:
     test_plugin = plugin(
@@ -162,6 +164,7 @@ def test_plugin_generate_and_learn_dag(struct_learning_search_method: str) -> No
 
 
 @pytest.mark.parametrize("use_dag_seed", [True])
+@pytest.mark.slow_2
 @pytest.mark.slow
 def test_debiasing(use_dag_seed: bool) -> None:
     # causal structure is in dag_seed

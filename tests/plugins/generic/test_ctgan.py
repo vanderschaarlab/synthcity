@@ -116,6 +116,7 @@ def test_sample_hyperparams() -> None:
         assert plugin(**args) is not None
 
 
+@pytest.mark.slow_1
 @pytest.mark.slow
 @pytest.mark.parametrize("compress_dataset", [True, False])
 def test_eval_performance_ctgan(compress_dataset: bool) -> None:
@@ -169,6 +170,7 @@ def gen_datetime(min_year: int = 2000, max_year: int = datetime.now().year) -> d
     return start + (end - start) * random.random()
 
 
+@pytest.mark.slow_1
 @pytest.mark.slow
 def test_plugin_encoding() -> None:
     data = [[gen_datetime(), i % 2 == 0, i] for i in range(1000)]
