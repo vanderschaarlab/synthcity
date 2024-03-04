@@ -41,6 +41,7 @@ def test_plugin_hyperparams(test_plugin: Plugin) -> None:
     assert len(test_plugin.hyperparameter_space()) == 10
 
 
+@pytest.mark.slow_2
 @pytest.mark.slow
 def test_plugin_fit() -> None:
     (
@@ -70,6 +71,7 @@ def test_plugin_fit() -> None:
         GoogleStocksDataloader(),
     ],
 )
+@pytest.mark.slow_2
 @pytest.mark.slow
 def test_plugin_generate(source: Any) -> None:
     static_data, temporal_data, observation_times, outcome = source.load()
@@ -101,6 +103,7 @@ def test_sample_hyperparams() -> None:
     sys.version_info < (3, 9), reason="test only with python3.9 or higher"
 )
 @pytest.mark.skipif(sys.platform != "linux", reason="Linux only for faster results")
+@pytest.mark.slow_2
 @pytest.mark.slow
 def test_plugin_generate_survival() -> None:
     (

@@ -59,6 +59,7 @@ def test_plugin_fit(test_plugin: Plugin) -> None:
     test_plugin.fit(GenericDataLoader(X))
 
 
+@pytest.mark.slow_2
 @pytest.mark.slow
 @pytest.mark.parametrize(
     "test_plugin",
@@ -90,12 +91,13 @@ def test_plugin_generate(test_plugin: Plugin, serialize: bool) -> None:
     assert (X_gen1.numpy() != X_gen3.numpy()).any()
 
 
+@pytest.mark.slow_2
 @pytest.mark.slow
 @pytest.mark.parametrize(
     "test_plugin", generate_fixtures(plugin_name, plugin, plugin_args)
 )
 def test_plugin_generate_constraints_aim(test_plugin: Plugin) -> None:
-    X = CategoricalAdultDataloader().load().head()
+    X = CategoricalAdultDataloader().load().sample(frac=0.1)
     test_plugin.fit(GenericDataLoader(X, target_column="income>50K"))
 
     constraints = Constraints(
@@ -105,12 +107,14 @@ def test_plugin_generate_constraints_aim(test_plugin: Plugin) -> None:
     )
 
     X_gen = test_plugin.generate(constraints=constraints).dataframe()
+
     assert len(X_gen) == len(X)
     assert test_plugin.schema_includes(X_gen)
     assert constraints.filter(X_gen).sum() == len(X_gen)
     assert (X_gen["income>50K"] == 1).all()
 
     X_gen = test_plugin.generate(count=50, constraints=constraints).dataframe()
+
     assert len(X_gen) == 50
     assert test_plugin.schema_includes(X_gen)
     assert constraints.filter(X_gen).sum() == len(X_gen)
@@ -124,6 +128,7 @@ def test_sample_hyperparams() -> None:
         assert plugin(**args) is not None
 
 
+@pytest.mark.slow_2
 @pytest.mark.slow
 @pytest.mark.parametrize("compress_dataset", [True, False])
 def test_eval_performance_aim(compress_dataset: bool) -> None:
@@ -133,7 +138,7 @@ def test_eval_performance_aim(compress_dataset: bool) -> None:
     X_raw, y = load_iris(as_frame=True, return_X_y=True)
     X_raw["target"] = y
     # Descretize the data
-    num_bins = 3
+    num_bins = 10
     for col in X_raw.columns:
         X_raw[col] = pd.cut(X_raw[col], bins=num_bins, labels=list(range(num_bins)))
 
