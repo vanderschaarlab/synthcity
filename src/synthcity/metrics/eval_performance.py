@@ -188,10 +188,6 @@ class PerformanceEvaluator(MetricEvaluator):
                 n_splits=self._n_folds, shuffle=True, random_state=self._random_state
             )
 
-        print("############## Task", self._task_type)
-        print(self._n_folds, self._random_state, self._task_type)
-        print(model, model_args)
-
         real_scores = []
         syn_scores_id = []
         syn_scores_ood = []
