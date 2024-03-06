@@ -179,12 +179,18 @@ class PerformanceEvaluator(MetricEvaluator):
 
         if self._task_type == "classification":
             eval_cbk = self._evaluate_performance_classification
+            skf = StratifiedKFold(
+                n_splits=self._n_folds, shuffle=True, random_state=self._random_state
+            )
         elif self._task_type == "regression":
             eval_cbk = self._evaluate_performance_regression
+            skf = KFold(
+                n_splits=self._n_folds, shuffle=True, random_state=self._random_state
+            )
 
-        skf = StratifiedKFold(
-            n_splits=self._n_folds, shuffle=True, random_state=self._random_state
-        )
+        print("############## Task", self._task_type)
+        print(self._n_folds, self._random_state, self._task_type)
+        print(model, model_args)
 
         real_scores = []
         syn_scores_id = []
