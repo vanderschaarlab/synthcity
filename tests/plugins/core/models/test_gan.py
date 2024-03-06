@@ -169,7 +169,7 @@ def test_gan_generation_with_early_stopping(patience_metric: Tuple[str, str]) ->
         n_iter_print=20,
         patience=2,
         batch_size=len(X),
-        patience_metric=WeightedMetrics(metrics=[patience_metric], weights=[1]),
+        patience_metric=WeightedMetrics(metrics=[patience_metric], weights=[1], task_type="regression"),
         generator_extra_penalty_cbks=[_tracker],
     )
     model.fit(X)
