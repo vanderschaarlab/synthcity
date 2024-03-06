@@ -57,6 +57,7 @@ def test_plugin_generate() -> None:
     assert len(X_gen) == 50
 
 
+@pytest.mark.slow_2
 @pytest.mark.slow
 def test_plugin_generate_with_conditional() -> None:
     test_plugin = plugin(n_iter=10, n_units_latent=13)
@@ -71,6 +72,7 @@ def test_plugin_generate_with_conditional() -> None:
     assert len(X_gen) == 50
 
 
+@pytest.mark.slow_2
 @pytest.mark.slow
 def test_plugin_generate_with_stop_conditional() -> None:
     test_plugin = plugin(n_iter=10, n_units_latent=13, n_iter_print=2)

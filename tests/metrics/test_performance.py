@@ -94,6 +94,7 @@ def test_evaluate_performance_classifier(
 @pytest.mark.xfail
 @pytest.mark.skipif(sys.platform != "linux", reason="Linux only for faster results")
 @pytest.mark.skipif(sys.version_info < (3, 9), reason="requires python3.9 or higher")
+@pytest.mark.slow_1
 @pytest.mark.slow
 def test_evaluate_feature_importance_rank_dist_clf(
     distance: str, test_plugin: Plugin
@@ -183,6 +184,7 @@ def test_evaluate_performance_regression(
 @pytest.mark.xfail
 @pytest.mark.skipif(sys.platform != "linux", reason="Linux only for faster results")
 @pytest.mark.skipif(sys.version_info < (3, 9), reason="requires python3.9 or higher")
+@pytest.mark.slow_1
 @pytest.mark.slow
 def test_evaluate_feature_importance_rank_dist_reg(
     distance: str, test_plugin: Plugin
@@ -211,6 +213,7 @@ def test_evaluate_feature_importance_rank_dist_reg(
     assert score["pvalue"] > 0
 
 
+@pytest.mark.slow_1
 @pytest.mark.slow
 @pytest.mark.parametrize("test_plugin", [Plugins().get("marginal_distributions")])
 @pytest.mark.parametrize(
@@ -296,6 +299,7 @@ def test_evaluate_performance_survival_analysis(
 @pytest.mark.xfail
 @pytest.mark.skipif(sys.platform != "linux", reason="Linux only for faster results")
 @pytest.mark.skipif(sys.version_info < (3, 9), reason="requires python3.9 or higher")
+@pytest.mark.slow_1
 @pytest.mark.slow
 def test_evaluate_feature_importance_rank_dist_surv(
     distance: str, test_plugin: Plugin
@@ -362,6 +366,7 @@ def test_evaluate_performance_custom_labels(
     assert "syn_ood" in good_score
 
 
+@pytest.mark.slow_1
 @pytest.mark.slow
 @pytest.mark.parametrize("test_plugin", [Plugins().get("timegan")])
 @pytest.mark.parametrize(
@@ -472,6 +477,7 @@ def test_evaluate_performance_time_series_survival(
     assert def_score == good_score["syn_id.c_index"] - good_score["syn_id.brier_score"]
 
 
+@pytest.mark.slow_1
 @pytest.mark.slow
 def test_image_support_perf() -> None:
     dataset = datasets.MNIST(".", download=True)

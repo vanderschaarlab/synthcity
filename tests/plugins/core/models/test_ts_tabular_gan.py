@@ -62,6 +62,7 @@ def test_network_config() -> None:
     assert net.model.embedding_penalty == 2
 
 
+@pytest.mark.slow_1
 @pytest.mark.slow
 @pytest.mark.parametrize("source", [SineDataloader, GoogleStocksDataloader])
 def test_ts_gan_generation(source: Any) -> None:
@@ -86,6 +87,7 @@ def test_ts_gan_generation(source: Any) -> None:
     )
 
 
+@pytest.mark.slow_1
 @pytest.mark.slow
 @pytest.mark.parametrize("source", [GoogleStocksDataloader])
 def test_ts_gan_generation_schema(source: Any) -> None:
@@ -118,6 +120,7 @@ def test_ts_gan_generation_schema(source: Any) -> None:
     assert reference_schema.as_constraints().filter(seq_df).sum() > 0
 
 
+@pytest.mark.slow_1
 @pytest.mark.slow
 @pytest.mark.parametrize("source", [SineDataloader, GoogleStocksDataloader])
 def test_ts_tabular_gan_conditional(source: Any) -> None:

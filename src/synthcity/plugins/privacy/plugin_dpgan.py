@@ -101,6 +101,8 @@ class DPGANPlugin(Plugin):
         >>>
         >>> plugin.generate(50)
 
+    Note: There is a known issue with the training step for training GANs with conditionals with dp_enabled set to True, as is the case for DPGAN.
+
     """
 
     @validate_arguments(config=dict(arbitrary_types_allowed=True))
