@@ -886,15 +886,16 @@ class PerformanceEvaluatorMLP(PerformanceEvaluator):
             if X_gt.type() == "images":
                 return self._evaluate_images(X_gt, X_syn)
 
-            mlp_args = {
+            model_args = {
                 "n_units_in": X_gt.shape[1] - 1,
                 "n_units_out": 1,
                 "random_state": self._random_state,
+                "task_type": self._task_type,
             }
-            mlp_args["task_type"] = self._task_type
 
             return self._evaluate_standard_performance(
                 MLP,
+                model_args,
                 X_gt,
                 X_syn,
             )
