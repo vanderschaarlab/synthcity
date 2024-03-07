@@ -166,7 +166,7 @@ def test_eval_performance_ddpm(compress_dataset: bool) -> None:
 
     for _ in range(2):
         test_plugin = plugin(**plugin_params, compress_dataset=compress_dataset)
-        evaluator = PerformanceEvaluatorXGB()
+        evaluator = PerformanceEvaluatorXGB(task_type="classification")
 
         test_plugin.fit(X)
         X_syn = test_plugin.generate()

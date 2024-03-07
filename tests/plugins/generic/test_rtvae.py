@@ -110,7 +110,7 @@ def test_eval_performance_rtvae() -> None:
 
     for retry in range(2):
         test_plugin = plugin(n_iter=1000)
-        evaluator = PerformanceEvaluatorXGB()
+        evaluator = PerformanceEvaluatorXGB(task_type="classification")
 
         test_plugin.fit(X)
         X_syn = test_plugin.generate()
