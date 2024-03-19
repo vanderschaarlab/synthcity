@@ -153,10 +153,8 @@ class PerformanceEvaluator(MetricEvaluator):
     @validate_arguments(config=dict(arbitrary_types_allowed=True))
     def _evaluate_standard_performance(
         self,
-        clf_model: Any,
-        clf_args: Dict,
-        regression_model: Any,
-        regression_args: Any,
+        model: Any,
+        model_args: Dict,
         X_gt: DataLoader,
         X_syn: DataLoader,
     ) -> Dict:
@@ -179,17 +177,13 @@ class PerformanceEvaluator(MetricEvaluator):
         ood_X_gt, ood_y_gt = X_gt.test().unpack()
         iter_X_syn, iter_y_syn = X_syn.unpack()
 
-        if len(id_y_gt.unique()) < 5:
+        if self._task_type == "classification":
             eval_cbk = self._evaluate_performance_classification
             skf = StratifiedKFold(
                 n_splits=self._n_folds, shuffle=True, random_state=self._random_state
             )
-            model = clf_model
-            model_args = clf_args
-        else:
+        elif self._task_type == "regression":
             eval_cbk = self._evaluate_performance_regression
-            model = regression_model
-            model_args = regression_args
             skf = KFold(
                 n_splits=self._n_folds, shuffle=True, random_state=self._random_state
             )
@@ -680,19 +674,21 @@ class PerformanceEvaluatorXGB(PerformanceEvaluator):
                 X_syn,
             )
         elif self._task_type == "classification" or self._task_type == "regression":
-            xgb_clf_args = {
+            if self._task_type == "classification":
+                model = XGBClassifier
+            else:
+                model = XGBRegressor
+
+            model_args = {
                 "n_jobs": 2,
                 "verbosity": 0,
                 "depth": 3,
                 "random_state": self._random_state,
             }
 
-            xgb_reg_args = copy.deepcopy(xgb_clf_args)
             return self._evaluate_standard_performance(
-                XGBClassifier,
-                xgb_clf_args,
-                XGBRegressor,
-                xgb_reg_args,
+                model,
+                model_args,
                 X_gt,
                 X_syn,
             )
@@ -743,10 +739,15 @@ class PerformanceEvaluatorLinear(PerformanceEvaluator):
     ) -> Dict:
         if self._task_type == "survival_analysis":
             return self._evaluate_survival_model(CoxPHSurvivalAnalysis, {}, X_gt, X_syn)
-        elif self._task_type == "classification" or self._task_type == "regression":
+        elif self._task_type == "classification":
             return self._evaluate_standard_performance(
                 LogisticRegression,
                 {"random_state": self._random_state},
+                X_gt,
+                X_syn,
+            )
+        elif self._task_type == "regression":
+            return self._evaluate_standard_performance(
                 LinearRegression,
                 {},
                 X_gt,
@@ -887,21 +888,16 @@ class PerformanceEvaluatorMLP(PerformanceEvaluator):
             if X_gt.type() == "images":
                 return self._evaluate_images(X_gt, X_syn)
 
-            mlp_args = {
+            model_args = {
                 "n_units_in": X_gt.shape[1] - 1,
                 "n_units_out": 1,
                 "random_state": self._random_state,
+                "task_type": self._task_type,
             }
-            clf_args = copy.deepcopy(mlp_args)
-            clf_args["task_type"] = "classification"
-            reg_args = copy.deepcopy(mlp_args)
-            reg_args["task_type"] = "regression"
 
             return self._evaluate_standard_performance(
                 MLP,
-                clf_args,
-                MLP,
-                reg_args,
+                model_args,
                 X_gt,
                 X_syn,
             )

@@ -134,7 +134,7 @@ def test_eval_performance_arf(compress_dataset: bool) -> None:
 
     for retry in range(2):
         test_plugin = plugin(**plugin_args)
-        evaluator = PerformanceEvaluatorXGB()
+        evaluator = PerformanceEvaluatorXGB(task_type="classification")
 
         test_plugin.fit(X)
         X_syn = test_plugin.generate(count=100)

@@ -148,7 +148,7 @@ def test_eval_performance_radialgan() -> None:
 
     for retry in range(2):
         test_plugin = plugin(n_iter=500, batch_size=50)
-        evaluator = PerformanceEvaluatorXGB()
+        evaluator = PerformanceEvaluatorXGB(task_type="classification")
 
         test_plugin.fit(X)
         X_syn = test_plugin.generate()

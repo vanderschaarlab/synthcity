@@ -142,7 +142,7 @@ def test_eval_performance(compress_dataset: bool) -> None:
 
     for retry in range(2):
         test_plugin = plugin(n_iter=5000, compress_dataset=compress_dataset)
-        evaluator = PerformanceEvaluatorXGB()
+        evaluator = PerformanceEvaluatorXGB(task_type="classification")
 
         test_plugin.fit(X)
         X_syn = test_plugin.generate()
