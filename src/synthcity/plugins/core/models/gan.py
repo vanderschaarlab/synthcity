@@ -682,7 +682,7 @@ class GAN(nn.Module):
         interpolated = (
             alpha * real_samples + ((1 - alpha) * fake_samples)
         ).requires_grad_(True)
-        d_interpolated = self.discriminator(interpolated).squeeze()
+        d_interpolated = self.discriminator(interpolated).squeeze(-1)
         labels = torch.ones((len(interpolated),), device=self.device)
 
         # Get gradient w.r.t. interpolates
