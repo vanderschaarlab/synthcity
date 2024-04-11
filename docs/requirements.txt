@@ -9,7 +9,7 @@ nbsphinx
 notebook
 numpy
 pandas
-Pillow==10.2.0
+Pillow==10.3.0
 seaborn
 sphinx==4.3.1
 sphinx-autopackagesummary
