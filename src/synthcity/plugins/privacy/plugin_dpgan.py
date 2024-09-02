@@ -4,11 +4,10 @@ Reference: "Differentially Private Generative Adversarial Network", Xie, Liyang 
 
 # stdlib
 from pathlib import Path
-from typing import Any, Dict, List, Optional, Union
+from typing import Any, List, Optional, Union
 
 # third party
 import pandas as pd
-from opacus.optimizers import DPOptimizer
 
 # Necessary packages
 from pydantic import validate_arguments
@@ -295,78 +294,6 @@ class DPGANPlugin(Plugin):
             cond = kwargs["cond"]
 
         return self._safe_generate(self.model.generate, count, syn_schema, cond=cond)
-
-    # TODO: check if this is necessary
-    def __getstate__(self) -> dict:
-        state = self.__dict__.copy()
-
-        # Navigate to the nested optimizer
-        if (
-            hasattr(self, "model")
-            and hasattr(self.model, "model")
-            and hasattr(self.model.model, "discriminator")
-            and hasattr(self.model.model.discriminator, "optimizer")
-        ):
-            optimizer = self.model.model.discriminator.optimizer
-            if isinstance(optimizer, DPOptimizer):
-                state["optimizer_state"] = optimizer.state_dict()
-                state["original_optimizer_state"] = None
-                state["original_optimizer_class"] = None
-                state["original_optimizer_defaults"] = None
-
-                if hasattr(optimizer, "original_optimizer"):
-                    state[
-                        "original_optimizer_state"
-                    ] = optimizer.original_optimizer.state_dict()
-                    state["original_optimizer_class"] = type(
-                        optimizer.original_optimizer
-                    )
-                    state[
-                        "original_optimizer_defaults"
-                    ] = optimizer.original_optimizer.defaults
-
-                # Remove the optimizer to prevent direct serialization
-                state["nested_optimizer"] = optimizer
-                del self.model.model.discriminator.optimizer
-
-        return state
-
-    def __setstate__(self, state: Dict) -> None:
-        self.__dict__.update(state)
-
-        # Restore the nested optimizer if it was removed
-        if "nested_optimizer" in state:
-            optimizer = state["nested_optimizer"]
-            self.model.model.discriminator.optimizer = optimizer
-            del self.nested_optimizer
-
-        # Restore the optimizer if it's a DPOptimizer
-        if (
-            hasattr(self, "model")
-            and hasattr(self.model, "model")
-            and hasattr(self.model.model, "discriminator")
-            and hasattr(self.model.model.discriminator, "optimizer")
-            and isinstance(self.model.model.discriminator.optimizer, DPOptimizer)
-        ):
-            optimizer = self.model.model.discriminator.optimizer
-            if "optimizer_state" in state:
-                optimizer.load_state_dict(state["optimizer_state"])
-            if "original_optimizer_state" in state:
-                original_optimizer_class = state["original_optimizer_class"]
-                original_optimizer_defaults = state["original_optimizer_defaults"]
-
-                # Initialize the original optimizer with saved class and defaults
-                original_optimizer = original_optimizer_class(
-                    optimizer.param_groups, **original_optimizer_defaults
-                )
-                original_optimizer.load_state_dict(state["original_optimizer_state"])
-                optimizer.original_optimizer = original_optimizer
-
-            # Clean up the temporary states
-            del self.optimizer_state
-            del self.original_optimizer_state
-            del self.original_optimizer_class
-            del self.original_optimizer_defaults
 
 
 plugin = DPGANPlugin
