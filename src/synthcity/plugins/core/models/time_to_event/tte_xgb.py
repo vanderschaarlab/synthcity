@@ -5,9 +5,16 @@ from typing import Any, List, Optional
 import numpy as np
 import pandas as pd
 from pydantic import validate_arguments
-from scipy.integrate import trapz
 from xgbse import XGBSEDebiasedBCE, XGBSEKaplanNeighbors, XGBSEStackedWeibull
 from xgbse.converters import convert_to_structured
+
+try:
+    # third party
+    from scipy.integrate import trapz
+except ImportError:
+    from numpy import (
+        trapz,
+    )  # As a fallback for older versions if scipy's import path changes
 
 # synthcity absolute
 from synthcity.plugins.core.distribution import (

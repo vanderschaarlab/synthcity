@@ -5,7 +5,14 @@ from typing import Any, List, Optional
 import pandas as pd
 from lifelines import CoxPHFitter
 from pydantic import validate_arguments
-from scipy.integrate import trapz
+
+try:
+    # third party
+    from scipy.integrate import trapz
+except ImportError:
+    from numpy import (
+        trapz,
+    )  # As a fallback for older versions if scipy's import path changes
 
 # synthcity absolute
 from synthcity.plugins.core.distribution import Distribution, FloatDistribution

@@ -8,8 +8,15 @@ import torch
 import torchtuples as tt
 from pycox.models import DeepHitSingle
 from pydantic import validate_arguments
-from scipy.integrate import trapz
 from sklearn.model_selection import train_test_split
+
+try:
+    # third party
+    from scipy.integrate import trapz
+except ImportError:
+    from numpy import (
+        trapz,
+    )  # As a fallback for older versions if scipy's import path changes
 
 # synthcity absolute
 from synthcity.plugins.core.distribution import (
