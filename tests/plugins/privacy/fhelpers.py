@@ -6,7 +6,7 @@ import pandas as pd
 
 # synthcity absolute
 from synthcity.plugins import Plugin, Plugins
-from synthcity.utils.serialization import load, save
+from synthcity.utils.serialization import load, save, unloadable_plugins
 
 
 def generate_fixtures(name: str, plugin: Type, plugin_args: Dict = {}) -> List:
@@ -18,6 +18,8 @@ def generate_fixtures(name: str, plugin: Type, plugin_args: Dict = {}) -> List:
 
     def from_serde() -> Plugin:
         buff = save(plugin(**plugin_args))
+        if plugin.name() in unloadable_plugins:
+            return load(buff, plugin())
         return load(buff)
 
     return [from_api(), from_module(), from_serde()]

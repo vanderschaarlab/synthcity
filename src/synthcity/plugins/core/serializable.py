@@ -22,7 +22,11 @@ class Serializable:
     """Utility class for model persistence."""
 
     def __init__(self, *args: Any, **kwargs: Any) -> None:
+        super().__init__(*args, **kwargs)
         derived_module_path: Optional[Path] = None
+        self.fitted = (
+            False  # make sure all serializable objects are not fitted by default
+        )
 
         search_module = self.__class__.__module__
         if not search_module.endswith(".py"):
@@ -58,8 +62,13 @@ class Serializable:
             data = self.__dict__[key]
             if isinstance(data, Serializable):
                 members[key] = self.__dict__[key].save_dict()
+            elif key == "model":
+                members[key] = serialize(self.__dict__[key])
             else:
                 members[key] = copy.deepcopy(self.__dict__[key])
+
+        if "fitted" not in members:
+            members["fitted"] = self.fitted  # Ensure 'fitted' is always serialized
 
         return {
             "source": "synthcity",

@@ -931,11 +931,20 @@ class TimeSeriesDataLoader(DataLoader):
 
         if as_numpy:
             longest_observation_seq = max([len(seq) for seq in temporal_data])
+            padded_temporal_data = np.zeros(
+                (len(temporal_data), longest_observation_seq, 5)
+            )
+            mask = np.ones((len(temporal_data), longest_observation_seq, 5), dtype=bool)
+            for i, arr in enumerate(temporal_data):
+                padded_temporal_data[i, : arr.shape[0], :] = arr  # Copy the actual data
+                mask[
+                    i, : arr.shape[0], :
+                ] = False  # Set mask to False where actual data is present
+
+            masked_temporal_data = ma.masked_array(padded_temporal_data, mask)
             return (
                 np.asarray(static_data),
-                np.asarray(
-                    temporal_data
-                ),  # TODO: check this works with time series benchmarks
+                masked_temporal_data,  # TODO: check this works with time series benchmarks
                 # masked array to handle variable length sequences
                 ma.vstack(
                     [
