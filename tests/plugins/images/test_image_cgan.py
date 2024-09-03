@@ -11,7 +11,10 @@ from synthcity.plugins.images.plugin_image_cgan import plugin
 
 plugin_name = "image_cgan"
 
-dataset = datasets.MNIST(".", download=True)
+try:
+    dataset = datasets.MNIST(".", download=False)
+except RuntimeError:
+    dataset = datasets.MNIST(".", download=True)
 
 
 @pytest.mark.parametrize("test_plugin", generate_fixtures(plugin_name, plugin))

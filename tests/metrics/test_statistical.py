@@ -284,7 +284,10 @@ def test_evaluate_survival_km_distance(test_plugin: Plugin) -> None:
 
 
 def test_image_support() -> None:
-    dataset = datasets.MNIST(".", download=True)
+    try:
+        dataset = datasets.MNIST(".", download=False)
+    except RuntimeError:
+        dataset = datasets.MNIST(".", download=True)
 
     X1 = ImageDataLoader(dataset).sample(100)
     X2 = ImageDataLoader(dataset).sample(100)

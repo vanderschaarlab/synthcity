@@ -638,7 +638,10 @@ def test_time_series_survival_pack_unpack_padding(as_numpy: bool) -> None:
 @pytest.mark.parametrize("height", [55, 64])
 @pytest.mark.parametrize("width", [32, 22])
 def test_image_dataloader_sanity(height: int, width: int) -> None:
-    dataset = datasets.MNIST(".", download=True)
+    try:
+        dataset = datasets.MNIST(".", download=False)
+    except RuntimeError:
+        dataset = datasets.MNIST(".", download=True)
 
     loader = ImageDataLoader(
         data=dataset,
@@ -678,7 +681,10 @@ def test_image_dataloader_sanity(height: int, width: int) -> None:
 
 
 def test_image_dataloader_create_from_info() -> None:
-    dataset = datasets.MNIST(".", download=True)
+    try:
+        dataset = datasets.MNIST(".", download=False)
+    except RuntimeError:
+        dataset = datasets.MNIST(".", download=True)
 
     loader = ImageDataLoader(
         data=dataset,
