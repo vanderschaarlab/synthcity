@@ -57,7 +57,6 @@ jobs:
           pip install -r prereq.txt
       - name: Pre-test setup
         run: |
-          mkdir -p .
           curl -o ./train-images-idx3-ubyte.gz https://ossci-datasets.s3.amazonaws.com/mnist/train-images-idx3-ubyte.gz
           curl -o ./train-labels-idx1-ubyte.gz https://ossci-datasets.s3.amazonaws.com/mnist/train-labels-idx1-ubyte.gz
           curl -o ./t10k-images-idx3-ubyte.gz https://ossci-datasets.s3.amazonaws.com/mnist/t10k-images-idx3-ubyte.gz
