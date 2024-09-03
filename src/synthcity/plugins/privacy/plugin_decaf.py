@@ -446,14 +446,12 @@ class DECAFPlugin(Plugin):
         **kwargs: Any,
     ) -> pd.DataFrame:
         encoded_biased_edges = self._encode_edges(biased_edges)
-        print(f"encoded_biased_edges = {encoded_biased_edges}")
 
         def _sample(count: int) -> pd.DataFrame:
             # generate baseline values
             seed_values = self.baseline_generator(count)
             seed_values = torch.from_numpy(seed_values).to(DEVICE)
             # debias baseline values
-            print("generating synthetic data")
             vals = (
                 self.model.gen_synthetic(seed_values, biased_edges=encoded_biased_edges)
                 .detach()

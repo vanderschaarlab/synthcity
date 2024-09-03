@@ -48,7 +48,6 @@ def test_plugin_hyperparams(test_plugin: Plugin) -> None:
     "test_plugin", generate_fixtures(plugin_name, plugin, plugin_args)
 )
 def test_plugin_fit(test_plugin: Plugin) -> None:
-    print(test_plugin)
     X = pd.DataFrame(load_iris()["data"])
     test_plugin.fit(GenericDataLoader(X))
 
