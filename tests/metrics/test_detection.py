@@ -1,4 +1,5 @@
 # stdlib
+import sys
 from typing import Type
 
 # third party
@@ -154,13 +155,11 @@ def test_detect_synth_timeseries(test_plugin: Plugin, evaluator_t: Type) -> None
     assert evaluator.direction() == "minimize"
 
 
+@pytest.mark.skipif(sys.platform == "linux", reason="Linux only for faster results")
 @pytest.mark.slow_1
 @pytest.mark.slow
 def test_image_support_detection() -> None:
-    try:
-        dataset = datasets.MNIST(".", download=False)
-    except RuntimeError:
-        dataset = datasets.MNIST(".", download=True)
+    dataset = datasets.MNIST(".", download=True)
 
     X1 = ImageDataLoader(dataset).sample(100)
     X2 = ImageDataLoader(dataset).sample(100)

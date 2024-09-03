@@ -1,4 +1,5 @@
 # stdlib
+import sys
 from typing import Any, Tuple, Type
 
 # third party
@@ -283,11 +284,9 @@ def test_evaluate_survival_km_distance(test_plugin: Plugin) -> None:
     assert SurvivalKMDistance.direction() == "minimize"
 
 
+@pytest.mark.skipif(sys.platform != "linux", reason="Linux only for faster results")
 def test_image_support() -> None:
-    try:
-        dataset = datasets.MNIST(".", download=False)
-    except RuntimeError:
-        dataset = datasets.MNIST(".", download=True)
+    dataset = datasets.MNIST(".", download=True)
 
     X1 = ImageDataLoader(dataset).sample(100)
     X2 = ImageDataLoader(dataset).sample(100)
