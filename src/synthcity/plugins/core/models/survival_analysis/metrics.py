@@ -5,8 +5,15 @@ from typing import Tuple
 import numpy as np
 import pandas as pd
 from lifelines import KaplanMeierFitter
-from scipy.integrate import trapz
 from xgbse.non_parametric import _get_conditional_probs_from_survival
+
+try:
+    # third party
+    from scipy.integrate import trapz
+except ImportError:
+    from numpy import (
+        trapz,
+    )  # As a fallback for older versions if scipy's import path changes
 
 # synthcity absolute
 from synthcity.plugins.core.models.survival_analysis.third_party.metrics import (

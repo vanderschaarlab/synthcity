@@ -49,7 +49,7 @@ def verify_serialization(model: Any, generate: bool = False) -> None:
     # pickle test
     buff = save(model)
 
-    reloaded = load(buff)
+    reloaded = load(buff, model)
     sanity_check(model, reloaded, generate=generate)
 
     # API test

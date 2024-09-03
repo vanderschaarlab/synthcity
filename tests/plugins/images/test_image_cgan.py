@@ -1,3 +1,6 @@
+# stdlib
+import sys
+
 # third party
 import numpy as np
 import pytest
@@ -10,8 +13,6 @@ from synthcity.plugins.core.dataloader import ImageDataLoader
 from synthcity.plugins.images.plugin_image_cgan import plugin
 
 plugin_name = "image_cgan"
-
-dataset = datasets.MNIST(".", download=True)
 
 
 @pytest.mark.parametrize("test_plugin", generate_fixtures(plugin_name, plugin))
@@ -34,10 +35,12 @@ def test_plugin_hyperparams(test_plugin: Plugin) -> None:
     assert len(test_plugin.hyperparameter_space()) == 6
 
 
+@pytest.mark.skipif(sys.platform != "linux", reason="Linux only for faster results")
 @pytest.mark.parametrize("height", [32, 64, 128])
 @pytest.mark.slow_2
 @pytest.mark.slow
 def test_plugin_fit(height: int) -> None:
+    dataset = datasets.MNIST(".", download=True)
     test_plugin = plugin(n_iter=5)
 
     X = ImageDataLoader(dataset, height=height).sample(100)
@@ -45,7 +48,9 @@ def test_plugin_fit(height: int) -> None:
     test_plugin.fit(X)
 
 
+@pytest.mark.skipif(sys.platform != "linux", reason="Linux only for faster results")
 def test_plugin_generate() -> None:
+    dataset = datasets.MNIST(".", download=True)
     test_plugin = plugin(n_iter=10, n_units_latent=13)
 
     X = ImageDataLoader(dataset).sample(100)
@@ -60,7 +65,9 @@ def test_plugin_generate() -> None:
     assert len(X_gen) == 50
 
 
+@pytest.mark.skipif(sys.platform != "linux", reason="Linux only for faster results")
 def test_plugin_generate_with_conditional() -> None:
+    dataset = datasets.MNIST(".", download=True)
     test_plugin = plugin(n_iter=10, n_units_latent=13)
 
     X = ImageDataLoader(dataset).sample(100)
@@ -73,9 +80,11 @@ def test_plugin_generate_with_conditional() -> None:
     assert len(X_gen) == 50
 
 
+@pytest.mark.skipif(sys.platform != "linux", reason="Linux only for faster results")
 @pytest.mark.slow_2
 @pytest.mark.slow
 def test_plugin_generate_with_stop_conditional() -> None:
+    dataset = datasets.MNIST(".", download=True)
     test_plugin = plugin(n_iter=10, n_units_latent=13, n_iter_print=2)
 
     X = ImageDataLoader(dataset).sample(100)

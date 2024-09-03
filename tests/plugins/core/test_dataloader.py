@@ -1,4 +1,5 @@
 # stdlib
+import sys
 from datetime import datetime
 from typing import Any
 
@@ -635,6 +636,7 @@ def test_time_series_survival_pack_unpack_padding(as_numpy: bool) -> None:
         assert len(unp_observation_times[idx]) == max_window_len
 
 
+@pytest.mark.skipif(sys.platform != "linux", reason="Linux only for faster results")
 @pytest.mark.parametrize("height", [55, 64])
 @pytest.mark.parametrize("width", [32, 22])
 def test_image_dataloader_sanity(height: int, width: int) -> None:
@@ -677,6 +679,7 @@ def test_image_dataloader_sanity(height: int, width: int) -> None:
     assert loader.unpack().labels().shape == (len(loader),)
 
 
+@pytest.mark.skipif(sys.platform != "linux", reason="Linux only for faster results")
 def test_image_dataloader_create_from_info() -> None:
     dataset = datasets.MNIST(".", download=True)
 

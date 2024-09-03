@@ -154,6 +154,10 @@ def test_sample_hyperparams() -> None:
 @pytest.mark.skipif(is_missing_goggle_deps, reason="Goggle dependencies not installed")
 @pytest.mark.slow_2
 @pytest.mark.slow
+@pytest.mark.parametrize(
+    "compress_dataset, decoder_arch",
+    [(False, "gcn"), (True, "gcn")],
+)
 def test_eval_fidelity_goggle(compress_dataset: bool, decoder_arch: str) -> None:
     results = []
     Xraw, y = load_iris(return_X_y=True, as_frame=True)

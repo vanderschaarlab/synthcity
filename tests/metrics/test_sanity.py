@@ -1,4 +1,5 @@
 # stdlib
+import sys
 from typing import Callable, Tuple
 
 # third party
@@ -194,6 +195,7 @@ def test_evaluate_distant_values(test_plugin: Plugin) -> None:
     assert isinstance(def_score, float)
 
 
+@pytest.mark.skipif(sys.platform != "linux", reason="Linux only for faster results")
 def test_image_support() -> None:
     dataset = datasets.MNIST(".", download=True)
 

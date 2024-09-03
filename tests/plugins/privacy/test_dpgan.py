@@ -62,7 +62,7 @@ def test_plugin_generate(test_plugin: Plugin, serialize: bool) -> None:
 
     if serialize:
         saved = save(test_plugin)
-        test_plugin = load(saved)
+        test_plugin = load(saved, test_plugin)
 
     X_gen = test_plugin.generate()
     assert len(X_gen) == len(X)
@@ -122,7 +122,7 @@ def test_eval_performance_dpgan() -> None:
     X = GenericDataLoader(Xraw)
 
     for retry in range(2):
-        test_plugin = plugin(n_iter=300)
+        test_plugin = plugin(n_iter=1000)
         evaluator = PerformanceEvaluatorXGB(task_type="classification")
 
         test_plugin.fit(X)
