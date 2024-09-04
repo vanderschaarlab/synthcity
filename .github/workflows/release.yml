@@ -39,12 +39,13 @@ jobs:
 
     runs-on: ubuntu-latest
     container:
-      image: amazonlinux:2  # Official Amazon Linux 2 image with yum
+      image: centos:stream8  # CentOS Stream 8 has a newer glibc version
     steps:
       - name: Install Node.js 20
         run: |
+          dnf install -y curl
           curl -sL https://rpm.nodesource.com/setup_20.x | bash -
-          yum install -y nodejs
+          dnf install -y nodejs
           node -v
           npm -v
       - uses: actions/checkout@v3
@@ -52,7 +53,7 @@ jobs:
           submodules: true
       - name: Set target Python version PATH
         run: |
-            echo "/opt/python/${{ matrix.python-version }}/bin" >> $GITHUB_PATH
+          echo "/opt/python/${{ matrix.python-version }}/bin" >> $GITHUB_PATH
       - name: Build and publish
         env:
           TWINE_USERNAME: __token__
