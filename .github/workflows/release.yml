@@ -39,8 +39,14 @@ jobs:
 
     runs-on: ubuntu-latest
     container:
-      image: node:20
+      image: amazonlinux:2  # Official Amazon Linux 2 image with yum
     steps:
+      - name: Install Node.js 20
+        run: |
+          curl -sL https://rpm.nodesource.com/setup_20.x | bash -
+          yum install -y nodejs
+          node -v
+          npm -v
       - uses: actions/checkout@v3
         with:
           submodules: true
