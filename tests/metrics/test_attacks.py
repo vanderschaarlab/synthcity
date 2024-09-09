@@ -58,14 +58,7 @@ def test_reduction(reduction: str, evaluator_t: Type) -> None:
     assert def_score == score[reduction]
 
 
-@pytest.mark.parametrize(
-    "evaluator_t",
-    [
-        DataLeakageLinear,
-        DataLeakageXGB,
-        DataLeakageMLP,
-    ],
-)
+@pytest.mark.parametrize("evaluator_t", evaluator_params)
 def test_evaluate_sensitive_data_leakage(evaluator_t: Type) -> None:
     X, y = load_diabetes(return_X_y=True, as_frame=True)
     X["target"] = y
