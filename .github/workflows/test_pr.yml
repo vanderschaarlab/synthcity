@@ -50,18 +50,18 @@ jobs:
           cache: "pip" # caching pip dependencies
       - name: Install MacOS dependencies
         run: |
-          HOMEBREW_VERBOSE=1 brew install libomp
+          brew install libomp
         if: ${{ matrix.os == 'macos-latest' }}
-      - name: Check system memory usage on macOS
-        if: ${{ matrix.os == 'macos-latest' }}
-        run: |
-          vm_stat
-          sysctl hw.memsize
       - name: Install dependencies
         run: |
           python -m pip install -U pip
           pip install -r prereq.txt
           pip install pytest-timeout
+      - name: Set libomp environment variables (macOS only)
+        if: runner.os == 'macOS'
+        run: |
+          export LDFLAGS="-L/opt/homebrew/opt/libomp/lib"
+          export CPPFLAGS="-I/opt/homebrew/opt/libomp/include"
       - name: Dump GitHub Action environment
         run: |
           echo "OS: $(uname -a)"
@@ -72,7 +72,7 @@ jobs:
         run: |
           pip install .[testing]
           pip freeze
-          pytest -vvvsx -n 2 -m "not slow" --durations=50 --timeout=300
+          pytest -vvvsx --timeout=300 -m "not slow" --durations=50
       - name: Test GOGGLE
         run: |
           pip install .[testing,goggle]
