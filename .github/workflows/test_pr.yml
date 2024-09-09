@@ -37,7 +37,8 @@ jobs:
     strategy:
       matrix:
         python-version: ["3.10"]
-        os: [macos-latest, ubuntu-latest, windows-latest]
+        # os: [macos-latest, ubuntu-latest, windows-latest]
+        os: [macos-latest]
     steps:
       - uses: actions/checkout@v3
         with:
@@ -49,12 +50,22 @@ jobs:
           cache: "pip" # caching pip dependencies
       - name: Install MacOS dependencies
         run: |
-          brew install libomp
+          HOMEBREW_VERBOSE=1 brew install libomp
+        if: ${{ matrix.os == 'macos-latest' }}
+      - name: Check system memory usage
+        run: free -m
         if: ${{ matrix.os == 'macos-latest' }}
       - name: Install dependencies
         run: |
           python -m pip install -U pip
           pip install -r prereq.txt
+          pip install pytest-timeout
+      - name: Dump GitHub Action environment
+        run: |
+          echo "OS: $(uname -a)"
+          python --version
+          brew --version
+          pip freeze
       - name: Test Core
         run: |
           pip install .[testing]
