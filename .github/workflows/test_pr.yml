@@ -72,7 +72,7 @@ jobs:
         run: |
           pip install .[testing]
           pip freeze
-          pytest -vvvsx --timeout=300 --timeout-method=thread -m "not slow" --durations=50
+          pytest -vvvsx --timeout=300 --timeout-method=signal -m "not slow" --durations=50
       - name: Test GOGGLE
         run: |
           pip install .[testing,goggle]

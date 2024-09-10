@@ -15,6 +15,7 @@ from synthcity.plugins import Plugins
 from synthcity.plugins.core.dataloader import GenericDataLoader
 
 
+@pytest.mark.timeout(300)
 @pytest.mark.parametrize("reduction", ["mean", "max", "min"])
 @pytest.mark.parametrize(
     "evaluator_t",
@@ -52,6 +53,7 @@ def test_reduction(reduction: str, evaluator_t: Type) -> None:
     assert def_score == score[reduction]
 
 
+@pytest.mark.timeout(300)
 @pytest.mark.parametrize(
     "evaluator_t",
     [
