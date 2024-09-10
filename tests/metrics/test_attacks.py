@@ -1,4 +1,5 @@
 # stdlib
+import sys
 from typing import Type
 
 # third party
@@ -16,7 +17,7 @@ from synthcity.plugins.core.dataloader import GenericDataLoader
 
 
 @pytest.mark.skipif(
-    "darwin" in pytest.config.getoption("--platform"),
+    sys.platform == "darwin",
     reason="Test skipped on MacOS",
 )
 @pytest.mark.parametrize("reduction", ["mean", "max", "min"])
@@ -57,7 +58,7 @@ def test_reduction(reduction: str, evaluator_t: Type) -> None:
 
 
 @pytest.mark.skipif(
-    "darwin" in pytest.config.getoption("--platform"),
+    sys.platform == "darwin",
     reason="Test skipped on MacOS",
 )
 @pytest.mark.parametrize(
