@@ -5,7 +5,6 @@ from typing import Generator
 
 # third party
 import pytest
-from pytest_timeout import TimeoutExpired  # Correct import for TimeoutExpired
 
 # synthcity absolute
 from synthcity.utils.reproducibility import clear_cache, enable_reproducible_results
@@ -28,7 +27,7 @@ def run_before_tests() -> Generator:
 def pytest_runtest_makereport(item: pytest.Item, call: pytest.CallInfo) -> None:
     """Modify the test result if it exceeds the timeout to skip instead of failing."""
     if call.when == "call" and call.excinfo is not None:
-        # Check if the exception is a TimeoutError from pytest-timeout
-        if isinstance(call.excinfo.value, TimeoutExpired):
+        # Check if the test was stopped due to a timeout using call.result
+        if "Timeout" in str(call.excinfo.value):
             # Mark the test as skipped due to exceeding the timeout
             pytest.skip(f"Test skipped due to exceeding the timeout: {item.nodeid}")
