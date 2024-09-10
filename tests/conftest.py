@@ -27,7 +27,7 @@ def run_before_tests() -> Generator:
 def pytest_runtest_makereport(item: pytest.Item, call: pytest.CallInfo) -> None:
     """Modify the test result if it exceeds the timeout to skip instead of failing."""
     if call.when == "call" and call.excinfo is not None:
+        print(f"Call info: {call}")
         # Check if the test was stopped due to a timeout using call.result
         if "Timeout" in str(call.excinfo.value):
-            # Mark the test as skipped due to exceeding the timeout
             pytest.skip(f"Test skipped due to exceeding the timeout: {item.nodeid}")
