@@ -57,11 +57,15 @@ jobs:
           python -m pip install -U pip
           pip install -r prereq.txt
           pip install pytest-timeout
+      - name: Set libomp environment variables (macOS only)
+        run: |
+          export LDFLAGS="-L/opt/homebrew/opt/libomp/lib"
+          export CPPFLAGS="-I/opt/homebrew/opt/libomp/include"
+        if: ${{ matrix.os == 'macos-latest' }}
       - name: Dump GitHub Action environment
         run: |
           echo "OS: $(uname -a)"
           python --version
-          brew --version
           pip freeze
       - name: Test Core
         run: |
