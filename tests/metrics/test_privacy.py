@@ -23,6 +23,7 @@ from synthcity.plugins import Plugin, Plugins
 from synthcity.plugins.core.dataloader import GenericDataLoader, ImageDataLoader
 
 
+@pytest.mark.skipif(sys.platform != "linux", reason="Only test on linux for speed")
 @pytest.mark.parametrize(
     "evaluator_t",
     [

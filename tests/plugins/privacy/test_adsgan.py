@@ -49,6 +49,7 @@ def test_plugin_fit() -> None:
     test_plugin.fit(X)
 
 
+@pytest.mark.skipif(sys.platform != "linux", reason="Only test on linux for speed")
 def test_plugin_generate() -> None:
     test_plugin = plugin(
         n_iter=100, generator_n_layers_hidden=1, generator_n_units_hidden=10

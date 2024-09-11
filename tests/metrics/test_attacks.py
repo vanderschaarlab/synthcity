@@ -16,10 +16,7 @@ from synthcity.plugins import Plugins
 from synthcity.plugins.core.dataloader import GenericDataLoader
 
 
-@pytest.mark.skipif(
-    sys.platform == "darwin",
-    reason="Test skipped on MacOS",
-)
+@pytest.mark.skipif(sys.platform == "darwin", reason="Test skipped on MacOS")
 @pytest.mark.parametrize("reduction", ["mean", "max", "min"])
 @pytest.mark.parametrize(
     "evaluator_t",
