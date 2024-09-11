@@ -61,7 +61,8 @@ jobs:
         run: |
           export LDFLAGS="-L/opt/homebrew/opt/libomp/lib"
           export CPPFLAGS="-I/opt/homebrew/opt/libomp/include"
-        if: ${{ matrix.os == 'macos-latest' }}
+          export DYLD_LIBRARY_PATH="/opt/homebrew/opt/libomp/lib:$DYLD_LIBRARY_PATH"
+        if: matrix.os == 'macos-13' || matrix.os == 'macos-12'
       - name: Dump GitHub Action environment
         run: |
           echo "OS: $(uname -a)"
