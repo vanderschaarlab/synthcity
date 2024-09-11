@@ -8,7 +8,6 @@ from typing import Any, List
 
 # third party
 import pytest
-import torch
 from lifelines.datasets import load_rossi
 from sklearn.datasets import load_diabetes, load_iris
 
@@ -27,17 +26,6 @@ from synthcity.plugins.core.schema import Schema
 
 
 def test_benchmark_sanity() -> None:
-
-    print("PyTorch version:", torch.__version__)
-    print("CUDA version:", torch.version.cuda)
-    print("Is CUDA available?", torch.cuda.is_available())
-
-    if torch.cuda.is_available():
-        print("Number of GPUs available:", torch.cuda.device_count())
-        print("Current GPU:", torch.cuda.get_device_name(0))
-    else:
-        print("No GPU detected.")
-
     X, y = load_diabetes(return_X_y=True, as_frame=True)
     X["target"] = y
 

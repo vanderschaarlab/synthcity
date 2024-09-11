@@ -6,7 +6,6 @@ from typing import Optional, Type
 import numpy as np
 import pandas as pd
 import pytest
-import torch
 from lifelines.datasets import load_rossi
 from sklearn.datasets import load_diabetes, load_iris
 from torchvision import datasets
@@ -29,13 +28,6 @@ from synthcity.plugins.core.dataloader import (
 )
 from synthcity.utils.datasets.time_series.google_stocks import GoogleStocksDataloader
 from synthcity.utils.datasets.time_series.pbc import PBCDataloader
-
-
-def is_cuda_available() -> None:
-    if torch.cuda.is_available():
-        print(f"CUDA is available. Device: {torch.cuda.get_device_name(0)}")
-    else:
-        print("CUDA is not available on this system.")
 
 
 @pytest.mark.parametrize("test_plugin", [Plugins().get("marginal_distributions")])
@@ -61,8 +53,6 @@ def test_evaluate_performance_classifier(
         Xloader,
         X_gen,
     )
-
-    is_cuda_available()
 
     assert "gt" in good_score
     assert "syn_id" in good_score
