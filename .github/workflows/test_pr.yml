@@ -37,7 +37,10 @@ jobs:
     strategy:
       matrix:
         python-version: ["3.11"]
-        os: [macos-13, macos-12, ubuntu-latest]
+        os: [macos-13, macos-12]
+    env:
+      ACTIONS_RUNNER_DEBUG: true
+      ACTIONS_STEP_DEBUG: true
     steps:
       - uses: actions/checkout@v3
         with:
