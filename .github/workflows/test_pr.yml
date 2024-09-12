@@ -37,7 +37,7 @@ jobs:
     strategy:
       matrix:
         python-version: ["3.11"]
-        os: [macos-13, macos-12]
+        os: [macos-13]
     env:
       ACTIONS_RUNNER_DEBUG: true
       ACTIONS_STEP_DEBUG: true
