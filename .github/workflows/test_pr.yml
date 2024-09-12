@@ -37,8 +37,7 @@ jobs:
     strategy:
       matrix:
         python-version: ["3.11"]
-        # os: [macos-latest, ubuntu-latest, windows-latest]
-        os: [macos-13, macos-12]
+        os: [macos-13, macos-12, ubuntu-latest]
     steps:
       - uses: actions/checkout@v3
         with:
@@ -64,6 +63,8 @@ jobs:
           python -m pip install -U pip
           pip install -r prereq.txt
           pip install pytest-timeout
+      - name: Set environment variables for MNIST
+        run: echo "MNIST_DATA_DIR=${{ github.workspace }}/mnist_data" >> $GITHUB_ENV
       - name: Dump GitHub Action environment
         run: |
           echo "OS: $(uname -a)"
