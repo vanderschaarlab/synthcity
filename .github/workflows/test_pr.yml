@@ -38,7 +38,7 @@ jobs:
       matrix:
         python-version: ["3.11"]
         # os: [macos-latest, ubuntu-latest, windows-latest]
-        os: [macos-14, macos-13, macos-12, ubuntu-latest]
+        os: [macos-13, macos-12]
     steps:
       - uses: actions/checkout@v3
         with:
