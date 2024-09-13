@@ -45,7 +45,12 @@ def compress_dataset(
         y = df[column]
 
         if len(df[column].unique()) < cat_limit:
-            model = XGBClassifier()
+            model = model = XGBClassifier(
+                tree_method="approx",
+                n_jobs=2,
+                verbosity=0,
+                depth=3,
+            )
             try:
                 score = evaluate_classifier(model, X, y)["clf"]["aucroc"][0]
             except BaseException:
