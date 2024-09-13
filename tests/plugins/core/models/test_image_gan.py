@@ -36,9 +36,9 @@ mnist_dir = os.getenv("MNIST_DATA_DIR", ".")  # Default to current directory if 
 # Check if the MNIST dataset is already downloaded
 mnist_path = Path(mnist_dir) / "MNIST" / "processed"
 if not mnist_path.exists():
-    dataset = datasets.MNIST(mnist_dir, download=True)
+    dataset = datasets.MNIST(mnist_dir, download=True, transform=data_transform)
 else:
-    dataset = datasets.MNIST(mnist_dir, train=True)
+    dataset = datasets.MNIST(mnist_dir, train=True, transform=data_transform)
 
 dataset = Subset(dataset, np.arange(len(dataset))[:100])
 dataset = FlexibleDataset(dataset)
