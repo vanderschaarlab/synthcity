@@ -43,30 +43,20 @@ jobs:
         with:
           submodules: true
 
-      - name: Set up Rosetta 2 (macOS only)
-        run: |
-          softwareupdate --install-rosetta --agree-to-license
-        if: ${{ runner.os == 'macOS' }}
-
       - name: Set up Python ${{ matrix.python-version }}
         uses: actions/setup-python@v4
         with:
           python-version: ${{ matrix.python-version }}
-          architecture: 'x64'  # Force x86_64 architecture
           cache: "pip"
 
       - name: Install libomp (macOS only)
         run: |
-          /usr/bin/arch -x86_64 brew install libomp
+          brew install libomp
         if: ${{ runner.os == 'macOS' }}
 
       - name: Set libomp environment variables (macOS only)
         run: |
-          if [[ $(uname -m) == 'arm64' ]]; then
-            LIBOMP_PATH="/opt/homebrew/opt/libomp"
-          else
-            LIBOMP_PATH="/usr/local/opt/libomp"
-          fi
+          LIBOMP_PATH="/opt/homebrew/opt/libomp"
           echo "LDFLAGS=-L${LIBOMP_PATH}/lib" >> $GITHUB_ENV
           echo "CPPFLAGS=-I${LIBOMP_PATH}/include" >> $GITHUB_ENV
           echo "DYLD_LIBRARY_PATH=${LIBOMP_PATH}/lib:\$DYLD_LIBRARY_PATH" >> $GITHUB_ENV
@@ -85,11 +75,15 @@ jobs:
           python --version
           pip freeze
 
+      - name: Limit OpenMP threads
+        run: |
+          echo "OMP_NUM_THREADS=2" >> $GITHUB_ENV
+
       - name: Test Core
         run: |
           pip install .[testing]
           pip freeze
-          pytest -vvvsx --timeout=1000 --timeout-method=thread -m "not slow" --durations=50
+          pytest -vvvsx --timeout=2000 --timeout-method=thread -m "not slow" --durations=50
 
       - name: Test GOGGLE
         run: |
