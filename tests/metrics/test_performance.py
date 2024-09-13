@@ -30,7 +30,6 @@ from synthcity.utils.datasets.time_series.google_stocks import GoogleStocksDatal
 from synthcity.utils.datasets.time_series.pbc import PBCDataloader
 
 
-@pytest.mark.skipif(sys.platform == "darwin", reason="Linux only for faster results")
 @pytest.mark.parametrize("test_plugin", [Plugins().get("marginal_distributions")])
 @pytest.mark.parametrize(
     "evaluator_t",

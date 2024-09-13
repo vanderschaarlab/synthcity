@@ -25,10 +25,6 @@ from synthcity.plugins.core.dataloader import (
 from synthcity.utils.datasets.time_series.google_stocks import GoogleStocksDataloader
 
 
-@pytest.mark.skipif(
-    sys.platform == "darwin",
-    reason="Test skipped on MacOS",
-)
 @pytest.mark.parametrize("reduction", ["mean", "max", "min"])
 @pytest.mark.parametrize(
     "evaluator_t",
@@ -62,10 +58,6 @@ def test_detect_reduction(reduction: str, evaluator_t: Type) -> None:
     assert def_score == score[reduction]
 
 
-@pytest.mark.skipif(
-    sys.platform == "darwin",
-    reason="Test skipped on MacOS",
-)
 @pytest.mark.parametrize("test_plugin", [Plugins().get("marginal_distributions")])
 @pytest.mark.parametrize(
     "evaluator_t",
@@ -110,10 +102,6 @@ def test_detect_synth_generic(test_plugin: Plugin, evaluator_t: Type) -> None:
     assert evaluator.direction() == "minimize"
 
 
-@pytest.mark.skipif(
-    sys.platform == "darwin",
-    reason="Test skipped on MacOS",
-)
 @pytest.mark.parametrize("test_plugin", [Plugins().get("dummy_sampler")])
 @pytest.mark.parametrize(
     "evaluator_t",
