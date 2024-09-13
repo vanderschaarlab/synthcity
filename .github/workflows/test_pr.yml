@@ -63,9 +63,7 @@ jobs:
           python -m pip install -U pip
           pip install -r prereq.txt
           pip install pytest-timeout
-          if [[ $(uname) == 'Darwin' ]]; then
-            pip install xgboost==1.7.6
-          fi
+          pip install xgboost==1.7.6
       - name: Set environment variables for MNIST
         run: echo "MNIST_DATA_DIR=${{ github.workspace }}/mnist_data" >> $GITHUB_ENV
       - name: Dump GitHub Action environment
