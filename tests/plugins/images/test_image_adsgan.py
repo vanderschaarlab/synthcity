@@ -1,7 +1,5 @@
 # stdlib
-import os
 import sys
-from pathlib import Path
 
 # third party
 import numpy as np
@@ -15,21 +13,6 @@ from synthcity.plugins.core.dataloader import ImageDataLoader
 from synthcity.plugins.images.plugin_image_adsgan import plugin
 
 plugin_name = "image_adsgan"
-
-
-def get_mnist() -> datasets.MNIST:
-    # Get the MNIST dataset directory from an environment variable
-    mnist_dir = os.getenv(
-        "MNIST_DATA_DIR", "."
-    )  # Default to current directory if not set
-
-    # Check if the MNIST dataset is already downloaded
-    mnist_path = Path(mnist_dir) / "MNIST" / "processed"
-    if not mnist_path.exists():
-        dataset = datasets.MNIST(mnist_dir, download=True)
-    else:
-        dataset = datasets.MNIST(mnist_dir, train=True)
-    return dataset
 
 
 @pytest.mark.parametrize("test_plugin", generate_fixtures(plugin_name, plugin))
@@ -54,7 +37,7 @@ def test_plugin_hyperparams(test_plugin: Plugin) -> None:
 
 @pytest.mark.skipif(sys.platform != "linux", reason="Linux only for faster results")
 def test_plugin_fit() -> None:
-    dataset = get_mnist()
+    dataset = datasets.MNIST(".", download=True)
     test_plugin = plugin(n_iter=5)
 
     X = ImageDataLoader(dataset).sample(100)
@@ -64,7 +47,7 @@ def test_plugin_fit() -> None:
 
 @pytest.mark.skipif(sys.platform != "linux", reason="Linux only for faster results")
 def test_plugin_generate() -> None:
-    dataset = get_mnist()
+    dataset = datasets.MNIST(".", download=True)
     test_plugin = plugin(n_iter=10, n_units_latent=13)
 
     X = ImageDataLoader(dataset).sample(100)
@@ -83,7 +66,7 @@ def test_plugin_generate() -> None:
 @pytest.mark.slow_2
 @pytest.mark.slow
 def test_plugin_generate_with_conditional() -> None:
-    dataset = get_mnist()
+    dataset = datasets.MNIST(".", download=True)
     test_plugin = plugin(n_iter=10, n_units_latent=13)
 
     X = ImageDataLoader(dataset).sample(100)
@@ -100,7 +83,7 @@ def test_plugin_generate_with_conditional() -> None:
 @pytest.mark.slow_2
 @pytest.mark.slow
 def test_plugin_generate_with_stop_conditional() -> None:
-    dataset = get_mnist()
+    dataset = datasets.MNIST(".", download=True)
     test_plugin = plugin(n_iter=10, n_units_latent=13, n_iter_print=2)
 
     X = ImageDataLoader(dataset).sample(100)

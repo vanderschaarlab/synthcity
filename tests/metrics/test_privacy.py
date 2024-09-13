@@ -1,7 +1,5 @@
 # stdlib
-import os
 import sys
-from pathlib import Path
 from typing import Type
 
 # third party
@@ -86,17 +84,8 @@ def test_evaluator(evaluator_t: Type, test_plugin: Plugin) -> None:
 
 @pytest.mark.skipif(sys.platform != "linux", reason="Linux only for faster results")
 def test_image_support() -> None:
-    # Get the MNIST dataset directory from an environment variable
-    mnist_dir = os.getenv(
-        "MNIST_DATA_DIR", "."
-    )  # Default to current directory if not set
 
-    # Check if the MNIST dataset is already downloaded
-    mnist_path = Path(mnist_dir) / "MNIST" / "processed"
-    if not mnist_path.exists():
-        dataset = datasets.MNIST(mnist_dir, download=True)
-    else:
-        dataset = datasets.MNIST(mnist_dir, train=True)
+    dataset = datasets.MNIST(".", download=True)
 
     X1 = ImageDataLoader(dataset).sample(100)
     X2 = ImageDataLoader(dataset).sample(100)

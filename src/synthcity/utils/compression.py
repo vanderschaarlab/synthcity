@@ -48,7 +48,7 @@ def compress_dataset(
             model = model = XGBClassifier(
                 tree_method="approx",
                 n_jobs=2,
-                verbosity=2,
+                verbosity=0,
                 depth=3,
             )
             try:

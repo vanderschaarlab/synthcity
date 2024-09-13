@@ -1,6 +1,5 @@
 # stdlib
 import random
-import sys
 from datetime import datetime, timedelta
 
 # third party
@@ -162,7 +161,6 @@ def gen_datetime(min_year: int = 2000, max_year: int = datetime.now().year) -> d
     return start + (end - start) * random.random()
 
 
-@pytest.mark.skipif(sys.platform == "darwin", reason="Linux only for faster results")
 def test_plugin_encoding() -> None:
     assert plugin is not None
     data = [[gen_datetime(), i % 2 == 0, i] for i in range(10)]

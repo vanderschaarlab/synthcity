@@ -1,8 +1,6 @@
 # stdlib
-import os
 import sys
 from datetime import datetime
-from pathlib import Path
 from typing import Any
 
 # third party
@@ -642,17 +640,8 @@ def test_time_series_survival_pack_unpack_padding(as_numpy: bool) -> None:
 @pytest.mark.parametrize("height", [55, 64])
 @pytest.mark.parametrize("width", [32, 22])
 def test_image_dataloader_sanity(height: int, width: int) -> None:
-    # Get the MNIST dataset directory from an environment variable
-    mnist_dir = os.getenv(
-        "MNIST_DATA_DIR", "."
-    )  # Default to current directory if not set
 
-    # Check if the MNIST dataset is already downloaded
-    mnist_path = Path(mnist_dir) / "MNIST" / "processed"
-    if not mnist_path.exists():
-        dataset = datasets.MNIST(mnist_dir, download=True)
-    else:
-        dataset = datasets.MNIST(mnist_dir, train=True)
+    dataset = datasets.MNIST(".", download=True)
 
     loader = ImageDataLoader(
         data=dataset,
@@ -693,17 +682,8 @@ def test_image_dataloader_sanity(height: int, width: int) -> None:
 
 @pytest.mark.skipif(sys.platform != "linux", reason="Linux only for faster results")
 def test_image_dataloader_create_from_info() -> None:
-    # Get the MNIST dataset directory from an environment variable
-    mnist_dir = os.getenv(
-        "MNIST_DATA_DIR", "."
-    )  # Default to current directory if not set
 
-    # Check if the MNIST dataset is already downloaded
-    mnist_path = Path(mnist_dir) / "MNIST" / "processed"
-    if not mnist_path.exists():
-        dataset = datasets.MNIST(mnist_dir, download=True)
-    else:
-        dataset = datasets.MNIST(mnist_dir, train=True)
+    dataset = datasets.MNIST(".", download=True)
 
     loader = ImageDataLoader(
         data=dataset,

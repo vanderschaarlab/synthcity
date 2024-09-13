@@ -21,13 +21,3 @@ def run_before_tests() -> Generator:
     workspace = Path("workspace")
     if workspace.exists():
         shutil.rmtree(workspace, ignore_errors=True)
-
-
-# Hook to modify the test result if it exceeds a timeout
-def pytest_runtest_makereport(item: pytest.Item, call: pytest.CallInfo) -> None:
-    """Modify the test result if it exceeds the timeout to skip instead of failing."""
-    if call.when == "call" and call.excinfo is not None:
-        print(f"Call info: {call}")
-        # Check if the test was stopped due to a timeout using call.result
-        if "Timeout" in str(call.excinfo.value):
-            pytest.skip(f"Test skipped due to exceeding the timeout: {item.nodeid}")
