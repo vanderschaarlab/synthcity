@@ -38,9 +38,6 @@ jobs:
       matrix:
         python-version: ["3.11"]
         os: [macos-13]
-    env:
-      ACTIONS_RUNNER_DEBUG: true
-      ACTIONS_STEP_DEBUG: true
     steps:
       - uses: actions/checkout@v3
         with:
@@ -66,6 +63,9 @@ jobs:
           python -m pip install -U pip
           pip install -r prereq.txt
           pip install pytest-timeout
+          if [[ $(uname) == 'Darwin' ]]; then
+            pip install xgboost==1.7.6
+          fi
       - name: Set environment variables for MNIST
         run: echo "MNIST_DATA_DIR=${{ github.workspace }}/mnist_data" >> $GITHUB_ENV
       - name: Dump GitHub Action environment
@@ -73,6 +73,10 @@ jobs:
           echo "OS: $(uname -a)"
           python --version
           pip freeze
+      - name: Enable Debug Logging
+        run: |
+          echo "::set-env name=ACTIONS_STEP_DEBUG::true"
+          echo "::set-env name=ACTIONS_RUNNER_DEBUG::true"
       - name: Test Core
         run: |
           pip install .[testing]
