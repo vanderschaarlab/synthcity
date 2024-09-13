@@ -55,6 +55,24 @@ jobs:
           architecture: 'x64'  # Force x86_64 architecture
           cache: "pip"
 
+      - name: Install libomp (macOS only)
+        run: |
+          /usr/bin/arch -x86_64 brew install libomp
+        if: ${{ runner.os == 'macOS' }}
+
+      - name: Set libomp environment variables (macOS only)
+        run: |
+          if [[ $(uname -m) == 'arm64' ]]; then
+            LIBOMP_PATH="/opt/homebrew/opt/libomp"
+          else
+            LIBOMP_PATH="/usr/local/opt/libomp"
+          fi
+          echo "LDFLAGS=-L${LIBOMP_PATH}/lib" >> $GITHUB_ENV
+          echo "CPPFLAGS=-I${LIBOMP_PATH}/include" >> $GITHUB_ENV
+          echo "DYLD_LIBRARY_PATH=${LIBOMP_PATH}/lib:\$DYLD_LIBRARY_PATH" >> $GITHUB_ENV
+          echo "OMP_PATH=${LIBOMP_PATH}/include" >> $GITHUB_ENV
+        if: ${{ runner.os == 'macOS' }}
+
       - name: Install dependencies
         run: |
           python -m pip install -U pip
@@ -72,6 +90,7 @@ jobs:
           pip install .[testing]
           pip freeze
           pytest -vvvsx --timeout=1000 --timeout-method=thread -m "not slow" --durations=50
+
       - name: Test GOGGLE
         run: |
           pip install .[testing,goggle]
