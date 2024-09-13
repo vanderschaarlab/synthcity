@@ -7,7 +7,7 @@ import numpy as np
 import pytest
 import torch
 from torch.utils.data import Subset
-from torchvision import datasets  # , transforms
+from torchvision import datasets, transforms
 
 # synthcity absolute
 from synthcity.plugins.core.models.convnet import (
@@ -60,13 +60,13 @@ def test_suggest_clf(n_channels: int, height: int) -> None:
 
 def test_train_clf() -> None:
     IMG_SIZE = 32
-    # data_transform = transforms.Compose(
-    #     [
-    #         transforms.Resize(IMG_SIZE),
-    #         transforms.ToTensor(),
-    #         transforms.Normalize(mean=(0.5,), std=(0.5,)),
-    #     ]
-    # )
+    data_transform = transforms.Compose(
+        [
+            transforms.Resize(IMG_SIZE),
+            transforms.ToTensor(),
+            transforms.Normalize(mean=(0.5,), std=(0.5,)),
+        ]
+    )
     # Get the MNIST dataset directory from an environment variable
     mnist_dir = os.getenv(
         "MNIST_DATA_DIR", "."
@@ -75,9 +75,9 @@ def test_train_clf() -> None:
     # Check if the MNIST dataset is already downloaded
     mnist_path = Path(mnist_dir) / "MNIST" / "processed"
     if not mnist_path.exists():
-        dataset = datasets.MNIST(mnist_dir, download=True)
+        dataset = datasets.MNIST(mnist_dir, download=True, transform=data_transform)
     else:
-        dataset = datasets.MNIST(mnist_dir, train=True)
+        dataset = datasets.MNIST(mnist_dir, train=True, transform=data_transform)
     dataset = Subset(dataset, np.arange(len(dataset))[:100])
 
     classes = 10
