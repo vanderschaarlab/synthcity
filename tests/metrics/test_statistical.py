@@ -186,7 +186,6 @@ def test_evaluate_wasserstein_distance(test_plugin: Plugin) -> None:
     assert WassersteinDistance.direction() == "minimize"
 
 
-@pytest.mark.skipif(sys.platform != "linux", reason="Only test on linux for speed")
 @pytest.mark.parametrize("test_plugin", [Plugins().get("ctgan")])
 def test_evaluate_prdc(test_plugin: Plugin) -> None:
     X, y = load_iris(return_X_y=True, as_frame=True)
@@ -287,7 +286,6 @@ def test_evaluate_survival_km_distance(test_plugin: Plugin) -> None:
 
 @pytest.mark.skipif(sys.platform != "linux", reason="Linux only for faster results")
 def test_image_support() -> None:
-
     dataset = datasets.MNIST(".", download=True)
 
     X1 = ImageDataLoader(dataset).sample(100)

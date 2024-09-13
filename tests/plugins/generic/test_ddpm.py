@@ -1,5 +1,4 @@
 # stdlib
-import sys
 from itertools import product
 from typing import Any, Generator
 
@@ -109,7 +108,6 @@ def test_plugin_generate(test_plugin: Plugin) -> None:
     assert test_plugin.schema_includes(X_gen)
 
 
-@pytest.mark.skipif(sys.platform != "linux", reason="Only test on linux for speed")
 @pytest.mark.parametrize(
     "test_plugin", extend_fixtures(is_classification=[True, False])
 )

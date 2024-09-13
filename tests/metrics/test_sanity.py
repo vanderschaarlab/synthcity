@@ -197,7 +197,6 @@ def test_evaluate_distant_values(test_plugin: Plugin) -> None:
 
 @pytest.mark.skipif(sys.platform != "linux", reason="Linux only for faster results")
 def test_image_support() -> None:
-
     dataset = datasets.MNIST(".", download=True)
 
     X1 = ImageDataLoader(dataset).sample(100)

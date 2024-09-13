@@ -481,7 +481,6 @@ def test_evaluate_performance_time_series_survival(
 @pytest.mark.slow_1
 @pytest.mark.slow
 def test_image_support_perf() -> None:
-
     dataset = datasets.MNIST(".", download=True)
 
     X1 = ImageDataLoader(dataset).sample(100)

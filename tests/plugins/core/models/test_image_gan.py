@@ -25,9 +25,7 @@ data_transform = transforms.Compose(
 )
 # Load MNIST dataset as tensors
 batch_size = 128
-
 dataset = datasets.MNIST(".", download=True, transform=data_transform)
-
 dataset = Subset(dataset, np.arange(len(dataset))[:100])
 dataset = FlexibleDataset(dataset)
 
