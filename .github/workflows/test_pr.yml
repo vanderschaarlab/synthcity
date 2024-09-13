@@ -63,14 +63,12 @@ jobs:
           python -m pip install -U pip
           pip install -r prereq.txt
           pip install pytest-timeout
-          pip install xgboost==1.7.6
       - name: Set environment variables for MNIST
         run: echo "MNIST_DATA_DIR=${{ github.workspace }}/mnist_data" >> $GITHUB_ENV
       - name: Dump GitHub Action environment
         run: |
           echo "OS: $(uname -a)"
           python --version
-          pip freeze
       - name: Test Core
         run: |
           pip install .[testing]

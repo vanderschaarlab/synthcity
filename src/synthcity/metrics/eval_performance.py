@@ -1064,8 +1064,9 @@ class FeatureImportanceRankDistance(MetricEvaluator):
 
         elif self._task_type == "classification":
             model = XGBClassifier(
+                tree_method="approx",
                 n_jobs=2,
-                verbosity=0,
+                verbosity=2,
                 depth=3,
                 random_state=self._random_state,
             )

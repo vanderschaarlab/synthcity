@@ -153,6 +153,7 @@ class SurvivalPipeline(Plugin):
             raise ValueError(f"unsupported strategy {self.strategy}")
 
         xgb_params = {
+            "tree_method": "approx",
             "n_jobs": 2,
             "verbosity": 0,
             "depth": 3,
