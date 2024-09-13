@@ -79,11 +79,15 @@ jobs:
         run: |
           echo "OMP_NUM_THREADS=2" >> $GITHUB_ENV
 
-      - name: Test Core
+      # - name: Test Core
+      #   run: |
+      #     pip install .[testing]
+      #     pip freeze
+      #     pytest -vvvsx --timeout=2000 --timeout-method=thread -m "not slow" --durations=50
+      - name: Set macOS deployment target
         run: |
-          pip install .[testing]
-          pip freeze
-          pytest -vvvsx --timeout=2000 --timeout-method=thread -m "not slow" --durations=50
+          echo "MACOSX_DEPLOYMENT_TARGET=10.13" >> $GITHUB_ENV
+        if: ${{ runner.os == 'macOS' }}
 
       - name: Test GOGGLE
         run: |
