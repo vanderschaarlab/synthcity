@@ -73,10 +73,6 @@ jobs:
           echo "OS: $(uname -a)"
           python --version
           pip freeze
-      - name: Enable Debug Logging
-        run: |
-          echo "::set-env name=ACTIONS_STEP_DEBUG::true"
-          echo "::set-env name=ACTIONS_RUNNER_DEBUG::true"
       - name: Test Core
         run: |
           pip install .[testing]
