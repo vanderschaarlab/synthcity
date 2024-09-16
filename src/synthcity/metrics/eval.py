@@ -220,12 +220,13 @@ class Metrics:
         X_gt, _ = X_gt.encode(encoders)
         X_syn, _ = X_syn.encode(encoders)
 
-        if X_train:
-            X_train, _ = X_train.encode(encoders)
-        if X_ref_syn:
-            X_ref_syn, _ = X_ref_syn.encode(encoders)
-        if X_augmented:
-            X_augmented, _ = X_augmented.encode(encoders)
+        # not used in our metrics
+        # if X_train:
+        #     X_train, _ = X_train.encode(encoders)
+        # if X_ref_syn:
+        #     X_ref_syn, _ = X_ref_syn.encode(encoders)
+        # if X_augmented:
+        #     X_augmented, _ = X_augmented.encode(encoders)
 
         scores = ScoreEvaluator()
 

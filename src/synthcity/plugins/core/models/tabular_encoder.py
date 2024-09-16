@@ -24,29 +24,27 @@ def preprocess_prediction(
     train: pd.DataFrame, test: pd.DataFrame, discrete_features: list
 ):
     """preprocessing for a standard prediction task using a tabular encoder"""
+    train = train.copy()
+    test = test.copy()
     # separately scale numericals
     cont_encoder = TabularEncoder(
         continuous_encoder="minmax",
         cont_encoder_params={"feature_range": (-1, 1)},
         categorical_encoder="passthrough",
         cat_encoder_params={},
-    )
-    cont_encoder.fit(train, discrete_columns=discrete_features)
+    ).fit(train, discrete_columns=discrete_features)
     train = cont_encoder.transform(train)
     cont_encoder = TabularEncoder(
         continuous_encoder="minmax",
         cont_encoder_params={"feature_range": (-1, 1)},
         categorical_encoder="passthrough",
         cat_encoder_params={},
-    )
-    cont_encoder.fit(test, discrete_columns=discrete_features)
+    ).fit(test, discrete_columns=discrete_features)
     test = cont_encoder.transform(test)
-
     # one hot encode discrete columns together
     cat_encoder = TabularEncoder(
         continuous_encoder="passthrough", cont_encoder_params={}
-    )
-    cat_encoder.fit(pd.concat([train, test]), discrete_columns=discrete_features)
+    ).fit(pd.concat([train, test]), discrete_columns=discrete_features)
     train = cat_encoder.transform(train)
     test = cat_encoder.transform(test)
 

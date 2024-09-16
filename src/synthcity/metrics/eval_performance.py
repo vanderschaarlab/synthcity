@@ -201,23 +201,23 @@ class PerformanceEvaluator(MetricEvaluator):
         syn_scores_ood = []
 
         for train_idx, test_idx in skf.split(id_X_gt, id_y_gt):
+            # preprocess prediction is not working!
             # preprocess input features (especially relevant for MLP and LR)
             train_real, test_real = preprocess_prediction(
-                train=id_X_gt.loc[train_idx].dataframe().copy(),
-                test=id_X_gt.loc[test_idx].dataframe().copy(),
+                train=id_X_gt.loc[train_idx],
+                test=id_X_gt.loc[test_idx],
                 discrete_features=X_gt.discrete_features,
             )
             train_syn_id, test_syn_id = preprocess_prediction(
-                train=iter_X_syn.dataframe().copy(),
-                test=id_X_gt.loc[test_idx].dataframe().copy(),
+                train=iter_X_syn,
+                test=id_X_gt.loc[test_idx],
                 discrete_features=X_gt.discrete_features,
             )
             train_syn_ood, test_syn_ood = preprocess_prediction(
-                train=iter_X_syn.dataframe().copy(),
-                test=ood_X_gt.dataframe().copy(),
+                train=iter_X_syn,
+                test=ood_X_gt,
                 discrete_features=X_gt.discrete_features,
             )
-
             real_score = eval_cbk(
                 model,
                 model_args,

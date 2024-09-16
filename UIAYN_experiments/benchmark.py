@@ -6,6 +6,8 @@ from ucimlrepo import fetch_ucirepo
 from utils import preprocess, plot_df
 from sklearn.model_selection import train_test_split
 
+# first test performance, detection, leakage, preprocessing of generative models on discrete features only
+
 ds = "adult"
 with open("UIAYN_experiments/datasets.json", "r") as f:
     config = json.load(f)
@@ -15,7 +17,7 @@ X = dataset.data.features
 y = dataset.data.targets
 
 df = preprocess(X=X, y=y, config=config)
-# df, _ = train_test_split(df, stratify=df["target"], train_size=0.1, random_state=1)
+df, _ = train_test_split(df, stratify=df["target"], train_size=0.01, random_state=1)
 
 # we have to make sure that the categorical limit corresponds to what we find discrete features in the dataset
 # print(df.nunique())
@@ -26,6 +28,7 @@ df = preprocess(X=X, y=y, config=config)
 X_r = GenericDataLoader(
     data=df,
     sensitive_features=config["sensitive"],
+    discrete_features=config["discrete"],
     target_column="target",
     random_state=0,
     train_size=0.8,
@@ -86,7 +89,7 @@ score = Benchmarks.evaluate(
             "detection_xgb",
             # "detection_mlp",
             # "detection_gmm",
-            "detection_linear",
+            # "detection_linear",
         ],
         "privacy": [
             #   "delta-presence",
@@ -99,7 +102,7 @@ score = Benchmarks.evaluate(
             # "DomiasMIA_prior",
         ],
         "attack": [  # "data_leakage_linear",
-            # "data_leakage_xgb",
+            "data_leakage_xgb",
             # "data_leakage_mlp"
         ],
     },
