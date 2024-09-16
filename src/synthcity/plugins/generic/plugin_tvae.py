@@ -188,13 +188,13 @@ class TVAEPlugin(Plugin):
             FloatDistribution(name="encoder_dropout", low=0, high=0.2),
         ]
 
-    def _fit(self, X: DataLoader, *args: Any, **kwargs: Any) -> "TVAEPlugin":
+    def _fit(self, X_gt: DataLoader, *args: Any, **kwargs: Any) -> "TVAEPlugin":
         cond: Optional[Union[pd.DataFrame, pd.Series]] = None
         if "cond" in kwargs:
             cond = kwargs["cond"]
 
         self.model = TabularVAE(
-            X.dataframe(),
+            X_gt,
             cond=cond,
             n_units_embedding=self.n_units_embedding,
             batch_size=self.batch_size,
@@ -223,7 +223,7 @@ class TVAEPlugin(Plugin):
             patience=self.patience,
             device=self.device,
         )
-        self.model.fit(X.dataframe(), **kwargs)
+        self.model.fit(X_gt.dataframe(), **kwargs)
 
         return self
 

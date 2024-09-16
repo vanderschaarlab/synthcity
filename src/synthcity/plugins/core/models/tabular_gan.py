@@ -14,6 +14,7 @@ from sklearn.preprocessing import OneHotEncoder
 from synthcity.metrics.weighted_metrics import WeightedMetrics
 from synthcity.utils.constants import DEVICE
 from synthcity.utils.samplers import BaseSampler, ConditionalDatasetSampler
+from synthcity.plugins.core.dataloader import DataLoader
 
 # synthcity relative
 from .gan import GAN
@@ -124,7 +125,7 @@ class TabularGAN(torch.nn.Module):
     @validate_arguments(config=dict(arbitrary_types_allowed=True))
     def __init__(
         self,
-        X: pd.DataFrame,
+        X_gt: DataLoader,
         n_units_latent: int,
         cond: Optional[Union[pd.DataFrame, pd.Series, np.ndarray]] = None,
         generator_n_layers_hidden: int = 2,
@@ -172,6 +173,7 @@ class TabularGAN(torch.nn.Module):
         dp_secure_mode: bool = False,
     ) -> None:
         super(TabularGAN, self).__init__()
+        X = X_gt.dataframe()
         self.columns = X.columns
         self.batch_size = batch_size
         self.sample_prob: Optional[np.ndarray] = None
@@ -183,7 +185,7 @@ class TabularGAN(torch.nn.Module):
         else:
             self.encoder = TabularEncoder(
                 max_clusters=encoder_max_clusters, whitelist=encoder_whitelist
-            ).fit(X)
+            ).fit(X, discrete_columns=X_gt.discrete_features)
 
         self.cond_encoder: Optional[OneHotEncoder] = None
         if cond is not None:

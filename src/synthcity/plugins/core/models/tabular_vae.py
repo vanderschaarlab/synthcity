@@ -12,6 +12,7 @@ from torch import nn
 # synthcity absolute
 from synthcity.utils.constants import DEVICE
 from synthcity.utils.samplers import BaseSampler, ConditionalDatasetSampler
+from synthcity.plugins.core.dataloader import DataLoader
 
 # synthcity relative
 from .tabular_encoder import TabularEncoder
@@ -81,7 +82,7 @@ class TabularVAE(nn.Module):
     @validate_arguments(config=dict(arbitrary_types_allowed=True))
     def __init__(
         self,
-        X: pd.DataFrame,
+        X_gt: DataLoader,
         n_units_embedding: int,
         cond: Optional[Union[pd.DataFrame, pd.Series, np.ndarray]] = None,
         lr: float = 2e-4,
@@ -116,10 +117,12 @@ class TabularVAE(nn.Module):
         patience: int = 20,
     ) -> None:
         super(TabularVAE, self).__init__()
+        X = X_gt.dataframe()
+
         self.columns = X.columns
         self.encoder = TabularEncoder(
             max_clusters=encoder_max_clusters, whitelist=encoder_whitelist
-        ).fit(X)
+        ).fit(X, discrete_columns=X_gt.discrete_features)
 
         n_units_conditional = 0
         self.cond_encoder: Optional[OneHotEncoder] = None

@@ -5,6 +5,7 @@ Reference: Jinsung Yoon, Lydia N. Drumright, Mihaela van der Schaar,
         IEEE Journal of Biomedical and Health Informatics (JBHI), 2019.
 Paper link: https://ieeexplore.ieee.org/document/9034117
 """
+
 # stdlib
 from pathlib import Path
 from typing import Any, List, Optional, Union
@@ -227,13 +228,13 @@ class AdsGANPlugin(Plugin):
             IntegerDistribution(name="encoder_max_clusters", low=2, high=20),
         ]
 
-    def _fit(self, X: DataLoader, *args: Any, **kwargs: Any) -> "AdsGANPlugin":
+    def _fit(self, X_gt: DataLoader, *args: Any, **kwargs: Any) -> "AdsGANPlugin":
         cond: Optional[Union[pd.DataFrame, pd.Series]] = None
         if "cond" in kwargs:
             cond = kwargs["cond"]
 
         self.model = TabularGAN(
-            X.dataframe(),
+            X_gt,
             cond=cond,
             n_units_latent=self.generator_n_units_hidden,
             batch_size=self.batch_size,
@@ -272,7 +273,7 @@ class AdsGANPlugin(Plugin):
             n_iter_print=self.n_iter_print,
             adjust_inference_sampling=self.adjust_inference_sampling,
         )
-        self.model.fit(X.dataframe(), cond=cond)
+        self.model.fit(X_gt.dataframe(), cond=cond)
 
         return self
 

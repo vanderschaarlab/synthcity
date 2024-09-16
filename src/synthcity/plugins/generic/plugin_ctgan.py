@@ -231,13 +231,13 @@ class CTGANPlugin(Plugin):
 
         return cond
 
-    def _fit(self, X: DataLoader, *args: Any, **kwargs: Any) -> "CTGANPlugin":
+    def _fit(self, X_gt: DataLoader, *args: Any, **kwargs: Any) -> "CTGANPlugin":
         cond: Optional[Union[pd.DataFrame, pd.Series]] = None
         if "cond" in kwargs:
             cond = self._prepare_cond(kwargs["cond"])
 
         self.model = TabularGAN(
-            X.dataframe(),
+            X_gt,
             cond=cond,
             n_units_latent=self.generator_n_units_hidden,
             batch_size=self.batch_size,
@@ -275,7 +275,7 @@ class CTGANPlugin(Plugin):
             n_iter_print=self.n_iter_print,
             adjust_inference_sampling=self.adjust_inference_sampling,
         )
-        self.model.fit(X.dataframe(), cond=cond)
+        self.model.fit(X_gt.dataframe(), cond=cond)
 
         return self
 
