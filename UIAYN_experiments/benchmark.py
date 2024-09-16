@@ -15,7 +15,7 @@ X = dataset.data.features
 y = dataset.data.targets
 
 df = preprocess(X=X, y=y, config=config)
-df, _ = train_test_split(df, stratify=df["target"], train_size=0.1, random_state=1)
+# df, _ = train_test_split(df, stratify=df["target"], train_size=0.1, random_state=1)
 
 # we have to make sure that the categorical limit corresponds to what we find discrete features in the dataset
 # print(df.nunique())
@@ -38,20 +38,17 @@ for file in os.listdir(hparam_path):
     with open(f"{hparam_path}/{file}", "r") as f:
         hparams.update(json.load(f))
 
-# set fasd to tvae plugin and add params
-evaluate = [(plugin, plugin, params) for (plugin, params) in hparams.items()]
-for i, (name, plugin, params) in enumerate(evaluate):
-    if plugin == "fasd":
-        params["fasd"] = True
-        evaluate[i] = (name, "tvae", params)
 
-    # for small datasets reduce the minimum number of iterations in the generative model and batch size
-    # if len(df) < 1000:
-    #     params["batch_size"] = 64
-    #     if plugin in ["tvae", "fasd", "ctgan", "adsgan"]:
-    #         params["n_iter_min"] = 10
-    #     if plugin in ["pategan"]:
-    #         params["n_teachers"] = 5
+evaluate = [(plugin, plugin, params) for (plugin, params) in hparams.items()]
+
+
+# for small datasets reduce the minimum number of iterations in the generative model and batch size
+# if len(df) < 1000:
+#     params["batch_size"] = 64
+#     if plugin in ["tvae", "fasd", "ctgan", "adsgan"]:
+#         params["n_iter_min"] = 10
+#     if plugin in ["pategan"]:
+#         params["n_teachers"] = 5
 
 
 # perform benchmarking

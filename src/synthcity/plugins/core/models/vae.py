@@ -528,9 +528,7 @@ class VAE(nn.Module):
             )
 
         reconstruction_loss = torch.sum(torch.stack(loss)) / real.shape[0]
-        KLD_loss = (-0.5 * torch.sum(1 + logvar - mu**2 - logvar.exp())) / real.shape[
-            0
-        ]
+        KLD_loss = (-0.5 * torch.sum(1 + logvar - mu**2 - logvar.exp())) / real.shape[0]
 
         if torch.isnan(reconstruction_loss):
             raise RuntimeError("NaNs detected in the reconstruction_loss")
@@ -594,8 +592,6 @@ class VAE(nn.Module):
 
         reconstruction_loss = torch.sum(torch.stack(loss)) / real.shape[0]
 
-        KLD_loss = (-0.5 * torch.sum(1 + logvar - mu**2 - logvar.exp())) / real.shape[
-            0
-        ]
+        KLD_loss = (-0.5 * torch.sum(1 + logvar - mu**2 - logvar.exp())) / real.shape[0]
 
         return reconstruction_loss * self.loss_factor + KLD_loss
