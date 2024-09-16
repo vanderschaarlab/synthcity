@@ -1,0 +1,193 @@
+{
+    "diabetes": {
+        "name": "diabetes",
+        "id": 296,
+        "discrete": [
+            "race",
+            "gender",
+            "age",
+            "weight",
+            "admission_type_id",
+            "discharge_disposition_id",
+            "admission_source_id",
+            "payer_code",
+            "medical_specialty",
+            "diag_1",
+            "diag_2",
+            "diag_3",
+            "max_glu_serum",
+            "A1Cresult",
+            "metformin",
+            "repaglinide",
+            "nateglinide",
+            "chlorpropamide",
+            "glimepiride",
+            "acetohexamide",
+            "glipizide",
+            "glyburide",
+            "tolbutamide",
+            "pioglitazone",
+            "rosiglitazone",
+            "acarbose",
+            "miglitol",
+            "troglitazone",
+            "tolazamide",
+            "examide",
+            "citoglipton",
+            "insulin",
+            "glyburide-metformin",
+            "glipizide-metformin",
+            "glimepiride-pioglitazone",
+            "metformin-rosiglitazone",
+            "metformin-pioglitazone",
+            "change",
+            "diabetesMed"
+        ],
+        "numerical": [
+            "time_in_hospital",
+            "num_lab_procedures",
+            "num_procedures",
+            "num_medications",
+            "number_outpatient",
+            "number_emergency",
+            "number_inpatient",
+            "number_diagnoses"
+        ],
+        "drop": [],
+        "sensitive": []
+    },
+    "heart": {
+        "name": "heart",
+        "id": 45,
+        "discrete": [
+            "sex",
+            "cp",
+            "fbs",
+            "restecg",
+            "exang",
+            "slope",
+            "thal",
+            "ca"
+        ],
+        "numerical": [
+            "age",
+            "trestbps",
+            "chol",
+            "thalach",
+            "oldpeak"
+        ],
+        "drop": [],
+        "sensitive": [
+            "sex",
+            "age"
+        ]
+    },
+    "student": {
+        "name": "student",
+        "id": 320,
+        "discrete": [
+            "school",
+            "sex",
+            "address",
+            "famsize",
+            "Pstatus",
+            "Mjob",
+            "Fjob",
+            "reason",
+            "guardian",
+            "schoolsup",
+            "famsup",
+            "paid",
+            "activities",
+            "nursery",
+            "higher",
+            "internet",
+            "romantic"
+        ],
+        "numerical": [
+            "age",
+            "Medu",
+            "Fedu",
+            "traveltime",
+            "studytime",
+            "failures",
+            "famrel",
+            "freetime",
+            "goout",
+            "Dalc",
+            "Walc",
+            "health",
+            "absences"
+        ],
+        "drop": [],
+        "sensitive": [
+            "age",
+            "sex"
+        ]
+    },
+    "adult": {
+        "name": "adult",
+        "id": 2,
+        "discrete": [
+            "sex",
+            "workclass",
+            "relationship",
+            "race",
+            "native-country",
+            "education",
+            "occupation"
+        ],
+        "numerical": [
+            "age",
+            "capital-gain",
+            "capital-loss",
+            "hours-per-week"
+        ],
+        "drop": [
+            "fnlwgt",
+            "education-num",
+            "marital-status"
+        ],
+        "sensitive": [
+            "age",
+            "sex",
+            "race"
+        ]
+    },
+    "credit": {
+        "name": "credit",
+        "id": 350,
+        "discrete": [
+            "X2",
+            "X3",
+            "X4",
+            "X6",
+            "X7",
+            "X8",
+            "X9",
+            "X10",
+            "X11"
+        ],
+        "numerical": [
+            "X1",
+            "X5",
+            "X12",
+            "X13",
+            "X14",
+            "X15",
+            "X16",
+            "X17",
+            "X18",
+            "X19",
+            "X20",
+            "X21",
+            "X22",
+            "X23"
+        ],
+        "drop": [],
+        "sensitive": [
+            "age",
+            "sex"
+        ]
+    }
+}

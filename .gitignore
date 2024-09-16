@@ -54,6 +54,8 @@ MANIFEST
 .ipynb_checkpoints
 weight_checkpoint*
 
+*hparams
+*results
 workspace
 workspace_test
 output
