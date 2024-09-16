@@ -44,8 +44,7 @@ class StatisticalEvaluator(MetricEvaluator):
         return "stats"
 
     @abstractmethod
-    def _evaluate(self, X_gt: DataLoader, X_syn: DataLoader) -> Dict:
-        ...
+    def _evaluate(self, X_gt: DataLoader, X_syn: DataLoader) -> Dict: ...
 
     @validate_arguments(config=dict(arbitrary_types_allowed=True))
     def evaluate(self, X_gt: DataLoader, X_syn: DataLoader) -> Dict:
@@ -391,8 +390,8 @@ class WassersteinDistance(StatisticalEvaluator):
         X_ = scaler.transform(X_)
         X_syn_ = scaler.transform(X_syn_)
 
-        X_ten = torch.from_numpy(X_)
-        Xsyn_ten = torch.from_numpy(X_syn_)
+        X_ten = torch.from_numpy(X_).contiguous()
+        Xsyn_ten = torch.from_numpy(X_syn_).contiguous()
         OT_solver = SamplesLoss(loss="sinkhorn")
 
         return {"joint": OT_solver(X_ten, Xsyn_ten).cpu().numpy().item()}
