@@ -74,6 +74,7 @@ class DataLoader(metaclass=ABCMeta):
         static_features: List[str] = [],
         temporal_features: List[str] = [],
         sensitive_features: List[str] = [],
+        discrete_features: List[str] = [],
         important_features: List[str] = [],
         outcome_features: List[str] = [],
         train_size: float = 0.8,
@@ -86,6 +87,7 @@ class DataLoader(metaclass=ABCMeta):
         self.important_features = important_features
         self.outcome_features = outcome_features
         self.random_state = random_state
+        self.discrete_features = discrete_features
 
         self.data = data
         self.data_type = data_type
@@ -95,82 +97,65 @@ class DataLoader(metaclass=ABCMeta):
         return self.data
 
     @abstractmethod
-    def unpack(self, as_numpy: bool = False, pad: bool = False) -> Any:
-        ...
+    def unpack(self, as_numpy: bool = False, pad: bool = False) -> Any: ...
 
     @abstractmethod
-    def decorate(self, data: Any) -> "DataLoader":
-        ...
+    def decorate(self, data: Any) -> "DataLoader": ...
 
     def type(self) -> str:
         return self.data_type
 
     @property
     @abstractmethod
-    def shape(self) -> tuple:
-        ...
+    def shape(self) -> tuple: ...
 
     @property
     @abstractmethod
-    def columns(self) -> list:
-        ...
+    def columns(self) -> list: ...
 
     @abstractmethod
-    def dataframe(self) -> pd.DataFrame:
-        ...
+    def dataframe(self) -> pd.DataFrame: ...
 
     @abstractmethod
-    def numpy(self) -> np.ndarray:
-        ...
+    def numpy(self) -> np.ndarray: ...
 
     @property
     def values(self) -> np.ndarray:
         return self.numpy()
 
     @abstractmethod
-    def info(self) -> dict:
-        ...
+    def info(self) -> dict: ...
 
     @abstractmethod
-    def __len__(self) -> int:
-        ...
+    def __len__(self) -> int: ...
 
     @abstractmethod
-    def satisfies(self, constraints: Constraints) -> bool:
-        ...
+    def satisfies(self, constraints: Constraints) -> bool: ...
 
     @abstractmethod
-    def match(self, constraints: Constraints) -> "DataLoader":
-        ...
+    def match(self, constraints: Constraints) -> "DataLoader": ...
 
     @staticmethod
     @abstractmethod
-    def from_info(data: pd.DataFrame, info: dict) -> "DataLoader":
-        ...
+    def from_info(data: pd.DataFrame, info: dict) -> "DataLoader": ...
 
     @abstractmethod
-    def sample(self, count: int, random_state: int = 0) -> "DataLoader":
-        ...
+    def sample(self, count: int, random_state: int = 0) -> "DataLoader": ...
 
     @abstractmethod
-    def drop(self, columns: list = []) -> "DataLoader":
-        ...
+    def drop(self, columns: list = []) -> "DataLoader": ...
 
     @abstractmethod
-    def __getitem__(self, feature: Union[str, list]) -> Any:
-        ...
+    def __getitem__(self, feature: Union[str, list]) -> Any: ...
 
     @abstractmethod
-    def __setitem__(self, feature: str, val: Any) -> None:
-        ...
+    def __setitem__(self, feature: str, val: Any) -> None: ...
 
     @abstractmethod
-    def train(self) -> "DataLoader":
-        ...
+    def train(self) -> "DataLoader": ...
 
     @abstractmethod
-    def test(self) -> "DataLoader":
-        ...
+    def test(self) -> "DataLoader": ...
 
     def hash(self) -> str:
         return dataframe_hash(self.dataframe())
@@ -182,12 +167,10 @@ class DataLoader(metaclass=ABCMeta):
         return self.dataframe()._repr_html_(*args, **kwargs)
 
     @abstractmethod
-    def fillna(self, value: Any) -> "DataLoader":
-        ...
+    def fillna(self, value: Any) -> "DataLoader": ...
 
     @abstractmethod
-    def compression_protected_features(self) -> list:
-        ...
+    def compression_protected_features(self) -> list: ...
 
     def domain(self) -> Optional[str]:
         return None
@@ -260,12 +243,10 @@ class DataLoader(metaclass=ABCMeta):
         return self.from_info(decoded, self.info())
 
     @abstractmethod
-    def is_tabular(self) -> bool:
-        ...
+    def is_tabular(self) -> bool: ...
 
     @abstractmethod
-    def get_fairness_column(self) -> Union[str, Any]:
-        ...
+    def get_fairness_column(self) -> Union[str, Any]: ...
 
 
 class GenericDataLoader(DataLoader):
@@ -307,6 +288,7 @@ class GenericDataLoader(DataLoader):
         data: Union[pd.DataFrame, list, np.ndarray],
         sensitive_features: List[str] = [],
         important_features: List[str] = [],
+        discrete_features: List[str] = [],
         target_column: Optional[str] = None,
         fairness_column: Optional[str] = None,
         domain_column: Optional[str] = None,
@@ -327,12 +309,14 @@ class GenericDataLoader(DataLoader):
 
         self.fairness_column = fairness_column
         self.domain_column = domain_column
+        self.discrete_features = discrete_features
 
         super().__init__(
             data_type="generic",
             data=data,
             static_features=list(data.columns),
             sensitive_features=sensitive_features,
+            discrete_features=discrete_features,
             important_features=important_features,
             outcome_features=[self.target_column],
             random_state=random_state,
@@ -383,6 +367,7 @@ class GenericDataLoader(DataLoader):
             "len": len(self),
             "static_features": self.static_features,
             "sensitive_features": self.sensitive_features,
+            "discrete_features": self.discrete_features,
             "important_features": self.important_features,
             "outcome_features": self.outcome_features,
             "target_column": self.target_column,
@@ -398,6 +383,7 @@ class GenericDataLoader(DataLoader):
         return GenericDataLoader(
             data,
             sensitive_features=self.sensitive_features,
+            discrete_features=self.discrete_features,
             important_features=self.important_features,
             target_column=self.target_column,
             random_state=self.random_state,
@@ -426,6 +412,7 @@ class GenericDataLoader(DataLoader):
         return GenericDataLoader(
             data,
             sensitive_features=info["sensitive_features"],
+            discrete_features=info["discrete_features"],
             important_features=info["important_features"],
             target_column=info["target_column"],
             fairness_column=info["fairness_column"],
@@ -937,9 +924,9 @@ class TimeSeriesDataLoader(DataLoader):
             mask = np.ones((len(temporal_data), longest_observation_seq, 5), dtype=bool)
             for i, arr in enumerate(temporal_data):
                 padded_temporal_data[i, : arr.shape[0], :] = arr  # Copy the actual data
-                mask[
-                    i, : arr.shape[0], :
-                ] = False  # Set mask to False where actual data is present
+                mask[i, : arr.shape[0], :] = (
+                    False  # Set mask to False where actual data is present
+                )
 
             masked_temporal_data = ma.masked_array(padded_temporal_data, mask)
             return (
