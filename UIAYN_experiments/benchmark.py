@@ -6,7 +6,7 @@ from ucimlrepo import fetch_ucirepo
 from utils import preprocess, plot_df
 from sklearn.model_selection import train_test_split
 
-ds = "heart"
+ds = "adult"
 with open("UIAYN_experiments/datasets.json", "r") as f:
     config = json.load(f)
 config = config[ds]
@@ -46,12 +46,12 @@ for i, (name, plugin, params) in enumerate(evaluate):
         evaluate[i] = (name, "tvae", params)
 
     # for small datasets reduce the minimum number of iterations in the generative model and batch size
-    if len(df) < 1000:
-        params["batch_size"] = 64
-        if plugin in ["tvae", "fasd", "ctgan", "adsgan"]:
-            params["n_iter_min"] = 10
-        if plugin in ["pategan"]:
-            params["n_teachers"] = 5
+    # if len(df) < 1000:
+    #     params["batch_size"] = 64
+    #     if plugin in ["tvae", "fasd", "ctgan", "adsgan"]:
+    #         params["n_iter_min"] = 10
+    #     if plugin in ["pategan"]:
+    #         params["n_teachers"] = 5
 
 
 # perform benchmarking
@@ -79,9 +79,9 @@ score = Benchmarks.evaluate(
             # "alpha_precision",
             # "survival_km_distance",
         ],
-        # "performance": ["linear_model", "mlp", "xgb", "feat_rank_distance"],
+        "performance": ["linear_model", "mlp", "xgb", "feat_rank_distance"],
         "detection": [
-            "detection_xgb",
+            # "detection_xgb",
             # "detection_mlp",
             # "detection_gmm",
             # "detection_linear",

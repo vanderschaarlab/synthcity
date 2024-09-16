@@ -43,6 +43,7 @@ from synthcity.plugins.core.models.time_series_survival.ts_surv_xgb import (
 )
 from synthcity.plugins.core.models.ts_model import TimeSeriesModel
 from synthcity.utils.serialization import load_from_file, save_to_file
+from synthcity.plugins.core.models.tabular_encoder import preprocess_prediction
 
 
 class PerformanceEvaluator(MetricEvaluator):
@@ -86,6 +87,12 @@ class PerformanceEvaluator(MetricEvaluator):
             1 means perfect predictions.
             0 means only incorrect predictions.
         """
+        X_train, X_test, y_train, y_test = (
+            X_train.copy(),
+            X_test.copy(),
+            y_train.copy(),
+            y_test.copy(),
+        )
         labels = list(y_train) + list(y_test)
 
         X_test_df = pd.DataFrame(X_test)
@@ -106,6 +113,7 @@ class PerformanceEvaluator(MetricEvaluator):
         enc_y_train = encoder.transform(y_train)
         if "n_units_out" in model_args:
             model_args["n_units_out"] = len(np.unique(y_train))
+            model_args["n_units_in"] = X_train.shape[1]
         try:
             enc_y_test = encoder.transform(y_test)
             estimator = model(**model_args).fit(X_train, enc_y_train)
@@ -193,19 +201,46 @@ class PerformanceEvaluator(MetricEvaluator):
         syn_scores_ood = []
 
         for train_idx, test_idx in skf.split(id_X_gt, id_y_gt):
-            train_data = np.asarray(id_X_gt.loc[train_idx])
-            test_data = np.asarray(id_X_gt.loc[test_idx])
-            train_labels = np.asarray(id_y_gt.loc[train_idx])
-            test_labels = np.asarray(id_y_gt.loc[test_idx])
+            # preprocess input features (especially relevant for MLP and LR)
+            train_real, test_real = preprocess_prediction(
+                train=id_X_gt.loc[train_idx].dataframe().copy(),
+                test=id_X_gt.loc[test_idx].dataframe().copy(),
+                discrete_features=X_gt.discrete_features,
+            )
+            train_syn_id, test_syn_id = preprocess_prediction(
+                train=iter_X_syn.dataframe().copy(),
+                test=id_X_gt.loc[test_idx].dataframe().copy(),
+                discrete_features=X_gt.discrete_features,
+            )
+            train_syn_ood, test_syn_ood = preprocess_prediction(
+                train=iter_X_syn.dataframe().copy(),
+                test=ood_X_gt.dataframe().copy(),
+                discrete_features=X_gt.discrete_features,
+            )
 
             real_score = eval_cbk(
-                model, model_args, train_data, train_labels, test_data, test_labels
+                model,
+                model_args,
+                np.asarray(train_real),
+                np.asarray(id_y_gt.loc[train_idx]),
+                np.asarray(test_real),
+                np.asarray(id_y_gt.loc[test_idx]),
             )
             synth_score_id = eval_cbk(
-                model, model_args, iter_X_syn, iter_y_syn, test_data, test_labels
+                model,
+                model_args,
+                np.asarray(train_syn_id),
+                np.asarray(iter_y_syn),
+                np.asarray(test_syn_id),
+                np.asarray(id_y_gt.loc[test_idx]),
             )
             synth_score_ood = eval_cbk(
-                model, model_args, iter_X_syn, iter_y_syn, ood_X_gt, ood_y_gt
+                model,
+                model_args,
+                np.asarray(train_syn_ood),
+                np.asarray(iter_y_syn),
+                np.asarray(test_syn_ood),
+                np.asarray(ood_y_gt),
             )
 
             real_scores.append(real_score)
