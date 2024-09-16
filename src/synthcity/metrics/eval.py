@@ -58,6 +58,8 @@ from .eval_statistical import (
     SurvivalKMDistance,
     WassersteinDistance,
 )
+
+from .eval_attacks import DataLeakageLinear, DataLeakageMLP, DataLeakageXGB
 from .scores import ScoreEvaluator
 
 standard_metrics = [
@@ -100,6 +102,10 @@ standard_metrics = [
     DomiasMIABNAF,  # TODO: This takes too long to include as default
     DomiasMIAKDE,
     DomiasMIAPrior,
+    # attribute inference attacks
+    DataLeakageXGB,
+    DataLeakageMLP,
+    DataLeakageLinear,
 ]
 
 
