@@ -6,14 +6,18 @@ from typing import Any, Dict
 import numpy as np
 from pydantic import validate_arguments
 from sklearn.linear_model import LinearRegression, LogisticRegression
-from sklearn.preprocessing import LabelEncoder
+from sklearn.preprocessing import LabelEncoder, MinMaxScaler
+from sklearn.metrics import r2_score
 from xgboost import XGBClassifier, XGBRegressor
+import pandas as pd
 
 # synthcity absolute
+from synthcity.metrics._utils import evaluate_auc
 from synthcity.metrics.core import MetricEvaluator
 from synthcity.plugins.core.dataloader import DataLoader
 from synthcity.plugins.core.models.mlp import MLP
 from synthcity.utils.serialization import load_from_file, save_to_file
+from synthcity.plugins.core.models.tabular_encoder import preprocess_prediction
 
 
 class AttackEvaluator(MetricEvaluator):
@@ -61,39 +65,66 @@ class AttackEvaluator(MetricEvaluator):
             if col not in X_syn.columns:
                 continue
 
+            # if column is discrete do classification
+            if col in X_gt.discrete_features:
+                task_type = "classification"
+                # dont try to one hot target column in input features
+                discrete = [x for x in X_gt.discrete_features if x != col]
+            else:
+                task_type = "regression"
+                discrete = X_gt.discrete_features.copy()
+
+            # preprocess input data
             target = X_syn[col]
             keys_data = X_syn.drop(columns=[col])
+            test_target = X_gt[col]
+            test_keys_data = X_gt.drop(columns=[col])
+            keys_data, test_keys_data = preprocess_prediction(
+                train=keys_data.dataframe(),
+                test=test_keys_data.dataframe(),
+                discrete_features=discrete,
+            )
 
-            # TODO: use a common limit for categorical features
-            if len(target.unique()) < 15:
-                task_type = "classification"
+            # setup target and model for classification / regression
+            if task_type == "classification":
                 encoder = LabelEncoder()
-                target = encoder.fit_transform(target)
+                encoder.fit(pd.concat([target, test_target]))
+                target = encoder.transform(target)
+                test_target = encoder.transform(test_target)
                 if "n_units_out" in classifier_args:
                     classifier_args["n_units_out"] = len(np.unique(target))
                 model = classifier_template(**classifier_args)
             else:
-                task_type = "regression"
+                target = MinMaxScaler(feature_range=(-1, 1)).fit_transform(target)
+                test_target = MinMaxScaler(feature_range=(-1, 1)).fit_transform(
+                    test_target
+                )
                 model = regressor_template(**regressor_args)
 
             model.fit(keys_data.values, np.asarray(target))
 
-            test_target = X_gt[col]
+            # get predictions and scores
             if task_type == "classification":
-                test_target = encoder.transform(test_target)
+                preds = model.predict_proba(test_keys_data.values)
+                output_, _ = evaluate_auc(
+                    np.asarray(test_target),
+                    np.asarray(preds),
+                    classes=sorted(set(np.asarray(target))),
+                )
+            else:
+                preds = model.predict(test_keys_data.values)
+                output_ = r2_score(np.asarray(test_target), np.asarray(preds))
 
-            test_keys_data = X_gt.drop(columns=[col])
-
-            preds = model.predict(test_keys_data.values)
-
-            output.append(
-                (np.asarray(preds) == np.asarray(test_target)).sum() / (len(preds) + 1)
-            )
+            output.append(output_)
 
         if len(output) == 0:
             return {}
 
-        results = {self._reduction: self.reduction()(output)}
+        # save results per feature
+        results = {}
+        for num, col in enumerate(X_gt.sensitive_features):
+            self.col = col
+            results[self.col] = output[num]
 
         save_to_file(cache_file, results)
 
