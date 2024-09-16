@@ -11,6 +11,7 @@ from sklearn.metrics import roc_auc_score
 from sklearn.mixture import GaussianMixture
 from sklearn.model_selection import StratifiedKFold
 from xgboost import XGBClassifier
+import pandas as pd
 
 # synthcity absolute
 import synthcity.logger as log
@@ -21,6 +22,7 @@ from synthcity.plugins.core.models.convnet import suggest_image_classifier_arch
 from synthcity.plugins.core.models.mlp import MLP
 from synthcity.utils.reproducibility import clear_cache
 from synthcity.utils.serialization import load_from_file, save_to_file
+from synthcity.plugins.core.models.tabular_encoder import preprocess_prediction
 
 
 class DetectionEvaluator(MetricEvaluator):
@@ -80,15 +82,33 @@ class DetectionEvaluator(MetricEvaluator):
             )
             return results
 
-        arr_gt = X_gt.numpy().reshape(len(X_gt), -1)
+        # if target column is discrete, we need to add it to the list of discrete columns for preprocessing
+        discrete = X_gt.discrete_features.copy()
+        if X_gt[X_gt.target_column].nunique() < 15:
+            discrete.append(X_gt.target_column)
+
+        gt, syn = X_gt.dataframe(), X_syn.dataframe()
+
+        # ensure equal precision between numerical synthetic and real data, else XGB might find splits "between" precision discrepancies
+        def count_decimals(x):
+            if pd.isna(x) or isinstance(x, int):
+                return 0
+            text = str(x).split(".")
+            if len(text) == 2:
+                return len(text[1].rstrip("0"))
+            return 0
+
+        precision_dict = {}
+        for col in [x for x in gt.columns if x not in discrete]:
+            precision_dict[col] = gt[col].apply(count_decimals).max()
+        for col, precision in precision_dict.items():
+            syn[col] = syn[col].round(precision)
+
+        # get data and labels
+        data = pd.concat([gt, syn])
         labels_gt = np.asarray([0] * len(X_gt))
-
-        arr_syn = X_syn.numpy().reshape(len(X_syn), -1)
         labels_syn = np.asarray([1] * len(X_syn))
-
-        data = np.concatenate([arr_gt, arr_syn])
         labels = np.concatenate([labels_gt, labels_syn])
-
         res = []
 
         skf = StratifiedKFold(
@@ -100,11 +120,16 @@ class DetectionEvaluator(MetricEvaluator):
             test_data = data[test_idx]
             test_labels = labels[test_idx]
 
-            model = model_template(**model_args).fit(
-                train_data.astype(float), train_labels
+            # preprocess (especially relevant for non XGB)
+            train_data, test_data = preprocess_prediction(
+                train=train_data, test=test_data, discrete_features=discrete
             )
 
-            test_pred = model.predict_proba(test_data.astype(float))[:, 1]
+            model = model_template(**model_args).fit(
+                np.asarray(train_data).astype(float), train_labels
+            )
+
+            test_pred = model.predict_proba(np.asarray(test_data).astype(float))[:, 1]
 
             score = roc_auc_score(test_labels, test_pred)
             res.append(score)

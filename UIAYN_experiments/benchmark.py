@@ -15,7 +15,7 @@ X = dataset.data.features
 y = dataset.data.targets
 
 df = preprocess(X=X, y=y, config=config)
-# df, _ = train_test_split(df, stratify=df["target"], train_size=0.01, random_state=1)
+df, _ = train_test_split(df, stratify=df["target"], train_size=0.5, random_state=1)
 
 # we have to make sure that the categorical limit corresponds to what we find discrete features in the dataset
 # print(df.nunique())
@@ -79,12 +79,17 @@ score = Benchmarks.evaluate(
             # "alpha_precision",
             # "survival_km_distance",
         ],
-        "performance": ["linear_model", "mlp", "xgb", "feat_rank_distance"],
+        "performance": [
+            "linear_model",
+            # "mlp",
+            "xgb",
+            # "feat_rank_distance"
+        ],
         "detection": [
-            # "detection_xgb",
+            "detection_xgb",
             # "detection_mlp",
             # "detection_gmm",
-            # "detection_linear",
+            "detection_linear",
         ],
         "privacy": [
             #   "delta-presence",
