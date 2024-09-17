@@ -33,18 +33,15 @@ jobs:
       - name: Limit OpenMP threads
         run: |
           echo "OMP_NUM_THREADS=2" >> $GITHUB_ENV
-      - name: Test Core - slow
-        # timeout-minutes: 1000
+      - name: Test Core - slow part one
         run: |
           pip install .[testing]
-          pytest -vvvs --durations=50 -m "slow"
-      # - name: Test Core - slow part two
-      #   timeout-minutes: 1000
-      #   run: |
-      #     pip install .[testing]
-      #     pytest -vvvs --durations=50 -m "slow_2"
+          pytest -vvvs --durations=50 -m "slow_1"
+      - name: Test Core - slow part two
+        run: |
+          pip install .[testing]
+          pytest -vvvs --durations=50 -m "slow_2"
       - name: Test Core - fast
-        timeout-minutes: 1000
         run: |
           pip install .[testing]
           pytest -vvvs --durations=50 -m "not slow"
