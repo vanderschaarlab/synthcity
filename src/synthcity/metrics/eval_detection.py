@@ -105,7 +105,7 @@ class DetectionEvaluator(MetricEvaluator):
             syn[col] = syn[col].round(precision)
 
         # get data and labels
-        data = pd.concat([gt, syn])
+        data = pd.concat([gt, syn], ignore_index=True)
         labels_gt = np.asarray([0] * len(X_gt))
         labels_syn = np.asarray([1] * len(X_syn))
         labels = np.concatenate([labels_gt, labels_syn])
@@ -115,9 +115,9 @@ class DetectionEvaluator(MetricEvaluator):
             n_splits=self._n_folds, shuffle=True, random_state=self._random_state
         )
         for train_idx, test_idx in skf.split(data, labels):
-            train_data = data[train_idx]
+            train_data = data.loc[train_idx]
             train_labels = labels[train_idx]
-            test_data = data[test_idx]
+            test_data = data.loc[test_idx]
             test_labels = labels[test_idx]
 
             # preprocess (especially relevant for non XGB)
