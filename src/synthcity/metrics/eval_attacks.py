@@ -87,22 +87,31 @@ class AttackEvaluator(MetricEvaluator):
 
             # setup target and model for classification / regression
             if task_type == "classification":
+
+                # if some labels occur in test data which do not appear in train data, remove those datapoints
+                test_keys_data = test_keys_data[test_target.isin(target.unique())]
+                test_target = test_target[test_target.isin(target.unique())]
+
                 encoder = LabelEncoder()
-                encoder.fit(pd.concat([target, test_target]))
-                target = encoder.transform(target)
+                target = encoder.fit_transform(target)
                 test_target = encoder.transform(test_target)
                 if "n_units_out" in classifier_args:
+                    # TBD: fix MLP
                     classifier_args["n_units_out"] = len(np.unique(target))
+                    classifier_args["n_units_in"] = keys_data.shape[1]
                 model = classifier_template(**classifier_args)
             else:
-                target = MinMaxScaler(feature_range=(-1, 1)).fit_transform(target)
-                test_target = MinMaxScaler(feature_range=(-1, 1)).fit_transform(
-                    test_target
+                encoder = MinMaxScaler(feature_range=(-1, 1))
+                target = pd.Series(
+                    encoder.fit_transform(target.to_frame()).flatten(),
+                    index=target.index,
+                )
+                test_target = pd.Series(
+                    encoder.fit_transform(test_target.to_frame()).flatten(),
+                    index=test_target.index,
                 )
                 model = regressor_template(**regressor_args)
-
             model.fit(keys_data.values, np.asarray(target))
-
             # get predictions and scores
             if task_type == "classification":
                 preds = model.predict_proba(test_keys_data.values)

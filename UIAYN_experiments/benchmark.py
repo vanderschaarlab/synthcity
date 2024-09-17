@@ -80,10 +80,10 @@ score = Benchmarks.evaluate(
             # "survival_km_distance",
         ],
         "performance": [
-            # "linear_model",
+            "linear_model",
             # "mlp",
-            # "xgb",
-            # "feat_rank_distance"
+            "xgb",
+            #  "feat_rank_distance"
         ],
         "detection": [
             "detection_xgb",
@@ -101,8 +101,9 @@ score = Benchmarks.evaluate(
             # "DomiasMIA_KDE",
             # "DomiasMIA_prior",
         ],
-        "attack": [  # "data_leakage_linear",
-            # "data_leakage_xgb",
+        "attack": [
+            # "data_leakage_linear",
+            "data_leakage_xgb",
             # "data_leakage_mlp"
         ],
     },
