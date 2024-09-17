@@ -129,7 +129,6 @@ class TabularFASD(nn.Module):
     ) -> None:
         super(TabularFASD, self).__init__()
         X = X_gt.dataframe()
-        print(X)
         self.target_column = X_gt.target_column
 
         # separately encode X and y
@@ -387,8 +386,6 @@ class TabularFASD(nn.Module):
 
         # attach targets to synthetic data
         samples[self.target_column] = y
-
-        print(samples)
 
         return samples
 

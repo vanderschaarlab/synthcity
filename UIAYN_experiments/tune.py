@@ -11,7 +11,7 @@ from synthcity.utils.optuna_sample import suggest_all
 # find approppriate hparam spaces
 hp_desired = {
     "fasd": [
-        "fasd_hidden_dim",
+        "fasd_n_units_embedding",
         "n_units_embedding",
         "decoder_n_layers_hidden",
         "decoder_n_units_hidden",
@@ -24,7 +24,6 @@ hp_desired = {
         "generator_n_layers_hidden",
         "generator_n_units_hidden",
     ],
-    # "privbayes": ["K", "n_bins", "mi_threshold", "target_usefulness"],
     "pategan": [
         "discriminator_n_layers_hidden",
         "discriminator_n_units_hidden",
@@ -86,12 +85,6 @@ for plugin, hparams in hp_space.items():
     def objective(trial: optuna.Trial):
         params = suggest_all(trial, hparams)
         ID = f"trial_{trial.number}"
-
-        if plugin == "fasd":
-            params["fasd"] = True
-            plugin_name = "tvae"
-        else:
-            plugin_name = plugin
 
         # ensure smaller batch size and training epochs are allowed for small datasets
         if len(df) < 1000:

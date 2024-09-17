@@ -166,20 +166,20 @@ class TVAEPlugin(Plugin):
         return [
             IntegerDistribution(name="n_iter", low=100, high=500, step=100),
             CategoricalDistribution(name="lr", choices=[1e-3, 2e-4, 1e-4]),
-            IntegerDistribution(name="decoder_n_layers_hidden", low=1, high=5),
+            IntegerDistribution(name="decoder_n_layers_hidden", low=1, high=3),
             CategoricalDistribution(name="weight_decay", choices=[1e-3, 1e-4]),
             CategoricalDistribution(name="batch_size", choices=[64, 128, 256, 512]),
-            IntegerDistribution(name="n_units_embedding", low=50, high=500, step=50),
+            IntegerDistribution(name="n_units_embedding", low=50, high=250, step=50),
             IntegerDistribution(
-                name="decoder_n_units_hidden", low=50, high=500, step=50
+                name="decoder_n_units_hidden", low=50, high=250, step=50
             ),
             CategoricalDistribution(
                 name="decoder_nonlin", choices=["relu", "leaky_relu", "tanh", "elu"]
             ),
             FloatDistribution(name="decoder_dropout", low=0, high=0.2),
-            IntegerDistribution(name="encoder_n_layers_hidden", low=1, high=5),
+            IntegerDistribution(name="encoder_n_layers_hidden", low=1, high=3),
             IntegerDistribution(
-                name="encoder_n_units_hidden", low=50, high=500, step=50
+                name="encoder_n_units_hidden", low=50, high=250, step=50
             ),
             CategoricalDistribution(
                 name="encoder_nonlin",

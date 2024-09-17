@@ -194,18 +194,18 @@ class CTGANPlugin(Plugin):
     @staticmethod
     def hyperparameter_space(**kwargs: Any) -> List[Distribution]:
         return [
-            IntegerDistribution(name="generator_n_layers_hidden", low=1, high=4),
+            IntegerDistribution(name="generator_n_layers_hidden", low=1, high=3),
             IntegerDistribution(
-                name="generator_n_units_hidden", low=50, high=150, step=50
+                name="generator_n_units_hidden", low=50, high=250, step=50
             ),
             CategoricalDistribution(
                 name="generator_nonlin", choices=["relu", "leaky_relu", "tanh", "elu"]
             ),
             IntegerDistribution(name="n_iter", low=100, high=1000, step=100),
             FloatDistribution(name="generator_dropout", low=0, high=0.2),
-            IntegerDistribution(name="discriminator_n_layers_hidden", low=1, high=4),
+            IntegerDistribution(name="discriminator_n_layers_hidden", low=1, high=3),
             IntegerDistribution(
-                name="discriminator_n_units_hidden", low=50, high=150, step=50
+                name="discriminator_n_units_hidden", low=50, high=250, step=50
             ),
             CategoricalDistribution(
                 name="discriminator_nonlin",
