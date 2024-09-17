@@ -129,6 +129,7 @@ class TabularFASD(nn.Module):
     ) -> None:
         super(TabularFASD, self).__init__()
         X = X_gt.dataframe()
+        print(X)
         self.target_column = X_gt.target_column
 
         # separately encode X and y
@@ -142,9 +143,8 @@ class TabularFASD(nn.Module):
         self.target_encoder = TabularEncoder(
             continuous_encoder="minmax", cont_encoder_params={"feature_range": (-1, 1)}
         )
-        self.target_encoder.fit(X[self.target_column])
-        y_enc = self.target_encoder.transform(X[self.target_column])
-
+        self.target_encoder.fit((X[self.target_column]).to_frame())
+        y_enc = self.target_encoder.transform((X[self.target_column]).to_frame())
         # train the FASD model to get representations
         self.fasd_model = FASD(
             n_units_in=self.data_encoder.n_features(),
@@ -387,6 +387,8 @@ class TabularFASD(nn.Module):
 
         # attach targets to synthetic data
         samples[self.target_column] = y
+
+        print(samples)
 
         return samples
 

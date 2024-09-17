@@ -37,7 +37,7 @@ class FASD(nn.Module):
         dropout: float = 0.1,
         clipping_value: int = 1,
     ) -> None:
-        super(FASD).__init__()
+        super(FASD, self).__init__()
         self.random_state = random_state
         self.batch_size = batch_size
         self.n_iter = n_iter
@@ -47,6 +47,7 @@ class FASD(nn.Module):
         self.lr = lr
         self.weight_decay = weight_decay
         self.n_iter_min = n_iter_min
+        self.n_units_embedding = n_units_embedding
 
         # the nonlin out for the encoder is simply the hidden nonlin for each hidden node
         # this does force the embedding activation and encoder nonlinearity to be the same
@@ -187,7 +188,7 @@ class FASD(nn.Module):
         # turn into dataframe
         X_enc = pd.DataFrame(
             Xt.cpu().detach().numpy(),
-            columns=["rep_" + str(x) for x in list(range(len(X.columns)))],
+            columns=["rep_" + str(x) for x in list(range(self.n_units_embedding))],
         )
 
         return X_enc
@@ -234,7 +235,7 @@ class FASD_Decoder(nn.Module):
         dropout: float = 0.1,
         clipping_value: int = 1,
     ) -> None:
-        super(FASD).__init__()
+        super(FASD_Decoder, self).__init__()
         self.random_state = random_state
         self.batch_size = batch_size
         self.n_iter = n_iter

@@ -17,7 +17,7 @@ X = dataset.data.features
 y = dataset.data.targets
 
 df = preprocess(X=X, y=y, config=config)
-df, _ = train_test_split(df, stratify=df["target"], train_size=0.01, random_state=1)
+df, _ = train_test_split(df, stratify=df["target"], train_size=0.1, random_state=1)
 
 # we have to make sure that the categorical limit corresponds to what we find discrete features in the dataset
 # print(df.nunique())
