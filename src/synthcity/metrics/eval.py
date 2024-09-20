@@ -119,6 +119,7 @@ class Metrics:
         random_state: int = 0,
         workspace: Path = Path("workspace"),
         use_cache: bool = True,
+        n_folds: int = 5,
     ) -> pd.DataFrame:
         """Core evaluation logic for the metrics
 
@@ -238,6 +239,7 @@ class Metrics:
                         random_state=random_state,
                         workspace=workspace,
                         use_cache=use_cache,
+                        n_folds=n_folds,
                     ),
                     X_gt,
                     X_augmented,
@@ -251,6 +253,7 @@ class Metrics:
                         random_state=random_state,
                         workspace=workspace,
                         use_cache=use_cache,
+                        n_folds=n_folds,
                     ),
                     X_gt,
                     X_syn,
@@ -267,6 +270,7 @@ class Metrics:
                         random_state=random_state,
                         workspace=workspace,
                         use_cache=use_cache,
+                        n_folds=n_folds,
                     ),
                     X_gt.sample(eval_cnt),
                     X_syn.sample(eval_cnt),

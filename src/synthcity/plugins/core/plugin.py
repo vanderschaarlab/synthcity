@@ -9,7 +9,7 @@ from typing import Any, Callable, Dict, Generator, List, Optional, Type, Union
 
 # third party
 import pandas as pd
-from pydantic import validate_arguments
+from pydantic import ConfigDict, validate_arguments
 
 # synthcity absolute
 import synthcity.logger as log
@@ -71,9 +71,7 @@ class Plugin(Serializable, metaclass=ABCMeta):
             Internal parameter for schema. marginal or uniform.
     """
 
-    class Config:
-        arbitrary_types_allowed = True
-        validate_assignment = True
+    model_config = ConfigDict(arbitrary_types_allowed=True, validate_assignment=True)
 
     def __init__(
         self,

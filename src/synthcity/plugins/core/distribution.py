@@ -6,7 +6,7 @@ from typing import Any, Dict, List, Optional
 # third party
 import numpy as np
 import pandas as pd
-from pydantic import BaseModel, validator
+from pydantic import BaseModel, ConfigDict, Field, ValidationInfo, field_validator
 
 # synthcity absolute
 from synthcity.plugins.core.constraints import Constraints
@@ -40,16 +40,16 @@ class Distribution(BaseModel, metaclass=ABCMeta):
     random_state: int = 0
     # DP parameters
     marginal_distribution: Optional[pd.Series] = None
+    model_config = ConfigDict(arbitrary_types_allowed=True)
 
-    class Config:
-        arbitrary_types_allowed = True
-
-    @validator("marginal_distribution", always=True)
-    def _validate_marginal_distribution(cls: Any, v: Any, values: Dict) -> Dict:
-        if "data" not in values or values["data"] is None:
+    @field_validator("marginal_distribution", mode="before")
+    def _validate_marginal_distribution(
+        cls: Any, v: Any, values: ValidationInfo
+    ) -> Dict:
+        if "data" not in values.data or values.data["data"] is None:
             return v
 
-        data = values["data"]
+        data = values.data["data"]
         if not isinstance(data, pd.Series):
             raise ValueError(f"Invalid data type {type(data)}")
 
@@ -142,18 +142,21 @@ class CategoricalDistribution(Distribution):
         :parts: 1
     """
 
-    choices: list = []
+    choices: List = Field(default_factory=list)
 
-    @validator("choices", always=True)
-    def _validate_choices(cls: Any, v: List, values: Dict) -> List:
+    @field_validator("choices", mode="before")
+    def _validate_choices(cls: Any, v: List, values: ValidationInfo) -> List:
         mkey = "marginal_distribution"
-        if mkey in values and values[mkey] is not None:
-            return list(values[mkey].index)
+        # Check if marginal_distribution is present and return its index
+        if mkey in values.data and values.data[mkey] is not None:
+            return list(values.data[mkey].index)
 
+        # If choices is empty, raise a ValueError
         if len(v) == 0:
             raise ValueError(
                 "Invalid choices for CategoricalDistribution. Provide data or choices params"
             )
+        # Ensure choices are unique and sorted
         return sorted(set(v))
 
     def get(self) -> List[Any]:
@@ -211,22 +214,22 @@ class FloatDistribution(Distribution):
         :parts: 1
     """
 
-    low: float = np.finfo(np.float64).min
-    high: float = np.finfo(np.float64).max
+    low: float = Field(default=np.finfo(np.float64).min)
+    high: float = Field(default=np.finfo(np.float64).max)
 
-    @validator("low", always=True)
-    def _validate_low_thresh(cls: Any, v: float, values: Dict) -> float:
+    @field_validator("low", mode="before")
+    def _validate_low_thresh(cls: Any, v: float, values: ValidationInfo) -> float:
         mkey = "marginal_distribution"
-        if mkey in values and values[mkey] is not None:
-            return values[mkey].index.min()
+        if mkey in values.data and values.data[mkey] is not None:
+            return values.data[mkey].index.min()
 
         return v
 
-    @validator("high", always=True)
-    def _validate_high_thresh(cls: Any, v: float, values: Dict) -> float:
+    @field_validator("high", mode="before")
+    def _validate_high_thresh(cls: Any, v: float, values: ValidationInfo) -> float:
         mkey = "marginal_distribution"
-        if mkey in values and values[mkey] is not None:
-            return values[mkey].index.max()
+        if mkey in values.data and values.data[mkey] is not None:
+            return values.data[mkey].index.max()
 
         return v
 
@@ -287,29 +290,37 @@ class IntegerDistribution(Distribution):
         :parts: 1
     """
 
-    low: int = np.iinfo(np.int64).min
-    high: int = np.iinfo(np.int64).max
-    step: int = 1
+    low: int = Field(default=np.iinfo(np.int64).min)
+    high: int = Field(default=np.iinfo(np.int64).max)
+    step: int = Field(default=1)
 
-    @validator("low", always=True)
-    def _validate_low_thresh(cls: Any, v: int, values: Dict) -> int:
+    @field_validator("low", mode="before")
+    def _validate_low_thresh(cls: Any, v: int, values: ValidationInfo) -> int:
         mkey = "marginal_distribution"
-        if mkey in values and values[mkey] is not None:
-            return int(values[mkey].index.min())
+        # If marginal_distribution is present, use its minimum value as 'low'
+        if mkey in values.data and values.data[mkey] is not None:
+            return int(values.data[mkey].index.min())
 
+        # Otherwise, return the value of 'low' field as is
         return v
 
-    @validator("high", always=True)
-    def _validate_high_thresh(cls: Any, v: int, values: Dict) -> int:
+    @field_validator("high", mode="before")
+    def _validate_high_thresh(cls: Any, v: int, values: ValidationInfo) -> int:
         mkey = "marginal_distribution"
-        if mkey in values and values[mkey] is not None:
-            return int(values[mkey].index.max())
+        # If marginal_distribution is present, use its maximum value as 'high'
+        if mkey in values.data and values.data[mkey] is not None:
+            return int(values.data[mkey].index.max())
+
+        # Otherwise, return the value of 'high' field as is
         return v
 
-    @validator("step", always=True)
-    def _validate_step(cls: Any, v: int, values: Dict) -> int:
+    @field_validator("step", mode="before")
+    def _validate_step(cls: Any, v: int, values: ValidationInfo) -> int:
+        # Ensure that the step is greater than or equal to 1
         if v < 1:
             raise ValueError("Step must be greater than 0")
+
+        # Return the validated step value
         return v
 
     def get(self) -> List[Any]:
@@ -351,11 +362,11 @@ class IntegerDistribution(Distribution):
 
 
 class IntLogDistribution(IntegerDistribution):
-    low: int = 1
-    high: int = np.iinfo(np.int64).max
+    low: int = Field(default=1)
+    high: int = Field(default=np.iinfo(np.int64).max)
 
-    @validator("step", always=True)
-    def _validate_step(cls: Any, v: int, values: Dict) -> int:
+    @field_validator("step", mode="before")
+    def _validate_step(cls: Any, v: int, values: ValidationInfo) -> int:
         if v != 1:
             raise ValueError("Step must be 1 for IntLogDistribution")
         return v
@@ -379,23 +390,25 @@ class DatetimeDistribution(Distribution):
         :parts: 1
     """
 
-    low: datetime = datetime.utcfromtimestamp(0)
-    high: datetime = datetime.now()
-    step: timedelta = timedelta(microseconds=1)
-    offset: timedelta = timedelta(seconds=120)
+    low: datetime = Field(default_factory=lambda: datetime.utcfromtimestamp(0))
+    high: datetime = Field(default_factory=lambda: datetime.now())
+    step: timedelta = Field(default=timedelta(microseconds=1))
+    offset: timedelta = Field(default=timedelta(seconds=120))
 
-    @validator("low", always=True)
-    def _validate_low_thresh(cls: Any, v: datetime, values: Dict) -> datetime:
+    @field_validator("low", mode="before")
+    def _validate_low_thresh(cls: Any, v: datetime, values: ValidationInfo) -> datetime:
         mkey = "marginal_distribution"
-        if mkey in values and values[mkey] is not None:
-            v = values[mkey].index.min()
+        if mkey in values.data and values.data[mkey] is not None:
+            v = values.data[mkey].index.min()
         return v
 
-    @validator("high", always=True)
-    def _validate_high_thresh(cls: Any, v: datetime, values: Dict) -> datetime:
+    @field_validator("high", mode="before")
+    def _validate_high_thresh(
+        cls: Any, v: datetime, values: ValidationInfo
+    ) -> datetime:
         mkey = "marginal_distribution"
-        if mkey in values and values[mkey] is not None:
-            v = values[mkey].index.max()
+        if mkey in values.data and values.data[mkey] is not None:
+            v = values.data[mkey].index.max()
         return v
 
     def get(self) -> List[Any]:

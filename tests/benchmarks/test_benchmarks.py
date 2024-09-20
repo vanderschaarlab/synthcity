@@ -100,9 +100,7 @@ def test_benchmark_custom_target() -> None:
         [
             ("test2", "uniform_sampler", {}),
         ],
-        GenericDataLoader(
-            X, sensitive_columns=["sex"], target_column="sepal width (cm)"
-        ),
+        GenericDataLoader(X, target_column="sepal width (cm)"),
         metrics={
             "performance": [
                 "linear_model",

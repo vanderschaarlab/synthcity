@@ -7,7 +7,7 @@ from typing import Any, List, Optional, Sequence, Tuple, Union
 # third party
 import numpy as np
 import pandas as pd
-from pydantic import BaseModel, validate_arguments, validator
+from pydantic import BaseModel, field_validator, validate_arguments
 from sklearn.base import BaseEstimator, TransformerMixin
 from sklearn.preprocessing import MinMaxScaler
 
@@ -23,18 +23,20 @@ from .factory import get_feature_encoder
 class FeatureInfo(BaseModel):
     name: str
     feature_type: str
-    transform: Any
+    transform: Any = None
     output_dimensions: int
     transformed_features: List[str]
     trans_feature_types: List[str]
 
-    @validator("feature_type")
+    @field_validator("feature_type")
+    @classmethod
     def _feature_type_validator(cls: Any, v: str) -> str:
         if v not in ["discrete", "continuous"]:
             raise ValueError(f"Invalid feature type {v}")
         return v
 
-    @validator("transform")
+    @field_validator("transform")
+    @classmethod
     def _transform_validator(cls: Any, v: Any) -> Any:
         if not (
             hasattr(v, "fit")
@@ -44,7 +46,8 @@ class FeatureInfo(BaseModel):
             raise ValueError(f"Invalid transform {v}")
         return v
 
-    @validator("output_dimensions")
+    @field_validator("output_dimensions")
+    @classmethod
     def _output_dimensions_validator(cls: Any, v: int) -> int:
         if v <= 0:
             raise ValueError(f"Invalid output_dimensions {v}")

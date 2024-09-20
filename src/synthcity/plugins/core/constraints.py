@@ -4,7 +4,7 @@ from typing import Any, Generator, List, Tuple
 # third party
 import numpy as np
 import pandas as pd
-from pydantic import BaseModel, validate_arguments, validator
+from pydantic import BaseModel, field_validator, validate_arguments
 
 # synthcity absolute
 import synthcity.logger as log
@@ -43,8 +43,8 @@ class Constraints(BaseModel):
 
     rules: list = []
 
-    @validator("rules")
-    def _validate_rules(cls: Any, rules: List, values: dict, **kwargs: Any) -> List:
+    @field_validator("rules", mode="before")
+    def _validate_rules(cls: Any, rules: List) -> List:
         supported_ops: list = [
             "<",
             ">=",

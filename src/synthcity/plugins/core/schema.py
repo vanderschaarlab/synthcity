@@ -4,7 +4,13 @@ from typing import Any, Dict, Generator, List
 # third party
 import numpy as np
 import pandas as pd
-from pydantic import BaseModel, validate_arguments, validator
+from pydantic import (
+    BaseModel,
+    Field,
+    ValidationInfo,
+    field_validator,
+    validate_arguments,
+)
 
 # synthcity absolute
 from synthcity.plugins.core.constraints import Constraints
@@ -21,10 +27,6 @@ from synthcity.plugins.core.distribution import (
 
 class Schema(BaseModel):
     """
-    .. inheritance-diagram:: synthcity.plugins.core.schema.Schema
-        :parts: 1
-
-
     Utility class for defining the schema of a Dataset.
 
     Constructor Args:
@@ -40,15 +42,15 @@ class Schema(BaseModel):
             (Optional) the data set
     """
 
-    sampling_strategy: str = "marginal"  # uniform or marginal
-    protected_cols: List[str] = ["seq_id"]
-    random_state: int = 0
+    sampling_strategy: str = Field(default="marginal")  # uniform or marginal
+    protected_cols: List[str] = Field(default_factory=lambda: ["seq_id"])
+    random_state: int = Field(default=0)
     data: Any = None
-    domain: Dict = {}
+    domain: Dict = Field(default_factory=dict)
 
-    @validator("domain", always=True)
-    def _validate_domain(cls: Any, v: Any, values: Dict) -> Dict:
-        if "data" not in values or values["data"] is None:
+    @field_validator("domain", mode="before")
+    def _validate_domain(cls: Any, v: Any, values: ValidationInfo) -> Dict:
+        if "data" not in values.data or values.data["data"] is None:
             return v
 
         feature_domain = {}
@@ -86,7 +88,7 @@ class Schema(BaseModel):
                         name=col, data=X[col], random_state=random_state
                     )
                 else:
-                    raise ValueError("unsupported format ", col)
+                    raise ValueError(f"unsupported format {col}")
         elif sampling_strategy == "uniform":
             for col in X.columns:
                 if X[col].dtype.kind in ["O", "b"] or len(X[col].unique()) < 10:
@@ -117,7 +119,7 @@ class Schema(BaseModel):
                         random_state=random_state,
                     )
                 else:
-                    raise ValueError("unsupported format ", col)
+                    raise ValueError(f"unsupported format {col}")
         else:
             raise ValueError(f"invalid sampling strategy {sampling_strategy}")
 
