@@ -10,12 +10,8 @@ from synthcity.plugins.core.schema import Schema
 
 
 def test_schema_fail() -> None:
-    if pydantic.__version__ < "2":
-        with pytest.raises(pydantic.error_wrappers.ValidationError):
-            Schema(data="sdfsfs")
-    else:
-        with pytest.raises(pydantic.pydantic_core._pydantic_core.ValidationError):
-            Schema(data="sdfsfs")
+    with pytest.raises(pydantic.ValidationError):
+        Schema(data="sdfsfs")
 
 
 def test_schema_ok() -> None:
@@ -67,9 +63,34 @@ def test_schema_as_constraint() -> None:
 
     cons = schema.as_constraints()
 
-    assert len(cons) == 7
-    for rule in cons:
-        assert rule[1] == "in"
+    # Old assertions
+    # assert len(cons) == 7
+    # for rule in cons:
+    #     assert rule[1] == "in"
+
+    # New assertions
+    assert len(cons) == 15
+
+    # Optionally, verify that the constraints are as expected
+    expected_constraints = [
+        ("a", "in", ["a", "b", "c"]),
+        ("b", "in", [True, False]),
+        ("c", "ge", 1),
+        ("c", "le", 3),
+        ("c", "dtype", "int"),
+        ("d", "ge", 4.0),
+        ("d", "le", 6.0),
+        ("d", "dtype", "float"),
+        ("e", "ge", 7),
+        ("e", "le", 9),
+        ("e", "dtype", "int"),
+        ("f", "in", ["odd", "even"]),
+        ("g", "ge", pd.Timestamp("2023-01-01")),
+        ("g", "le", pd.Timestamp("2023-01-03")),
+        ("g", "dtype", "datetime"),
+    ]
+
+    assert sorted(cons.rules) == sorted(expected_constraints)
 
 
 def test_schema_from_constraint() -> None:

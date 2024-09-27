@@ -93,19 +93,20 @@ def test_benchmark_invalid_metric() -> None:
 
 
 def test_benchmark_custom_target() -> None:
-    X, y = load_iris(return_X_y=True, as_frame=True)
+    X, y = load_diabetes(return_X_y=True, as_frame=True)
     X["target"] = y
 
     Benchmarks.evaluate(
         [
-            ("test2", "uniform_sampler", {}),
+            ("test2", "ctgan", {}),
         ],
-        GenericDataLoader(X, target_column="sepal width (cm)"),
+        GenericDataLoader(X, target_column="target"),
         metrics={
             "performance": [
                 "linear_model",
             ]
         },
+        task_type="regression",
     )
 
 

@@ -9,6 +9,8 @@ from pydantic import BaseModel, field_validator, validate_arguments
 # synthcity absolute
 import synthcity.logger as log
 
+Rule = Tuple[str, str, Any]  # Define a type alias for clarity
+
 
 class Constraints(BaseModel):
     """
@@ -41,7 +43,7 @@ class Constraints(BaseModel):
             and thresh is the threshold or data type.
     """
 
-    rules: list = []
+    rules: list[Rule] = []
 
     @field_validator("rules", mode="before")
     def _validate_rules(cls: Any, rules: List) -> List:

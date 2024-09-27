@@ -405,6 +405,12 @@ class Plugin(Serializable, metaclass=ABCMeta):
                 iter_samples, columns=self.training_schema().features()
             )
 
+            # Handle protected columns
+            for col in syn_schema.protected_cols:
+                if col not in iter_samples_df.columns:
+                    # Sample the protected column using its distribution
+                    iter_samples_df[col] = syn_schema.domain[col].sample(count)
+
             # validate schema
             iter_samples_df = self.training_schema().adapt_dtypes(iter_samples_df)
 

@@ -74,12 +74,22 @@ def test_metric_filter(metric_filter: dict) -> None:
 
     model.fit(Xraw)
     X_gen = model.generate(100)
+    assert not X_gen.dataframe().empty
+    print(X_gen)
+
+    # Add debugging here
+    print(f"Metrics to evaluate: {metric_filter}")
+    print(
+        f"Xraw shape: {Xraw.dataframe().shape}, X_gen shape: {X_gen.dataframe().shape}"
+    )
 
     out = Metrics.evaluate(
         Xraw,
         X_gen,
         metrics=metric_filter,
     )
+
+    print(f"Output of Metrics.evaluate: {out}")
 
     expected_index = [
         f"{category}.{metric}.score"
