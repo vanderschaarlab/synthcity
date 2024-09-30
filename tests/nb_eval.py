@@ -55,6 +55,7 @@ all_tests = [
     "plugin_privbayes",
     "plugin_ctgan(generic)",
     "plugin_fourier_flows",
+    "plugin_timegan",
     "plugin_aim",
     "plugin_arf",
     "plugin_great",
@@ -69,7 +70,6 @@ minimal_tests = [
     "plugin_ctgan",
     "plugin_nflow",
     "plugin_tvae",
-    "plugin_timegan",
 ]
 
 # For extras
