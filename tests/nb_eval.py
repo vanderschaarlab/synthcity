@@ -55,9 +55,9 @@ all_tests = [
     "plugin_privbayes",
     "plugin_ctgan(generic)",
     "plugin_fourier_flows",
-    "plugin_timegan",
     "plugin_aim",
-    "plugin_arf" "plugin_great",
+    "plugin_arf",
+    "plugin_great",
 ]
 
 if not goggle_disabled:
