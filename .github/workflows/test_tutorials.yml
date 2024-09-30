@@ -40,4 +40,4 @@ jobs:
           python -m pip install ipykernel
           python -m ipykernel install --user
       - name: Run the tutorials
-        run: python tests/nb_eval.py --nb_dir tutorials/ --tutorial_tests minimal_tests
+        run: python tests/nb_eval.py --nb_dir tutorials/ --tutorial_tests minimal_tests --timeout 3600

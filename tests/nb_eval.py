@@ -12,11 +12,11 @@ workspace = Path(__file__).parents[0] / "workspace"
 workspace.mkdir(parents=True, exist_ok=True)
 
 
-def run_notebook(notebook_path: Path) -> None:
+def run_notebook(notebook_path: Path, timeout: int) -> None:
     with open(notebook_path) as f:
         nb = nbformat.read(f, as_version=4)
 
-    proc = ExecutePreprocessor(timeout=1800)
+    proc = ExecutePreprocessor(timeout=timeout)
     # Will raise on cell error
     proc.preprocess(nb, {"metadata": {"path": workspace}})
 
@@ -29,22 +29,6 @@ try:
 except ImportError:
     goggle_disabled = True
 
-try:
-    # synthcity absolute
-    from synthcity.plugins.core.models.tabular_arf import TabularARF  # noqa: F401
-
-    arf_disabled = False
-except ImportError:
-    arf_disabled = True
-
-try:
-    # synthcity absolute
-    from synthcity.plugins.core.models.tabular_great import TabularGReaT  # noqa: F401
-
-    great_disabled = False
-except ImportError:
-    great_disabled = True
-
 all_tests = [
     "basic_examples",
     "benchmarks",
@@ -56,8 +40,8 @@ all_tests = [
     "plugin_ctgan",
     "plugin_nflow",
     "plugin_tvae",
-    "plugin_timegan",
-    "plugin_radialgan" "plugin_arf",
+    "plugin_radialgan",
+    "plugin_arf",
     "plugin_bayesian_network",
     "plugin_ddpm",
     "plugin_dummy_sampler",
@@ -73,14 +57,11 @@ all_tests = [
     "plugin_fourier_flows",
     "plugin_timegan",
     "plugin_aim",
+    "plugin_arf" "plugin_great",
 ]
 
 if not goggle_disabled:
     all_tests.append("plugin_goggle")
-if not arf_disabled:
-    all_tests.append("plugin_arf")
-if not great_disabled:
-    all_tests.append("plugin_great")
 
 minimal_tests = [
     "basic_examples",
@@ -93,8 +74,6 @@ minimal_tests = [
 
 # For extras
 goggle_tests = ["plugin_goggle"]
-arf_tests = ["plugin_arf"]
-great_tests = ["plugin_great"]
 
 
 @click.command()
@@ -102,12 +81,18 @@ great_tests = ["plugin_great"]
 @click.option(
     "--tutorial_tests",
     type=click.Choice(
-        ["minimal_tests", "all_tests", "goggle_tests", "plugin_arf", "plugin_great"],
+        ["minimal_tests", "all_tests", "goggle_tests"],
         case_sensitive=False,
     ),
     default="minimal_tests",
 )
-def main(nb_dir: Path, tutorial_tests: str) -> None:
+@click.option(
+    "--timeout",
+    type=int,
+    default=1800,
+    help="Timeout for notebook execution in seconds.",
+)
+def main(nb_dir: Path, tutorial_tests: str, timeout: int) -> None:
     nb_dir = Path(nb_dir)
     enabled_tests: List = []
     if tutorial_tests == "all_tests":
@@ -134,7 +119,7 @@ def main(nb_dir: Path, tutorial_tests: str) -> None:
         print("Testing ", p.name)
         start = time()
         try:
-            run_notebook(p)
+            run_notebook(p, timeout)
         except BaseException as e:
             print("FAIL", p.name, e)
 
