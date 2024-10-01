@@ -9,7 +9,7 @@ from typing import Any, Callable, Dict, Generator, List, Optional, Type, Union
 
 # third party
 import pandas as pd
-from pydantic import validate_arguments
+from pydantic import ConfigDict, validate_arguments
 
 # synthcity absolute
 import synthcity.logger as log
@@ -71,9 +71,7 @@ class Plugin(Serializable, metaclass=ABCMeta):
             Internal parameter for schema. marginal or uniform.
     """
 
-    class Config:
-        arbitrary_types_allowed = True
-        validate_assignment = True
+    model_config = ConfigDict(arbitrary_types_allowed=True, validate_assignment=True)
 
     def __init__(
         self,
@@ -406,6 +404,12 @@ class Plugin(Serializable, metaclass=ABCMeta):
             iter_samples_df = pd.DataFrame(
                 iter_samples, columns=self.training_schema().features()
             )
+
+            # Handle protected columns
+            for col in syn_schema.protected_cols:
+                if col not in iter_samples_df.columns:
+                    # Sample the protected column using its distribution
+                    iter_samples_df[col] = syn_schema.domain[col].sample(count)
 
             # validate schema
             iter_samples_df = self.training_schema().adapt_dtypes(iter_samples_df)

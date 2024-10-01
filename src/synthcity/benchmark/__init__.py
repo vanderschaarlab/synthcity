@@ -57,6 +57,7 @@ class Benchmarks:
         strict_augmentation: bool = False,
         ad_hoc_augment_vals: Optional[Dict] = None,
         use_metric_cache: bool = True,
+        n_eval_folds: int = 5,
         **generate_kwargs: Any,
     ) -> pd.DataFrame:
         """Benchmark the performance of several algorithms.
@@ -102,6 +103,8 @@ class Benchmarks:
                 A dictionary containing the number of each class to augment the real data with. This is only required if using the rule="ad-hoc" option. Defaults to None.
             use_metric_cache: bool
                 If the current metric has been previously run and is cached, it will be reused for the experiments. Defaults to True.
+            n_eval_folds: int
+                the KFolds used by MetricEvaluators in the benchmarks. Defaults to 5.
             plugin_kwargs:
                 Optional kwargs for each algorithm. Example {"adsgan": {"n_iter": 10}},
         """
@@ -295,6 +298,7 @@ class Benchmarks:
                     task_type=task_type,
                     workspace=workspace,
                     use_cache=use_metric_cache,
+                    n_folds=n_eval_folds,
                 )
 
                 mean_score = evaluation["mean"].to_dict()

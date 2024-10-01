@@ -332,7 +332,7 @@ def save_model(
                     "epoch": epoch,
                 },
                 workspace / "DomiasMIA_bnaf_checkpoint.pt",
-            )
+            )  # nosec B614
 
     return f
 
@@ -348,7 +348,7 @@ def load_model(
 
         log.info("Loading model..")
         if (workspace / "checkpoint.pt").exists():
-            checkpoint = torch.load(workspace / "checkpoint.pt")
+            checkpoint = torch.load(workspace / "checkpoint.pt")  # nosec B614
             model.load_state_dict(checkpoint["model"])
             optimizer.load_state_dict(checkpoint["optimizer"])
 
@@ -453,7 +453,7 @@ Test loss:       {test_loss.item():4.3f}
                 "epoch": epoch,
             },
             workspace / "checkpoint.pt",
-        )
+        )  # nosec B614
         log.debug(
             f"""
 ###### Stop training after {epoch + 1} epochs!
