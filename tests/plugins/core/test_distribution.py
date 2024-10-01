@@ -49,7 +49,6 @@ def test_categorical() -> None:
     assert param.includes(param_other)
     assert param_other.includes(param)
 
-    # Instead of asserting marginal_distribution is None, assert it's correctly initialized
     expected_marginal = pd.Series(
         [0.25, 0.25, 0.25, 0.25], index=["1", "2", "55", "sdfsf"]
     )
@@ -195,7 +194,6 @@ def test_float_from_data() -> None:
     assert param.includes(param_other)
     assert not param_other.includes(param)
 
-    # This assertion should now pass
     assert param.marginal_distribution is not None
 
 
