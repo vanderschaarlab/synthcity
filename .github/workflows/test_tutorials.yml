@@ -3,8 +3,8 @@ name: PR Tutorials
 on:
   push:
     branches: [main, release]
-  pull_request:
-    types: [opened, synchronize, reopened]
+  # pull_request:
+  #   types: [opened, synchronize, reopened]
   schedule:
     - cron: "2 3 * * 4"
   workflow_dispatch:
