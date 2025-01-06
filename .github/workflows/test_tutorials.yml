@@ -20,6 +20,7 @@ jobs:
       - uses: actions/checkout@v3
         with:
           submodules: true
+          ref: main
 
       - name: Make Keepalive Commit
         run: |
@@ -36,6 +37,7 @@ jobs:
           title: "Keep Repository Active"
           body: "This PR is automatically generated to keep the repository active."
           branch: keepalive-branch
+          base: main
 
       - name: Set up Python ${{ matrix.python-version }}
         uses: actions/setup-python@v4
