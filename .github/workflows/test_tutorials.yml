@@ -21,39 +21,6 @@ jobs:
         with:
           submodules: true
           ref: main
-
-      - name: Make Keepalive Commit
-        run: |
-          echo "Keepalive commit at $(date)" > keepalive.txt
-          git config --global user.name "gkr-bot"
-          git config --global user.email "gkr-bot@tuta.io"
-          git add keepalive.txt
-          git commit -m "Automated commit by Keepalive Workflow to keep the repository active" || echo "No changes to commit"
-      - name: Create Pull Request
-        id: cpr
-        uses: peter-evans/create-pull-request@v5
-        with:
-          token: ${{ secrets.GITHUB_TOKEN }}
-          commit-message: "Automated commit by Keepalive Workflow to keep the repository active"
-          title: "Keep Repository Active"
-          body: "This PR is automatically generated to keep the repository active."
-          branch: keepalive-branch
-          base: main
-      - name: Close Pull Request
-        if: steps.cpr.outputs.pull-request-number != ''
-        uses: actions/github-script@v6
-        with:
-          github-token: ${{ secrets.GITHUB_TOKEN }}
-          script: |
-            const prNumber = ${{ steps.cpr.outputs.pull-request-number }};
-            await github.rest.pulls.update({
-              owner: context.repo.owner,
-              repo: context.repo.repo,
-              pull_number: prNumber,
-              state: 'closed'
-            });
-            console.log(`Closed PR #${prNumber}`);
-
       - name: Set up Python ${{ matrix.python-version }}
         uses: actions/setup-python@v4
         with:
