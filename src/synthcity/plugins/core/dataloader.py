@@ -13,6 +13,8 @@ from pydantic import validate_arguments
 from sklearn.model_selection import train_test_split
 from sklearn.preprocessing import LabelEncoder
 from torchvision import transforms
+# synthpop
+from synthpop_encoder import SynthpopEncoder
 
 # synthcity absolute
 from synthcity.plugins.core.constraints import Constraints
@@ -1800,6 +1802,103 @@ class ImageDataLoader(DataLoader):
     def fillna(self, value: Any) -> "DataLoader":
         raise NotImplementedError()
 
+
+class SynthpopDataLoader(DataLoader):
+    """
+    A DataLoader that applies synthpop-style preprocessing to input data.
+    """
+
+    def __init__(
+        self,
+        data: pd.DataFrame,
+        target_order: List[str],
+        columns_special_values: Optional[Dict[str, Any]] = None,
+        unique_value_threshold: int = 20,
+        **kwargs: Any,
+    ) -> None:
+        """
+        Initialize the SynthpopDataLoader with preprocessing parameters and data.
+
+        Args:
+            data (pd.DataFrame): The input DataFrame.
+            target_order (List[str]): Columns to retain and process in specific order.
+            columns_special_values (Optional[Dict[str, Any]]): Mapping of columns to special values. Keys are column names, and values are the special values to be replaced.
+            unique_value_threshold (int): Threshold to classify columns as numeric or categorical.
+            **kwargs (Any): Additional arguments for the DataLoader superclass.
+        """
+        # Validate target columns
+        missing_columns = set(target_order) - set(data.columns)
+        if missing_columns:
+            raise ValueError(f"Missing columns in input data: {missing_columns}")
+
+        self.target_order = target_order
+        self.columns_special_values = columns_special_values or {}
+        self.unique_value_threshold = unique_value_threshold
+
+        filtered_data = data[self.target_order]
+
+        super().__init__(
+            data_type="synthpop",
+            data=filtered_data,
+            static_features=list(filtered_data.columns),
+            **kwargs,
+        )
+
+    def encode(
+        self,
+        encoders: Optional[Dict[str, Any]] = None,
+    ) -> Tuple["DataLoader", Dict]:
+        """
+        Encode the data using SynthpopEncoder with fit/transform pattern.
+        """
+        if encoders is None:
+            encoder = SynthpopEncoder(
+                columns_special_values=self.columns_special_values,
+                target_order=self.target_order,
+                unique_value_threshold=self.unique_value_threshold,
+            )
+            encoder.fit(self.dataframe())
+            encoded_data = encoder.transform(self.dataframe())
+
+            return self.decorate(encoded_data), {"synthpop_encoder": encoder}
+
+        return super().encode(encoders)
+
+    def decode(
+        self,
+        encoders: Dict[str, Any],
+    ) -> "DataLoader":
+        """
+        Decode the data using stored encoder.
+        """
+        if "synthpop_encoder" in encoders:
+            encoder = encoders["synthpop_encoder"]
+            if not isinstance(encoder, SynthpopEncoder):
+                raise TypeError(f"Expected SynthpopEncoder, got {type(encoder)}")
+
+            if not hasattr(encoder, "column_order_"):
+                raise ValueError(
+                    "The encoder has not been fitted. Call fit before using this encoder."
+                )
+
+            try:
+                decoded_data = encoder.inverse_transform(self.dataframe())
+                return self.decorate(decoded_data)
+            except Exception as e:
+                raise RuntimeError(f"Failed to decode data: {str(e)}")
+
+        return super().decode(encoders)
+
+    def decorate(self, data: pd.DataFrame) -> "SynthpopDataLoader":
+        """
+        Create a new instance of SynthpopDataLoader with modified data.
+        """
+        return SynthpopDataLoader(
+            data=data,
+            target_order=self.target_order,
+            columns_special_values=self.columns_special_values,
+            unique_value_threshold=self.unique_value_threshold,
+        )
 
 @validate_arguments(config=dict(arbitrary_types_allowed=True))
 def create_from_info(
