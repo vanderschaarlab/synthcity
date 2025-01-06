@@ -22,7 +22,7 @@ jobs:
         run: |
           echo "Keepalive commit at $(date)" > keepalive.txt
           git config --global user.name "gkr-bot"
-          git config --global user.email "github-actions[bot]@users.noreply.github.com"
+          git config --global user.email "gkr-bot@tuta.io"
           git add keepalive.txt
           git commit -m "Automated commit by Keepalive Workflow to keep the repository active" || echo "No changes to commit"
       - name: Create Pull Request
