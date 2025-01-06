@@ -3,10 +3,10 @@ import pandas as pd
 from sklearn.base import TransformerMixin, BaseEstimator
 import numpy as np
 
-# SQRGEncoder
-class SQRGEncoder(TransformerMixin, BaseEstimator):
+# Syn_SeqEncoder
+class Syn_SeqEncoder(TransformerMixin, BaseEstimator):
     """
-    SQRGEncoder handles preprocessing and postprocessing tasks using fit/transform pattern.
+    Syn_SeqEncoder handles preprocessing and postprocessing tasks using fit/transform pattern.
     """
 
     def __init__(
@@ -25,7 +25,7 @@ class SQRGEncoder(TransformerMixin, BaseEstimator):
         self.method_assignments = {}
         self.prediction_matrix = None
 
-    def fit(self, X: pd.DataFrame, y=None) -> "SQRGEncoder":
+    def fit(self, X: pd.DataFrame, y=None) -> "Syn_SeqEncoder":
         """학습 단계에서 필요한 변환 정보를 수집"""
         X = X.copy()
 

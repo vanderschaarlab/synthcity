@@ -13,8 +13,8 @@ from pydantic import validate_arguments
 from sklearn.model_selection import train_test_split
 from sklearn.preprocessing import LabelEncoder
 from torchvision import transforms
-# SQRG
-from sqrg_encoder import SQRGEncoder
+# Syn_Seq
+from syn_seq_encoder import Syn_SeqEncoder
 
 # synthcity absolute
 from synthcity.plugins.core.constraints import Constraints
@@ -1803,9 +1803,9 @@ class ImageDataLoader(DataLoader):
         raise NotImplementedError()
 
 
-class SQRGDataLoader(DataLoader):
+class Syn_SeqDataLoader(DataLoader):
     """
-    A DataLoader that applies SQRG-style preprocessing to input data.
+    A DataLoader that applies Syn_Seq-style preprocessing to input data.
     """
 
     def __init__(
@@ -1817,7 +1817,7 @@ class SQRGDataLoader(DataLoader):
         **kwargs: Any,
     ) -> None:
         """
-        Initialize the SQRGDataLoader with preprocessing parameters and data.
+        Initialize the Syn_SeqDataLoader with preprocessing parameters and data.
 
         Args:
             data (pd.DataFrame): The input DataFrame.
@@ -1838,7 +1838,7 @@ class SQRGDataLoader(DataLoader):
         filtered_data = data[self.target_order]
 
         super().__init__(
-            data_type="SQRG",
+            data_type="Syn_Seq",
             data=filtered_data,
             static_features=list(filtered_data.columns),
             **kwargs,
@@ -1849,10 +1849,10 @@ class SQRGDataLoader(DataLoader):
         encoders: Optional[Dict[str, Any]] = None,
     ) -> Tuple["DataLoader", Dict]:
         """
-        Encode the data using SQRGEncoder with fit/transform pattern.
+        Encode the data using Syn_SeqEncoder with fit/transform pattern.
         """
         if encoders is None:
-            encoder = SQRGEncoder(
+            encoder = Syn_SeqEncoder(
                 columns_special_values=self.columns_special_values,
                 target_order=self.target_order,
                 unique_value_threshold=self.unique_value_threshold,
@@ -1860,7 +1860,7 @@ class SQRGDataLoader(DataLoader):
             encoder.fit(self.dataframe())
             encoded_data = encoder.transform(self.dataframe())
 
-            return self.decorate(encoded_data), {"sqrg_encoder": encoder}
+            return self.decorate(encoded_data), {"syn_seq_encoder": encoder}
 
         return super().encode(encoders)
 
@@ -1871,10 +1871,10 @@ class SQRGDataLoader(DataLoader):
         """
         Decode the data using stored encoder.
         """
-        if "sqrg_encoder" in encoders:
-            encoder = encoders["sqrg_encoder"]
-            if not isinstance(encoder, SQRGEncoder):
-                raise TypeError(f"Expected SQRGEncoder, got {type(encoder)}")
+        if "syn_seq_encoder" in encoders:
+            encoder = encoders["syn_seq_encoder"]
+            if not isinstance(encoder, Syn_SeqEncoder):
+                raise TypeError(f"Expected Syn_SeqEncoder, got {type(encoder)}")
 
             if not hasattr(encoder, "column_order_"):
                 raise ValueError(
@@ -1889,11 +1889,11 @@ class SQRGDataLoader(DataLoader):
 
         return super().decode(encoders)
 
-    def decorate(self, data: pd.DataFrame) -> "SQRGDataLoader":
+    def decorate(self, data: pd.DataFrame) -> "Syn_SeqDataLoader":
         """
-        Create a new instance of SQRGDataLoader with modified data.
+        Create a new instance of Syn_SeqDataLoader with modified data.
         """
-        return SQRGDataLoader(
+        return Syn_SeqDataLoader(
             data=data,
             target_order=self.target_order,
             columns_special_values=self.columns_special_values,
