@@ -30,6 +30,7 @@ jobs:
           git add keepalive.txt
           git commit -m "Automated commit by Keepalive Workflow to keep the repository active" || echo "No changes to commit"
       - name: Create Pull Request
+        id: cpr
         uses: peter-evans/create-pull-request@v5
         with:
           token: ${{ secrets.GITHUB_TOKEN }}
@@ -38,6 +39,19 @@ jobs:
           body: "This PR is automatically generated to keep the repository active."
           branch: keepalive-branch
           base: main
+      - name: Close Pull Request
+        if: steps.cpr.outputs.pull-request-number != ''
+        uses: actions/github-script@v6
+        with:
+          script: |
+            const prNumber = ${{ steps.cpr.outputs.pull-request-number }};
+            await github.pulls.update({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              pull_number: prNumber,
+              state: 'closed'
+            });
+            console.log(`Closed PR #${prNumber}`);
 
       - name: Set up Python ${{ matrix.python-version }}
         uses: actions/setup-python@v4
