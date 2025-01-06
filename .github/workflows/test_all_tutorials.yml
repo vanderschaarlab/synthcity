@@ -39,9 +39,10 @@ jobs:
         if: steps.cpr.outputs.pull-request-number != ''
         uses: actions/github-script@v6
         with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
           script: |
             const prNumber = ${{ steps.cpr.outputs.pull-request-number }};
-            await github.pulls.update({
+            await github.rest.pulls.update({
               owner: context.repo.owner,
               repo: context.repo.repo,
               pull_number: prNumber,
