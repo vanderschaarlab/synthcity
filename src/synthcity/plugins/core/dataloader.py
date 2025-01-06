@@ -13,8 +13,8 @@ from pydantic import validate_arguments
 from sklearn.model_selection import train_test_split
 from sklearn.preprocessing import LabelEncoder
 from torchvision import transforms
-# synthpop
-from synthpop_encoder import SynthpopEncoder
+# SQRG
+from sqrg_encoder import SQRGEncoder
 
 # synthcity absolute
 from synthcity.plugins.core.constraints import Constraints
@@ -1803,9 +1803,9 @@ class ImageDataLoader(DataLoader):
         raise NotImplementedError()
 
 
-class SynthpopDataLoader(DataLoader):
+class SQRGDataLoader(DataLoader):
     """
-    A DataLoader that applies synthpop-style preprocessing to input data.
+    A DataLoader that applies SQRG-style preprocessing to input data.
     """
 
     def __init__(
@@ -1817,7 +1817,7 @@ class SynthpopDataLoader(DataLoader):
         **kwargs: Any,
     ) -> None:
         """
-        Initialize the SynthpopDataLoader with preprocessing parameters and data.
+        Initialize the SQRGDataLoader with preprocessing parameters and data.
 
         Args:
             data (pd.DataFrame): The input DataFrame.
@@ -1838,7 +1838,7 @@ class SynthpopDataLoader(DataLoader):
         filtered_data = data[self.target_order]
 
         super().__init__(
-            data_type="synthpop",
+            data_type="SQRG",
             data=filtered_data,
             static_features=list(filtered_data.columns),
             **kwargs,
@@ -1849,10 +1849,10 @@ class SynthpopDataLoader(DataLoader):
         encoders: Optional[Dict[str, Any]] = None,
     ) -> Tuple["DataLoader", Dict]:
         """
-        Encode the data using SynthpopEncoder with fit/transform pattern.
+        Encode the data using SQRGEncoder with fit/transform pattern.
         """
         if encoders is None:
-            encoder = SynthpopEncoder(
+            encoder = SQRGEncoder(
                 columns_special_values=self.columns_special_values,
                 target_order=self.target_order,
                 unique_value_threshold=self.unique_value_threshold,
@@ -1860,7 +1860,7 @@ class SynthpopDataLoader(DataLoader):
             encoder.fit(self.dataframe())
             encoded_data = encoder.transform(self.dataframe())
 
-            return self.decorate(encoded_data), {"synthpop_encoder": encoder}
+            return self.decorate(encoded_data), {"sqrg_encoder": encoder}
 
         return super().encode(encoders)
 
@@ -1871,10 +1871,10 @@ class SynthpopDataLoader(DataLoader):
         """
         Decode the data using stored encoder.
         """
-        if "synthpop_encoder" in encoders:
-            encoder = encoders["synthpop_encoder"]
-            if not isinstance(encoder, SynthpopEncoder):
-                raise TypeError(f"Expected SynthpopEncoder, got {type(encoder)}")
+        if "sqrg_encoder" in encoders:
+            encoder = encoders["sqrg_encoder"]
+            if not isinstance(encoder, SQRGEncoder):
+                raise TypeError(f"Expected SQRGEncoder, got {type(encoder)}")
 
             if not hasattr(encoder, "column_order_"):
                 raise ValueError(
@@ -1889,11 +1889,11 @@ class SynthpopDataLoader(DataLoader):
 
         return super().decode(encoders)
 
-    def decorate(self, data: pd.DataFrame) -> "SynthpopDataLoader":
+    def decorate(self, data: pd.DataFrame) -> "SQRGDataLoader":
         """
-        Create a new instance of SynthpopDataLoader with modified data.
+        Create a new instance of SQRGDataLoader with modified data.
         """
-        return SynthpopDataLoader(
+        return SQRGDataLoader(
             data=data,
             target_order=self.target_order,
             columns_special_values=self.columns_special_values,

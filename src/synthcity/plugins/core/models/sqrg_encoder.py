@@ -3,10 +3,10 @@ import pandas as pd
 from sklearn.base import TransformerMixin, BaseEstimator
 import numpy as np
 
-# SynthpopEncoder
-class SynthpopEncoder(TransformerMixin, BaseEstimator):
+# SQRGEncoder
+class SQRGEncoder(TransformerMixin, BaseEstimator):
     """
-    SynthpopEncoder handles preprocessing and postprocessing tasks using fit/transform pattern.
+    SQRGEncoder handles preprocessing and postprocessing tasks using fit/transform pattern.
     """
 
     def __init__(
@@ -25,7 +25,7 @@ class SynthpopEncoder(TransformerMixin, BaseEstimator):
         self.method_assignments = {}
         self.prediction_matrix = None
 
-    def fit(self, X: pd.DataFrame, y=None) -> "SynthpopEncoder":
+    def fit(self, X: pd.DataFrame, y=None) -> "SQRGEncoder":
         """학습 단계에서 필요한 변환 정보를 수집"""
         X = X.copy()
 
