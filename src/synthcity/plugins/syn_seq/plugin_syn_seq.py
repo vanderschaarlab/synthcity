@@ -1,28 +1,45 @@
-# synthcity/plugins/syn_seq/plugin_syn_seq.py
-
+# =====================
+# file: plugin_syn_seq.py
+# =====================
 from typing import Any, Optional
-
 import pandas as pd
 
 # synthcity absolute
 from synthcity.plugins.core.base_plugin import Plugin
 from .syn_seq_dataloader import Syn_SeqDataLoader
-
+# 우리가 만든 Synthesizer import
+from .syn_seq_synthesizer import SynSeqSynthesizer
 
 class Syn_SeqPlugin(Plugin):
     """
     A plugin example for the 'syn_seq' approach,
-    demonstrating how to fit and generate synthetic data with Syn_Seq logic.
+    that internally uses SynSeqSynthesizer for the actual R-synthpop-like logic.
     """
 
     def __init__(
         self,
         random_state: Optional[int] = None,
+        visit_sequence: Optional[list] = None,
+        method_map: Optional[dict] = None,
+        use_rules: bool = False,
         **kwargs: Any,
     ):
         super().__init__(plugin_name="syn_seq")
+        
         self.random_state = random_state
+        self.visit_sequence = visit_sequence or []
+        self.method_map = method_map or {}
+        self.use_rules = use_rules
         self.params = kwargs
+
+        # 핵심: plugin 안에 우리가 만든 Synthesizer를 멤버로 둠
+        self.synthesizer = SynSeqSynthesizer(
+            visit_sequence=self.visit_sequence,
+            method_map=self.method_map,
+            use_rules=self.use_rules
+            # 필요하면 **kwargs
+        )
+
         self._model_trained = False
         self._encoders = {}
 
@@ -36,16 +53,18 @@ class Syn_SeqPlugin(Plugin):
         return "generic"
 
     def fit(self, dataloader: Syn_SeqDataLoader, *args, **kwargs) -> "Syn_SeqPlugin":
-        # e.g. encode => (encoded_loader, {"syn_seq_encoder": encoder})
+        """
+        1) encode to get DataFrame
+        2) pass to self.synthesizer.fit
+        """
         encoded_loader, encoders = dataloader.encode()
 
         df = encoded_loader.dataframe()
         if df.empty:
             raise ValueError("No data to train on in Syn_SeqPlugin.")
 
-        # TODO: example model training
-        # self.model = someModel(...)
-        # self.model.fit(df, ...)
+        # call synthesizer's fit
+        self.synthesizer.fit(df, *args, **kwargs)
 
         self._model_trained = True
         self._encoders = encoders
@@ -55,21 +74,17 @@ class Syn_SeqPlugin(Plugin):
         if not self._model_trained:
             raise RuntimeError("Syn_SeqPlugin: fit must be called before generate().")
 
-        # dummy synthetic df for example
-        synthetic_df = pd.DataFrame({
-            "feature1": [1] * count,
-            "feature2": [0] * count,
-        })
+        # call synthesizer's generate
+        syn_df = self.synthesizer.generate(count=count, **kwargs)
 
-        # if we want decode
+        # encoder의 역변환을 원한다면(필요하다면) inverse_transform
         if "syn_seq_encoder" in self._encoders:
-            # encoder = self._encoders["syn_seq_encoder"]
-            # synthetic_df = encoder.inverse_transform(synthetic_df)
-            pass
+            encoder = self._encoders["syn_seq_encoder"]
+            syn_df = encoder.inverse_transform(syn_df)
 
-        # create Syn_SeqDataLoader
+        # wrap DataFrame into Syn_SeqDataLoader
         syn_loader = Syn_SeqDataLoader(
-            data=synthetic_df,
-            target_order=list(synthetic_df.columns),
+            data=syn_df,
+            target_order=list(syn_df.columns), # or original?
         )
         return syn_loader
