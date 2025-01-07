@@ -16,6 +16,7 @@ from pydantic import validate_arguments
 from torch.utils.data import sampler
 
 # synthcity absolute
+import synthcity.logger as log
 from synthcity.plugins.core.dataloader import DataLoader
 from synthcity.plugins.core.distribution import (
     CategoricalDistribution,
@@ -32,8 +33,9 @@ try:
     from synthcity.plugins.core.models.tabular_goggle import TabularGoggle
 
     module_disabled = False
-except ImportError:
+except ImportError as e:
     module_disabled = True
+    log.critical(f"Error importing TabularGoggle: {e}")
 
 
 class GOGGLEPlugin(Plugin):
@@ -89,7 +91,7 @@ class GOGGLEPlugin(Plugin):
         workspace: Path = Path("workspace"),
         compress_dataset: bool = False,
         dataloader_sampler: Optional[sampler.Sampler] = None,
-        **kwargs: Any
+        **kwargs: Any,
     ) -> None:
         """
         .. inheritance-diagram:: synthcity.plugins.generic.plugin_goggle.GOGGLEPlugin
