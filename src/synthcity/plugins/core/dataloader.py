@@ -13,8 +13,6 @@ from pydantic import validate_arguments
 from sklearn.model_selection import train_test_split
 from sklearn.preprocessing import LabelEncoder
 from torchvision import transforms
-# Syn_Seq
-from syn_seq_encoder import Syn_SeqEncoder
 
 # synthcity absolute
 from synthcity.plugins.core.constraints import Constraints
