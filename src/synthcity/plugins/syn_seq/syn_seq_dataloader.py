@@ -42,7 +42,7 @@ class Syn_SeqDataLoader(DataLoader):
             train_size (float): Ratio for train/test.
             **kwargs: Additional arguments for base DataLoader.
         """
-        # 검증
+        # 검 증
         missing_columns = set(syn_order) - set(data.columns)
         if missing_columns:
             raise ValueError(f"Missing columns in input data: {missing_columns}")
