@@ -15,7 +15,7 @@ class Syn_SeqDataLoader(DataLoader):
     inheriting directly from DataLoader and implementing all required
     abstract methods.
 
-    - target_order: the order of columns to keep or process
+    - syn_order: the order of columns to keep or process
     - columns_special_values: map of { column_name : special_value(s) }
     - unique_value_threshold: used to decide numeric vs. categorical
     """
@@ -23,7 +23,7 @@ class Syn_SeqDataLoader(DataLoader):
     def __init__(
         self,
         data: pd.DataFrame,
-        target_order: List[str],
+        syn_order: List[str],
         columns_special_values: Optional[Dict[str, Any]] = None,
         unique_value_threshold: int = 20,
         random_state: int = 0,
@@ -35,7 +35,7 @@ class Syn_SeqDataLoader(DataLoader):
 
         Args:
             data (pd.DataFrame): The input DataFrame.
-            target_order (List[str]): Columns to retain and process in specific order.
+            syn_order (List[str]): Columns to retain and process in specific order.
             columns_special_values (Optional[Dict[str, Any]]): Mapping of columns to special values.
             unique_value_threshold (int): Threshold to classify columns as numeric or categorical.
             random_state (int): For reproducibility in train/test splits, etc.
@@ -43,16 +43,16 @@ class Syn_SeqDataLoader(DataLoader):
             **kwargs: Additional arguments for base DataLoader.
         """
         # 검증
-        missing_columns = set(target_order) - set(data.columns)
+        missing_columns = set(syn_order) - set(data.columns)
         if missing_columns:
             raise ValueError(f"Missing columns in input data: {missing_columns}")
 
-        self.target_order = target_order
+        self.syn_order = syn_order
         self.columns_special_values = columns_special_values or {}
         self.unique_value_threshold = unique_value_threshold
 
         # 순서대로 컬럼 정렬
-        filtered_data = data[self.target_order].copy()
+        filtered_data = data[self.syn_order].copy()
 
         # 부모 DataLoader 생성자 호출
         super().__init__(
@@ -90,7 +90,7 @@ class Syn_SeqDataLoader(DataLoader):
             "len": len(self),
             "train_size": self.train_size,
             "random_state": self.random_state,
-            "target_order": self.target_order,
+            "syn_order": self.syn_order,
             "unique_value_threshold": self.unique_value_threshold,
             # 필요 시 추가 필드
         }
@@ -112,7 +112,7 @@ class Syn_SeqDataLoader(DataLoader):
         # info 딕셔너리를 사용하여 동일한 파라미터로 재생성
         return Syn_SeqDataLoader(
             data=data,
-            target_order=info["target_order"],
+            syn_order=info["syn_order"],
             unique_value_threshold=info["unique_value_threshold"],
             random_state=info["random_state"],
             train_size=info["train_size"],
@@ -178,7 +178,7 @@ class Syn_SeqDataLoader(DataLoader):
         if encoders is None:
             encoder = Syn_SeqEncoder(
                 columns_special_values=self.columns_special_values,
-                target_order=self.target_order,
+                syn_order=self.syn_order,
                 unique_value_threshold=self.unique_value_threshold,
             )
             encoder.fit(self._df)
@@ -214,7 +214,7 @@ class Syn_SeqDataLoader(DataLoader):
         """
         return Syn_SeqDataLoader(
             data=data,
-            target_order=self.target_order,
+            syn_order=self.syn_order,
             columns_special_values=self.columns_special_values,
             unique_value_threshold=self.unique_value_threshold,
             random_state=self.random_state,

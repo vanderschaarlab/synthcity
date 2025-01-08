@@ -22,10 +22,10 @@ Usage Example:
     >>> from synthcity.plugins.syn_seq.plugin_syn_seq import Syn_SeqPlugin
     >>>
     >>> # Suppose df is a pandas DataFrame with columns ["A","B","C",...]
-    >>> # We define a target_order, special values, etc.
+    >>> # We define a syn_order, special values, etc.
     >>> data_loader = Syn_SeqDataLoader(
     ...     data=df,
-    ...     target_order=["A","B","C",...],
+    ...     syn_order=["A","B","C",...],
     ...     columns_special_values={"A":[999]}, 
     ...     unique_value_threshold=20,
     ... )
@@ -230,5 +230,5 @@ class Syn_SeqPlugin(Plugin):
         # (keeping the same columns order or the original order).
         return Syn_SeqDataLoader(
             data=syn_df,
-            target_order=list(syn_df.columns),  # or the original target_order if needed
+            syn_order=list(syn_df.columns),  # or the original syn_order if needed
         )

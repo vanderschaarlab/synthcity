@@ -15,11 +15,11 @@ class Syn_SeqEncoder(TransformerMixin, BaseEstimator):
     def __init__(
         self,
         columns_special_values: Optional[Dict[str, Any]] = None,
-        target_order: Optional[List[str]] = None,
+        syn_order: Optional[List[str]] = None,
         unique_value_threshold: int = 20,
     ) -> None:
         self.columns_special_values = columns_special_values or {}
-        self.target_order = target_order or []
+        self.syn_order = syn_order or []
         self.unique_value_threshold = unique_value_threshold
 
         self.categorical_info_ = {}
@@ -34,7 +34,7 @@ class Syn_SeqEncoder(TransformerMixin, BaseEstimator):
 
         # 1. save column order
         self.column_order_ = (
-            self.target_order if self.target_order else X.columns.tolist()
+            self.syn_order if self.syn_order else X.columns.tolist()
         )
 
         # 2. decide col type by unique-value threshold
