@@ -66,6 +66,16 @@ class Syn_SeqDataLoader(DataLoader):
         # 최종 내부 보관용 DF
         self._df = filtered_data
 
+        # ---- 1) 여기서 encoder.fit()까지만 수행 ----
+        self._encoder = Syn_SeqEncoder(
+            columns_special_values=self.columns_special_values,
+            syn_order=self.syn_order,
+            max_categories=self.max_categories,
+        )
+        # fit까지는 여기서!
+        self._encoder.fit(self._df)
+        # transform은 encode() 시점까지 미룬다.
+
     # ----------------------------------------------------------------------
     # DataLoader에서 요구하는 추상 메서드들 구현
     # ----------------------------------------------------------------------
@@ -99,17 +109,14 @@ class Syn_SeqDataLoader(DataLoader):
         return len(self._df)
 
     def satisfies(self, constraints: Constraints) -> bool:
-        # 예: constraints가 self._df에 모두 만족하는지
         return constraints.is_valid(self._df)
 
     def match(self, constraints: Constraints) -> "Syn_SeqDataLoader":
-        # 예: constraints를 만족하도록 row/col을 필터링한 DF
         matched_df = constraints.match(self._df)
         return self.decorate(matched_df)
 
     @staticmethod
     def from_info(data: pd.DataFrame, info: dict) -> "Syn_SeqDataLoader":
-        # info 딕셔너리를 사용하여 동일한 파라미터로 재생성
         return Syn_SeqDataLoader(
             data=data,
             syn_order=info["syn_order"],
@@ -133,8 +140,6 @@ class Syn_SeqDataLoader(DataLoader):
         self._df[feature] = val
 
     def train(self) -> "Syn_SeqDataLoader":
-        # 간단한 예: random split (stratify=None)
-        # 실제론 sklearn train_test_split 등을 활용
         ntrain = int(len(self._df) * self.train_size)
         train_df = self._df.iloc[:ntrain].copy()
         return self.decorate(train_df)
@@ -149,47 +154,42 @@ class Syn_SeqDataLoader(DataLoader):
         return self.decorate(filled_df)
 
     def compression_protected_features(self) -> list:
-        # 예시로 아무것도 보호하지 않는다고 가정
         return []
 
     def is_tabular(self) -> bool:
-        # syn_seq는 일반 tabular 데이터 가정
         return True
 
     def unpack(self, as_numpy: bool = False, pad: bool = False) -> Any:
-        """
-        Roughly, if you want to separate X, y, etc. For now we do a simple pass:
-        """
         if as_numpy:
             return self._df.to_numpy()
         return self._df
 
     def get_fairness_column(self) -> Union[str, Any]:
-        # 필요하다면, 예: 'sex' 컬럼등 반환
         return None
 
     # ----------------------------------------------------------------------
-    # encode/decode : Syn_SeqEncoder 사용 예시
+    # encode/decode : encoder.transform or inverse_transform
     # ----------------------------------------------------------------------
 
     def encode(
         self, encoders: Optional[Dict[str, Any]] = None
     ) -> Tuple["Syn_SeqDataLoader", Dict]:
+        """
+        Called typically by a plugin's fit(...).
+        At this point, we want to do 'transform' using self._encoder 
+        that was already fitted in __init__.
+        """
         if encoders is None:
-            encoder = Syn_SeqEncoder(
-                columns_special_values=self.columns_special_values,
-                syn_order=self.syn_order,
-                max_categories=self.max_categories,
-            )
-            encoder.fit(self._df)
-            encoded_data = encoder.transform(self._df)
+            # self._encoder는 이미 __init__에서 fit까지 끝냄
+            encoded_data = self._encoder.transform(self._df)
 
             new_loader = self.decorate(encoded_data)
-            return new_loader, {"syn_seq_encoder": encoder}
+            # encoders dict에 저장해서 plugin에서 활용할 수 있게
+            return new_loader, {"syn_seq_encoder": self._encoder}
         else:
-            # 만약 이미 encoders가 있다면, 상위 로직 또는 사용자 정의로 처리
-            # 예: for col, enc in encoders.items(): ...
-            return self, encoders  # 예시
+            # 이미 encoders가 있다면, 굳이 transform 하지 않고 그대로 반환
+            # (혹은 encoders로 새 transform을 해도 된다. 목적에 따라 다름.)
+            return self, encoders
 
     def decode(
         self, encoders: Dict[str, Any]
@@ -204,14 +204,7 @@ class Syn_SeqDataLoader(DataLoader):
         else:
             return self
 
-    # ----------------------------------------------------------------------
-    # decorate : 내부 DF 교체 + 동일한 설정 유지
-    # ----------------------------------------------------------------------
     def decorate(self, data: pd.DataFrame) -> "Syn_SeqDataLoader":
-        """
-        Build a new Syn_SeqDataLoader with the same configurations,
-        but a new underlying dataframe.
-        """
         return Syn_SeqDataLoader(
             data=data,
             syn_order=self.syn_order,
