@@ -149,9 +149,16 @@ def index_to_log_onehot(x: Tensor, num_classes: np.ndarray) -> Tensor:
 
 
 @torch.jit.script
-def log_sub_exp(a: Tensor, b: Tensor) -> Tensor:
+def log_sub_exp(a: Tensor, b: Tensor, epsilon: float = 1e-10) -> Tensor:
     m = torch.maximum(a, b)
-    return torch.log(torch.exp(a - m) - torch.exp(b - m)) + m
+    # Compute the exponentials safely
+    exp_diff = torch.exp(a - m) - torch.exp(b - m)
+    # Ensure that exp_diff is greater than epsilon
+    exp_diff_clamped = torch.clamp(exp_diff, min=epsilon)
+    # Where a <= b, set the result to -inf or another appropriate value
+    valid = a > b
+    log_result = torch.log(exp_diff_clamped) + m
+    return torch.where(valid, log_result, torch.full_like(log_result, -float("inf")))
 
 
 @torch.jit.script

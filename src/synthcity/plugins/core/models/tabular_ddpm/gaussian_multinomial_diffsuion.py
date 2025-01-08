@@ -4,6 +4,7 @@ Based on
 - https://github.com/ehoogeboom/multinomial_diffusion
 - https://github.com/lucidrains/denoising-diffusion-pytorch/blob/5989f4c77eafcdc6be0fb4739f0f277a6dd7f7d8/denoising_diffusion_pytorch/denoising_diffusion_pytorch.py#L281
 """
+
 # stdlib
 import math
 from typing import Any, Optional, Tuple
@@ -457,10 +458,10 @@ class GaussianMultinomialDiffusion(torch.nn.Module):
         log_alpha_t = perm_and_expand(self.log_alpha, t, log_x_t.shape)
         log_1_min_alpha_t = perm_and_expand(self.log_1_min_alpha, t, log_x_t.shape)
 
-        # alpha_t * E[xt] + (1 - alpha_t) 1 / K
+        # Clamp before log_add_exp to prevent numerical issues
         log_probs = log_add_exp(
             log_x_t + log_alpha_t,
-            log_1_min_alpha_t - torch.log(self.num_classes_expanded),
+            log_1_min_alpha_t - torch.log(self.num_classes_expanded + 1e-10),
         )
 
         return log_probs
@@ -475,7 +476,7 @@ class GaussianMultinomialDiffusion(torch.nn.Module):
 
         log_probs = log_add_exp(
             log_x_start + log_cumprod_alpha_t,
-            log_1_min_cumprod_alpha - torch.log(self.num_classes_expanded),
+            log_1_min_cumprod_alpha - torch.log(self.num_classes_expanded + 1e-10),
         )
 
         return log_probs
@@ -541,9 +542,11 @@ class GaussianMultinomialDiffusion(torch.nn.Module):
         full_sample = []
         for i in range(len(self.num_classes)):
             one_class_logits = logits[:, self.slices_for_classes[i]]
-            uniform = torch.rand_like(one_class_logits)
+            # Clamp logits to prevent overflow in Gumbel noise
+            one_class_logits_clamped = torch.clamp(one_class_logits, max=50)
+            uniform = torch.rand_like(one_class_logits_clamped)
             gumbel_noise = -torch.log(-torch.log(uniform + 1e-30) + 1e-30)
-            sample = (gumbel_noise + one_class_logits).argmax(dim=1)
+            sample = (gumbel_noise + one_class_logits_clamped).argmax(dim=1)
             full_sample.append(sample.unsqueeze(1))
         full_sample = torch.cat(full_sample, dim=1)
         log_sample = index_to_log_onehot(full_sample, self.num_classes)
