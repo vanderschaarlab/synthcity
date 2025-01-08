@@ -17,7 +17,7 @@ class Syn_SeqDataLoader(DataLoader):
 
     - syn_order: the order of columns to keep or process
     - columns_special_values: map of { column_name : special_value(s) }
-    - unique_value_threshold: used to decide numeric vs. categorical
+    - max_categories: used to decide numeric vs. categorical
     """
 
     def __init__(
@@ -25,7 +25,7 @@ class Syn_SeqDataLoader(DataLoader):
         data: pd.DataFrame,
         syn_order: List[str],
         columns_special_values: Optional[Dict[str, Any]] = None,
-        unique_value_threshold: int = 20,
+        max_categories: int = 20,
         random_state: int = 0,
         train_size: float = 0.8,
         **kwargs: Any,
@@ -37,7 +37,7 @@ class Syn_SeqDataLoader(DataLoader):
             data (pd.DataFrame): The input DataFrame.
             syn_order (List[str]): Columns to retain and process in specific order.
             columns_special_values (Optional[Dict[str, Any]]): Mapping of columns to special values.
-            unique_value_threshold (int): Threshold to classify columns as numeric or categorical.
+            max_categories (int): Threshold to classify columns as numeric or categorical.
             random_state (int): For reproducibility in train/test splits, etc.
             train_size (float): Ratio for train/test.
             **kwargs: Additional arguments for base DataLoader.
@@ -49,7 +49,7 @@ class Syn_SeqDataLoader(DataLoader):
 
         self.syn_order = syn_order
         self.columns_special_values = columns_special_values or {}
-        self.unique_value_threshold = unique_value_threshold
+        self.max_categories = max_categories
 
         # 순서대로 컬럼 정렬
         filtered_data = data[self.syn_order].copy()
@@ -91,7 +91,7 @@ class Syn_SeqDataLoader(DataLoader):
             "train_size": self.train_size,
             "random_state": self.random_state,
             "syn_order": self.syn_order,
-            "unique_value_threshold": self.unique_value_threshold,
+            "max_categories": self.max_categories,
             # 필요 시 추가 필드
         }
 
@@ -113,7 +113,7 @@ class Syn_SeqDataLoader(DataLoader):
         return Syn_SeqDataLoader(
             data=data,
             syn_order=info["syn_order"],
-            unique_value_threshold=info["unique_value_threshold"],
+            max_categories=info["max_categories"],
             random_state=info["random_state"],
             train_size=info["train_size"],
         )
@@ -179,7 +179,7 @@ class Syn_SeqDataLoader(DataLoader):
             encoder = Syn_SeqEncoder(
                 columns_special_values=self.columns_special_values,
                 syn_order=self.syn_order,
-                unique_value_threshold=self.unique_value_threshold,
+                max_categories=self.max_categories,
             )
             encoder.fit(self._df)
             encoded_data = encoder.transform(self._df)
@@ -216,7 +216,7 @@ class Syn_SeqDataLoader(DataLoader):
             data=data,
             syn_order=self.syn_order,
             columns_special_values=self.columns_special_values,
-            unique_value_threshold=self.unique_value_threshold,
+            max_categories=self.max_categories,
             random_state=self.random_state,
             train_size=self.train_size,
         )

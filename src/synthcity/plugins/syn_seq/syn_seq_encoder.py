@@ -16,11 +16,11 @@ class Syn_SeqEncoder(TransformerMixin, BaseEstimator):
         self,
         columns_special_values: Optional[Dict[str, Any]] = None,
         syn_order: Optional[List[str]] = None,
-        unique_value_threshold: int = 20,
+        max_categories: int = 20,
     ) -> None:
         self.columns_special_values = columns_special_values or {}
         self.syn_order = syn_order or []
-        self.unique_value_threshold = unique_value_threshold
+        self.max_categories = max_categories
 
         self.categorical_info_ = {}
         self.numeric_info_ = {}
@@ -40,7 +40,7 @@ class Syn_SeqEncoder(TransformerMixin, BaseEstimator):
         # 2. decide col type by unique-value threshold
         for col in X.columns:
             unique_values = X[col].nunique()
-            if unique_values > self.unique_value_threshold:
+            if unique_values > self.max_categories:
                 # treat as numeric
                 self.numeric_info_[col] = {"dtype": X[col].dtype}
             else:

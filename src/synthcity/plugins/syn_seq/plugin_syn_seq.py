@@ -27,7 +27,7 @@ Usage Example:
     ...     data=df,
     ...     syn_order=["A","B","C",...],
     ...     columns_special_values={"A":[999]}, 
-    ...     unique_value_threshold=20,
+    ...     max_categories=20,
     ... )
     >>>
     >>> plugin = Syn_SeqPlugin(
