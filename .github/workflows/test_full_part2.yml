@@ -1,4 +1,4 @@
-name: Tests Full Python
+name: Tests Full Python - part 2
 
 on:
   schedule:
