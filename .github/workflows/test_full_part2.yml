@@ -2,7 +2,7 @@ name: Tests Full Python
 
 on:
   schedule:
-    - cron: "4 2 * * 3"
+    - cron: "4 8 * * 3"
   workflow_dispatch:
 
 jobs:
@@ -32,11 +32,11 @@ jobs:
       - name: Limit OpenMP threads
         run: |
           echo "OMP_NUM_THREADS=2" >> $GITHUB_ENV
-      - name: Test Core - slow part one
+      - name: Test Core - slow part two
         timeout-minutes: 1000
         run: |
           pip install .[testing]
-          pytest -vvvs --durations=50 -m "slow_1"
+          pytest -vvvs --durations=50 -m "slow_2"
       - name: Test Core - fast
         timeout-minutes: 1000
         run: |
