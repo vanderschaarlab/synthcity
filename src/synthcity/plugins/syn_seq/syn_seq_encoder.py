@@ -1,5 +1,3 @@
-# synthcity/plugins/syn_seq/syn_seq_encoder.py
-
 from typing import Optional, Dict, Any, List, Union
 import pandas as pd
 import numpy as np
@@ -21,179 +19,150 @@ class Syn_SeqEncoder(TransformerMixin, BaseEstimator):
     ) -> None:
         """
         Args:
-            user_variable_selection: if not None, a user-provided variable_selection matrix.
-                                     Must be a DataFrame with shape (n_cols, n_cols).
-                                     Columns & index must match self.syn_order or final columns.
+            columns_special_values : {colName : [specialVals...]}
+            syn_order : column order
+            max_categories : threshold for deciding numeric vs categorical
+            user_variable_selection : optional DataFrame(n x n) (row=target, col=predictor)
         """
         self.columns_special_values = columns_special_values or {}
         self.syn_order = syn_order or []
         self.max_categories = max_categories
 
-        # for custom variable_selection
+        # user-provided or None
         self.user_variable_selection = user_variable_selection
 
         self.categorical_info_ = {}
         self.numeric_info_ = {}
-        self.column_order_ = []
-        self.method_assignments = {}
-        self.variable_selection_ = None  # This is our main "prediction matrix"
-        self.prediction_matrix = None  # optional if you want a separate copy
+        self.column_order_: List[str] = []
+        self.method_assignments: Dict[str, str] = {}
+
+        # main variable_selection (prediction matrix)
+        self.variable_selection_: Optional[pd.DataFrame] = None
 
     def fit(self, X: pd.DataFrame, y=None) -> "Syn_SeqEncoder":
         X = X.copy()
 
-        # 1) column order
         self._detect_column_order(X)
-
-        # 2) col types
         self._detect_col_types(X)
-
-        # 3) special values
         self._detect_special_values(X)
-
-        # 4) Build an empty variable_selection_ matrix (or from user input if any)
         self._build_variable_selection_matrix(X)
-
         return self
 
     def transform(self, X: pd.DataFrame) -> pd.DataFrame:
         X = X.copy()
 
-        # reorder -> numeric split -> update dtypes -> methods -> ...
+        # Step 1: reorder columns
         X = self._reorder_columns(X)
+        # Step 2: split numeric -> numeric + numeric_cat
         X = self._split_numeric_cols(X)
+        # Step 3: update dtypes
         X = self._update_column_types(X)
+        # Step 4: assign methods
         X = self._assign_methods(X)
 
-        # build a new 'prediction_matrix' if needed
-        self._build_or_update_prediction_matrix(X)
-
-        # update the variable_selection_ after splitting numeric -> numeric + numeric_cat
+        # Step 5: update variable_selection for newly created columns
         self._update_variable_selection_after_split(X)
 
         return X
 
     def inverse_transform(self, X: pd.DataFrame) -> pd.DataFrame:
-        # restore special values
+        X = X.copy()
+
+        # 1) restore special values
         for col, vals in self.columns_special_values.items():
             if col in X.columns:
+                # if vals is list, .replace(pd.NA, vals) might be ambiguous
+                # ideally, assume 1:1 mapping => e.g. "pd.NA -> singleValue"
+                # or handle multiple?
+                if isinstance(vals, list) and len(vals) == 1:
+                    vals = vals[0]
                 X[col] = X[col].replace(pd.NA, vals)
 
-        # restore dtypes
+        # 2) restore dtype
         for col, info in self.categorical_info_.items():
             if col in X.columns:
                 X[col] = X[col].astype(info["dtype"])
         for col, info in self.numeric_info_.items():
             if col in X.columns:
                 X[col] = X[col].astype(info["dtype"])
+
         return X
 
-    # --------------------------------------------------------------------
-    # BUILD variable_selection_ (prediction matrix)
-    # --------------------------------------------------------------------
-    def _build_variable_selection_matrix(self, X: pd.DataFrame):
-        """
-        If user_variable_selection is given, use that.
-        Otherwise, build a default matrix e.g. for each col_i,
-        set predictor=1 for col_j < col_i (previous columns in order).
-        """
+    # -----------------------------------------------------
+    # variable_selection building
+    # -----------------------------------------------------
+    def _build_variable_selection_matrix(self, X: pd.DataFrame) -> None:
         n = len(self.column_order_)
         df_cols = self.column_order_
 
         if self.user_variable_selection is not None:
-            # Use the user-provided matrix. We assume user ensured correct shape & order
             vs = self.user_variable_selection.copy()
-            # But let's do a minimal check
             if vs.shape != (n, n):
-                raise ValueError(f"user_variable_selection must be shape ({n},{n}). Got {vs.shape}")
-            # also check index & columns match
+                raise ValueError(f"user_variable_selection must be shape ({n},{n}), got {vs.shape}")
+            # check row/col alignment
             if list(vs.index) != df_cols or list(vs.columns) != df_cols:
-                raise ValueError("user_variable_selection must have same index/columns as syn_order.")
+                raise ValueError("Mismatch in user_variable_selection index/columns vs syn_order.")
             self.variable_selection_ = vs
         else:
-            # default logic: row=target col, col=predictor col
+            # default: row=target col=predictor
             vs = pd.DataFrame(0, index=df_cols, columns=df_cols)
-            # e.g. for target i, use all j < i
+            # e.g. for i-th col => use all j < i as predictor
             for i in range(n):
                 for j in range(i):
                     vs.iat[i, j] = 1
             self.variable_selection_ = vs
 
-    def _build_or_update_prediction_matrix(self, X: pd.DataFrame):
-        """
-        If you want a separate 'prediction_matrix' from variable_selection_,
-        you can build it here. For now, we just store the same structure as variable_selection_.
-        But if columns changed (e.g. numeric->cat), we might adapt.
-        """
-        # Example: we create a new empty DataFrame with the final columns
-        # but keep the same row dimension. This is a toy example, adjust as needed.
-        final_cols = list(X.columns)
-        n2 = len(final_cols)
-        self.prediction_matrix = pd.DataFrame(0, index=final_cols, columns=final_cols)
-
-    def _update_variable_selection_after_split(self, X: pd.DataFrame):
-        """
-        If numeric col 'age' was splitted => 'age','age_cat', 
-        we need to update variable_selection_ to handle 'age_cat' row & col.
-        In your real logic, you might want to copy the row for 'age' => 'age_cat' or set them differently.
-        """
-        existing_rows = set(self.variable_selection_.index)
-        final_cols = list(X.columns)
-
-        # find new splitted columns
-        new_cols = [c for c in final_cols if c not in existing_rows]
-
-        if not new_cols:
-            return  # no new splitted columns => do nothing
-
-        # We'll expand the variable_selection_ to include them
+    def _update_variable_selection_after_split(self, X: pd.DataFrame) -> None:
+        if self.variable_selection_ is None:
+            return
         old_vs = self.variable_selection_
-        old_cols = old_vs.columns.tolist()
         old_rows = old_vs.index.tolist()
+        old_cols = old_vs.columns.tolist()
 
-        # new size
-        new_size = len(old_rows) + len(new_cols)
-        vs_new = pd.DataFrame(0, index=old_rows+new_cols, columns=old_cols+new_cols)
+        final_cols = list(X.columns)
+        new_cols = [c for c in final_cols if c not in old_rows]
+        if not new_cols:
+            return
 
-        # copy old data
+        # create expanded matrix
+        vs_new = pd.DataFrame(0, index=old_rows + new_cols, columns=old_cols + new_cols)
+
+        # copy old content
         for r in old_rows:
             for c in old_cols:
                 vs_new.at[r, c] = old_vs.at[r, c]
 
-        # any new row/col logic => e.g. for "age_cat", replicate "age" row partially or user-defined
+        # handle newly splitted
         for c_new in new_cols:
             if c_new.endswith("_cat"):
-                # assume it is splitted from c_base
-                c_base = c_new[:-4]
-                # copy row from c_base
+                c_base = c_new[:-4]  # ex) 'age_cat' -> 'age'
                 if c_base in vs_new.index and c_base in vs_new.columns:
+                    # copy entire row from base
                     for c2 in old_cols:
                         vs_new.at[c_new, c2] = vs_new.at[c_base, c2]
-                    # also for old rows referencing c_base as predictor
+                    # also copy columns in old_rows
                     for r2 in old_rows:
                         vs_new.at[r2, c_new] = vs_new.at[r2, c_base]
-                # but can also tweak if you want
-                # e.g. set vs_new.at[c_new, c_base] = 0 if you don't want self dependency
-                vs_new.at[c_new, c_new] = 0  # typically no self-predict
 
+                vs_new.at[c_new, c_new] = 0  # no self-predict
             else:
-                # brand new col, for this example => just 0
+                # brand new col => remain 0
                 pass
 
         self.variable_selection_ = vs_new
 
-    # --------------------------------------------------------------------
+    # -----------------------------------------------------
     # HELPER sub-routines
-    # --------------------------------------------------------------------
+    # -----------------------------------------------------
     def _detect_column_order(self, X: pd.DataFrame):
         if self.syn_order:
-            self.column_order_ = list(self.syn_order)
+            self.column_order_ = [c for c in self.syn_order if c in X.columns]
         else:
             self.column_order_ = list(X.columns)
 
     def _detect_col_types(self, X: pd.DataFrame):
-        self.numeric_info_ = {}
-        self.categorical_info_ = {}
+        self.numeric_info_.clear()
+        self.categorical_info_.clear()
         for col in X.columns:
             nuniq = X[col].nunique()
             if nuniq > self.max_categories:
@@ -222,7 +191,7 @@ class Syn_SeqEncoder(TransformerMixin, BaseEstimator):
             cat_col = col + "_cat"
             special_vals = self.columns_special_values.get(col, [])
             X[cat_col] = X[col].apply(
-                lambda x: x if x in special_vals or pd.isna(x) else -777
+                lambda x: x if (x in special_vals or pd.isna(x)) else -777
             )
             X[cat_col] = X[cat_col].fillna(-9999)
             X[col] = X[col].apply(
@@ -250,54 +219,35 @@ class Syn_SeqEncoder(TransformerMixin, BaseEstimator):
                 self.method_assignments[c] = "CART"
         return X
 
-    # --------------------------------------------------------------------
+    # -----------------------------------------------------
     # user update variable selection
-    # --------------------------------------------------------------------
-
+    # -----------------------------------------------------
+    @staticmethod
     def update_variable_selection(
         var_sel_df: pd.DataFrame,
-        user_dict: dict
+        user_dict: Dict[str, List[str]]
     ) -> pd.DataFrame:
         """
-        variable_selection DataFrame을 user_dict 기준으로 갱신합니다.
+        Update the variable_selection DataFrame with user_dict info:
+          user_dict = {
+            "D": ["B","C"],
+            "A": ["B"]
+          }
+          => row="D", col="B","C" => 1 (others=0)
+             row="A", col="B"    => 1 (others=0)
 
-        Parameters
-        ----------
-        var_sel_df : pd.DataFrame
-            2차원 0/1 매트릭스 형태의 variable_selection.
-            index = target 컬럼 목록,
-            columns = predictor 컬럼 목록.
-
-        user_dict : dict
-            {
-                "타겟이름": ["사용할 predictor1", "사용할 predictor2", ...],
-                ...
-            } 형태의 입력 예:
-                {
-                    "D": ["B", "C"],  # row="D", col="B","C"에만 1; 나머지는 0
-                    "A": ["B"]        # row="A", col="B"만 1; 나머지는 0
-                }
-
-        Returns
-        -------
-        pd.DataFrame
-            업데이트된 variable_selection DataFrame
+        Returns the updated var_sel_df
         """
-        # user_dict를 순회하며 variable_selection 업데이트
         for target_col, predictor_list in user_dict.items():
-            # 1) target_col 이 var_sel_df의 index에 있어야만 처리
             if target_col not in var_sel_df.index:
-                print(f"[WARNING] '{target_col}' not in var_sel_df.index. Skipped.")
+                print(f"[WARNING] '{target_col}' not in var_sel_df.index => skipping.")
                 continue
-
-            # 2) 해당 target row를 모두 0으로 초기화
+            # set row=target_col to 0 first
             var_sel_df.loc[target_col, :] = 0
-
-            # 3) predictor_list에 속한 열만 1로 설정
+            # set 1 only for the predictor_list
             for predictor in predictor_list:
                 if predictor in var_sel_df.columns:
                     var_sel_df.loc[target_col, predictor] = 1
                 else:
-                    print(f"[WARNING] predictor '{predictor}' not in columns. Skipped.")
-
+                    print(f"[WARNING] predictor '{predictor}' not in columns => skipping.")
         return var_sel_df

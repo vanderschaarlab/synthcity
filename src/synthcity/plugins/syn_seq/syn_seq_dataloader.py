@@ -15,7 +15,8 @@ class Syn_SeqDataLoader(DataLoader):
     inheriting directly from DataLoader and implementing all required
     abstract methods.
 
-    - syn_order: the order of columns to keep or process
+    - syn_order: the order of columns to keep or process. If not provided (None or empty),
+                 use the raw order from the dataframe columns.
     - columns_special_values: map of { column_name : special_value(s) }
     - max_categories: used to decide numeric vs. categorical
     """
@@ -23,7 +24,7 @@ class Syn_SeqDataLoader(DataLoader):
     def __init__(
         self,
         data: pd.DataFrame,
-        syn_order: List[str],
+        syn_order: Optional[List[str]] = None,
         columns_special_values: Optional[Dict[str, Any]] = None,
         max_categories: int = 20,
         random_state: int = 0,
@@ -35,14 +36,23 @@ class Syn_SeqDataLoader(DataLoader):
 
         Args:
             data (pd.DataFrame): The input DataFrame.
-            syn_order (List[str]): Columns to retain and process in specific order.
+            syn_order (List[str], optional): Columns to retain/process in specific order.
+                                             If None or empty, use data.columns order.
             columns_special_values (Optional[Dict[str, Any]]): Mapping of columns to special values.
             max_categories (int): Threshold to classify columns as numeric or categorical.
             random_state (int): For reproducibility in train/test splits, etc.
             train_size (float): Ratio for train/test.
             **kwargs: Additional arguments for base DataLoader.
         """
-        # 검 증
+
+        # ─────────────────────────────────────────────
+        # 1) syn_order가 None이거나 빈 리스트라면 data.columns 사용
+        # ─────────────────────────────────────────────
+        if not syn_order:
+            print("[INFO] syn_order not provided; using data.columns as default.")
+            syn_order = list(data.columns)
+
+        # 2) 만약 syn_order에 없는 컬럼이 있다면 오류
         missing_columns = set(syn_order) - set(data.columns)
         if missing_columns:
             raise ValueError(f"Missing columns in input data: {missing_columns}")
@@ -51,7 +61,7 @@ class Syn_SeqDataLoader(DataLoader):
         self.columns_special_values = columns_special_values or {}
         self.max_categories = max_categories
 
-        # 순서대로 컬럼 정렬
+        # 데이터 순서 정렬
         filtered_data = data[self.syn_order].copy()
 
         # 부모 DataLoader 생성자 호출
@@ -63,22 +73,36 @@ class Syn_SeqDataLoader(DataLoader):
             **kwargs,
         )
 
-        # 최종 내부 보관용 DF
         self._df = filtered_data
 
-        # ---- 1) 여기서 encoder.fit()까지만 수행 ----
+        # ─────────────────────────────────────────────
+        # [DEBUG] 사용자에게 보여줄 설정 정보
+        # ─────────────────────────────────────────────
+        print(f"[INFO] Syn_SeqDataLoader init complete:")
+        print(f"  - syn_order: {self.syn_order}")
+        print(f"  - columns_special_values: {self.columns_special_values}")
+        print(f"  - max_categories: {self.max_categories}")
+        print(f"  - random_state: {random_state}, train_size: {train_size}")
+        print(f"  - data shape: {self._df.shape}")
+
+        # ─────────────────────────────────────────────
+        # 3) encoder를 생성 & fit만 수행 (transform은 encode() 호출 시점에)
+        # ─────────────────────────────────────────────
         self._encoder = Syn_SeqEncoder(
             columns_special_values=self.columns_special_values,
             syn_order=self.syn_order,
             max_categories=self.max_categories,
         )
-        # fit까지는 여기서!
         self._encoder.fit(self._df)
-        # transform은 encode() 시점까지 미룬다.
 
-    # ----------------------------------------------------------------------
-    # DataLoader에서 요구하는 추상 메서드들 구현
-    # ----------------------------------------------------------------------
+        # fit 후, 어떤 정보가 인식되었는지 한 번 더 찍어줄 수도 있음
+        print("[DEBUG] After encoder.fit(), detected info:")
+        print(f"  - encoder.column_order_: {self._encoder.column_order_}")
+        print(f"  - numeric_info_: {self._encoder.numeric_info_}")
+        print(f"  - categorical_info_: {self._encoder.categorical_info_}")
+        if self._encoder.variable_selection_ is not None:
+            print("  - variable_selection_:\n", self._encoder.variable_selection_)
+        print("----------------------------------------------------------------")
 
     @property
     def shape(self) -> tuple:
@@ -102,7 +126,6 @@ class Syn_SeqDataLoader(DataLoader):
             "random_state": self.random_state,
             "syn_order": self.syn_order,
             "max_categories": self.max_categories,
-            # 필요 시 추가 필드
         }
 
     def __len__(self) -> int:
@@ -119,7 +142,7 @@ class Syn_SeqDataLoader(DataLoader):
     def from_info(data: pd.DataFrame, info: dict) -> "Syn_SeqDataLoader":
         return Syn_SeqDataLoader(
             data=data,
-            syn_order=info["syn_order"],
+            syn_order=info.get("syn_order"),
             max_categories=info["max_categories"],
             random_state=info["random_state"],
             train_size=info["train_size"],
@@ -170,7 +193,6 @@ class Syn_SeqDataLoader(DataLoader):
     # ----------------------------------------------------------------------
     # encode/decode : encoder.transform or inverse_transform
     # ----------------------------------------------------------------------
-
     def encode(
         self, encoders: Optional[Dict[str, Any]] = None
     ) -> Tuple["Syn_SeqDataLoader", Dict]:
@@ -180,15 +202,10 @@ class Syn_SeqDataLoader(DataLoader):
         that was already fitted in __init__.
         """
         if encoders is None:
-            # self._encoder는 이미 __init__에서 fit까지 끝냄
             encoded_data = self._encoder.transform(self._df)
-
             new_loader = self.decorate(encoded_data)
-            # encoders dict에 저장해서 plugin에서 활용할 수 있게
             return new_loader, {"syn_seq_encoder": self._encoder}
         else:
-            # 이미 encoders가 있다면, 굳이 transform 하지 않고 그대로 반환
-            # (혹은 encoders로 새 transform을 해도 된다. 목적에 따라 다름.)
             return self, encoders
 
     def decode(
@@ -198,7 +215,6 @@ class Syn_SeqDataLoader(DataLoader):
             encoder = encoders["syn_seq_encoder"]
             if not isinstance(encoder, Syn_SeqEncoder):
                 raise TypeError(f"Expected Syn_SeqEncoder, got {type(encoder)}")
-
             decoded_data = encoder.inverse_transform(self._df)
             return self.decorate(decoded_data)
         else:
