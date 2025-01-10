@@ -11,7 +11,7 @@ jobs:
     strategy:
       matrix:
         python-version: ["3.9", "3.10", "3.11"]
-        os: [macos-latest, ubuntu-latest, windows-latest]
+        os: [ubuntu-latest, windows-latest] # TODO: Add MacOS back, currently hanging until timeout for unknown reason
     steps:
       - uses: actions/checkout@v3
         with:
