@@ -1,18 +1,14 @@
 # synthcity/plugins/syn_seq/methods/polyreg.py
 
 """
-Implements a polytomous (multinomial) regression approach, analogous to R's syn.polyreg in synthpop.
+Implements a multinomial (polytomous) regression approach for categorical targets.
 
-Key ideas from R syn.polyreg:
-    - For a categorical response variable (with k>2 possible categories),
-      fit a multinomial model using e.g. 'multinom' from nnet in R.
-    - Predict probabilities for new data Xp.
-    - For each row in Xp, draw a random category from the predicted probabilities.
-
-In this Python version:
-    - We use scikit-learn's LogisticRegression with multi_class="multinomial" as the default approach.
-    - The user can specify "proper=True" to perform bootstrapping on (X, y) before model fitting.
-    - If y is factor/categorical, we keep track of its categories so we can return consistent labels.
+Steps:
+  1. Identify the categories of the target y. If the target is a pandas Series with a categorical dtype, we preserve those categories.
+  2. If `proper=True`, bootstrap (X, y) before fitting.
+  3. Fit a scikit-learn LogisticRegression with multi_class="multinomial".
+  4. Predict probabilities for each row in Xp, then sample a category from the predicted probability distribution.
+  5. Return a dictionary with "res" (the synthetic outcomes) and "fit" (the fitted model and metadata).
 """
 
 from typing import Any, Dict, Optional, Union
@@ -32,86 +28,85 @@ def syn_polyreg(
     **kwargs: Any,
 ) -> Dict[str, Any]:
     """
-    Synthesis for categorical/multinomial response variables by a polytomous regression model.
+    Synthesize a categorical (multinomial) variable using multinomial logistic regression.
 
     Args:
-        y: 1D array-like. The response variable, containing multiple categories.
-            If given as pandas Series with categorical dtype, we preserve categories.
-        X: 2D array-like of shape (n, p). Covariates of the training data.
-        Xp: 2D array-like of shape (m, p). Covariates of the new data to synthesize for.
-        proper: bool, default=False. If True, apply bootstrapping to (X, y) before fitting the model.
-        random_state: Optional[int]. Seed for reproducibility.
-        max_iter: int, default=1000. Max iteration for the underlying solver.
-        **kwargs: Additional arguments passed to LogisticRegression constructor.
-                  e.g. solver="lbfgs", C=1.0, etc.
+        y: The target array of shape (n,). Contains the observed categories.
+        X: Predictor matrix of shape (n, p).
+        Xp: Predictor matrix for new data, shape (m, p).
+        proper: If True, apply bootstrap to (X, y) before fitting.
+        random_state: Random seed for reproducibility.
+        max_iter: Max iterations for LogisticRegression.
+        **kwargs: Additional arguments for LogisticRegression, e.g. solver="lbfgs", C=1.0, etc.
 
     Returns:
-        A dictionary with:
-            "res": array of shape (m,) of synthetic categories for each row in Xp.
-            "fit": a dictionary describing the fitted model + metadata.
+        A dict with:
+          "res": np.ndarray or pd.Categorical of length m (synthetic categories for each row in Xp).
+          "fit": a dictionary containing:
+              - "model": the fitted LogisticRegression
+              - "classes_": model.classes_
+              - "y_categories": original category info (if y was categorical)
     """
     rng = np.random.RandomState(random_state)
 
-    # Convert y to numpy array if not already
-    # Try to preserve categories if y is a pandas Series with categorical dtype.
+    # If y is a pandas Series with categorical dtype, keep track of the categories
+    y_categories = None
     if isinstance(y, pd.Series):
-        y_categories = y.cat.categories if pd.api.types.is_categorical_dtype(y) else None
+        if pd.api.types.is_categorical_dtype(y):
+            y_categories = y.cat.categories
         y = y.values
-    else:
-        y_categories = None
 
-    y = np.asarray(y)
+    # Convert input data to NumPy arrays if needed
     X = np.asarray(X)
     Xp = np.asarray(Xp)
 
     n = len(y)
-    # Bootstrapping if proper
+    # Apply bootstrap if proper
     if proper:
         idx_boot = rng.choice(n, size=n, replace=True)
         X = X[idx_boot, :]
         y = y[idx_boot]
 
-    # Fit a multinomial logistic regression
-    # By default, scikit-learn's LogisticRegression expects numeric y for classification,
-    # but we can encode categories with e.g. y.astype("int") if y is already numeric-coded.
-    # If y has string labels, it should still work as scikit-learn will encode them internally.
+    # Prepare arguments for LogisticRegression (multinomial)
     model_params = {
         "multi_class": "multinomial",
         "max_iter": max_iter,
-        # common solver for multinomial is lbfgs, but user can override via kwargs
+        # If user doesn't specify a solver, default to "lbfgs".
         "solver": kwargs.pop("solver", "lbfgs"),
         "random_state": rng,
     }
     model_params.update(kwargs)
-    model = LogisticRegression(**model_params)
 
-    # Fit
+    # Fit the multinomial logistic regression
+    model = LogisticRegression(**model_params)
     model.fit(X, y)
 
-    # Predicted probabilities for Xp
-    prob = model.predict_proba(Xp)
+    # Predict probabilities for new data
+    prob = model.predict_proba(Xp)  # shape = (m, k)
 
-    # Draw from predicted distribution
+    # Sample from the predicted probability distribution
     syn_labels = []
     for row_p in prob:
-        # sample from the row_p distribution
         cat_idx = rng.choice(len(row_p), p=row_p)
         syn_labels.append(model.classes_[cat_idx])
 
     syn_labels = np.asarray(syn_labels)
 
-    # If original was a categorical type, we try to map back to those categories
+    # If original y was categorical, try to map back to those categories
     if y_categories is not None and len(model.classes_) == len(y_categories):
-        # We assume model.classes_ is in the same order as y_categories
-        # If not, or if the numeric codes differ, further mapping might be needed.
-        # For now, assume same ordering:
-        syn_labels = pd.Categorical.from_codes(
-            codes=[
-                np.where(model.classes_ == lbl)[0][0]
-                for lbl in syn_labels
-            ],
+        # Align the predicted labels with the original category ordering if possible
+        # We create a Series, factor out the codes, then build a pd.Categorical
+        df_temp = pd.DataFrame({"pred": syn_labels})
+        # Factor to match model.classes_ => integer codes
+        df_temp["code"] = df_temp["pred"].apply(
+            lambda v: np.where(model.classes_ == v)[0][0]
+        )
+        # Then map those codes to y_categories
+        syn_categorical = pd.Categorical.from_codes(
+            codes=df_temp["code"],
             categories=y_categories
         )
+        syn_labels = syn_categorical
 
     return {
         "res": syn_labels,

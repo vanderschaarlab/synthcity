@@ -11,7 +11,9 @@ Key ideas:
       We'll mimic this by fitting logistic regression on y/denom with sample_weight=denom in scikit-learn.
       Then for Xp, we predict probability p and draw from Binomial(denomp, p).
       (Here denomp is analogous to how many trials for each new observation.)
-    - If proper=True => we bootstrap (X, y) before fitting, as in the R code.
+    - If proper=True => we bootstrap (X, y) before fitting, as in the R code. This aims for "proper" multiple
+      imputation or synthesis.
+    - The function returns a dictionary with "res" (the synthetic values) and "fit" (the fitted model info).
 
 Example usage:
     result = syn_logreg(
@@ -54,10 +56,11 @@ def syn_logreg(
         X: 2D array-like of shape (n, p). Covariates for training data.
         Xp: 2D array-like of shape (m, p). Covariates for new data to generate synthetic y.
         denom: optional array-like. If provided => treat as binomial with y successes out of denom.
-        denomp: optional array-like. If provided => used for the new data's # trials, default is None => 1 trial.
-        proper: bool, default=False. If True, bootstrap (X,y) prior to training.
+        denomp: optional array-like. If provided => used for the new data's # trials.
+                If None => default is 1 trial for all rows in Xp.
+        proper: bool, default=False. If True, bootstrap (X, y) prior to training for "proper" synthesis.
         random_state: optional int for reproducibility.
-        **kwargs: Additional arguments for LogisticRegression, e.g. `max_iter=1000`.
+        **kwargs: Additional arguments for LogisticRegression, e.g. `max_iter=1000`, `solver="lbfgs"`, etc.
 
     Returns:
         A dictionary with:
@@ -65,14 +68,13 @@ def syn_logreg(
             "fit": dictionary containing the fitted logistic model and metadata.
 
     Notes:
-        - We rely on scikit-learn's logistic regression, which doesn't natively handle binomial
-          responses with multiple trials. We approximate by using y/denom as the label
-          and sample_weight=denom.
-        - If denom is not None, we interpret the new data's # trials as `denomp`. Then we draw from
-          Binomial(denomp, p).
-        - If denom=None => standard Bernoulli( p ) draw.
-        - "proper" synthesis can be done by bootstrap resampling (X, y) before fitting.
+        - For denom != None, we use y/denom as the target proportion and set sample_weight=denom.
+          This is a reasonable approximation for binomial logistic regression with multiple trials.
+        - For generating new data, if denomp is provided, we draw from Binomial(denomp, p_pred).
+          If denomp is not provided, it's treated as 1 => Bernoulli(p_pred).
+        - "proper" synthesis can be done by bootstrap resampling (X, y) before model fitting.
     """
+    # Use a controlled random generator
     rng = np.random.RandomState(random_state)
 
     # Convert input to arrays
@@ -82,7 +84,7 @@ def syn_logreg(
     Xp = np.asarray(Xp)
     n = len(y)
 
-    # If proper => bootstrap
+    # If proper => do bootstrap sampling
     if proper:
         idx_boot = rng.choice(n, size=n, replace=True)
         X = X[idx_boot, :]
@@ -91,26 +93,27 @@ def syn_logreg(
             denom = np.asarray(denom)
             denom = denom[idx_boot]
 
-    # Decide how to fit the logistic model
+    # Decide logistic regression path
     if denom is None:
         # Standard logistic with y in {0,1}
-        # Some checks or conversions if needed
         model = LogisticRegression(random_state=rng, **kwargs)
         model.fit(X, y)
-        # Predict probabilities for new data
         p_pred = model.predict_proba(Xp)[:, 1]
-        # Synthetic draws
+        # Synthetic draws from Bernoulli(p_pred)
         y_syn = rng.binomial(1, p_pred)
     else:
-        # Binomial with sample_weight = denom
+        # Binomial approach: sample_weight = denom
         denom = np.asarray(denom)
-        # Convert y/denom => "proportions"
+        if any(denom < 0):
+            raise ValueError("All 'denom' values must be >= 0 for binomial.")
+        # Convert y/denom => proportion for logistic
+        # Then fit with sample_weight=denom
         y_frac = y / denom
         model = LogisticRegression(random_state=rng, **kwargs)
         model.fit(X, y_frac, sample_weight=denom)
-        # For new data, we need # trials => denomp
+
+        # For new data, if denomp is None => Bernoulli
         if denomp is None:
-            # If user doesn't specify, default = 1 trial => Bernoulli
             denomp = np.ones(len(Xp), dtype=int)
         else:
             denomp = np.asarray(denomp)

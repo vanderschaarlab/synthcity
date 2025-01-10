@@ -1,8 +1,10 @@
 # File: plugins/syn_seq/plugin_syn_seq.py
 
-from typing import Any, Dict, Optional
+from typing import Any, Dict, List, Optional, Union
 
 import pandas as pd
+from random import sample
+import numpy as np
 
 # synthcity absolute
 from synthcity.plugins.core.plugin import Plugin
@@ -16,342 +18,353 @@ from .syn_seq_encoder import Syn_SeqEncoder
 
 class Syn_SeqPlugin(Plugin):
     """
-    A plugin for sequential (column-by-column) synthetic data generation,
-    all contained in this single class (no separate 'Synthesizer').
+    A plugin for a sequential (column-by-column) synthetic data approach,
+    akin to R's `synthpop` but in Python. This plugin consolidates all logic:
+    encoding, fitting methods per column, and generating new samples.
 
-    Workflow:
+    Usage:
+        loader = Syn_SeqDataLoader(...)
+        syn_model = Plugins().get("syn_seq")
 
-        1. Provide a Syn_SeqDataLoader with your DF, plus syn_order, special values, etc.
-        2. Call .fit(dataloader, method=..., variable_selection=...).
-           - We encode the data,
-           - Then for each column, train a model (e.g., SWR, CART, PMM, etc.)
-             using the user-defined or default methods & variable selection.
-        3. Call .generate(count=...), which uses the stored models to
-           create new rows column-by-column, optionally decode them,
-           and return a brand-new Syn_SeqDataLoader.
+        syn_model.fit(
+            loader,
+            method = ["SWR", "CART", "CART", "pmm", "CART"],
+            variable_selection = { "N1": ["C2", "C1"], "D1": ["C2", "C1", "N2"] }
+        )
+
+        constraints = {
+          # (column, operation, value) in some dictionary format you like
+          # or "N1": ["=", 999], "N1":[">", 10], etc.
+        }
+
+        syn_data = syn_model.generate(count=100, constraint=constraints)
+        df_syn = syn_data.dataframe()
     """
 
-    # ------------------------------------------------
-    # Plugin "metadata" for synthcity
-    # ------------------------------------------------
     @staticmethod
     def name() -> str:
         return "syn_seq"
 
     @staticmethod
     def type() -> str:
-        # Typically "generic," or you could define a new category.
-        return "generic"
+        return "syn_seq"
 
     @staticmethod
     def hyperparameter_space(**kwargs: Any) -> list:
-        """
-        If you want to expose tuneable hyperparameters for AutoML,
-        define them here (e.g., distributions for 'n_estimators', etc.).
-        For now, returning [] means "no hyperparams."
-        """
         return []
 
-    # ------------------------------------------------
-    # Initialization
-    # ------------------------------------------------
     def __init__(
         self,
         random_state: int = 0,
-        # You can add other plugin-level arguments if needed:
         default_first_method: str = "SWR",
         default_other_method: str = "CART",
         **kwargs: Any
     ):
         """
         Args:
-            random_state: for reproducibility.
             default_first_method: if user doesn't override, the first column uses SWR.
             default_other_method: if user doesn't override, other columns use CART.
-            **kwargs: optional plugin or parent-Plugin arguments (strict, workspace, etc.)
+            **kwargs: passed to the base Plugin constructor (like strict=True, workspace=..., etc.)
         """
         super().__init__(random_state=random_state, **kwargs)
 
-        # Just store some defaults or extra config
+        # Storage for fitted results
+        self._column_models: Dict[str, Any] = {}
+        self.method_list: List[str] = []
+        self.variable_selection: Dict[str, Union[List[str], List[int]]] = {}
+
+        # Default methods
         self.default_first_method = default_first_method
         self.default_other_method = default_other_method
 
-        # For tracking the fitted “models” per column
-        self._column_models: Dict[str, Any] = {}
-
-        # For tracking the "method" mapping and "variable_selection"
-        self.method_map: Dict[str, str] = {}
-        self.variable_selection: Dict[str, Any] = {}
-
+        # Encoders + tracking
         self._encoders: Dict[str, Any] = {}
         self._model_trained = False
 
-    # ------------------------------------------------
-    # Public .fit()
-    # ------------------------------------------------
     def fit(
         self,
         dataloader: Syn_SeqDataLoader,
-        method: Optional[Dict[str, str]] = None,
-        variable_selection: Optional[Dict[str, Any]] = None,
+        method: Optional[List[str]] = None,
+        variable_selection: Optional[Dict[str, List[str]]] = None,
         *args: Any,
         **kwargs: Any,
     ) -> "Syn_SeqPlugin":
         """
-        Main entrypoint to train/fix column-by-column "models."
+        Fit the sequential synthesis model.
 
         Args:
-            dataloader: a Syn_SeqDataLoader with your real dataset.
-            method: dict specifying the method for each column, e.g. {"colA":"pmm"}.
-                    If a column is not in `method`, fallback to defaults.
-            variable_selection: dict controlling what predictor columns are used
-                                for each target column.
-                                e.g. {"colA":[0,1,1,0], "colB":[1,0,1,1], ...}
-                                Or any structure you prefer.
+            dataloader: Syn_SeqDataLoader with your real dataset.
+            method: a list specifying the method for each column in the dataloader's syn_order.
+                    e.g. ["SWR", "CART", "CART", "pmm", "CART"].
+                    If absent or shorter than #cols, defaults used.
+            variable_selection: dict controlling which predictor columns are used for each target col.
+                                e.g. {"N1": ["C2","C1"], "D1": ["C2","C1","N2"]}
 
         Steps:
-            1) Encode the data if no external encoders provided.
-            2) Store user method map & variable selection.
-            3) Call parent plugin's .fit() => triggers _fit().
+          1) We encode the data => returns a new loader + encoder.
+          2) We store the user method array, user variable_selection.
+          3) Print out the final method assignment & var-selection matrix for debugging.
+          4) Actually train the column models (calls parent .fit => triggers _fit).
         """
-        # Quick type-check
         if not isinstance(dataloader, Syn_SeqDataLoader):
-            raise TypeError("Syn_SeqPlugin requires a Syn_SeqDataLoader.")
+            raise TypeError("Syn_SeqPlugin expects a Syn_SeqDataLoader")
 
-        # Encode if needed
+        # encode
         encoded_loader, encoders = dataloader.encode()
-        df_encoded = encoded_loader.dataframe()
-        if df_encoded.empty:
+        df_enc = encoded_loader.dataframe()
+        if df_enc.empty:
             raise ValueError("No data to train on in Syn_SeqPlugin.")
 
-        self._encoders = encoders  # store for usage in .generate
-        self.method_map = method or {}
+        self._encoders = encoders
+
+        # store user info
+        self.method_list = method or []
         self.variable_selection = variable_selection or {}
 
-        # Now let the base Plugin do the rest (it calls _fit internally).
+        # Now let the base Plugin handle schema etc. (calls _fit internally)
         super().fit(encoded_loader, *args, **kwargs)
         return self
 
-    # ------------------------------------------------
-    # The parent's .fit() calls ._fit() internally
-    # ------------------------------------------------
     def _fit(self, X: DataLoader, *args: Any, **kwargs: Any) -> "Syn_SeqPlugin":
         """
-        The internal training routine.
-        We'll do column-by-column approach here:
-          1) For each column in X, decide the method.
-          2) Build a simple model or approach (SWR, CART, etc.).
-          3) Save to self._column_models[col].
+        The real training logic after base .fit() sets up internal schema etc.
+        We'll create a model for each column, in the order they appear in X.
         """
         df = X.dataframe()
         col_list = list(df.columns)
 
+        # Possibly expand method_list to match # of columns
+        final_methods = []
         for i, col in enumerate(col_list):
-            # Pick method: user override or fallback
-            chosen_method = self.method_map.get(col, None)
-            if not chosen_method:
-                chosen_method = (
+            if i < len(self.method_list):
+                final_methods.append(self.method_list[i])
+            else:
+                # fallback
+                final_methods.append(
                     self.default_first_method if i == 0 else self.default_other_method
                 )
 
-            # Decide predictor columns from variable_selection
-            # e.g. you might store "col": ["colA","colB"] or a mask, etc.
-            predictor_cols = self._get_predictors(col, col_list)
+        # Print out the final method assignments for debugging
+        print("[INFO] Final column method assignment:")
+        for col, m in zip(col_list, final_methods):
+            print(f"  {col}: {m}")
 
-            # Implement or call an internal function to fit a model
-            model_obj = self._train_column_model(
+        # If we want to also show a final variable_selection matrix (like synthpop)
+        # We create a matrix col_list x col_list of 0/1
+        n = len(col_list)
+        vs_matrix = pd.DataFrame(0, index=col_list, columns=col_list)
+        # default: i-th row uses all j < i
+        for i in range(n):
+            vs_matrix.iloc[i, :i] = 1
+
+        # incorporate user changes
+        if self.variable_selection:
+            for target_col, pred_cols in self.variable_selection.items():
+                if target_col in vs_matrix.index:
+                    # zero out that row
+                    vs_matrix.loc[target_col, :] = 0
+                    for pc in pred_cols:
+                        if pc in vs_matrix.columns:
+                            vs_matrix.loc[target_col, pc] = 1
+
+        print("[INFO] Final variable selection matrix:")
+        print(vs_matrix)
+
+        # Train a small “model” for each column
+        for i, col in enumerate(col_list):
+            chosen_method = final_methods[i]
+            # get predictor columns
+            preds = vs_matrix.columns[(vs_matrix.loc[col] == 1)].tolist()
+
+            # train a model
+            model_info = self._train_column_model(
                 df,
                 target_col=col,
+                predictor_cols=preds,
                 method=chosen_method,
-                predictor_cols=predictor_cols,
             )
-
-            # Store it
             self._column_models[col] = {
                 "method": chosen_method,
-                "predictors": predictor_cols,
-                "model": model_obj,
+                "predictors": preds,
+                "model": model_info,
             }
 
         self._model_trained = True
         return self
 
-    # ------------------------------------------------
-    # Public .generate()
-    # ------------------------------------------------
     def generate(
         self,
         count: int = 10,
+        constraint: Optional[Dict[str, Any]] = None,
         *args: Any,
-        **kwargs: Any
+        **kwargs: Any,
     ) -> Syn_SeqDataLoader:
         """
-        Synthesize new samples.
+        Generate synthetic data for 'count' samples.
 
-        Steps:
-            1) Call parent's generate => triggers _generate().
-            2) If we have a stored "syn_seq_encoder," decode columns.
-            3) Return as a new Syn_SeqDataLoader.
+        If constraint is provided, we handle them in 2 ways:
+          1) Hard constraints (like 'in', '>', etc.) are handled by the parent's `_safe_generate` logic,
+             repeatedly sampling until the constraints are satisfied or out of patience.
+          2) If we see e.g. 'col' : ["=", val], we interpret that as direct substitution after generation.
+
+        Return a new Syn_SeqDataLoader with the final synthetic data.
         """
         if not self._model_trained:
-            raise RuntimeError("Syn_SeqPlugin: please call fit() before generate().")
+            raise RuntimeError("Cannot generate. Must call fit() first.")
 
-        # Let the base plugin handle constraints + calling _generate
+        # We'll store constraint in kwargs, so the parent's .generate => _generate => _safe_generate can see it
+        # If there's a special '=' constraint, we do a simple post-processing approach in the method below.
+        if constraint is not None:
+            kwargs["syn_seq_constraint"] = constraint
+
+        # parent's generate => calls _generate => we produce a DataLoader => it might do repeated tries
         gen_data: DataLoader = super().generate(count=count, *args, **kwargs)
 
-        # Optionally decode if we have an encoder
+        # decode if needed
         syn_df = gen_data.dataframe()
         if "syn_seq_encoder" in self._encoders:
-            encoder = self._encoders["syn_seq_encoder"]
-            syn_df = encoder.inverse_transform(syn_df)
+            enc = self._encoders["syn_seq_encoder"]
+            syn_df = enc.inverse_transform(syn_df)
 
-        # Wrap in a new Syn_SeqDataLoader
-        syn_loader = Syn_SeqDataLoader(
+        # now handle substitution constraints if any
+        if constraint is not None:
+            syn_df = self._apply_substitution_constraints(syn_df, constraint)
+
+        # wrap into Syn_SeqDataLoader
+        return Syn_SeqDataLoader(
             data=syn_df,
-            syn_order=list(syn_df.columns),  # or preserve original order if you prefer
+            syn_order=list(syn_df.columns),
         )
-        return syn_loader
 
-    # ------------------------------------------------
-    # The parent's .generate() calls ._generate()
-    # ------------------------------------------------
     def _generate(
         self,
         count: int,
         syn_schema: Schema,
-        **kwargs: Any,
+        **kwargs: Any
     ) -> DataLoader:
         """
-        The internal generation routine:
-          - We'll build up a new DF row-by-row or column-by-column.
-          - For each column, call the stored model to produce synthetic data.
+        Actually create synthetic rows. We'll do a simple column-by-column approach:
+          1) For each column, call the stored model's sample function.
+          2) Insert into partial synthetic DataFrame.
+        Then we'll let the parent's `_safe_generate` handle iteration for constraints.
         """
-        if not self._model_trained:
-            raise RuntimeError("Must fit() the plugin before generating data.")
-
-        # If we have the same column order used during training, use that.
+        # We'll return a raw DataFrame, the parent plugin code wraps it in a DataLoader, tries constraints, etc.
         col_list = list(self._column_models.keys())
-
-        # Create an empty df with `count` rows
         syn_df = pd.DataFrame(index=range(count))
 
-        # Fill column by column
-        for i, col in enumerate(col_list):
+        for col in col_list:
             info = self._column_models[col]
-            chosen_method = info["method"]
-            predictor_cols = info["predictors"]
+            method = info["method"]
+            preds = info["predictors"]
             model_obj = info["model"]
 
-            # We'll call an internal function to do the actual sampling
-            col_values = self._generate_for_column(
+            new_values = self._generate_for_column(
                 count,
                 col,
-                chosen_method,
+                method,
+                preds,
                 model_obj,
-                predictor_cols,
-                syn_df,
+                partial_df=syn_df,
             )
-            syn_df[col] = col_values
+            syn_df[col] = new_values
 
-        # Return a DataLoader. The base plugin just needs *some* DataLoader.
-        # A GenericDataLoader is enough for now. Or you could wrap a Syn_SeqDataLoader if desired.
         return GenericDataLoader(syn_df)
 
-    # ------------------------------------------------
-    # Helper: get predictor columns for a given col
-    # ------------------------------------------------
-    def _get_predictors(self, col: str, col_list: list) -> list:
-        """
-        For example, if variable_selection is like:
-            {
-              "colA": ["col1","col2"],
-              "colB": ...
-            }
-        or a mask, or anything the user provided.
-        If not found, fallback to some default logic (like "all previous columns").
-        """
-        if col in self.variable_selection:
-            # e.g. variable_selection[col] = ["colX", "colY"]
-            preds = self.variable_selection[col]
-            if isinstance(preds, list):
-                return preds
-            # Or handle other data structure
-        else:
-            # fallback: maybe all columns before `col` in col_list?
-            idx = col_list.index(col)
-            preds = col_list[:idx]
-        return preds
-
-    # ------------------------------------------------
-    # Helper: train a "model" for one column
-    # ------------------------------------------------
+    # ----------------------------------------------------------------
+    # Helper: "train" a column
+    # ----------------------------------------------------------------
     def _train_column_model(
         self,
         df: pd.DataFrame,
         target_col: str,
+        predictor_cols: List[str],
         method: str,
-        predictor_cols: list,
-    ) -> Any:
+    ) -> dict:
         """
-        This function trains the actual column-level model. E.g.:
-          - If method == "SWR", we store the observed distribution or do sampling w/o replacement
-          - If method == "CART", we train a decision tree regressor or classifier
-          - etc.
-        For this minimal example, we won't do anything complex.
-        We just store the column's data for reference. :-)
+        Minimalistic placeholder training code. 
+        For real logic, plug in your CART, pmm, etc. 
+        We'll store raw data or any other info we need.
         """
-        # We'll store a dict with the "training data" so we can sample later.
-        # Replace with your real method code (like scikit-learn, etc.)
-        train_info = {
+        model_info = {
+            "predictors": predictor_cols,
+            "target_data": df[target_col].values,  # store entire column
             "method": method,
-            "predictor_cols": predictor_cols,
-            "target_data": df[target_col].values,
         }
-        return train_info
+        return model_info
 
-    # ------------------------------------------------
-    # Helper: generate data for one column
-    # ------------------------------------------------
+    # ----------------------------------------------------------------
+    # Helper: generate synthetic values for one column
+    # ----------------------------------------------------------------
     def _generate_for_column(
         self,
         count: int,
         col: str,
         method: str,
-        model_obj: Any,
-        predictor_cols: list,
+        predictor_cols: List[str],
+        model_obj: dict,
         partial_df: pd.DataFrame,
     ) -> pd.Series:
         """
-        Given the chosen method & the partial DF so far (which may contain
-        already-synthesized columns), produce `count` new values for col.
-
-        For example:
-          - SWR => sample randomly from the real values (w/o replacement).
-          - CART => run a trained decision tree on partial_df's predictor columns.
-          - PMM => do predictive mean matching, etc.
-
-        This minimal example just does random sampling from the real column data we stored.
+        Simple sampling based on method. 
+        Real "CART"/"pmm" etc. logic would be placed here.
         """
         real_data = model_obj["target_data"]
-        if method == "SWR":
-            # naive "sample w/o replacement" if count <= len(real_data)
-            # else we do a repeated sample just for demonstration
-            from random import sample
+
+        if method.lower() == "swr":  # sample w/o replacement
             n_real = len(real_data)
             if count <= n_real:
-                return pd.Series(sample(list(real_data), count))
+                picks = sample(list(real_data), count)
             else:
-                # sample all then repeat
+                # if user wants more than real_data, after the real unique values are used, we re-sample
                 picks = list(real_data)
                 overshoot = count - n_real
                 picks += sample(list(real_data), overshoot)
-                return pd.Series(picks)
-        elif method == "CART":
-            # placeholder: real CART logic would predict partial_df[predictor_cols]
-            # Here just random from real data as a placeholder
-            from numpy.random import choice
-            return pd.Series(choice(real_data, size=count, replace=True))
+            return pd.Series(picks)
+
+        elif method.lower() == "cart":
+            # placeholder: random from real
+            from numpy.random import default_rng
+            rng = default_rng(self.random_state + hash(col) % 999999)
+            picks = rng.choice(real_data, size=count, replace=True)
+            return pd.Series(picks)
+
+        elif method.lower() == "pmm":
+            # placeholder for a real predictive mean matching
+            # for now, random
+            from numpy.random import default_rng
+            rng = default_rng(self.random_state + hash(col) % 999999)
+            picks = rng.choice(real_data, size=count, replace=True)
+            return pd.Series(picks)
+
         else:
             # fallback
-            from numpy.random import choice
-            return pd.Series(choice(real_data, size=count, replace=True))
+            from numpy.random import default_rng
+            rng = default_rng(self.random_state + hash(col) % 999999)
+            picks = rng.choice(real_data, size=count, replace=True)
+            return pd.Series(picks)
+
+    # ----------------------------------------------------------------
+    # Helper: substitution constraints handling
+    # ----------------------------------------------------------------
+    def _apply_substitution_constraints(
+        self, df: pd.DataFrame, constraints: Dict[str, Any]
+    ) -> pd.DataFrame:
+        """
+        If user provided e.g. constraints = { "N1": ["=", 999], "C2": ["in", [...]] }
+        or something more elaborate, we can parse them.
+        We'll do a simple approach: for each key, if the op is '=' or '==', we forcibly set that col to the value.
+        """
+        new_df = df.copy()
+        for col, rule in constraints.items():
+            # maybe rule is something like ["=", 100], or a tuple, or a list
+            # interpret a small handful of possibilities
+            if isinstance(rule, list) and len(rule) == 2:
+                op = rule[0]
+                val = rule[1]
+                if op in ["=", "=="]:
+                    # direct substitution
+                    if col in new_df.columns:
+                        new_df[col] = val
+        return new_df
+
+plugin = Syn_SeqPlugin
