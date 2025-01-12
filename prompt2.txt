@@ -1,0 +1,4321 @@
+src/synthcity/plugins/generic/plugin_ctgan.py
+"""
+Reference: "Modeling Tabular Data using Conditional GAN", Xu, Lei et al.
+"""
+
+# stdlib
+from pathlib import Path
+from typing import Any, List, Optional, Union
+
+# third party
+import numpy as np
+import pandas as pd
+
+# Necessary packages
+from pydantic import validate_arguments
+from torch.utils.data import sampler
+
+# synthcity absolute
+from synthcity.metrics.weighted_metrics import WeightedMetrics
+from synthcity.plugins.core.dataloader import DataLoader
+from synthcity.plugins.core.distribution import (
+    CategoricalDistribution,
+    Distribution,
+    FloatDistribution,
+    IntegerDistribution,
+)
+from synthcity.plugins.core.models.tabular_gan import TabularGAN
+from synthcity.plugins.core.plugin import Plugin
+from synthcity.plugins.core.schema import Schema
+from synthcity.utils.constants import DEVICE
+
+
+class CTGANPlugin(Plugin):
+    """
+    .. inheritance-diagram:: synthcity.plugins.generic.plugin_ctgan.CTGANPlugin
+        :parts: 1
+
+
+    Conditional Tabular GAN implementation.
+
+    Args:
+        generator_n_layers_hidden: int
+            Number of hidden layers in the generator
+        generator_n_units_hidden: int
+            Number of hidden units in each layer of the Generator
+        generator_nonlin: string, default 'leaky_relu'
+            Nonlinearity to use in the generator. Can be 'elu', 'relu', 'selu' or 'leaky_relu'.
+        n_iter: int
+            Maximum number of iterations in the Generator.
+        generator_dropout: float
+            Dropout value. If 0, the dropout is not used.
+        discriminator_n_layers_hidden: int
+            Number of hidden layers in the discriminator
+        discriminator_n_units_hidden: int
+            Number of hidden units in each layer of the discriminator
+        discriminator_nonlin: string, default 'leaky_relu'
+            Nonlinearity to use in the discriminator. Can be 'elu', 'relu', 'selu' or 'leaky_relu'.
+        discriminator_n_iter: int
+            Maximum number of iterations in the discriminator.
+        discriminator_dropout: float
+            Dropout value for the discriminator. If 0, the dropout is not used.
+        lr: float
+            learning rate for optimizer.
+        weight_decay: float
+            l2 (ridge) penalty for the weights.
+        batch_size: int
+            Batch size
+        random_state: int
+            random seed to use
+        clipping_value: int, default 0
+            Gradients clipping value. Zero disables the feature
+        encoder_max_clusters: int
+            The max number of clusters to create for continuous columns when encoding
+        adjust_inference_sampling: bool
+            Adjust the marginal probabilities in the synthetic data to closer match the training set. Active only with the ConditionalSampler
+        # early stopping
+        n_iter_print: int
+            Number of iterations after which to print updates and check the validation loss.
+        n_iter_min: int
+            Minimum number of iterations to go through before starting early stopping
+        patience: int
+            Max number of iterations without any improvement before early stopping is trigged.
+        patience_metric: Optional[WeightedMetrics]
+            If not None, the metric is used for evaluation the criterion for early stopping.
+        # Core Plugin arguments
+        workspace: Path.
+            Optional Path for caching intermediary results.
+        compress_dataset: bool. Default = False.
+            Drop redundant features before training the generator.
+        sampling_patience: int.
+            Max inference iterations to wait for the generated data to match the training schema.
+    Example:
+        >>> from sklearn.datasets import load_iris
+        >>> from synthcity.plugins import Plugins
+        >>>
+        >>> X, y = load_iris(as_frame = True, return_X_y = True)
+        >>> X["target"] = y
+        >>>
+        >>> plugin = Plugins().get("ctgan", n_iter = 100)
+        >>> plugin.fit(X)
+        >>>
+        >>> plugin.generate(50)
+
+    """
+
+    @validate_arguments(config=dict(arbitrary_types_allowed=True))
+    def __init__(
+        self,
+        n_iter: int = 2000,
+        generator_n_layers_hidden: int = 2,
+        generator_n_units_hidden: int = 500,
+        generator_nonlin: str = "relu",
+        generator_dropout: float = 0.1,
+        generator_opt_betas: tuple = (0.5, 0.999),
+        discriminator_n_layers_hidden: int = 2,
+        discriminator_n_units_hidden: int = 500,
+        discriminator_nonlin: str = "leaky_relu",
+        discriminator_n_iter: int = 1,
+        discriminator_dropout: float = 0.1,
+        discriminator_opt_betas: tuple = (0.5, 0.999),
+        lr: float = 1e-3,
+        weight_decay: float = 1e-3,
+        batch_size: int = 200,
+        random_state: int = 0,
+        clipping_value: int = 1,
+        lambda_gradient_penalty: float = 10,
+        encoder_max_clusters: int = 10,
+        encoder: Any = None,
+        dataloader_sampler: Optional[sampler.Sampler] = None,
+        device: Any = DEVICE,
+        patience: int = 5,
+        patience_metric: Optional[WeightedMetrics] = None,
+        n_iter_print: int = 50,
+        n_iter_min: int = 100,
+        adjust_inference_sampling: bool = False,
+        # core plugin arguments
+        workspace: Path = Path("workspace"),
+        compress_dataset: bool = False,
+        sampling_patience: int = 500,
+        **kwargs: Any
+    ) -> None:
+        super().__init__(
+            device=device,
+            random_state=random_state,
+            sampling_patience=sampling_patience,
+            workspace=workspace,
+            compress_dataset=compress_dataset,
+            **kwargs
+        )
+        if patience_metric is None:
+            patience_metric = WeightedMetrics(
+                metrics=[("detection", "detection_mlp")],
+                weights=[1],
+                workspace=workspace,
+            )
+        self.generator_n_layers_hidden = generator_n_layers_hidden
+        self.generator_n_units_hidden = generator_n_units_hidden
+        self.generator_nonlin = generator_nonlin
+        self.n_iter = n_iter
+        self.generator_dropout = generator_dropout
+        self.generator_opt_betas = generator_opt_betas
+        self.discriminator_n_layers_hidden = discriminator_n_layers_hidden
+        self.discriminator_n_units_hidden = discriminator_n_units_hidden
+        self.discriminator_nonlin = discriminator_nonlin
+        self.discriminator_n_iter = discriminator_n_iter
+        self.discriminator_dropout = discriminator_dropout
+        self.discriminator_opt_betas = discriminator_opt_betas
+
+        self.lr = lr
+        self.weight_decay = weight_decay
+        self.batch_size = batch_size
+        self.random_state = random_state
+        self.clipping_value = clipping_value
+        self.lambda_gradient_penalty = lambda_gradient_penalty
+
+        self.encoder_max_clusters = encoder_max_clusters
+        self.encoder = encoder
+        self.dataloader_sampler = dataloader_sampler
+
+        self.device = device
+        self.patience = patience
+        self.patience_metric = patience_metric
+        self.n_iter_min = n_iter_min
+        self.n_iter_print = n_iter_print
+        self.adjust_inference_sampling = adjust_inference_sampling
+
+    @staticmethod
+    def name() -> str:
+        return "ctgan"
+
+    @staticmethod
+    def type() -> str:
+        return "generic"
+
+    @staticmethod
+    def hyperparameter_space(**kwargs: Any) -> List[Distribution]:
+        return [
+            IntegerDistribution(name="generator_n_layers_hidden", low=1, high=4),
+            IntegerDistribution(
+                name="generator_n_units_hidden", low=50, high=150, step=50
+            ),
+            CategoricalDistribution(
+                name="generator_nonlin", choices=["relu", "leaky_relu", "tanh", "elu"]
+            ),
+            IntegerDistribution(name="n_iter", low=100, high=1000, step=100),
+            FloatDistribution(name="generator_dropout", low=0, high=0.2),
+            IntegerDistribution(name="discriminator_n_layers_hidden", low=1, high=4),
+            IntegerDistribution(
+                name="discriminator_n_units_hidden", low=50, high=150, step=50
+            ),
+            CategoricalDistribution(
+                name="discriminator_nonlin",
+                choices=["relu", "leaky_relu", "tanh", "elu"],
+            ),
+            IntegerDistribution(name="discriminator_n_iter", low=1, high=5),
+            FloatDistribution(name="discriminator_dropout", low=0, high=0.2),
+            CategoricalDistribution(name="lr", choices=[1e-3, 2e-4, 1e-4]),
+            CategoricalDistribution(name="weight_decay", choices=[1e-3, 1e-4]),
+            CategoricalDistribution(name="batch_size", choices=[100, 200, 500]),
+            IntegerDistribution(name="encoder_max_clusters", low=2, high=20),
+        ]
+
+    def _prepare_cond(
+        self, cond: Optional[Union[pd.DataFrame, pd.Series, np.ndarray, list]]
+    ) -> Optional[np.ndarray]:
+        if cond is None:
+            return None
+
+        cond = np.asarray(cond)
+        if len(cond.shape) == 1:
+            cond = cond.reshape(-1, 1)
+
+        return cond
+
+    def _fit(self, X: DataLoader, *args: Any, **kwargs: Any) -> "CTGANPlugin":
+        cond: Optional[Union[pd.DataFrame, pd.Series]] = None
+        if "cond" in kwargs:
+            cond = self._prepare_cond(kwargs["cond"])
+
+        self.model = TabularGAN(
+            X.dataframe(),
+            cond=cond,
+            n_units_latent=self.generator_n_units_hidden,
+            batch_size=self.batch_size,
+            generator_n_layers_hidden=self.generator_n_layers_hidden,
+            generator_n_units_hidden=self.generator_n_units_hidden,
+            generator_nonlin=self.generator_nonlin,
+            generator_nonlin_out_discrete="softmax",
+            generator_nonlin_out_continuous="none",
+            generator_lr=self.lr,
+            generator_residual=True,
+            generator_n_iter=self.n_iter,
+            generator_batch_norm=False,
+            generator_dropout=0,
+            generator_weight_decay=self.weight_decay,
+            generator_opt_betas=self.generator_opt_betas,
+            generator_extra_penalties=[],
+            discriminator_n_units_hidden=self.discriminator_n_units_hidden,
+            discriminator_n_layers_hidden=self.discriminator_n_layers_hidden,
+            discriminator_n_iter=self.discriminator_n_iter,
+            discriminator_nonlin=self.discriminator_nonlin,
+            discriminator_batch_norm=False,
+            discriminator_dropout=self.discriminator_dropout,
+            discriminator_lr=self.lr,
+            discriminator_weight_decay=self.weight_decay,
+            discriminator_opt_betas=self.discriminator_opt_betas,
+            encoder=self.encoder,
+            clipping_value=self.clipping_value,
+            lambda_gradient_penalty=self.lambda_gradient_penalty,
+            encoder_max_clusters=self.encoder_max_clusters,
+            dataloader_sampler=self.dataloader_sampler,
+            device=self.device,
+            patience=self.patience,
+            patience_metric=self.patience_metric,
+            n_iter_min=self.n_iter_min,
+            n_iter_print=self.n_iter_print,
+            adjust_inference_sampling=self.adjust_inference_sampling,
+        )
+        self.model.fit(X.dataframe(), cond=cond)
+
+        return self
+
+    def _generate(self, count: int, syn_schema: Schema, **kwargs: Any) -> DataLoader:
+        cond: Optional[Union[pd.DataFrame, pd.Series]] = None
+        if "cond" in kwargs:
+            cond = self._prepare_cond(kwargs["cond"])
+
+        return self._safe_generate(self.model.generate, count, syn_schema, cond=cond)
+
+
+plugin = CTGANPlugin
+
+
+src/synthcity/plugins/core/models/tabular_gan.py
+# stdlib
+from typing import Any, Callable, Optional, Union
+
+# third party
+import numpy as np
+import pandas as pd
+import torch
+from pydantic import validate_arguments
+from scipy.optimize import minimize
+from scipy.special import logsumexp
+from sklearn.preprocessing import OneHotEncoder
+
+# synthcity absolute
+from synthcity.metrics.weighted_metrics import WeightedMetrics
+from synthcity.utils.constants import DEVICE
+from synthcity.utils.samplers import BaseSampler, ConditionalDatasetSampler
+
+# synthcity relative
+from .gan import GAN
+from .tabular_encoder import TabularEncoder
+
+
+class TabularGAN(torch.nn.Module):
+    """
+    .. inheritance-diagram:: synthcity.plugins.core.models.tabular_gan.TabularGAN
+        :parts: 1
+
+
+    GAN for tabular data.
+
+    This class combines GAN and tabular encoder to form a generative model for tabular data.
+
+    Args:
+        X: pd.DataFrame
+            Reference dataset, used for training the tabular encoder
+        n_units_latent: int
+            Number of latent units
+        cond: Optional
+            Optional conditional
+        generator_n_layers_hidden: int
+            Number of hidden layers in the generator
+        generator_n_units_hidden: int
+            Number of hidden units in each layer of the Generator
+        generator_nonlin: string, default 'elu'
+            Nonlinearity to use in the generator. Can be 'elu', 'relu', 'selu' or 'leaky_relu'.
+        generator_n_iter: int
+            Maximum number of iterations in the Generator.
+        generator_batch_norm: bool
+            Enable/disable batch norm for the generator
+        generator_dropout: float
+            Dropout value. If 0, the dropout is not used.
+        generator_residual: bool
+            Use residuals for the generator
+        generator_nonlin_out: Optional[List[Tuple[str, int]]]
+            List of activations. Useful with the TabularEncoder
+        generator_lr: float = 2e-4
+            Generator learning rate, used by the Adam optimizer
+        generator_weight_decay: float = 1e-3
+            Generator weight decay, used by the Adam optimizer
+        generator_opt_betas: tuple = (0.9, 0.999)
+            Generator initial decay rates, used by the Adam Optimizer
+        generator_extra_penalties: list
+            Additional penalties for the generator. Values: "identifiability_penalty"
+        generator_extra_penalty_cbks: List[Callable]
+            Additional loss callabacks for the generator. Used by the TabularGAN for the conditional loss
+        discriminator_n_layers_hidden: int
+            Number of hidden layers in the discriminator
+        discriminator_n_units_hidden: int
+            Number of hidden units in each layer of the discriminator
+        discriminator_nonlin: string, default 'relu'
+            Nonlinearity to use in the discriminator. Can be 'elu', 'relu', 'selu' or 'leaky_relu'.
+        discriminator_n_iter: int
+            Maximum number of iterations in the discriminator.
+        discriminator_batch_norm: bool
+            Enable/disable batch norm for the discriminator
+        discriminator_dropout: float
+            Dropout value for the discriminator. If 0, the dropout is not used.
+        discriminator_lr: float
+            Discriminator learning rate, used by the Adam optimizer
+        discriminator_weight_decay: float
+            Discriminator weight decay, used by the Adam optimizer
+        discriminator_opt_betas: tuple
+            Initial weight decays for the Adam optimizer
+        batch_size: int
+            Batch size
+        n_iter_print: int
+            Number of iterations after which to print updates and check the validation loss.
+        random_state: int
+            random_state used
+        n_iter_min: int
+            Minimum number of iterations to go through before starting early stopping
+        clipping_value: int, default 0
+            Gradients clipping value. Zero disables the feature
+        lambda_gradient_penalty: float = 10
+            Weight for the gradient penalty
+        lambda_identifiability_penalty: float = 0.1
+            Weight for the identifiability penalty, if enabled
+        dataloader_sampler: Optional[sampler.Sampler]
+            Optional sampler for the dataloader, useful for conditional sampling
+        device: Any = DEVICE
+            CUDA/CPU
+        adjust_inference_sampling: bool
+            Adjust the marginal probabilities in the synthetic data to closer match the training set. Active only with the ConditionalSampler
+        # privacy settings
+        dp_enabled: bool
+            Train the discriminator with Differential Privacy guarantees
+        dp_delta: Optional[float]
+            Optional DP delta: the probability of information accidentally being leaked. Usually 1 / len(dataset)
+        dp_epsilon: float = 3
+            DP epsilon: privacy budget, which is a measure of the amount of privacy that is preserved by a given algorithm. Epsilon is a number that represents the maximum amount of information that an adversary can learn about an individual from the output of a differentially private algorithm. The smaller the value of epsilon, the more private the algorithm is. For example, an algorithm with an epsilon of 0.1 preserves more privacy than an algorithm with an epsilon of 1.0.
+        dp_max_grad_norm: float
+            max grad norm used for gradient clipping
+        dp_secure_mode: bool = False,
+             if True uses noise generation approach robust to floating point arithmetic attacks.
+
+        encoder_max_clusters: int
+            The max number of clusters to create for continuous columns when encoding
+        encoder:
+            Pre-trained tabular encoder. If None, a new encoder is trained.
+        encoder_whitelist:
+            Ignore columns from encoding
+    """
+
+    @validate_arguments(config=dict(arbitrary_types_allowed=True))
+    def __init__(
+        self,
+        X: pd.DataFrame,
+        n_units_latent: int,
+        cond: Optional[Union[pd.DataFrame, pd.Series, np.ndarray]] = None,
+        generator_n_layers_hidden: int = 2,
+        generator_n_units_hidden: int = 150,
+        generator_nonlin: str = "leaky_relu",
+        generator_nonlin_out_discrete: str = "softmax",
+        generator_nonlin_out_continuous: str = "none",
+        generator_n_iter: int = 1000,
+        generator_batch_norm: bool = False,
+        generator_dropout: float = 0.01,
+        generator_lr: float = 1e-3,
+        generator_weight_decay: float = 1e-3,
+        generator_opt_betas: tuple = (0.9, 0.999),
+        generator_residual: bool = True,
+        generator_extra_penalties: list = [],  # "identifiability_penalty"
+        discriminator_n_layers_hidden: int = 3,
+        discriminator_n_units_hidden: int = 300,
+        discriminator_nonlin: str = "leaky_relu",
+        discriminator_n_iter: int = 1,
+        discriminator_batch_norm: bool = False,
+        discriminator_dropout: float = 0.1,
+        discriminator_lr: float = 1e-3,
+        discriminator_weight_decay: float = 1e-3,
+        discriminator_opt_betas: tuple = (0.9, 0.999),
+        batch_size: int = 64,
+        random_state: int = 0,
+        clipping_value: int = 0,
+        lambda_gradient_penalty: float = 10,
+        lambda_identifiability_penalty: float = 0.1,
+        encoder_max_clusters: int = 20,
+        encoder: Any = None,
+        encoder_whitelist: list = [],
+        dataloader_sampler: Optional[BaseSampler] = None,
+        device: Any = DEVICE,
+        patience: int = 10,
+        patience_metric: Optional[WeightedMetrics] = None,
+        n_iter_print: int = 50,
+        n_iter_min: int = 100,
+        adjust_inference_sampling: bool = False,
+        # privacy settings
+        dp_enabled: bool = False,
+        dp_epsilon: float = 3,
+        dp_delta: Optional[float] = None,
+        dp_max_grad_norm: float = 2,
+        dp_secure_mode: bool = False,
+    ) -> None:
+        super(TabularGAN, self).__init__()
+        self.columns = X.columns
+        self.batch_size = batch_size
+        self.sample_prob: Optional[np.ndarray] = None
+        self._adjust_inference_sampling = adjust_inference_sampling
+        n_units_conditional = 0
+
+        if encoder is not None:
+            self.encoder = encoder
+        else:
+            self.encoder = TabularEncoder(
+                max_clusters=encoder_max_clusters, whitelist=encoder_whitelist
+            ).fit(X)
+
+        self.cond_encoder: Optional[OneHotEncoder] = None
+        if cond is not None:
+            cond = np.asarray(cond)
+            if len(cond.shape) == 1:
+                cond = cond.reshape(-1, 1)
+
+            self.cond_encoder = OneHotEncoder(handle_unknown="ignore").fit(cond)
+            cond = self.cond_encoder.transform(cond).toarray()
+
+            n_units_conditional = cond.shape[-1]
+
+        self.predefined_conditional = cond is not None
+
+        if (
+            dataloader_sampler is None and not self.predefined_conditional
+        ):  # don't mix conditionals
+            dataloader_sampler = ConditionalDatasetSampler(
+                self.encoder.transform(X),
+                self.encoder.layout(),
+            )
+            n_units_conditional = dataloader_sampler.conditional_dimension()
+
+        self.dataloader_sampler = dataloader_sampler
+
+        def _generator_cond_loss(
+            real_samples: torch.tensor,
+            fake_samples: torch.Tensor,
+            cond: Optional[torch.Tensor],
+        ) -> torch.Tensor:
+            if cond is None or self.predefined_conditional:
+                return 0
+
+            losses = []
+
+            idx = 0
+            cond_idx = 0
+
+            for item in self.encoder.layout():
+                length = item.output_dimensions
+
+                if item.feature_type != "discrete":
+                    idx += length
+                    continue
+
+                # create activate feature mask
+                mask = cond[:, cond_idx : cond_idx + length].sum(axis=1).bool()
+
+                if mask.sum() == 0:
+                    idx += length
+                    continue
+
+                if not (fake_samples[mask, idx : idx + length] >= 0).all():
+                    raise RuntimeError(
+                        f"Invalid samples after softmax = {fake_samples[mask, idx : idx + length]}"
+                    )
+                # fake_samples are after the Softmax activation
+                # we filter active features in the mask
+                item_loss = torch.nn.NLLLoss()(
+                    torch.log(fake_samples[mask, idx : idx + length] + 1e-8),
+                    torch.argmax(real_samples[mask, idx : idx + length], dim=1),
+                )
+                losses.append(item_loss)
+
+                cond_idx += length
+                idx += length
+
+            if idx != real_samples.shape[1]:
+                raise ValueError(
+                    f"Invalid offset idx = {idx}; real_samples.shape = {real_samples.shape}"
+                )
+
+            if len(losses) == 0:
+                return 0
+
+            loss = torch.stack(losses, dim=-1)
+
+            return loss.sum() / len(real_samples)
+
+        self.model = GAN(
+            self.encoder.n_features(),
+            n_units_latent=n_units_latent,
+            n_units_conditional=n_units_conditional,
+            batch_size=batch_size,
+            generator_n_layers_hidden=generator_n_layers_hidden,
+            generator_n_units_hidden=generator_n_units_hidden,
+            generator_nonlin=generator_nonlin,
+            generator_nonlin_out=self.encoder.activation_layout(
+                discrete_activation=generator_nonlin_out_discrete,
+                continuous_activation=generator_nonlin_out_continuous,
+            ),
+            generator_n_iter=generator_n_iter,
+            generator_batch_norm=generator_batch_norm,
+            generator_dropout=generator_dropout,
+            generator_lr=generator_lr,
+            generator_residual=generator_residual,
+            generator_weight_decay=generator_weight_decay,
+            generator_opt_betas=generator_opt_betas,
+            generator_extra_penalties=generator_extra_penalties,
+            generator_extra_penalty_cbks=[_generator_cond_loss],
+            discriminator_n_units_hidden=discriminator_n_units_hidden,
+            discriminator_n_layers_hidden=discriminator_n_layers_hidden,
+            discriminator_n_iter=discriminator_n_iter,
+            discriminator_nonlin=discriminator_nonlin,
+            discriminator_batch_norm=discriminator_batch_norm,
+            discriminator_dropout=discriminator_dropout,
+            discriminator_lr=discriminator_lr,
+            discriminator_weight_decay=discriminator_weight_decay,
+            discriminator_opt_betas=discriminator_opt_betas,
+            lambda_gradient_penalty=lambda_gradient_penalty,
+            lambda_identifiability_penalty=lambda_identifiability_penalty,
+            clipping_value=clipping_value,
+            n_iter_print=n_iter_print,
+            random_state=random_state,
+            # early stopping
+            n_iter_min=n_iter_min,
+            dataloader_sampler=dataloader_sampler,
+            device=device,
+            patience=patience,
+            patience_metric=patience_metric,
+            # privacy
+            dp_enabled=dp_enabled,
+            dp_epsilon=dp_epsilon,
+            dp_delta=dp_delta,
+            dp_max_grad_norm=dp_max_grad_norm,
+            dp_secure_mode=dp_secure_mode,
+        )
+
+    @validate_arguments(config=dict(arbitrary_types_allowed=True))
+    def encode(self, X: pd.DataFrame) -> pd.DataFrame:
+        return self.encoder.transform(X)
+
+    @validate_arguments(config=dict(arbitrary_types_allowed=True))
+    def decode(self, X: pd.DataFrame) -> pd.DataFrame:
+        return self.encoder.inverse_transform(X)
+
+    def get_encoder(self) -> TabularEncoder:
+        return self.encoder
+
+    @validate_arguments(config=dict(arbitrary_types_allowed=True))
+    def fit(
+        self,
+        X: pd.DataFrame,
+        cond: Optional[Union[pd.DataFrame, pd.Series, np.ndarray]] = None,
+        fake_labels_generator: Optional[Callable] = None,
+        true_labels_generator: Optional[Callable] = None,
+        encoded: bool = False,
+    ) -> Any:
+        # preprocessing
+        if encoded:
+            X_enc = X
+        else:
+            X_enc = self.encode(X)
+
+        if cond is not None and self.cond_encoder is not None:
+            cond = np.asarray(cond)
+            if len(cond.shape) == 1:
+                cond = cond.reshape(-1, 1)
+
+            cond = self.cond_encoder.transform(cond).toarray()
+
+        if not self.predefined_conditional and self.dataloader_sampler is not None:
+            cond = self.dataloader_sampler.get_dataset_conditionals()
+
+        if cond is not None:
+            if len(cond) != len(X_enc):
+                raise ValueError(
+                    f"Invalid conditional shape. {cond.shape} expected {len(X_enc)}"
+                )
+
+        # training
+        self.model.fit(
+            np.asarray(X_enc),
+            np.asarray(cond),
+            fake_labels_generator=fake_labels_generator,
+            true_labels_generator=true_labels_generator,
+        )
+
+        # post processing
+        self.adjust_inference_sampling(self._adjust_inference_sampling)
+
+        return self
+
+    def adjust_inference_sampling(self, enabled: bool) -> None:
+        if self.predefined_conditional or self.dataloader_sampler is None:
+            return
+
+        self._adjust_inference_sampling = enabled
+
+        if enabled:
+            real_prob = self.dataloader_sampler.conditional_probs()
+            sample_prob = self._extract_sample_prob()
+
+            self.sample_prob = self._find_sample_p(real_prob, sample_prob)
+        else:
+            self.sample_prob = None
+
+    @validate_arguments(config=dict(arbitrary_types_allowed=True))
+    def generate(
+        self,
+        count: int,
+        cond: Optional[Union[pd.DataFrame, pd.Series, np.ndarray]] = None,
+    ) -> pd.DataFrame:
+        samples = self(count, cond)
+        return self.decode(pd.DataFrame(samples))
+
+    def forward(
+        self, count: int, cond: Optional[Union[pd.DataFrame, np.ndarray]] = None
+    ) -> torch.Tensor:
+        if cond is not None and self.cond_encoder is not None:
+            cond = np.asarray(cond)
+            if len(cond.shape) == 1:
+                cond = cond.reshape(-1, 1)
+
+            cond = self.cond_encoder.transform(cond).toarray()
+
+        if not self.predefined_conditional and self.dataloader_sampler is not None:
+            cond = self.dataloader_sampler.sample_conditional(count, p=self.sample_prob)
+
+        return self.model.generate(count, cond=cond)
+
+    def _extract_sample_prob(self) -> Optional[np.ndarray]:
+        if self.predefined_conditional or self.dataloader_sampler is None:
+            return None
+
+        if self.dataloader_sampler.conditional_dimension() == 0:
+            return None
+
+        prob_list = list()
+        batch_size = 10000
+
+        for c in range(self.dataloader_sampler.conditional_dimension()):
+            cond = self.dataloader_sampler.sample_conditional_for_class(batch_size, c)
+            if cond is None:
+                continue
+
+            data_cond = self.model.generate(batch_size, cond=cond)
+
+            syn_dataloader_sampler = ConditionalDatasetSampler(
+                pd.DataFrame(data_cond),
+                self.encoder.layout(),
+            )
+
+            prob = syn_dataloader_sampler.conditional_probs()
+            prob_list.append(prob)
+
+        prob_mat = np.stack(prob_list, axis=-1)
+
+        return prob_mat
+
+    def _find_sample_p(
+        self, prob_real: Optional[np.ndarray], prob_mat: Optional[np.ndarray]
+    ) -> Optional[np.ndarray]:
+        if prob_real is None or prob_mat is None:
+            return None
+
+        def kl(
+            alpha: np.ndarray, prob_real: np.ndarray, prob_mat: np.ndarray
+        ) -> np.ndarray:
+            # alpha: _n_categories
+
+            # f1: same as prob_real
+            alpha_tensor = alpha[None, None, :]
+            f1 = logsumexp(alpha_tensor, axis=-1, b=prob_mat)
+            f2 = logsumexp(alpha)
+            ce = -np.sum(prob_real * f1, axis=1) + f2
+            return np.mean(ce)
+
+        try:
+            res = minimize(kl, np.ones(prob_mat.shape[-1]), (prob_real, prob_mat))
+        except Exception:
+            return np.ones(prob_mat.shape[-1]) / prob_mat.shape[-1]
+
+        return np.exp(res.x) / np.sum(np.exp(res.x))
+
+
+src/synthcity/plugins/core/models/tabular_encoder.py
+"""TabularEncoder module.
+"""
+
+# stdlib
+from typing import Any, List, Optional, Sequence, Tuple, Union
+
+# third party
+import numpy as np
+import pandas as pd
+from pydantic import BaseModel, field_validator, validate_arguments
+from sklearn.base import BaseEstimator, TransformerMixin
+from sklearn.preprocessing import MinMaxScaler
+
+# synthcity absolute
+import synthcity.logger as log
+from synthcity.utils.dataframe import discrete_columns as find_cat_cols
+from synthcity.utils.serialization import dataframe_hash
+
+# synthcity relative
+from .factory import get_feature_encoder
+
+
+class FeatureInfo(BaseModel):
+    name: str
+    feature_type: str
+    transform: Any = None
+    output_dimensions: int
+    transformed_features: List[str]
+    trans_feature_types: List[str]
+
+    @field_validator("feature_type")
+    @classmethod
+    def _feature_type_validator(cls: Any, v: str) -> str:
+        if v not in ["discrete", "continuous"]:
+            raise ValueError(f"Invalid feature type {v}")
+        return v
+
+    @field_validator("transform")
+    @classmethod
+    def _transform_validator(cls: Any, v: Any) -> Any:
+        if not (
+            hasattr(v, "fit")
+            and hasattr(v, "transform")
+            and hasattr(v, "inverse_transform")
+        ):
+            raise ValueError(f"Invalid transform {v}")
+        return v
+
+    @field_validator("output_dimensions")
+    @classmethod
+    def _output_dimensions_validator(cls: Any, v: int) -> int:
+        if v <= 0:
+            raise ValueError(f"Invalid output_dimensions {v}")
+        return v
+
+
+class TabularEncoder(TransformerMixin, BaseEstimator):
+    """Tabular encoder.
+
+    Model continuous columns with a BayesianGMM and normalized to a scalar [0, 1] and a vector.
+    Discrete columns are encoded using a scikit-learn OneHotEncoder.
+    """
+
+    categorical_encoder: Union[str, type] = "onehot"
+    continuous_encoder: Union[str, type] = "bayesian_gmm"
+    cat_encoder_params: dict = dict(handle_unknown="ignore", sparse_output=False)
+    cont_encoder_params: dict = dict(n_components=10)
+
+    @validate_arguments(config=dict(arbitrary_types_allowed=True))
+    def __init__(
+        self,
+        *,
+        whitelist: tuple = (),
+        max_clusters: int = 10,
+        categorical_limit: int = 10,
+        categorical_encoder: Optional[Union[str, type]] = None,
+        continuous_encoder: Optional[Union[str, type]] = None,
+        cat_encoder_params: Optional[dict] = None,
+        cont_encoder_params: Optional[dict] = None,
+    ) -> None:
+        """Create a data transformer.
+
+        Args:
+            whitelist (tuple):
+                Columns that will not be transformed.
+        """
+        self.whitelist = whitelist
+        self.categorical_limit = categorical_limit
+        self.max_clusters = max_clusters
+        if categorical_encoder is not None:
+            self.categorical_encoder = categorical_encoder
+        if continuous_encoder is not None:
+            self.continuous_encoder = continuous_encoder
+        if cat_encoder_params is not None:
+            self.cat_encoder_params = cat_encoder_params
+        else:
+            self.cat_encoder_params = self.cat_encoder_params.copy()
+        if cont_encoder_params is not None:
+            self.cont_encoder_params = cont_encoder_params
+        else:
+            self.cont_encoder_params = self.cont_encoder_params.copy()
+        if self.continuous_encoder == "bayesian_gmm":
+            self.cont_encoder_params["n_components"] = max_clusters
+
+    @validate_arguments(config=dict(arbitrary_types_allowed=True))
+    def _fit_feature(self, feature: pd.Series, feature_type: str) -> FeatureInfo:
+        """Fit the feature encoder on a column.
+
+        Args:
+            feature (pd.Series):
+                A column of a dataframe.
+            feature_type (str):
+                Type of the feature ('discrete' or 'continuous').
+
+        Returns:
+            FeatureInfo:
+                Information of the fitted feature encoder.
+        """
+        if feature_type == "discrete":
+            encoder = get_feature_encoder(
+                self.categorical_encoder, self.cat_encoder_params
+            )
+        else:
+            encoder = get_feature_encoder(
+                self.continuous_encoder, self.cont_encoder_params
+            )
+
+        encoder.fit(feature)
+
+        return FeatureInfo(
+            name=feature.name,
+            feature_type=feature_type,
+            transform=encoder,
+            output_dimensions=encoder.n_features_out,
+            transformed_features=encoder.feature_names_out,
+            trans_feature_types=encoder.feature_types_out,
+        )
+
+    @validate_arguments(config=dict(arbitrary_types_allowed=True))
+    def fit(
+        self, raw_data: pd.DataFrame, discrete_columns: Optional[List] = None
+    ) -> Any:
+        """Fit the ``TabularEncoder``.
+
+        This step also counts the #columns in matrix data and span information.
+        """
+        if discrete_columns is None:
+            discrete_columns = find_cat_cols(raw_data, self.categorical_limit)
+
+        self.output_dimensions = 0
+
+        self._column_raw_dtypes = raw_data.infer_objects().dtypes
+        self._column_transform_info_list: Sequence[FeatureInfo] = []
+
+        for name in raw_data.columns:
+            if name in self.whitelist:
+                continue
+            column_hash = dataframe_hash(raw_data[[name]])
+            log.info(f"Encoding {name} {column_hash}")
+            ftype = "discrete" if name in discrete_columns else "continuous"
+            column_transform_info = self._fit_feature(raw_data[name], ftype)
+
+            self.output_dimensions += column_transform_info.output_dimensions
+            self._column_transform_info_list.append(column_transform_info)
+
+        return self
+
+    def _transform_feature(
+        self, column_transform_info: FeatureInfo, feature: pd.Series
+    ) -> pd.DataFrame:
+        encoder = column_transform_info.transform
+        return pd.DataFrame(
+            encoder.transform(feature).values,
+            columns=column_transform_info.transformed_features,
+        )
+
+    @validate_arguments(config=dict(arbitrary_types_allowed=True))
+    def transform(self, raw_data: pd.DataFrame) -> pd.DataFrame:
+        """Take raw data and output a matrix data."""
+        if len(self._column_transform_info_list) == 0:
+            return pd.DataFrame(np.zeros((len(raw_data), 0)))
+
+        column_data_list = []
+        for name in self.whitelist:
+            if name not in raw_data.columns:
+                continue
+            feature = raw_data[name]
+            column_data_list.append(feature)
+
+        for column_transform_info in self._column_transform_info_list:
+            feature = raw_data[column_transform_info.name]
+            column_data_list.append(
+                self._transform_feature(column_transform_info, feature)
+            )
+
+        result = pd.concat(column_data_list, axis=1)
+        result.index = raw_data.index
+
+        return result
+
+    @validate_arguments(config=dict(arbitrary_types_allowed=True))
+    def _inverse_transform_feature(
+        self,
+        column_transform_info: FeatureInfo,
+        column_data: pd.DataFrame,
+    ) -> pd.Series:
+        encoder = column_transform_info.transform
+        return encoder.inverse_transform(column_data)
+
+    @validate_arguments(config=dict(arbitrary_types_allowed=True))
+    def inverse_transform(self, data: pd.DataFrame) -> pd.DataFrame:
+        """Take matrix data and output raw data.
+
+        Output uses the same type as input to the transform function.
+        """
+        if len(self._column_transform_info_list) == 0:
+            return pd.DataFrame(np.zeros((len(data), 0)))
+
+        st = 0
+        names = []
+        feature_types = []
+        recovered_feature_list = []
+
+        for name in self.whitelist:
+            if name not in data.columns:
+                continue
+            names.append(name)
+            feature_types.append(self._column_raw_dtypes)
+            recovered_feature_list.append(data[name])
+
+        for column_transform_info in self._column_transform_info_list:
+            dim = column_transform_info.output_dimensions
+            column_data = data.iloc[:, list(range(st, st + dim))]
+            recovered_feature = self._inverse_transform_feature(
+                column_transform_info, column_data
+            )
+            recovered_feature_list.append(recovered_feature)
+            names.append(column_transform_info.name)
+            st += dim
+
+        recovered_data = np.column_stack(recovered_feature_list)
+        recovered_data = pd.DataFrame(
+            recovered_data, columns=names, index=data.index
+        ).astype(self._column_raw_dtypes.filter(names))
+        return recovered_data
+
+    def layout(self) -> Sequence[FeatureInfo]:
+        """Get the layout of the encoded dataset.
+
+        Returns a list of tuple, describing each column as:
+            - continuous, and with length 1 + number of GMM clusters.
+            - discrete, and with length <N>, the length of the one-hot encoding.
+        """
+        return self._column_transform_info_list
+
+    def n_features(self) -> int:
+        return np.sum(
+            column_transform_info.output_dimensions
+            for column_transform_info in self._column_transform_info_list
+        )
+
+    def get_column_info(self, name: str) -> FeatureInfo:
+        for column_transform_info in self._column_transform_info_list:
+            if column_transform_info.name == name:
+                return column_transform_info
+
+        raise RuntimeError(f"Unknown column {name}")
+
+    @validate_arguments(config=dict(arbitrary_types_allowed=True))
+    def activation_layout(
+        self, discrete_activation: str, continuous_activation: str
+    ) -> Sequence[Tuple[str, int]]:
+        """Get the layout of the activations.
+
+        Returns a list of tuple, describing each column as:
+            - continuous, and with length 1 + number of GMM clusters.
+            - discrete, and with length <N>, the length of the one-hot encoding.
+        """
+        out = []
+        acts = dict(discrete=discrete_activation, continuous=continuous_activation)
+        for column_transform_info in self._column_transform_info_list:
+            ct = column_transform_info.trans_feature_types[0]
+            d = 0
+            for t in column_transform_info.trans_feature_types:
+                if t != ct:
+                    out.append((acts[ct], d))
+                    ct = t
+                    d = 0
+                d += 1
+            out.append((acts[ct], d))
+        return out
+
+
+class BinEncoder(TabularEncoder):
+    """Binary encoder (for SurvivalGAN).
+
+    Model continuous columns with a BayesianGMM and normalized to a scalar [0, 1] and a vector.
+    Discrete columns are encoded using a scikit-learn OneHotEncoder.
+    """
+
+    continuous_encoder = "bayesian_gmm"
+    cont_encoder_params = dict(n_components=2)
+    categorical_encoder = "passthrough"  # "onehot"
+    cat_encoder_params = dict()  # dict(handle_unknown="ignore", sparse=False)
+
+    def _transform_feature(
+        self, column_transform_info: FeatureInfo, feature: pd.Series
+    ) -> pd.DataFrame:
+        if column_transform_info.feature_type == "discrete":
+            return super()._transform_feature(column_transform_info, feature)
+        bgm = column_transform_info.transform
+        out = bgm.transform(feature)
+        return pd.DataFrame(
+            out.values[:, 1:].argmax(axis=1), columns=[bgm.feature_name_in]
+        )
+
+    def _inverse_transform_feature(
+        self, column_transform_info: FeatureInfo, column_data: pd.DataFrame
+    ) -> pd.Series:
+        if column_transform_info == "discrete":
+            return super()._inverse_transform_feature(
+                column_transform_info, column_data
+            )
+        bgm = column_transform_info.transform
+        components = column_data.values.reshape(-1)
+        features = bgm.means[components]
+        return pd.Series(features, name=bgm.feature_name_in)
+
+
+class TimeSeriesTabularEncoder(TransformerMixin, BaseEstimator):
+    """TimeSeries Tabular encoder.
+
+    Model continuous columns with a BayesianGMM and normalized to a scalar [0, 1] and a vector.
+    Discrete columns are encoded using a scikit-learn OneHotEncoder.
+    """
+
+    @validate_arguments(config=dict(arbitrary_types_allowed=True))
+    def __init__(
+        self,
+        max_clusters: int = 10,
+        categorical_limit: int = 10,
+        whitelist: list = [],
+    ) -> None:
+        self.max_clusters = max_clusters
+        self.categorical_limit = categorical_limit
+        self.whitelist = whitelist
+
+    def fit_temporal(
+        self,
+        temporal_data: List[pd.DataFrame],
+        observation_times: List,
+        discrete_columns: Optional[List] = None,
+    ) -> "TimeSeriesTabularEncoder":
+        # Temporal
+        self.temporal_encoder = TabularEncoder(
+            max_clusters=self.max_clusters,
+            categorical_limit=self.categorical_limit,
+            whitelist=self.whitelist,
+        )
+        temporal_features = temporal_data[0].columns
+
+        temporal_arr = np.asarray(temporal_data)
+        temporal_arr = np.swapaxes(temporal_arr, -1, 0).reshape(
+            len(temporal_features), -1
+        )
+        temporal_df = pd.DataFrame(temporal_arr.T, columns=temporal_features)
+
+        self.temporal_encoder.fit(temporal_df)
+
+        # Temporal horizons
+        self.observation_times_encoder = MinMaxScaler().fit(
+            np.asarray(observation_times).reshape(-1, 1)
+        )
+
+        return self
+
+    def fit(
+        self,
+        static_data: pd.DataFrame,
+        temporal_data: List[pd.DataFrame],
+        observation_times: List,
+        discrete_columns: Optional[List] = None,
+    ) -> "TimeSeriesTabularEncoder":
+        # Static
+        self.static_encoder = TabularEncoder(
+            max_clusters=self.max_clusters,
+            categorical_limit=self.categorical_limit,
+            whitelist=self.whitelist,
+        )
+        self.static_encoder.fit(static_data, discrete_columns=discrete_columns)
+
+        # Temporal
+        self.fit_temporal(
+            temporal_data, observation_times, discrete_columns=discrete_columns
+        )
+
+        return self
+
+    @validate_arguments(config=dict(arbitrary_types_allowed=True))
+    def transform_observation_times(
+        self,
+        observation_times: List,
+    ) -> List:
+        horizons_encoded = (
+            self.observation_times_encoder.transform(
+                np.asarray(observation_times).reshape(-1, 1)
+            )
+            .reshape(len(observation_times), -1)
+            .tolist()
+        )
+        return horizons_encoded
+
+    @validate_arguments(config=dict(arbitrary_types_allowed=True))
+    def transform_temporal(
+        self,
+        temporal_data: List[pd.DataFrame],
+        observation_times: List,
+    ) -> Tuple[pd.DataFrame, List]:
+        temporal_encoded = []
+        for item in temporal_data:
+            temporal_encoded.append(self.temporal_encoder.transform(item))
+
+        horizons_encoded = self.transform_observation_times(observation_times)
+
+        return temporal_encoded, horizons_encoded
+
+    @validate_arguments(config=dict(arbitrary_types_allowed=True))
+    def transform_static(
+        self,
+        static_data: pd.DataFrame,
+    ) -> pd.DataFrame:
+        static_encoded = self.static_encoder.transform(static_data)
+
+        return static_encoded
+
+    @validate_arguments(config=dict(arbitrary_types_allowed=True))
+    def transform(
+        self,
+        static_data: pd.DataFrame,
+        temporal_data: List[pd.DataFrame],
+        observation_times: List,
+    ) -> Tuple[pd.DataFrame, pd.DataFrame, List]:
+        static_encoded = self.transform_static(static_data)
+
+        temporal_encoded, horizons_encoded = self.transform_temporal(
+            temporal_data, observation_times
+        )
+
+        return static_encoded, temporal_encoded, horizons_encoded
+
+    @validate_arguments(config=dict(arbitrary_types_allowed=True))
+    def fit_transform_temporal(
+        self,
+        temporal_data: List[pd.DataFrame],
+        observation_times: List,
+    ) -> Tuple[pd.DataFrame, List]:
+        return self.fit_temporal(temporal_data, observation_times).transform_temporal(
+            temporal_data, observation_times
+        )
+
+    @validate_arguments(config=dict(arbitrary_types_allowed=True))
+    def fit_transform(
+        self,
+        static_data: pd.DataFrame,
+        temporal_data: List[pd.DataFrame],
+        observation_times: List,
+    ) -> Tuple[pd.DataFrame, pd.DataFrame, List]:
+        return self.fit(static_data, temporal_data, observation_times).transform(
+            static_data, temporal_data, observation_times
+        )
+
+    @validate_arguments(config=dict(arbitrary_types_allowed=True))
+    def inverse_transform_observation_times(
+        self,
+        observation_times: List,
+    ) -> pd.DataFrame:
+        horizons_decoded = (
+            self.observation_times_encoder.inverse_transform(
+                np.asarray(observation_times).reshape(-1, 1)
+            )
+            .reshape(len(observation_times), -1)
+            .tolist()
+        )
+        return horizons_decoded
+
+    @validate_arguments(config=dict(arbitrary_types_allowed=True))
+    def inverse_transform_temporal(
+        self,
+        temporal_encoded: List[pd.DataFrame],
+        observation_times: List,
+    ) -> pd.DataFrame:
+        temporal_decoded = []
+        for item in temporal_encoded:
+            temporal_decoded.append(self.temporal_encoder.inverse_transform(item))
+
+        horizons_decoded = self.inverse_transform_observation_times(observation_times)
+
+        return temporal_decoded, horizons_decoded
+
+    @validate_arguments(config=dict(arbitrary_types_allowed=True))
+    def inverse_transform_static(
+        self,
+        static_encoded: pd.DataFrame,
+    ) -> pd.DataFrame:
+        static_decoded = self.static_encoder.inverse_transform(static_encoded)
+        return static_decoded
+
+    @validate_arguments(config=dict(arbitrary_types_allowed=True))
+    def inverse_transform(
+        self,
+        static_encoded: pd.DataFrame,
+        temporal_encoded: List[pd.DataFrame],
+        observation_times: List,
+    ) -> pd.DataFrame:
+        static_decoded = self.inverse_transform_static(static_encoded)
+
+        temporal_decoded, horizons_decoded = self.inverse_transform_temporal(
+            temporal_encoded, observation_times
+        )
+        return static_decoded, temporal_decoded, horizons_decoded
+
+    def layout(self) -> Tuple[List, List]:
+        return self.static_encoder.layout(), self.temporal_encoder.layout()
+
+    def n_features(self) -> Tuple:
+        return self.static_encoder.n_features(), self.temporal_encoder.n_features()
+
+    @validate_arguments(config=dict(arbitrary_types_allowed=True))
+    def activation_layout_temporal(
+        self, discrete_activation: str, continuous_activation: str
+    ) -> Any:
+        return self.temporal_encoder.activation_layout(
+            discrete_activation, continuous_activation
+        )
+
+    @validate_arguments(config=dict(arbitrary_types_allowed=True))
+    def activation_layout(
+        self, discrete_activation: str, continuous_activation: str
+    ) -> Tuple:
+        return self.static_encoder.activation_layout(
+            discrete_activation, continuous_activation
+        ), self.temporal_encoder.activation_layout(
+            discrete_activation, continuous_activation
+        )
+
+
+class TimeSeriesBinEncoder(TransformerMixin, BaseEstimator):
+    """Time series Bin encoder.
+
+    Model continuous columns with a BayesianGMM and normalized to a scalar [0, 1] and a vector.
+    Discrete columns are encoded using a scikit-learn OneHotEncoder.
+    """
+
+    @validate_arguments(config=dict(arbitrary_types_allowed=True))
+    def __init__(
+        self,
+        max_clusters: int = 10,
+        categorical_limit: int = 10,
+        continuous_encoder: str = "gmm",
+    ) -> None:
+        """Create a data transformer.
+
+        Args:
+            max_clusters (int):
+                Maximum number of Gaussian distributions in Bayesian GMM.
+        """
+        self.encoder = BinEncoder(
+            max_clusters=max_clusters,
+            categorical_limit=categorical_limit,
+            continuous_encoder=continuous_encoder,
+        )
+
+    def _prepare(
+        self,
+        static_data: pd.DataFrame,
+        temporal_data: List[pd.DataFrame],
+        observation_times: List,
+    ) -> pd.DataFrame:
+        temporal_init = np.asarray(temporal_data)[:, 0, :].squeeze()
+        temporal_init_df = pd.DataFrame(temporal_init, columns=temporal_data[0].columns)
+
+        out = pd.concat(
+            [
+                static_data.reset_index(drop=True),
+                temporal_init_df.reset_index(drop=True),
+            ],
+            axis=1,
+        )
+        out.columns = np.asarray(range(len(out.columns)))
+        out.columns = out.columns.astype(str)
+
+        return out
+
+    def fit(
+        self,
+        static_data: pd.DataFrame,
+        temporal_data: List[pd.DataFrame],
+        observation_times: List,
+        discrete_columns: Optional[List] = None,
+    ) -> "TimeSeriesBinEncoder":
+        """Fit the TimeSeriesBinEncoder"""
+
+        data = self._prepare(static_data, temporal_data, observation_times)
+
+        self.encoder.fit(data, discrete_columns=discrete_columns)
+        return self
+
+    @validate_arguments(config=dict(arbitrary_types_allowed=True))
+    def transform(
+        self,
+        static_data: pd.DataFrame,
+        temporal_data: List[pd.DataFrame],
+        observation_times: List,
+    ) -> pd.DataFrame:
+        """Take raw data and output a matrix data."""
+        data = self._prepare(static_data, temporal_data, observation_times)
+        return self.encoder.transform(data)
+
+    @validate_arguments(config=dict(arbitrary_types_allowed=True))
+    def fit_transform(
+        self,
+        static: pd.DataFrame,
+        temporal: List[pd.DataFrame],
+        observation_times: List,
+    ) -> pd.DataFrame:
+        return self.fit(static, temporal, observation_times).transform(
+            static, temporal, observation_times
+        )
+
+
+src/synthcity/plugins/core/models/feature_encoder.py
+# stdlib
+from typing import Any, List, Optional, Type, Union
+
+# third party
+import numpy as np
+import pandas as pd
+from pydantic import validate_arguments
+from sklearn.base import BaseEstimator, TransformerMixin
+from sklearn.mixture import BayesianGaussianMixture
+from sklearn.preprocessing import (
+    LabelEncoder,
+    MinMaxScaler,
+    OneHotEncoder,
+    OrdinalEncoder,
+    QuantileTransformer,
+    RobustScaler,
+    StandardScaler,
+)
+
+
+def validate_shape(x: np.ndarray, n_dim: int) -> np.ndarray:
+    if n_dim == 1:
+        if x.ndim == 2:
+            x = np.squeeze(x, axis=1)
+        if x.ndim != 1:
+            raise ValueError("array must be 1D")
+        return x
+    elif n_dim == 2:
+        if x.ndim == 1:
+            x = x.reshape(-1, 1)
+        if x.ndim != 2:
+            raise ValueError("array must be 2D")
+        return x
+    else:
+        raise ValueError("n_dim must be 1 or 2")
+
+
+FeatureEncoder = Any  # tried to use ForwardRef but it didn't work under mypy
+
+
+class FeatureEncoder(TransformerMixin, BaseEstimator):  # type: ignore
+    """
+    Base feature encoder with sklearn-style API.
+    """
+
+    n_dim_in: int = 1
+    n_dim_out: int = 2
+    n_features_out: int
+    feature_name_in: str
+    feature_names_out: List[str]
+    feature_types_out: List[str]
+    categorical: bool = False  # used by get_feature_types_out
+
+    def __init__(
+        self, n_dim_in: Optional[int] = None, n_dim_out: Optional[int] = None
+    ) -> None:
+        super().__init__()
+        if n_dim_in is not None:
+            self.n_dim_in = n_dim_in
+        if n_dim_out is not None:
+            self.n_dim_out = n_dim_out
+
+    @validate_arguments(config=dict(arbitrary_types_allowed=True))
+    def fit(self, x: pd.Series, y: Any = None, **kwargs: Any) -> FeatureEncoder:
+        self.feature_name_in = x.name
+        self.feature_type_in = self._get_feature_type(x)
+        input = validate_shape(x.values, self.n_dim_in)
+        output = self._fit(input, **kwargs)._transform(input)
+        self._out_shape = (-1, *output.shape[1:])  # for inverse_transform
+        output = validate_shape(output, self.n_dim_out)
+        if self.n_dim_out == 1:
+            self.n_features_out = 1
+        else:
+            self.n_features_out = output.shape[1]
+        self.feature_names_out = self.get_feature_names_out()
+        self.feature_types_out = self.get_feature_types_out(output)
+        return self
+
+    def _fit(self, x: np.ndarray, **kwargs: Any) -> FeatureEncoder:
+        return self
+
+    @validate_arguments(config=dict(arbitrary_types_allowed=True))
+    def transform(self, x: pd.Series) -> Union[pd.DataFrame, pd.Series]:
+        data = validate_shape(x.values, self.n_dim_in)
+        out = self._transform(data)
+        out = validate_shape(out, self.n_dim_out)
+        if self.n_dim_out == 1:
+            return pd.Series(out, name=self.feature_name_in)
+        else:
+            return pd.DataFrame(out, columns=self.feature_names_out)
+
+    def _transform(self, x: np.ndarray) -> np.ndarray:
+        return x
+
+    def get_feature_names_out(self) -> List[str]:
+        n = self.n_features_out
+        if n == 1:
+            return [self.feature_name_in]
+        else:
+            return [f"{self.feature_name_in}_{i}" for i in range(n)]
+
+    def get_feature_types_out(self, output: np.ndarray) -> List[str]:
+        t = self._get_feature_type(output)
+        return [t] * self.n_features_out
+
+    def _get_feature_type(self, x: Any) -> str:
+        if self.categorical:
+            return "discrete"
+        elif np.issubdtype(x.dtype, np.floating):
+            return "continuous"
+        elif np.issubdtype(x.dtype, np.datetime64):
+            return "datetime"
+        else:
+            return "discrete"
+
+    @validate_arguments(config=dict(arbitrary_types_allowed=True))
+    def inverse_transform(self, df: Union[pd.DataFrame, pd.Series]) -> pd.Series:
+        y = df.values.reshape(self._out_shape)
+        x = self._inverse_transform(y)
+        x = validate_shape(x, 1)
+        return pd.Series(x, name=self.feature_name_in)
+
+    def _inverse_transform(self, data: np.ndarray) -> np.ndarray:
+        return data
+
+    @classmethod
+    def wraps(
+        cls: type, encoder_class: TransformerMixin, **params: Any
+    ) -> Type[FeatureEncoder]:
+        """Wraps sklearn transformer to FeatureEncoder."""
+
+        class WrappedEncoder(FeatureEncoder):
+            n_dim_in = 2  # most sklearn transformers accept 2D input
+
+            def __init__(self, *args: Any, **kwargs: Any) -> None:
+                self.encoder = encoder_class(*args, **kwargs)
+
+            def _fit(self, x: np.ndarray, **kwargs: Any) -> FeatureEncoder:
+                self.encoder.fit(x, **kwargs)
+                return self
+
+            def _transform(self, x: np.ndarray) -> np.ndarray:
+                return self.encoder.transform(x)
+
+            def _inverse_transform(self, data: np.ndarray) -> np.ndarray:
+                return self.encoder.inverse_transform(data)
+
+            def get_feature_names_out(self) -> List[str]:
+                return list(self.encoder.get_feature_names_out([self.feature_name_in]))
+
+        for attr in ("__name__", "__qualname__", "__doc__"):
+            setattr(WrappedEncoder, attr, getattr(encoder_class, attr))
+        for attr, val in params.items():
+            setattr(WrappedEncoder, attr, val)
+
+        return WrappedEncoder
+
+
+OneHotEncoder = FeatureEncoder.wraps(
+    OneHotEncoder, categorical=True, handle_unknown="ignore"
+)
+OrdinalEncoder = FeatureEncoder.wraps(OrdinalEncoder, categorical=True)
+LabelEncoder = FeatureEncoder.wraps(LabelEncoder, n_dim_out=1, categorical=True)
+StandardScaler = FeatureEncoder.wraps(StandardScaler)
+MinMaxScaler = FeatureEncoder.wraps(MinMaxScaler)
+RobustScaler = FeatureEncoder.wraps(RobustScaler)
+
+
+class DatetimeEncoder(FeatureEncoder):
+    """Datetime variables encoder"""
+
+    n_dim_out = 1
+
+    def _transform(self, x: np.ndarray) -> np.ndarray:
+        return pd.to_numeric(x).astype(float)
+
+    def _inverse_transform(self, data: np.ndarray) -> np.ndarray:
+        return pd.to_datetime(data)
+
+
+class BayesianGMMEncoder(FeatureEncoder):
+    """Bayesian Gaussian Mixture encoder"""
+
+    n_dim_in = 2
+
+    def __init__(
+        self,
+        n_components: int = 10,
+        random_state: int = 0,
+        weight_threshold: float = 0.005,
+        clip_output: bool = True,
+        std_multiplier: int = 4,
+    ) -> None:
+        self.n_components = n_components
+        self.weight_threshold = weight_threshold
+        self.clip_output = clip_output
+        self.std_multiplier = std_multiplier
+        self.model = BayesianGaussianMixture(
+            n_components=n_components,
+            random_state=random_state,
+            weight_concentration_prior=1e-3,
+        )
+
+    def _fit(self, x: np.ndarray, **kwargs: Any) -> "BayesianGaussianMixture":
+        self.min_value = x.min()
+        self.max_value = x.max()
+
+        self.model.fit(x)
+        self.weights = self.model.weights_
+        self.means = self.model.means_.reshape(-1)
+        self.stds = np.sqrt(self.model.covariances_).reshape(-1)
+
+        return self
+
+    def _transform(self, x: np.ndarray) -> np.ndarray:
+        means = self.means.reshape(1, -1)
+        stds = self.stds.reshape(1, -1)
+
+        # predict cluster value
+        normalized_values = (x - means) / (self.std_multiplier * stds)
+
+        # predict cluster
+        component_probs = self.model.predict_proba(x)
+
+        components = np.argmax(component_probs, axis=1)
+
+        normalized = normalized_values[np.arange(len(x)), components]
+        if self.clip_output:  # why use 0.99 instead of 1?
+            normalized = np.clip(normalized, -0.99, 0.99)
+        normalized = normalized.reshape(-1, 1)
+
+        components = np.eye(self.n_components, dtype=int)[components]
+        return np.hstack([normalized, components])
+
+    def get_feature_names_out(self) -> List[str]:
+        name = self.feature_name_in
+        return [f"{name}.value"] + [
+            f"{name}.component_{i}" for i in range(self.n_components)
+        ]
+
+    def get_feature_types_out(self, output: np.ndarray) -> List[str]:
+        return ["continuous"] + ["discrete"] * self.n_components
+
+    def _inverse_transform(self, data: np.ndarray) -> np.ndarray:
+        components = np.argmax(data[:, 1:], axis=1)
+
+        data = data[:, 0]
+        if self.clip_output:
+            data = np.clip(data, -1.0, 1.0)
+
+        # recreate data
+        mean_t = self.means[components]
+        std_t = self.stds[components]
+        reversed_data = data * self.std_multiplier * std_t + mean_t
+
+        # clip values
+        return np.clip(reversed_data, self.min_value, self.max_value)
+
+
+@FeatureEncoder.wraps
+class GaussianQuantileTransformer(QuantileTransformer):
+    """Quantile transformer with Gaussian distribution"""
+
+    def __init__(
+        self,
+        *,
+        ignore_implicit_zeros: bool = False,
+        subsample: int = 10000,
+        random_state: Any = None,
+        copy: bool = True,
+    ) -> None:
+        super().__init__(
+            n_quantiles=None,
+            output_distribution="normal",
+            ignore_implicit_zeros=ignore_implicit_zeros,
+            subsample=subsample,
+            random_state=random_state,
+            copy=copy,
+        )
+
+    def fit(self, x: np.ndarray, y: Any = None) -> "GaussianQuantileTransformer":
+        self.n_quantiles = max(min(len(x) // 30, 1000), 10)
+        return super().fit(x, y)
+
+
+src/synthcity/plugins/core/plugin.py
+# stdlib
+import importlib.util
+import platform
+import sys
+from abc import ABCMeta, abstractmethod
+from importlib.abc import Loader
+from pathlib import Path
+from typing import Any, Callable, Dict, Generator, List, Optional, Type, Union
+
+# third party
+import pandas as pd
+from pydantic import ConfigDict, validate_arguments
+
+# synthcity absolute
+import synthcity.logger as log
+from synthcity.metrics.plots import plot_marginal_comparison, plot_tsne
+from synthcity.plugins.core.constraints import Constraints
+from synthcity.plugins.core.dataloader import (
+    DataLoader,
+    GenericDataLoader,
+    TimeSeriesDataLoader,
+    TimeSeriesSurvivalDataLoader,
+    create_from_info,
+)
+from synthcity.plugins.core.distribution import (
+    CategoricalDistribution,
+    Distribution,
+    FloatDistribution,
+    IntegerDistribution,
+)
+from synthcity.plugins.core.schema import Schema
+from synthcity.plugins.core.serializable import Serializable
+from synthcity.utils.constants import DEVICE
+from synthcity.utils.reproducibility import enable_reproducible_results
+from synthcity.utils.serialization import load_from_file, save_to_file
+
+PLUGIN_NAME_NOT_SET: str = "plugin_name_not_set"
+PLUGIN_TYPE_NOT_SET: str = "plugin_type_not_set"
+
+
+class Plugin(Serializable, metaclass=ABCMeta):
+    """
+    .. inheritance-diagram:: synthcity.plugins.core.plugin.Plugin
+        :parts: 1
+
+    Base class for all plugins.
+
+    Each derived class must implement the following methods:
+        type() - a static method that returns the type of the plugin. e.g., debug, generative, bayesian, etc.
+        name() - a static method that returns the name of the plugin. e.g., ctgan, random_noise, etc.
+        hyperparameter_space() - a static method that returns the hyperparameters that can be tuned during AutoML.
+        _fit() - internal method, called by `fit` on each training set.
+        _generate() - internal method, called by `generate`.
+
+    If any method implementation is missing, the class constructor will fail.
+
+    Args:
+        strict: bool. Default = True
+            If True, is raises an exception if the generated data is not following the requested constraints. If False, it returns only the rows that match the constraints.
+        workspace: Path
+            Path for caching intermediary results
+        compress_dataset: bool. Default = False
+            Drop redundant features before training the generator.
+        device:
+            PyTorch device: cpu or cuda.
+        random_state: int
+            Random seed
+        sampling_patience: int.
+            Max inference iterations to wait for the generated data to match the training schema.
+        sampling_strategy: str
+            Internal parameter for schema. marginal or uniform.
+    """
+
+    model_config = ConfigDict(arbitrary_types_allowed=True, validate_assignment=True)
+
+    def __init__(
+        self,
+        sampling_patience: int = 500,
+        strict: bool = True,
+        device: Any = DEVICE,
+        random_state: int = 0,
+        workspace: Path = Path("workspace"),
+        compress_dataset: bool = False,
+        sampling_strategy: str = "marginal",  # uniform, marginal
+    ) -> None:
+        if self.name() == PLUGIN_NAME_NOT_SET:
+            raise ValueError(
+                f"Plugin {self.__class__.__name__} `name` was not set, use Plugins().add({self.__class__.__name__}, {self.__class__})"
+            )
+        if self.type() == PLUGIN_TYPE_NOT_SET:
+            raise ValueError(
+                f"Plugin {self.__class__.__name__} `type` was not set, use Plugins().add({self.__class__.__name__}, {self.__class__})"
+            )
+
+        super().__init__()
+
+        enable_reproducible_results(random_state)
+
+        self._schema: Optional[Schema] = None
+        self._training_schema: Optional[Schema] = None
+        self._data_encoders: Optional[Dict] = None
+
+        self.sampling_strategy = sampling_strategy
+        self.sampling_patience = sampling_patience
+        self.strict = strict
+        self.device = device
+        self.random_state = random_state
+        self.compress_dataset = compress_dataset
+
+        workspace.mkdir(parents=True, exist_ok=True)
+        self.workspace = workspace
+
+        self.fitted = False
+        self.expecting_conditional = False
+
+    @staticmethod
+    @abstractmethod
+    def hyperparameter_space(**kwargs: Any) -> List[Distribution]:
+        """Returns the hyperparameter space for the derived plugin."""
+        ...
+
+    @classmethod
+    def sample_hyperparameters(cls, *args: Any, **kwargs: Any) -> Dict[str, Any]:
+        """Sample value from the hyperparameter space for the current plugin."""
+        param_space = cls.hyperparameter_space(*args, **kwargs)
+
+        results = {}
+
+        for hp in param_space:
+            results[hp.name] = hp.sample()[0]
+
+        return results
+
+    @classmethod
+    def sample_hyperparameters_optuna(
+        cls, trial: Any, *args: Any, **kwargs: Any
+    ) -> Dict[str, Any]:
+        param_space = cls.hyperparameter_space(*args, **kwargs)
+
+        results = {}
+
+        for hp in param_space:
+            if isinstance(hp, IntegerDistribution):
+                results[hp.name] = trial.suggest_int(hp.name, hp.low, hp.high, hp.step)
+            elif isinstance(hp, FloatDistribution):
+                results[hp.name] = trial.suggest_float(hp.name, hp.low, hp.high)
+            elif isinstance(hp, CategoricalDistribution):
+                results[hp.name] = trial.suggest_categorical(hp.name, hp.choices)
+            else:
+                raise RuntimeError(f"unknown distribution type {hp}")
+
+        return results
+
+    @staticmethod
+    @abstractmethod
+    def name() -> str:
+        """The name of the plugin."""
+        return PLUGIN_NAME_NOT_SET
+
+    @staticmethod
+    @abstractmethod
+    def type() -> str:
+        """The type of the plugin."""
+        return PLUGIN_TYPE_NOT_SET
+
+    @classmethod
+    def fqdn(cls) -> str:
+        """The Fully-Qualified name of the plugin."""
+        return cls.type() + "." + cls.name()
+
+    @validate_arguments(config=dict(arbitrary_types_allowed=True))
+    def fit(self, X: Union[DataLoader, pd.DataFrame], *args: Any, **kwargs: Any) -> Any:
+        """Training method the synthetic data plugin.
+
+        Args:
+            X: DataLoader.
+                The reference dataset.
+            cond: Optional, Union[pd.DataFrame, pd.Series, np.ndarray]
+                Optional Training Conditional.
+                The training conditional can be used to control to output of some models, like GANs or VAEs. The content can be anything, as long as it maps to the training dataset X.
+                Usage example:
+                    >>> from sklearn.datasets import load_iris
+                    >>> from synthcity.plugins.core.dataloader import GenericDataLoader
+                    >>> from synthcity.plugins.core.constraints import Constraints
+                    >>>
+                    >>> # Load in `test_plugin` the generative model of choice
+                    >>> # ....
+                    >>>
+                    >>> X, y = load_iris(as_frame=True, return_X_y=True)
+                    >>> X["target"] = y
+                    >>>
+                    >>> X = GenericDataLoader(X)
+                    >>> test_plugin.fit(X, cond=y)
+                    >>>
+                    >>> count = 10
+                    >>> X_gen = test_plugin.generate(count, cond=np.ones(count))
+                    >>>
+                    >>> # The Conditional only optimizes the output generation
+                    >>> # for GANs and VAEs, but does NOT guarantee the samples
+                    >>> # are only from that condition.
+                    >>> # If you want to guarantee that output contains only
+                    >>> # "target" == 1 samples, use Constraints.
+                    >>>
+                    >>> constraints = Constraints(
+                    >>>     rules=[
+                    >>>         ("target", "==", 1),
+                    >>>     ]
+                    >>> )
+                    >>> X_gen = test_plugin.generate(count,
+                    >>>         cond=np.ones(count),
+                    >>>         constraints=constraints
+                    >>>        )
+                    >>> assert (X_gen["target"] == 1).all()
+
+        Returns:
+            self
+        """
+        if isinstance(X, (pd.DataFrame)):
+            X = GenericDataLoader(X)
+
+        if "cond" in kwargs and kwargs["cond"] is not None:
+            self.expecting_conditional = True
+
+        enable_reproducible_results(self.random_state)
+
+        self.data_info = X.info()
+
+        self._schema = Schema(
+            data=X,
+            sampling_strategy=self.sampling_strategy,
+            random_state=self.random_state,
+        )
+
+        if X.is_tabular():
+            X, self._data_encoders = X.encode()
+            if self.compress_dataset:
+                X_hash = X.hash()
+                bkp_file = (
+                    self.workspace
+                    / f"compressed_df_{X_hash}_{platform.python_version()}.bkp"
+                )
+                if not bkp_file.exists():
+                    X_compressed_context = X.compress()
+                    save_to_file(bkp_file, X_compressed_context)
+
+                X, self.compress_context = load_from_file(bkp_file)
+
+        self._training_schema = Schema(
+            data=X,
+            sampling_strategy=self.sampling_strategy,
+            random_state=self.random_state,
+        )
+
+        output = self._fit(X, *args, **kwargs)
+        self.fitted = True
+
+        return output
+
+    @abstractmethod
+    def _fit(self, X: DataLoader, *args: Any, **kwargs: Any) -> "Plugin":
+        """Internal training method the synthetic data plugin.
+
+        Args:
+            X: DataLoader.
+                The reference dataset.
+            cond: Optional, Union[pd.DataFrame, pd.Series, np.ndarray]
+                Training Conditional
+        Returns:
+            self
+        """
+        ...
+
+    @validate_arguments
+    def generate(
+        self,
+        count: Optional[int] = None,
+        constraints: Optional[Constraints] = None,
+        random_state: Optional[int] = None,
+        **kwargs: Any,
+    ) -> DataLoader:
+        """Synthetic data generation method.
+
+        Args:
+            count: optional int.
+                The number of samples to generate. If None, it generated len(reference_dataset) samples.
+            cond: Optional, Union[pd.DataFrame, pd.Series, np.ndarray].
+                Optional Generation Conditional. The conditional can be used only if the model was trained using a conditional too.
+                If provided, it must have `count` length.
+                Not all models support conditionals. The conditionals can be used in VAEs or GANs to speed-up the generation under some constraints. For model agnostic solutions, check out the `constraints` parameter.
+            constraints: optional Constraints.
+                Optional constraints to apply on the generated data. If none, the reference schema constraints are applied. The constraints are model agnostic, and will filter the output of the generative model.
+                The constraints are a list of rules. Each rule is a tuple of the form (<feature>, <operation>, <value>).
+
+                Valid Operations:
+                    - "<", "lt" : less than <value>
+                    - "<=", "le": less or equal with <value>
+                    - ">", "gt" : greater than <value>
+                    - ">=", "ge": greater or equal with <value>
+                    - "==", "eq": equal with <value>
+                    - "in": valid for categorical features, and <value> must be array. for example, ("target", "in", [0, 1])
+                    - "dtype": <value> can be a data type. For example, ("target", "dtype", "int")
+
+                Usage example:
+                    >>> from synthcity.plugins.core.constraints import Constraints
+                    >>> constraints = Constraints(
+                    >>>   rules=[
+                    >>>             ("InterestingFeature", "==", 0),
+                    >>>         ]
+                    >>>     )
+                    >>>
+                    >>> syn_data = syn_model.generate(
+                            count=count,
+                            constraints=constraints
+                        ).dataframe()
+                    >>>
+                    >>> assert (syn_data["InterestingFeature"] == 0).all()
+
+            random_state: optional int.
+                Optional random seed to use.
+
+        Returns:
+            <count> synthetic samples
+        """
+        if not self.fitted:
+            raise RuntimeError("Fit the generator first")
+
+        if self._schema is None:
+            raise RuntimeError("Fit the model first")
+
+        if random_state is not None:
+            enable_reproducible_results(random_state)
+
+        has_gen_cond = "cond" in kwargs and kwargs["cond"] is not None
+        if has_gen_cond and not self.expecting_conditional:
+            raise RuntimeError(
+                "Conditional mismatch. Got inference conditional, without any training conditional"
+            )
+
+        if count is None:
+            count = self.data_info["len"]
+
+        # We use the training schema for the generation
+        gen_constraints = self.training_schema().as_constraints()
+        if constraints is not None:
+            gen_constraints = gen_constraints.extend(constraints)
+
+        syn_schema = Schema.from_constraints(gen_constraints)
+
+        X_syn = self._generate(count=count, syn_schema=syn_schema, **kwargs)
+
+        if X_syn.is_tabular():
+            if self.compress_dataset:
+                X_syn = X_syn.decompress(self.compress_context)
+            if self._data_encoders is not None:
+                X_syn = X_syn.decode(self._data_encoders)
+
+        # The dataset is decompressed here, we can use the public schema
+        gen_constraints = self.schema().as_constraints()
+        if constraints is not None:
+            gen_constraints = gen_constraints.extend(constraints)
+
+        if not X_syn.satisfies(gen_constraints) and self.strict:
+            raise RuntimeError(
+                f"Plugin {self.name()} failed to meet the synthetic constraints."
+            )
+
+        if self.strict:
+            X_syn = X_syn.match(gen_constraints)
+
+        return X_syn
+
+    @abstractmethod
+    def _generate(
+        self,
+        count: int,
+        syn_schema: Schema,
+        **kwargs: Any,
+    ) -> DataLoader:
+        """Internal synthetic data generation method.
+
+        Args:
+            count: optional int.
+                The number of samples to generate. If None, it generated len(reference_dataset) samples.
+            syn_schema:
+                The schema/constraints that need to be satisfied by the synthetic data.
+            cond: Optional, Union[pd.DataFrame, pd.Series, np.ndarray]
+                Generation Conditional
+
+        Returns:
+            <count> synthetic samples
+        """
+        ...
+
+    @validate_arguments(config=dict(arbitrary_types_allowed=True))
+    def _safe_generate(
+        self, gen_cbk: Callable, count: int, syn_schema: Schema, **kwargs: Any
+    ) -> DataLoader:
+        constraints = syn_schema.as_constraints()
+
+        data_synth = pd.DataFrame([], columns=self.training_schema().features())
+        for it in range(self.sampling_patience):
+            # sample
+            iter_samples = gen_cbk(count, **kwargs)
+            iter_samples_df = pd.DataFrame(
+                iter_samples, columns=self.training_schema().features()
+            )
+
+            # Handle protected columns
+            for col in syn_schema.protected_cols:
+                if col not in iter_samples_df.columns:
+                    # Sample the protected column using its distribution
+                    iter_samples_df[col] = syn_schema.domain[col].sample(count)
+
+            # validate schema
+            iter_samples_df = self.training_schema().adapt_dtypes(iter_samples_df)
+
+            if self.strict:
+                iter_samples_df = constraints.match(iter_samples_df)
+                iter_samples_df = iter_samples_df.drop_duplicates()
+
+            data_synth = pd.concat([data_synth, iter_samples_df], ignore_index=True)
+
+            if len(data_synth) >= count:
+                break
+
+        data_synth = self.training_schema().adapt_dtypes(data_synth).head(count)
+
+        return create_from_info(data_synth, self.data_info)
+
+    @validate_arguments(config=dict(arbitrary_types_allowed=True))
+    def _safe_generate_time_series(
+        self, gen_cbk: Callable, count: int, syn_schema: Schema, **kwargs: Any
+    ) -> DataLoader:
+        if self.data_info["data_type"] not in ["time_series", "time_series_survival"]:
+            raise ValueError(
+                f"Invalid data type for time series = {self.data_info['data_type']}"
+            )
+        constraints = syn_schema.as_constraints()
+
+        data_synth = pd.DataFrame([], columns=self.training_schema().features())
+        data_info = self.data_info
+        offset = 0
+        seq_offset = 0
+        for it in range(self.sampling_patience):
+            # sample
+            if self.data_info["data_type"] == "time_series":
+                static, temporal, observation_times, outcome = gen_cbk(
+                    count - offset, **kwargs
+                )
+                loader = TimeSeriesDataLoader(
+                    temporal_data=temporal,
+                    observation_times=observation_times,
+                    static_data=static,
+                    outcome=outcome,
+                    seq_offset=seq_offset,
+                )
+            elif self.data_info["data_type"] == "time_series_survival":
+                static, temporal, observation_times, T, E = gen_cbk(
+                    count - offset, **kwargs
+                )
+                loader = TimeSeriesSurvivalDataLoader(
+                    temporal_data=temporal,
+                    observation_times=observation_times,
+                    static_data=static,
+                    T=T,
+                    E=E,
+                    seq_offset=seq_offset,
+                )
+
+            # validate schema
+            iter_samples_df = loader.dataframe()
+            id_col = loader.info()["seq_id_feature"]
+
+            iter_samples_df = self.training_schema().adapt_dtypes(iter_samples_df)
+
+            if self.strict:
+                iter_samples_df = constraints.match(iter_samples_df)
+
+            if len(iter_samples_df) == 0:
+                continue
+
+            data_synth = pd.concat([data_synth, iter_samples_df], ignore_index=True)
+            offset = len(data_synth[id_col].unique())
+            seq_offset = max(data_synth[id_col].unique()) + 1
+
+            if offset >= count:
+                break
+
+        data_synth = self.training_schema().adapt_dtypes(data_synth)
+        return create_from_info(data_synth, data_info)
+
+    @validate_arguments(config=dict(arbitrary_types_allowed=True))
+    def _safe_generate_images(
+        self, gen_cbk: Callable, count: int, syn_schema: Schema, **kwargs: Any
+    ) -> DataLoader:
+        data_synth = gen_cbk(count, **kwargs)
+
+        return create_from_info(data_synth, self.data_info)
+
+    @validate_arguments(config=dict(arbitrary_types_allowed=True))
+    def schema_includes(self, other: Union[DataLoader, pd.DataFrame]) -> bool:
+        """Helper method to test if the reference schema includes a Dataset
+
+        Args:
+            other: DataLoader.
+                The dataset to test
+
+        Returns:
+            bool, if the schema includes the dataset or not.
+
+        """
+        other_schema = Schema(data=other)
+        return self.schema().includes(other_schema)
+
+    def schema(self) -> Schema:
+        """The reference schema"""
+        if self._schema is None:
+            raise RuntimeError("Fit the model first")
+
+        return self._schema
+
+    def training_schema(self) -> Schema:
+        """The internal schema"""
+        if self._training_schema is None:
+            raise RuntimeError("Fit the model first")
+
+        return self._training_schema
+
+    @validate_arguments(config=dict(arbitrary_types_allowed=True))
+    def plot(
+        self,
+        plt: Any,
+        X: DataLoader,
+        count: Optional[int] = None,
+        plots: list = ["marginal", "associations", "tsne"],
+        **kwargs: Any,
+    ) -> Any:
+        """Plot the real-synthetic distributions.
+
+        Args:
+            plt: output
+            X: DataLoader.
+                The reference dataset.
+
+        Returns:
+            self
+        """
+        X_syn = self.generate(count=count, **kwargs)
+
+        if "marginal" in plots:
+            plot_marginal_comparison(plt, X, X_syn)
+        if "tsne" in plots:
+            plot_tsne(plt, X, X_syn)
+
+
+PLUGIN_CATEGORY_REGISTRY: Dict[str, List[str]] = dict()
+PLUGIN_REGISTRY: Dict[str, Type[Plugin]] = dict()
+
+
+class PluginLoader:
+    """Plugin loading utility class.
+    Used to load the plugins from the current folder.
+    """
+
+    @validate_arguments
+    def __init__(self, plugins: list, expected_type: Type, categories: list) -> None:
+        global PLUGIN_CATEGORY_REGISTRY
+        PLUGIN_CATEGORY_REGISTRY = {cat: [] for cat in categories}
+        self._refresh()
+        self._available_plugins = {}
+        for plugin in plugins:
+            stem = Path(plugin).stem.split("plugin_")[-1]
+            cls = self._load_single_plugin_impl(plugin)
+            if cls is None:
+                continue
+            self._available_plugins[stem] = plugin
+        self._expected_type = expected_type
+
+    def _refresh(self) -> None:
+        """Refresh the list of available plugins"""
+        self._plugins: Dict[str, Type[Plugin]] = PLUGIN_REGISTRY
+        self._categories: Dict[str, List[str]] = PLUGIN_CATEGORY_REGISTRY
+
+    @validate_arguments
+    def _load_single_plugin_impl(self, plugin_name: str) -> Optional[Type]:
+        """Helper for loading a single plugin implementation"""
+        plugin = Path(plugin_name)
+        name = plugin.stem
+        ptype = plugin.parent.name
+
+        module_name = f"synthcity.plugins.{ptype}.{name}"
+
+        failed = False
+        for retry in range(2):
+            try:
+                if module_name in sys.modules:
+                    mod = sys.modules[module_name]
+                else:
+                    spec = importlib.util.spec_from_file_location(module_name, plugin)
+                    if spec is None:
+                        raise RuntimeError("invalid spec")
+                    if not isinstance(spec.loader, Loader):
+                        raise RuntimeError("invalid plugin type")
+
+                    mod = importlib.util.module_from_spec(spec)
+                    if module_name not in sys.modules:
+                        sys.modules[module_name] = mod
+
+                    spec.loader.exec_module(mod)
+                cls = mod.plugin
+                if cls is None:
+                    log.critical(f"module disabled: {plugin_name}")
+                    return None
+
+                failed = False
+                break
+            except BaseException as e:
+                log.critical(f"load failed: {e}")
+                failed = True
+
+        if failed:
+            log.critical(f"module {name} load failed")
+            return None
+
+        return cls
+
+    @validate_arguments
+    def _load_single_plugin(self, plugin_name: str) -> bool:
+        """Helper for loading a single plugin"""
+        cls = self._load_single_plugin_impl(plugin_name)
+        if cls is None:
+            return False
+
+        self.add(cls.name(), cls)
+        return True
+
+    def list(self) -> List[str]:
+        """Get all the available plugins."""
+        self._refresh()
+        all_plugins = list(self._plugins.keys()) + list(self._available_plugins.keys())
+        plugins = []
+        for plugin in all_plugins:
+            if self.get_type(plugin).type() in self._categories:
+                plugins.append(plugin)
+        return list(set(plugins))
+
+    def types(self) -> List[Type]:
+        """Get the loaded plugins types"""
+        self._refresh()
+        return list(self._plugins.values())
+
+    def _add_category(self, category: str, name: str) -> "PluginLoader":
+        """Add a new plugin category"""
+        log.debug(f"Registering plugin category {category}")
+        if (
+            category in PLUGIN_CATEGORY_REGISTRY
+            and name in PLUGIN_CATEGORY_REGISTRY[category]
+        ):
+            raise TypeError(
+                f"Plugin {name} is already registered as category: {category}"
+            )
+        if PLUGIN_CATEGORY_REGISTRY.get(category, None) is not None:
+            PLUGIN_CATEGORY_REGISTRY[category].append(name)
+        else:
+            PLUGIN_CATEGORY_REGISTRY[category] = [name]
+        return self
+
+    def add(self, name: str, cls: Type) -> "PluginLoader":
+        """Add a new plugin"""
+        global PLUGIN_REGISTRY
+        global PLUGIN_CATEGORY_REGISTRY
+        self._refresh()
+        if name in self._plugins:
+            log.info(f"Plugin {name} already exists. Overwriting")
+
+        if not issubclass(cls, self._expected_type):
+            raise ValueError(
+                f"Plugin {name} must derive the {self._expected_type} interface."
+            )
+
+        if (
+            cls.type() not in PLUGIN_CATEGORY_REGISTRY.keys()
+            or name not in PLUGIN_CATEGORY_REGISTRY.get(cls.type(), [])
+        ):
+            self._add_category(str(cls.type()), name)
+        PLUGIN_REGISTRY[name] = cls
+        return self
+
+    @validate_arguments
+    def load(self, buff: bytes) -> Any:
+        """Load serialized plugin"""
+        return Plugin.load(buff)
+
+    @validate_arguments
+    def get(self, name: str, *args: Any, **kwargs: Any) -> Any:
+        """Create a new object from a plugin.
+        Args:
+            name: str. The name of the plugin
+            &args, **kwargs. Plugin specific arguments
+
+        Returns:
+            The new object
+        """
+        self._refresh()
+        if name not in self._plugins and name not in self._available_plugins:
+            raise ValueError(f"Plugin {name} doesn't exist.")
+
+        if name not in self._plugins:
+            self._load_single_plugin(self._available_plugins[name])
+
+        if name not in self._plugins:
+            raise ValueError(f"Plugin {name} cannot be loaded.")
+
+        return self._plugins[name](*args, **kwargs)
+
+    @validate_arguments
+    def get_type(self, name: str) -> Type:
+        """Get the class type of a plugin.
+        Args:
+            name: str. The name of the plugin
+
+        Returns:
+            The class of the plugin
+        """
+        self._refresh()
+        if name not in self._plugins and name not in self._available_plugins:
+            raise ValueError(f"Plugin {name} doesn't exist.")
+
+        if name not in self._plugins:
+            self._load_single_plugin(self._available_plugins[name])
+
+        if name not in self._plugins:
+            raise ValueError(f"Plugin {name} doesn't exist.")
+
+        return self._plugins[name]
+
+    def __iter__(self) -> Generator:
+        """Iterate the loaded plugins."""
+        self._refresh()
+        for x in self._plugins:
+            yield x
+
+    def __len__(self) -> int:
+        """The number of available plugins."""
+        return len(self.list())
+
+    @validate_arguments
+    def __getitem__(self, key: str) -> Any:
+        return self.get(key)
+
+    def reload(self) -> "PluginLoader":
+        global PLUGIN_CATEGORY_REGISTRY
+        global PLUGIN_REGISTRY
+        PLUGIN_CATEGORY_REGISTRY = dict()
+        PLUGIN_REGISTRY = dict()
+        return self
+
+
+src/synthcity/plugins/core/schema.py
+# stdlib
+from typing import Any, Dict, Generator, List, Optional, Union
+
+# third party
+import pandas as pd
+from pydantic import (
+    BaseModel,
+    ConfigDict,
+    Field,
+    field_validator,
+    model_validator,
+    validate_arguments,
+)
+
+# synthcity absolute
+import synthcity.logger as log
+from synthcity.plugins.core.constraints import Constraints
+from synthcity.plugins.core.dataloader import DataLoader, GenericDataLoader
+from synthcity.plugins.core.distribution import (
+    CategoricalDistribution,
+    DatetimeDistribution,
+    Distribution,
+    FloatDistribution,
+    IntegerDistribution,
+    PassThroughDistribution,
+)
+
+
+class Schema(BaseModel):
+    """
+    Utility class for defining the schema of a Dataset.
+
+    Constructor Args:
+        domain: Dict
+            A dictionary of feature_name: Distribution.
+        sampling_strategy: str
+            Taking value of "marginal" (default) or "uniform" (for debugging).
+        protected_cols: List[str]
+            List of columns that are exempt from distributional constraints (e.g. ID column)
+        random_state: int
+            Random seed (default 0)
+        data: Any
+            (Optional) the data set
+    """
+
+    sampling_strategy: str = Field(default="marginal")
+    protected_cols: List[str] = []
+    random_state: int = Field(default=0)
+    domain: Dict = Field(default_factory=dict)
+
+    data: Optional[Union[DataLoader, pd.DataFrame]] = Field(default=None, exclude=True)
+
+    model_config = ConfigDict(arbitrary_types_allowed=True)
+
+    @field_validator("data", mode="before")
+    def validate_data(cls, v: Any) -> Optional[DataLoader]:
+        if v is not None:
+            if isinstance(v, pd.DataFrame):
+                return GenericDataLoader(v)
+            elif isinstance(v, DataLoader):
+                return v
+            else:
+                raise ValueError(
+                    f"Invalid data type for 'data': {type(v)}. Expected DataLoader or pandas DataFrame."
+                )
+        return v
+
+    @model_validator(mode="after")
+    def initialize_domain(cls, model: "Schema") -> "Schema":
+        if model.data is not None:
+            X = model.data.dataframe()
+            model.domain = model._infer_domain(
+                X,
+                sampling_strategy=model.sampling_strategy,
+                random_state=model.random_state,
+            )
+            # Remove 'data' attribute from the model
+            del model.__dict__["data"]
+            if "data" in model.__fields_set__:
+                model.__fields_set__.remove("data")
+        return model
+
+    @validate_arguments
+    def get(self, feature: str) -> Distribution:
+        """Get the Distribution of a feature.
+
+        Args:
+            feature: str. the feature name
+
+        Returns:
+            The feature distribution
+        """
+        if feature not in self.domain:
+            raise ValueError(f"invalid feature {feature}")
+
+        return self.domain[feature]
+
+    @validate_arguments
+    def __getitem__(self, key: str) -> Distribution:
+        """Get the Distribution of a feature.
+
+        Args:
+            feature: str. the feature name
+
+        Returns:
+            The feature distribution
+        """
+        return self.get(key)
+
+    def __iter__(self) -> Generator:
+        """Iterate the features distribution"""
+        for x in self.domain:
+            yield x
+
+    def __len__(self) -> int:
+        """Get the number of features"""
+        return len(self.domain)
+
+    def includes(self, other: "Schema") -> bool:
+        """Test if another schema is included in the local one."""
+        for feature in other:
+            if feature in self.protected_cols:
+                continue
+            if feature not in self.domain:
+                return False
+
+            if not self[feature].includes(other[feature]):
+                return False
+
+        return True
+
+    def features(self) -> List:
+        return list(self.domain.keys())
+
+    def sample(self, count: int) -> pd.DataFrame:
+        data = {}
+        for col, dist in self.domain.items():
+            samples = dist.sample(count)
+            data[col] = samples
+        return pd.DataFrame(data)
+
+    def adapt_dtypes(self, X: pd.DataFrame) -> pd.DataFrame:
+        """Applying the data type to a new data frame
+
+        Args:
+            X: pd.DataFrame
+                A new data frame to be adapted.
+
+        Returns:
+            A data frame whose data types are coerced to be the same with the Schema.
+            If the data frame contains new features, these will be retained as is.
+        """
+        for feature in self.domain:
+            if feature not in X.columns:
+                continue
+            X[feature] = X[feature].astype(
+                self.domain[feature].dtype(), errors="ignore"
+            )
+
+        return X
+
+    def as_constraints(self) -> Constraints:
+        rules = []
+        for feature, dist in self.domain.items():
+            rules.extend(dist.as_constraint().rules)
+        return Constraints(rules=rules)
+
+    @classmethod
+    def from_constraints(cls, constraints: Constraints) -> "Schema":
+        domain: Dict = {}
+        feature_params: Dict = {}
+
+        # Collect constraint information
+        for feature, op, value in constraints.rules:
+            if feature not in feature_params:
+                feature_params[feature] = {
+                    "name": feature,
+                    "random_state": None,
+                    "low": None,
+                    "high": None,
+                    "dtype": "float",  # Default to 'float' if not specified
+                    "choices": [],
+                }
+
+            params = feature_params[feature]
+
+            if op in ["ge", ">="]:
+                if params["low"] is None or value > params["low"]:
+                    params["low"] = value
+            elif op in ["le", "<="]:
+                if params["high"] is None or value < params["high"]:
+                    params["high"] = value
+            elif op in ["eq", "=="]:
+                # For '==', set both 'low' and 'high' to value
+                params["low"] = value
+                params["high"] = value
+            elif op in ["in", "isin"]:
+                if isinstance(value, list):
+                    params["choices"].extend(value)
+                else:
+                    params["choices"].append(value)
+            elif op == "dtype":
+                params["dtype"] = value
+            else:
+                # Handle other operators if necessary
+                pass
+
+        # Create distribution objects
+        for feature, params in feature_params.items():
+            dtype = params["dtype"]
+            if dtype == "float":
+                if params["low"] is None or params["high"] is None:
+                    raise ValueError(
+                        f"Cannot create FloatDistribution for '{feature}' without 'low' and 'high' values."
+                    )
+                domain[feature] = FloatDistribution(
+                    name=params["name"],
+                    random_state=params["random_state"],
+                    low=params["low"],
+                    high=params["high"],
+                )
+            elif dtype == "int":
+                if params["low"] is None or params["high"] is None:
+                    raise ValueError(
+                        f"Cannot create IntegerDistribution for '{feature}' without 'low' and 'high' values."
+                    )
+                domain[feature] = IntegerDistribution(
+                    name=params["name"],
+                    random_state=params["random_state"],
+                    low=int(params["low"]),
+                    high=int(params["high"]),
+                    step=1,  # Default step to 1 or adjust as needed
+                )
+            elif dtype in ["category", "object"]:
+                choices = params.get("choices")
+                if choices is None or not choices:
+                    raise ValueError(
+                        f"Cannot create CategoricalDistribution for '{feature}' without 'choices'."
+                    )
+                domain[feature] = CategoricalDistribution(
+                    name=params["name"],
+                    random_state=params["random_state"],
+                    choices=list(set(choices)),
+                )
+            else:
+                raise ValueError(
+                    f"Unsupported dtype '{dtype}' for feature '{feature}'."
+                )
+
+        return cls(domain=domain)
+
+    def _infer_domain(
+        self,
+        X: pd.DataFrame,
+        sampling_strategy: str,
+        random_state: int,
+    ) -> Dict[str, Distribution]:
+        feature_domain: Dict[str, Distribution] = {}
+
+        for idx, col in enumerate(X.columns):
+            col_random_state = random_state + idx + 1  # Ensure unique seeds
+
+            try:
+                if sampling_strategy == "marginal":
+                    if col in self.protected_cols:
+                        feature_domain[col] = PassThroughDistribution(
+                            name=col,
+                            data=X[col],
+                            random_state=col_random_state,
+                        )
+                        continue
+
+                    is_categorical = pd.api.types.is_categorical_dtype(X[col])
+                    is_object = X[col].dtype == object
+                    is_bool = pd.api.types.is_bool_dtype(X[col])
+                    is_integer = pd.api.types.is_integer_dtype(X[col])
+                    is_float = pd.api.types.is_float_dtype(X[col])
+                    is_datetime = pd.api.types.is_datetime64_any_dtype(X[col])
+
+                    if is_categorical or is_object or is_bool:
+                        feature_domain[col] = CategoricalDistribution(
+                            name=col,
+                            data=X[col],
+                            random_state=col_random_state,
+                        )
+                    elif is_integer:
+                        feature_domain[col] = IntegerDistribution(
+                            name=col,
+                            data=X[col],
+                            random_state=col_random_state,
+                        )
+                    elif is_float:
+                        feature_domain[col] = FloatDistribution(
+                            name=col,
+                            data=X[col],
+                            random_state=col_random_state,
+                        )
+                    elif is_datetime:
+                        feature_domain[col] = DatetimeDistribution(
+                            name=col,
+                            data=X[col],
+                            random_state=col_random_state,
+                        )
+                    else:
+                        raise ValueError(
+                            f"Unsupported data type for column '{col}' with dtype {X[col].dtype}"
+                        )
+                elif sampling_strategy == "uniform":
+
+                    is_categorical = pd.api.types.is_categorical_dtype(X[col])
+                    is_object = X[col].dtype == object
+                    is_bool = pd.api.types.is_bool_dtype(X[col])
+                    is_integer = pd.api.types.is_integer_dtype(X[col])
+                    is_float = pd.api.types.is_float_dtype(X[col])
+                    is_datetime = pd.api.types.is_datetime64_any_dtype(X[col])
+
+                    if (
+                        pd.api.types.is_categorical_dtype(X[col])
+                        or X[col].dtype == object
+                        or pd.api.types.is_bool_dtype(X[col])
+                    ):
+                        feature_domain[col] = CategoricalDistribution(
+                            name=col,
+                            choices=list(X[col].unique()),
+                            random_state=col_random_state,
+                            sampling_strategy=sampling_strategy,
+                        )
+                    elif pd.api.types.is_integer_dtype(X[col]):
+                        feature_domain[col] = IntegerDistribution(
+                            name=col,
+                            low=X[col].min(),
+                            high=X[col].max(),
+                            random_state=col_random_state,
+                            sampling_strategy=sampling_strategy,
+                        )
+                    elif pd.api.types.is_float_dtype(X[col]):
+                        feature_domain[col] = FloatDistribution(
+                            name=col,
+                            low=X[col].min(),
+                            high=X[col].max(),
+                            random_state=col_random_state,
+                            sampling_strategy=sampling_strategy,
+                        )
+                    elif pd.api.types.is_datetime64_any_dtype(X[col]):
+                        feature_domain[col] = DatetimeDistribution(
+                            name=col,
+                            low=X[col].min(),
+                            high=X[col].max(),
+                            random_state=col_random_state,
+                            sampling_strategy=sampling_strategy,
+                        )
+                else:
+                    raise ValueError(
+                        f"Unsupported sampling strategy '{sampling_strategy}'"
+                    )
+            except Exception as e:
+                log.error(f"Exception occurred while processing column '{col}': {e}")
+                raise
+        return feature_domain
+
+
+src/synthcity/plugins/core/serializable.py
+# stdlib
+import copy
+import importlib.util
+import os
+from importlib.abc import Loader
+from pathlib import Path
+from typing import Any, Optional
+
+# third party
+from pydantic import validate_arguments
+
+# synthcity absolute
+from synthcity.utils.serialization import load as deserialize
+from synthcity.utils.serialization import save as serialize
+from synthcity.version import MAJOR_VERSION
+
+module_path = Path(__file__).resolve()
+module_parent_path = module_path.parent
+
+
+class Serializable:
+    """Utility class for model persistence."""
+
+    def __init__(self, *args: Any, **kwargs: Any) -> None:
+        super().__init__(*args, **kwargs)
+        derived_module_path: Optional[Path] = None
+        self.fitted = (
+            False  # make sure all serializable objects are not fitted by default
+        )
+
+        search_module = self.__class__.__module__
+        if not search_module.endswith(".py"):
+            search_module = search_module.split(".")[-1]
+            search_module += ".py"
+
+        for path in module_path.parent.parent.rglob(search_module):
+            derived_module_path = path
+            break
+
+        self.module_relative_path: Optional[Path] = None
+
+        if derived_module_path is not None:
+            relative_path = Path(
+                os.path.relpath(derived_module_path, start=module_path.parent)
+            )
+
+            if not (module_parent_path / relative_path).resolve().exists():
+                raise RuntimeError(
+                    f"cannot find relative module path for {relative_path.resolve()}"
+                )
+
+            self.module_relative_path = relative_path
+
+        self.module_name = self.__class__.__module__
+        self.class_name = self.__class__.__qualname__
+        self.raw_class = self.__class__
+
+    def save_dict(self) -> dict:
+        members: dict = {}
+
+        for key in self.__dict__:
+            data = self.__dict__[key]
+            if isinstance(data, Serializable):
+                members[key] = self.__dict__[key].save_dict()
+            elif key == "model":
+                members[key] = serialize(self.__dict__[key])
+            else:
+                members[key] = copy.deepcopy(self.__dict__[key])
+
+        if "fitted" not in members:
+            members["fitted"] = self.fitted  # Ensure 'fitted' is always serialized
+
+        return {
+            "source": "synthcity",
+            "data": members,
+            "version": self.version(),
+            "class_name": self.class_name,
+            "class": self.raw_class,
+            "module_name": self.module_name,
+            "module_relative_path": self.module_relative_path,
+        }
+
+    def save(self) -> bytes:
+        return serialize(self.save_dict())
+
+    @validate_arguments
+    def save_to_file(self, path: Path) -> bytes:
+        raise NotImplementedError()
+
+    @staticmethod
+    # @validate_arguments
+    def load_dict(representation: dict) -> Any:
+        if "source" not in representation or representation["source"] != "synthcity":
+            raise ValueError("Invalid synthcity object")
+
+        if representation["version"] != Serializable.version():
+            raise RuntimeError(
+                f"Invalid synthcity API version. Current version is {Serializable.version()}, but the object was serialized using version {representation['version']}"
+            )
+
+        if representation["module_relative_path"] is not None:
+            module_path = module_parent_path / representation["module_relative_path"]
+
+            if not module_path.exists():
+                raise RuntimeError(f"Unknown module path {module_path}")
+
+            spec = importlib.util.spec_from_file_location(
+                representation["module_name"], module_path
+            )
+            if spec is None:
+                raise RuntimeError("Invalid spec")
+
+            if not isinstance(spec.loader, Loader):
+                raise RuntimeError("invalid synthcity object type")
+
+            mod = importlib.util.module_from_spec(spec)
+            spec.loader.exec_module(mod)
+
+        cls = representation["class"]
+
+        obj = cls()
+
+        obj_dict = {}
+        for key in representation["data"]:
+            val = representation["data"][key]
+
+            if (
+                isinstance(val, dict)
+                and "source" in val
+                and val["source"] == "synthcity"
+            ):
+                obj_dict[key] = Serializable.load_dict(val)
+            else:
+                obj_dict[key] = val
+
+        obj.__dict__ = obj_dict
+
+        return obj
+
+    @staticmethod
+    @validate_arguments
+    def load(buff: bytes) -> Any:
+        representation = deserialize(buff)
+
+        return Serializable.load_dict(representation)
+
+    @staticmethod
+    def version() -> str:
+        "API version"
+        return MAJOR_VERSION
+
+
+src/synthcity/plugins/core/constraints.py
+# stdlib
+from typing import Any, Generator, List, Tuple
+
+# third party
+import numpy as np
+import pandas as pd
+from pydantic import BaseModel, field_validator, validate_arguments
+
+# synthcity absolute
+import synthcity.logger as log
+
+Rule = Tuple[str, str, Any]  # Define a type alias for clarity
+
+
+class Constraints(BaseModel):
+    """
+    .. inheritance-diagram:: synthcity.plugins.core.constraints.Constraints
+        :parts: 1
+
+
+    Constraints on data.
+
+    The Constraints class allows users to specify constraints on the features. Examples include the feature value range, allowed item set, and data type.
+    These constraints can be used to filter out invalid values in synthetic datasets.
+
+    Constructor Args:
+        rules: List[Tuple]
+            Each tuple in the list specifies a constraint on a feature. The tuple has the form of (feature, op, thresh),
+            where feature is the feature name to apply constraint on, op takes values in [
+                    "<",
+                    ">=",
+                    "<=",
+                    ">",
+                    "==",
+                    "lt",
+                    "le",
+                    "gt",
+                    "ge",
+                    "eq",
+                    "in",
+                    "dtype",
+                ],
+            and thresh is the threshold or data type.
+    """
+
+    rules: list[Rule] = []
+
+    @field_validator("rules", mode="before")
+    def _validate_rules(cls: Any, rules: List) -> List:
+        supported_ops: list = [
+            "<",
+            ">=",
+            "<=",
+            ">",
+            "==",
+            "lt",
+            "le",
+            "gt",
+            "ge",
+            "eq",
+            "in",
+            "dtype",
+        ]
+
+        for rule in rules:
+            if len(rule) < 3:
+                raise ValueError(f"Invalid constraint. Expecting tuple, but got {rule}")
+
+            feature, op, thresh = rule
+
+            if op not in supported_ops:
+                raise ValueError(
+                    f"Invalid operation {op}. Supported ops: {supported_ops}"
+                )
+            if op in ["in"]:
+                if not isinstance(thresh, list):
+                    raise ValueError("Invalid type for threshold = {type(thresh)}")
+            elif op in ["dtype"]:
+                if not isinstance(thresh, str):
+                    raise ValueError("Invalid type for threshold = {type(thresh)}")
+
+        return rules
+
+    @validate_arguments(config=dict(arbitrary_types_allowed=True))
+    def _eval(self, X: pd.DataFrame, feature: str, op: str, operand: Any) -> pd.Index:
+        """Evaluation primitive.
+
+        Args:
+            X: DataFrame. The dataset to apply the constraint on.
+            feature: str. The column in the dataset to apply the constraint on.
+            op: str. The operation to execute for the constraint.
+            operand: Any. The operand for the binary operation.
+
+        Returns:
+            The pandas.Index which matches the constraint.
+        """
+        if op == "lt" or op == "<":
+            return (X[feature] < operand) | X[feature].isna()
+        elif op == "le" or op == "<=":
+            return (X[feature] <= operand) | X[feature].isna()
+        elif op == "gt" or op == ">":
+            return (X[feature] > operand) | X[feature].isna()
+        elif op == "ge" or op == ">=":
+            return (X[feature] >= operand) | X[feature].isna()
+        elif op == "eq" or op == "==":
+            return (X[feature] == operand) | X[feature].isna()
+        elif op == "in":
+            return (X[feature].isin(operand)) | X[feature].isna()
+        elif op == "dtype":
+            return operand in str(X[feature])
+        else:
+            raise RuntimeError("unsupported operation", op)
+
+    @validate_arguments(config=dict(arbitrary_types_allowed=True))
+    def _correct(
+        self, X: pd.DataFrame, feature: str, op: str, operand: Any
+    ) -> pd.DataFrame:
+        """Correct limits.
+
+        Args:
+            X: DataFrame. The dataset to apply the constraint on.
+            feature: str. The column in the dataset to apply the constraint on.
+            op: str. The operation to execute for the constraint.
+            operand: Any. The operand for the binary operation.
+
+        """
+        _filter = self._eval(X, feature, op, operand)
+        if op in [
+            "lt",
+            "le",
+            "gt",
+            "ge",
+            "eq",
+            "<",
+            "<=",
+            ">",
+            ">=",
+            "==",
+        ]:
+            X.loc[~_filter, feature] = operand
+
+        return X
+
+    @validate_arguments(config=dict(arbitrary_types_allowed=True))
+    def filter(self, X: pd.DataFrame) -> pd.DataFrame:
+        """Apply the constraints to a DataFrame X.
+
+        Args:
+            X: DataFrame. The dataset to apply the constraints on.
+
+        Returns:
+            pandas.Index which matches all the constraints
+        """
+        X = pd.DataFrame(X)
+        res = pd.Series([True] * len(X), index=X.index)
+        for feature, op, thresh in self.rules:
+            if feature not in X:
+                res &= False
+                break
+
+            prev = res.sum()
+            res &= self._eval(
+                X,
+                feature,
+                op,
+                thresh,
+            )
+            if res.sum() < prev:
+                log.info(
+                    f"[{feature}] quality loss for constraints {op} = {thresh}. Remaining {res.sum()}. prev length {prev}. Original dtype {X[feature].dtype}.",
+                )
+        return res
+
+    @validate_arguments(config=dict(arbitrary_types_allowed=True))
+    def match(self, X: pd.DataFrame) -> pd.DataFrame:
+        """Apply the constraints to a DataFrame X and return the filtered dataset.
+
+        Args:
+            X: DataFrame. The dataset to apply the constraints on.
+
+        Returns:
+            The filtered Dataframe
+        """
+
+        return X[self.filter(X)]
+
+    @validate_arguments(config=dict(arbitrary_types_allowed=True))
+    def is_valid(self, X: pd.DataFrame) -> bool:
+        """Checks if all the rows in X meet the constraints.
+
+        Args:
+            X: DataFrame. The dataset to apply the constraints on.
+
+        Returns:
+            True if all rows match the constraints, False otherwise
+        """
+
+        return self.filter(X).sum() == len(X)
+
+    def extend(self, other: "Constraints") -> "Constraints":
+        """Extend the local constraints with more constraints.
+
+        Args:
+            other: The new constraints to add.
+
+        Returns:
+            self with the updated constraints.
+        """
+        self.rules.extend(other.rules)
+
+        return self
+
+    def __len__(self) -> int:
+        """The number of constraint rules."""
+        return len(self.rules)
+
+    def __iter__(self) -> Generator:
+        """Iterate the constraint rules."""
+        for x in self.rules:
+            yield x
+
+    def features(self) -> List:
+        """Return list of feature names in an undefined order"""
+        results = []
+        for feature, _, _ in self.rules:
+            results.append(feature)
+
+        return list(set(results))
+
+    def feature_constraints(self, ref_feature: str) -> List:
+        """Get constraints for a given feature
+
+        Args:
+            ref_feature: str
+                The name of the feature of interest.
+
+        Returns:
+            A list of tuples of (op, threshold). For example:
+
+            [('le', 3.), ('gt', 1.)]
+
+            If ref_feature has no constraint, None will be returned.
+        """
+        results = []
+        for feature, op, threshold in self.rules:
+            if feature != ref_feature:
+                continue
+            results.append((op, threshold))
+
+        return results
+
+    def feature_params(self, feature: str) -> Tuple:
+        """Provide the parameters of Distribution from the Constraint
+
+        This is to be used with the constraint_to_distribution function in distribution module.
+
+        Args:
+            feature: str
+                The name of the feature of interest.
+
+        Returns:
+            dist_template: str
+                The type of inferred distribution from ("categorical", "float", "integer")
+            dist_args: Dict
+                The arguments to the constructor of the Distribution.
+        """
+
+        rules = self.feature_constraints(feature)
+
+        dist_template = "float"
+        dist_args = {"low": np.iinfo(np.int64).min, "high": np.iinfo(np.int64).max}
+
+        for op, value in rules:
+            if op == "in":
+                dist_template = "categorical"
+                if "choices" not in dist_args:
+                    dist_args["choices"] = value
+                    continue
+                dist_args["choices"] = [v for v in value if v in dist_args["choices"]]
+
+            elif op == "dtype" and value in ["int", "int32", "int64", "integer"]:
+                dist_template = "integer"
+            elif (op == "le" or op == "<=") and value < dist_args["high"]:
+                dist_args["high"] = value
+                if "choices" in dist_args:
+                    dist_args["choices"] = [
+                        v for v in dist_args["choices"] if v <= value
+                    ]
+            elif (op == "lt" or op == "<") and value < dist_args["high"]:
+                dist_args["high"] = value - 1
+                if "choices" in dist_args:
+                    dist_args["choices"] = [
+                        v for v in dist_args["choices"] if v < value
+                    ]
+            elif (op == "ge" or op == ">=") and dist_args["low"] < value:
+                dist_args["low"] = value
+                if "choices" in dist_args:
+                    dist_args["choices"] = [
+                        v for v in dist_args["choices"] if v >= value
+                    ]
+            elif (op == "gt" or op == ">") and dist_args["low"] < value:
+                dist_args["low"] = value + 1
+                if "choices" in dist_args:
+                    dist_args["choices"] = [
+                        v for v in dist_args["choices"] if v > value
+                    ]
+            elif op == "eq" or op == "==":
+                dist_args["low"] = value
+                dist_args["high"] = value
+                dist_args["choices"] = [value]
+
+        return dist_template, dist_args
+
+
+src/synthcity/plugins/core/dataset.py
+# stdlib
+from typing import List, Optional, Tuple
+
+# third party
+import numpy as np
+import torch
+
+# synthcity absolute
+from synthcity.utils.constants import DEVICE
+
+
+class FlexibleDataset(torch.utils.data.Dataset):
+    """Helper dataset wrapper for post-processing or transforming another dataset. Used for controlling the image sizes for the synthcity models.
+
+    The class supports adding custom transforms to existing datasets, and to subsample a set of indices.
+
+    Args:
+        data: torch.Dataset
+        transform: An optional list of transforms
+        indices: An optional list of indices to subsample
+    """
+
+    def __init__(
+        self,
+        data: torch.utils.data.Dataset,
+        transform: Optional[torch.nn.Module] = None,
+        indices: Optional[list] = None,
+    ) -> None:
+        super().__init__()
+
+        if indices is None:
+            indices = np.arange(len(data))
+
+        self.indices = np.asarray(indices)
+        self.data = data
+        self.transform = transform
+        self.ndarrays: Optional[Tuple[torch.Tensor, torch.Tensor]] = None
+
+    def __getitem__(self, index: int) -> Tuple[torch.Tensor, torch.Tensor]:
+        x, y = self.data[self.indices[index]]
+        if self.transform:
+            x = self.transform(x)
+        return x, y
+
+    def __len__(self) -> int:
+        return len(self.indices)
+
+    def shape(self) -> Tuple:
+        x, _ = self[self.indices[0]]
+
+        return (len(self), *x.shape)
+
+    def numpy(self) -> Tuple[np.ndarray, np.ndarray]:
+        if self.ndarrays is not None:
+            return self.ndarrays
+
+        x_buff = []
+        y_buff = []
+        for idx in range(len(self)):
+            x_local, y_local = self[idx]
+            x_buff.append(x_local.unsqueeze(0).cpu().numpy())
+            y_buff.append(y_local)
+
+        x = np.concatenate(x_buff, axis=0)
+        y = np.asarray(y_buff)
+
+        self.ndarrays = (x, y)
+        return x, y
+
+    def tensors(self) -> Tuple[torch.Tensor, torch.Tensor]:
+        x, y = self.numpy()
+
+        return torch.from_numpy(x), torch.from_numpy(y)
+
+    def labels(self) -> np.ndarray:
+        labels = []
+        for idx in self.indices:
+            _, y = self.data[idx]
+            labels.append(y)
+
+        return np.asarray(labels)
+
+    def filter_indices(self, indices: List[int]) -> "FlexibleDataset":
+        for idx in indices:
+            if idx >= len(self.indices):
+                raise ValueError(
+                    "Invalid filtering list. {idx} not found in the current list of indices"
+                )
+        return FlexibleDataset(
+            data=self.data, transform=self.transform, indices=self.indices[indices]
+        )
+
+
+class TensorDataset(torch.utils.data.Dataset):
+    """Helper dataset for wrapping existing tensors
+
+    Args:
+        images: Tensor
+        targets: Tensor
+    """
+
+    def __init__(
+        self,
+        images: torch.Tensor,
+        targets: Optional[torch.Tensor],
+    ) -> None:
+        super().__init__()
+
+        if targets is not None and len(targets) != len(images):
+            raise ValueError("Invalid input")
+
+        self.images = images
+        self.targets = targets
+
+    def __getitem__(self, index: int) -> Tuple[torch.Tensor, Optional[torch.Tensor]]:
+        y: Optional[torch.Tensor] = None
+        x = self.images[index]
+
+        if self.targets is not None:
+            y = self.targets[index]
+
+        return x, y
+
+    def __len__(self) -> int:
+        return len(self.images)
+
+    def labels(self) -> Optional[np.ndarray]:
+        if self.targets is None:
+            return None
+
+        return self.targets.cpu().numpy()
+
+
+class ConditionalDataset(torch.utils.data.Dataset):
+    """Helper dataset for wrapping existing datasets with custom tensors
+
+    Args:
+        data: torch.Dataset
+        cond: Optional Tensor
+    """
+
+    def __init__(
+        self,
+        data: torch.utils.data.Dataset,
+        cond: Optional[torch.Tensor] = None,
+    ) -> None:
+        super().__init__()
+
+        if cond is not None and len(cond) != len(data):
+            raise ValueError("Invalid input")
+
+        self.data = data
+        self.cond = cond
+
+    def __getitem__(self, index: int) -> Tuple[torch.Tensor, Optional[torch.Tensor]]:
+        cond: Optional[torch.Tensor] = None
+        x = self.data[index][0]
+
+        if self.cond is not None:
+            cond = self.cond[index]
+
+        return x, cond
+
+    def __len__(self) -> int:
+        return len(self.data)
+
+
+class NumpyDataset(torch.utils.data.Dataset):
+    """Helper class for wrapping Numpy arrays in torch Datasets
+    Args:
+        X: np.ndarray
+        y: np.ndarray
+    """
+
+    def __init__(self, X: np.ndarray, y: np.ndarray) -> None:
+        super().__init__()
+
+        self.X = X
+        self.y = y
+
+    def __getitem__(self, index: int) -> Tuple[torch.Tensor, torch.Tensor]:
+        x = self.X[index]
+        y = self.y[index]
+
+        return torch.from_numpy(x).to(DEVICE), y
+
+    def __len__(self) -> int:
+        return len(self.X)
+
+
+src/synthcity/plugins/core/distribution.py
+# stdlib
+from abc import ABCMeta, abstractmethod
+from datetime import datetime, timedelta, timezone
+from typing import Any, List, Optional, Tuple
+
+# third party
+import numpy as np
+import pandas as pd
+from pydantic import (
+    BaseModel,
+    ConfigDict,
+    Field,
+    FieldValidationInfo,
+    PrivateAttr,
+    ValidationInfo,
+    field_validator,
+    model_validator,
+)
+
+# synthcity absolute
+from synthcity.plugins.core.constraints import Constraints
+
+Rule = Tuple[str, str, Any]  # Define a type alias for clarity
+
+
+class Distribution(BaseModel, metaclass=ABCMeta):
+    """
+    .. inheritance-diagram:: synthcity.plugins.core.distribution.Distribution
+        :parts: 1
+
+    Base class of all Distributions.
+
+    The Distribution class characterizes the **empirical** marginal distribution of the feature.
+    Each derived class must implement the following methods:
+        get() - Return the metadata of the Distribution.
+        sample() - Sample a value from the Distribution.
+        includes() - Test if another Distribution is included in the local one.
+        has() - Test if a value is included in the support of the Distribution.
+        as_constraint() - Convert the Distribution to a set of Constraints.
+        min() - Return the minimum of the support.
+        max() - Return the maximum of the support.
+        __eq__() - Testing equality of two Distributions.
+        dtype() - Return the data type
+
+    Examples of derived classes include CategoricalDistribution, FloatDistribution, and IntegerDistribution.
+    """
+
+    name: str
+    data: Optional[pd.Series] = None
+    random_state: Optional[int] = None
+    sampling_strategy: str = "marginal"
+    _rng: np.random.Generator = PrivateAttr()
+    # DP parameters
+    marginal_distribution: Optional[pd.Series] = None
+
+    model_config = ConfigDict(arbitrary_types_allowed=True)
+
+    @field_validator("marginal_distribution", mode="before")
+    def _validate_marginal_distribution(
+        cls: Any, v: Any, values: FieldValidationInfo
+    ) -> Optional[pd.Series]:
+        if "data" not in values.data or values.data["data"] is None:
+            return v
+
+        data = values.data["data"]
+        if not isinstance(data, pd.Series):
+            raise ValueError(f"Invalid data type {type(data)}")
+
+        marginal = data.value_counts(dropna=False)
+        del values["data"]
+
+        return marginal
+
+    @model_validator(mode="after")
+    def initialize_rng(cls, model: "Distribution") -> "Distribution":
+        """
+        Initializes the random number generator after model validation.
+        """
+        if model.random_state is not None:
+            model._rng = np.random.default_rng(model.random_state)
+        else:
+            model._rng = np.random.default_rng()
+        return model
+
+    def marginal_states(self) -> Optional[List]:
+        if self.marginal_distribution is None:
+            return None
+
+        return self.marginal_distribution.index.values
+
+    def marginal_probabilities(self) -> Optional[List]:
+        if self.marginal_distribution is None:
+            return None
+
+        return (
+            self.marginal_distribution.values / self.marginal_distribution.values.sum()
+        )
+
+    def sample_marginal(self, count: int = 1) -> Any:
+        if self.marginal_distribution is None:
+            return None
+
+        return self._rng.choice(
+            self.marginal_states(),
+            count,
+            p=self.marginal_probabilities(),
+        ).tolist()
+
+    @abstractmethod
+    def get(self) -> List[Any]:
+        """Return the metadata of the Distribution."""
+        ...
+
+    @abstractmethod
+    def sample(self, count: int = 1) -> Any:
+        """Sample a value from the Distribution."""
+        ...
+
+    @abstractmethod
+    def includes(self, other: "Distribution") -> bool:
+        """Test if another Distribution is included in the local one."""
+        ...
+
+    @abstractmethod
+    def has(self, val: Any) -> bool:
+        """Test if a value is included in the Distribution."""
+        ...
+
+    @abstractmethod
+    def as_constraint(self) -> Constraints:
+        """Convert the Distribution to a set of Constraints."""
+        ...
+
+    @abstractmethod
+    def min(self) -> Any:
+        """Get the min value of the distribution."""
+        ...
+
+    @abstractmethod
+    def max(self) -> Any:
+        """Get the max value of the distribution."""
+        ...
+
+    def __eq__(self, other: Any) -> bool:
+        return type(self) == type(other) and self.get() == other.get()
+
+    def __contains__(self, item: Any) -> bool:
+        """
+        Example:
+        >>> dist = CategoricalDistribution(name="foo", choices=["a", "b", "c"])
+        >>> "a" in dist
+        True
+        """
+        return self.has(item)
+
+    @abstractmethod
+    def dtype(self) -> str:
+        ...
+
+
+class CategoricalDistribution(Distribution):
+    """
+    .. inheritance-diagram:: synthcity.plugins.core.distribution.CategoricalDistribution
+        :parts: 1
+    """
+
+    data: Optional[pd.Series] = None
+    marginal_distribution: Optional[pd.Series] = None
+    choices: List[Any] = Field(default_factory=list)
+
+    @model_validator(mode="after")
+    def validate_and_initialize(
+        cls, model: "CategoricalDistribution"
+    ) -> "CategoricalDistribution":
+        """
+        Validates and initializes choices and marginal_distribution based on data or provided choices.
+        Ensures that choices are unique and sorted.
+        """
+        if model.data is not None:
+            # Set marginal_distribution based on data
+            model.marginal_distribution = model.data.value_counts(normalize=True)
+            model.choices = model.marginal_distribution.index.tolist()
+        elif model.choices is not None:
+            # Ensure choices are unique and sorted
+            model.choices = sorted(set(model.choices))
+            # Set uniform probabilities
+            probabilities = np.ones(len(model.choices)) / len(model.choices)
+            model.marginal_distribution = pd.Series(probabilities, index=model.choices)
+        else:
+            raise ValueError(
+                "Invalid CategoricalDistribution: Provide either 'data' or 'choices'."
+            )
+
+        # Additional validation to ensure consistency
+        if not isinstance(model.choices, list) or len(model.choices) == 0:
+            raise ValueError(
+                "CategoricalDistribution must have a non-empty 'choices' list."
+            )
+        if not isinstance(model.marginal_distribution, pd.Series):
+            raise ValueError(
+                "CategoricalDistribution must have a valid 'marginal_distribution'."
+            )
+        if len(model.choices) != len(model.marginal_distribution):
+            raise ValueError(
+                "'choices' and 'marginal_distribution' must have the same length."
+            )
+
+        return model
+
+    def sample(self, count: int = 1) -> Any:
+        """
+        Samples values from the distribution based on the specified sampling strategy.
+        If the distribution has only one choice, returns an array filled with that value.
+        """
+        if self.choices is not None and len(self.choices) == 1:
+            samples = np.full(count, self.choices[0])
+        else:
+            if self.sampling_strategy == "marginal":
+                if self.marginal_distribution is None:
+                    raise ValueError(
+                        "Cannot sample based on marginal distribution: marginal_distribution is not provided."
+                    )
+                return self._rng.choice(
+                    self.marginal_distribution.index,
+                    size=count,
+                    p=self.marginal_distribution.values,
+                )
+            elif self.sampling_strategy == "uniform":
+                return self._rng.choice(self.choices, size=count)
+            else:
+                raise ValueError(
+                    f"Unsupported sampling strategy '{self.sampling_strategy}'."
+                )
+        return samples
+
+    def get(self) -> List[Any]:
+        """
+        Returns the metadata of the distribution.
+        """
+        return [self.name, self.choices]
+
+    def has(self, val: Any) -> bool:
+        """
+        Checks if a value is among the distribution's choices.
+        """
+        return val in self.choices
+
+    def includes(self, other: "Distribution") -> bool:
+        """
+        Checks if another categorical distribution's choices are a subset of this distribution's choices.
+        """
+        if not isinstance(other, CategoricalDistribution):
+            return False
+        return set(other.choices).issubset(set(self.choices))
+
+    def as_constraint(self) -> Constraints:
+        """
+        Converts the distribution to a set of constraints.
+        """
+        return Constraints(rules=[(self.name, "in", list(self.choices))])
+
+    def min(self) -> Any:
+        """
+        Returns the minimum value among the choices.
+        """
+        return min(self.choices)
+
+    def max(self) -> Any:
+        """
+        Returns the maximum value among the choices.
+        """
+        return max(self.choices)
+
+    def dtype(self) -> str:
+        """
+        Determines the data type based on the choices.
+        """
+        types = {
+            "object": 0,
+            "float": 0,
+            "int": 0,
+        }
+        for v in self.choices:
+            if isinstance(v, float):
+                types["float"] += 1
+            elif isinstance(v, int):
+                types["int"] += 1
+            else:
+                types["object"] += 1
+
+        for t in types:
+            if types[t] != 0:
+                return t
+
+        return "object"
+
+
+class FloatDistribution(Distribution):
+    """
+    .. inheritance-diagram:: synthcity.plugins.core.distribution.FloatDistribution
+        :parts: 1
+    """
+
+    low: Optional[float] = Field(default=None)
+    high: Optional[float] = Field(default=None)
+    _is_constant: bool = PrivateAttr(False)
+
+    model_config = ConfigDict(arbitrary_types_allowed=True)
+
+    @model_validator(mode="after")
+    def validate_and_initialize(cls, model: "FloatDistribution") -> "FloatDistribution":
+        """
+        Validates and initializes the distribution.
+        Sets '_is_constant' based on whether 'low' equals 'high'.
+        Initializes 'marginal_distribution' based on 'data' if provided.
+        """
+        if model.data is not None:
+            # Initialize marginal_distribution based on data
+            # For float data, use value_counts(normalize=True) if data has repeated values
+            # This will create a discrete approximation of the distribution
+            model.marginal_distribution = model.data.value_counts(
+                normalize=True
+            ).sort_index()
+            model.low = float(model.data.min())
+            model.high = float(model.data.max())
+        elif model.marginal_distribution is not None:
+            # Set 'low' and 'high' based on marginal_distribution
+            model.low = float(model.marginal_distribution.index.min())
+            model.high = float(model.marginal_distribution.index.max())
+        else:
+            # Ensure 'low' and 'high' are provided
+            if model.low is None or model.high is None:
+                raise ValueError(
+                    "FloatDistribution requires 'low' and 'high' values if 'data' or 'marginal_distribution' is not provided."
+                )
+
+        # Validate that low <= high
+        if model.low > model.high:
+            raise ValueError(
+                f"Invalid range for '{model.name}': low ({model.low}) cannot be greater than high ({model.high})."
+            )
+
+        # Set _is_constant based on low == high
+        model._is_constant = model.low == model.high
+
+        # Ensure that low and high are finite numbers
+        if not np.isfinite(model.low) or not np.isfinite(model.high):
+            raise ValueError(
+                f"Invalid range for '{model.name}': low or high is not finite (low={model.low}, high={model.high})."
+            )
+
+        return model
+
+    def sample(self, count: int = 1) -> Any:
+        """
+        Samples values from the distribution.
+        If the distribution is constant, returns an array filled with the constant value.
+        Otherwise, samples based on the marginal distribution or uniform sampling.
+        """
+        if self._is_constant:
+            if self.low is None:
+                raise ValueError(
+                    "Cannot sample: 'low' is None for a constant distribution."
+                )
+            samples = np.full(count, self.low)
+        else:
+            if self.low is None or self.high is None:
+                raise ValueError("Cannot sample: 'low' or 'high' is None.")
+            if (
+                self.sampling_strategy == "marginal"
+                and self.marginal_distribution is not None
+            ):
+                # Sample based on marginal distribution
+                return self._rng.choice(
+                    self.marginal_distribution.index.values,
+                    size=count,
+                    p=self.marginal_distribution.values,
+                )
+            else:
+                # Proceed with uniform sampling
+                samples = self._rng.uniform(low=self.low, high=self.high, size=count)
+        return samples
+
+    def get(self) -> List[Any]:
+        """
+        Returns the metadata of the distribution.
+        """
+        return [self.name, self.low, self.high]
+
+    def has(self, val: Any) -> bool:
+        """
+        Checks if a value is within the distribution's range.
+        """
+        return self.low <= val <= self.high
+
+    def includes(self, other: "Distribution") -> bool:
+        """
+        Checks if another distribution is entirely within this distribution.
+        """
+        if self.min() is None or self.max() is None:
+            return False
+        if other.min() is None or other.max() is None:
+            return False
+        return self.min() <= other.min() and other.max() <= self.max()
+
+    def as_constraint(self) -> Constraints:
+        """
+        Converts the distribution to a set of constraints.
+        """
+        return Constraints(
+            rules=[
+                (self.name, "le", self.high),
+                (self.name, "ge", self.low),
+                (self.name, "dtype", "float"),
+            ]
+        )
+
+    def min(self) -> Any:
+        """
+        Returns the minimum value of the distribution.
+        """
+        return self.low
+
+    def max(self) -> Any:
+        """
+        Returns the maximum value of the distribution.
+        """
+        return self.high
+
+    def dtype(self) -> str:
+        """
+        Returns the data type of the distribution.
+        """
+        return "float"
+
+
+class LogDistribution(FloatDistribution):
+    low: float = np.finfo(np.float64).tiny
+    high: float = np.finfo(np.float64).max
+
+    def get(self) -> List[Any]:
+        return [self.name, self.low, self.high]
+
+    def sample(self, count: int = 1) -> Any:
+        msamples = self.sample_marginal(count)
+        if msamples is not None:
+            return msamples
+        lo, hi = np.log2(self.low), np.log2(self.high)
+        return 2.0 ** self._rng.uniform(lo, hi, count)
+
+
+class IntegerDistribution(Distribution):
+    """
+    .. inheritance-diagram:: synthcity.plugins.core.distribution.IntegerDistribution
+        :parts: 1
+    """
+
+    low: Optional[int] = Field(default=None)
+    high: Optional[int] = Field(default=None)
+    step: int = Field(default=1)
+    _is_constant: bool = PrivateAttr(False)
+
+    model_config = ConfigDict(arbitrary_types_allowed=True)
+
+    @model_validator(mode="after")
+    def validate_and_initialize(
+        cls, model: "IntegerDistribution"
+    ) -> "IntegerDistribution":
+        """
+        Validates and initializes the distribution.
+        Sets '_is_constant' based on whether 'low' equals 'high'.
+        Initializes 'marginal_distribution' based on 'data' if provided.
+        """
+        if model.data is not None:
+            # Initialize marginal_distribution based on data
+            model.marginal_distribution = model.data.value_counts(
+                normalize=True
+            ).sort_index()
+            model.low = int(model.data.min())
+            model.high = int(model.data.max())
+        elif model.marginal_distribution is not None:
+            # Infer 'low' and 'high' from the marginal distribution's index
+            model.low = int(model.marginal_distribution.index.min())
+            model.high = int(model.marginal_distribution.index.max())
+        else:
+            # Ensure 'low' and 'high' are provided
+            if model.low is None or model.high is None:
+                raise ValueError(
+                    "IntegerDistribution requires 'low' and 'high' values if 'data' or 'marginal_distribution' is not provided."
+                )
+
+        # Validate that low <= high
+        if model.low > model.high:
+            raise ValueError(
+                f"Invalid range for '{model.name}': low ({model.low}) cannot be greater than high ({model.high})."
+            )
+
+        # Set _is_constant based on low == high
+        model._is_constant = model.low == model.high
+
+        # Ensure that low and high are finite integers
+        if not np.isfinite(model.low) or not np.isfinite(model.high):
+            raise ValueError(
+                f"Invalid range for '{model.name}': low or high is not finite (low={model.low}, high={model.high})."
+            )
+
+        # Ensure that 'step' is a positive integer
+        if model.step <= 0:
+            raise ValueError("'step' must be a positive integer.")
+
+        # Adjust 'low' and 'high' to be compatible with 'step'
+        model.low = model.low - ((model.low - (model.low % model.step)) % model.step)
+        model.high = model.high - (
+            (model.high - (model.high % model.step)) % model.step
+        )
+
+        # Re-validate after adjustment
+        if model.low > model.high:
+            raise ValueError(
+                f"After adjusting with step, invalid range for '{model.name}': low ({model.low}) cannot be greater than high ({model.high})."
+            )
+
+        return model
+
+    def sample(self, count: int = 1) -> Any:
+        """
+        Samples values from the distribution.
+        If the distribution is constant, returns an array filled with the constant value.
+        Otherwise, samples based on the marginal distribution or uniform sampling.
+        """
+        if self._is_constant:
+            if self.low is None:
+                raise ValueError(
+                    "Cannot sample: 'low' is None for a constant distribution."
+                )
+            samples = np.full(count, self.low)
+        else:
+            if self.low is None or self.high is None:
+                raise ValueError("Cannot sample: 'low' or 'high' is None.")
+            if (
+                self.sampling_strategy == "marginal"
+                and self.marginal_distribution is not None
+            ):
+                # Sample based on marginal distribution
+                return self._rng.choice(
+                    self.marginal_distribution.index,
+                    size=count,
+                    p=self.marginal_distribution.values,
+                )
+            else:
+                if self.low is None or self.high is None:
+                    raise ValueError(
+                        "Cannot sample based on uniform distribution: low or high is not provided."
+                    )
+                # Proceed with uniform sampling
+                possible_values = np.arange(self.low, self.high + 1, self.step)
+                samples = self._rng.choice(possible_values, size=count)
+        return samples
+
+    def get(self) -> List[Any]:
+        """
+        Returns the metadata of the distribution.
+        """
+        return [self.name, self.low, self.high, self.step]
+
+    def has(self, val: Any) -> bool:
+        """
+        Checks if a value is within the distribution's range.
+        """
+        return self.low <= val <= self.high
+
+    def includes(self, other: "Distribution") -> bool:
+        """
+        Checks if another distribution is entirely within this distribution.
+        """
+        if self.min() is None or self.max() is None:
+            return False
+        if other.min() is None or other.max() is None:
+            return False
+        return self.min() <= other.min() and other.max() <= self.max()
+
+    def as_constraint(self) -> Constraints:
+        """
+        Converts the distribution to a set of constraints.
+        """
+        rules: List[Rule] = []
+        if self.low is not None:
+            rules.append((self.name, "ge", self.low))
+        if self.high is not None:
+            rules.append((self.name, "le", self.high))
+        rules.append((self.name, "dtype", "int"))
+        return Constraints(rules=rules)
+
+    def min(self) -> Any:
+        """
+        Returns the minimum value of the distribution.
+        """
+        return self.low
+
+    def max(self) -> Any:
+        """
+        Returns the maximum value of the distribution.
+        """
+        return self.high
+
+    def dtype(self) -> str:
+        """
+        Returns the data type of the distribution.
+        """
+        return "int"
+
+
+class IntLogDistribution(IntegerDistribution):
+    low: int = Field(default=1)
+    high: int = Field(default=np.iinfo(np.int64).max)
+
+    @field_validator("step", mode="before")
+    def _validate_step(cls: Any, v: int, values: ValidationInfo) -> int:
+        if v != 1:
+            raise ValueError("Step must be 1 for IntLogDistribution")
+        return v
+
+    def get(self) -> List[Any]:
+        return [self.name, self.low, self.high]
+
+    def sample(self, count: int = 1) -> Any:
+        msamples = self.sample_marginal(count)
+        if msamples is not None:
+            return msamples
+        lo, hi = np.log2(self.low), np.log2(self.high)
+        samples = 2.0 ** self._rng.uniform(lo, hi, count)
+        return samples.astype(int)
+
+
+class DatetimeDistribution(Distribution):
+    """
+    .. inheritance-diagram:: synthcity.plugins.core.distribution.DatetimeDistribution
+        :parts: 1
+    """
+
+    low: Optional[datetime] = Field(default=None)
+    high: Optional[datetime] = Field(default=None)
+    step: timedelta = Field(default=timedelta(microseconds=1))
+    offset: timedelta = Field(default=timedelta(seconds=120))
+    _is_constant: bool = PrivateAttr(False)  # Correctly named with leading underscore
+
+    model_config = ConfigDict(arbitrary_types_allowed=True)
+
+    @model_validator(mode="after")
+    def validate_low_high(cls, model: "DatetimeDistribution") -> "DatetimeDistribution":
+        """
+        Validates that 'low' is less than or equal to 'high'.
+        Sets '_is_constant' based on whether 'low' equals 'high'.
+        """
+        if model.marginal_distribution is not None:
+            # Infer 'low' and 'high' from the marginal distribution's index
+            model.low = model.marginal_distribution.index.min()
+            model.high = model.marginal_distribution.index.max()
+        else:
+            # If 'marginal_distribution' is not provided, ensure 'low' and 'high' are set
+            if model.low is None or model.high is None:
+                if model.data is not None:
+                    model.low = model.data.min()
+                    model.high = model.data.max()
+                else:
+                    # Set default finite datetime values if not provided
+                    model.low = datetime.fromtimestamp(0, timezone.utc)
+                    model.high = datetime.now()
+        if model.low is None or model.high is None:
+            raise ValueError(
+                "DatetimeDistribution requires 'low' and 'high' values if 'data' or 'marginal_distribution' is not provided."
+            )
+        # Validate that low <= high
+        if model.low > model.high:
+            raise ValueError(
+                f"Invalid range for {model.name}: low ({model.low}) cannot be greater than high ({model.high})."
+            )
+
+        # Set _is_constant based on low == high
+        model._is_constant = model.low == model.high
+
+        # Ensure that low and high are valid datetime objects
+        if not isinstance(model.low, datetime) or not isinstance(model.high, datetime):
+            raise ValueError(
+                f"Invalid range for {model.name}: low or high is not a valid datetime object (low={model.low}, high={model.high})."
+            )
+
+        # Ensure that 'step' is positive and non-zero
+        if model.step.total_seconds() <= 0:
+            raise ValueError("'step' must be a positive timedelta.")
+
+        return model
+
+    def sample(self, count: int = 1) -> Any:
+        """
+        Samples datetime values from the distribution.
+        If the distribution is constant, returns a list filled with the constant datetime value.
+        Otherwise, samples based on the specified sampling strategy.
+        """
+        if self._is_constant:
+            if self.low is None:
+                raise ValueError(
+                    "Cannot sample constant datetime distribution: low is not provided."
+                )
+            samples = [self.low for _ in range(count)]
+        else:
+            if self.low is None or self.high is None:
+                raise ValueError(
+                    "Cannot sample datetime distribution: low or high is not provided."
+                )
+            if self.sampling_strategy in ["marginal", "uniform"]:
+                msamples = self.sample_marginal(count)
+                if msamples is not None:
+                    return msamples
+                if self.low is None or self.high is None:
+                    raise ValueError(
+                        "Cannot sample based on marginal distribution: low or high is not provided."
+                    )
+                total_seconds = (self.high - self.low).total_seconds()
+                step_seconds = self.step.total_seconds()
+                steps = int(total_seconds / step_seconds)
+                step_indices = self._rng.integers(0, steps + 1, count)
+                samples = [self.low + self.step * int(s) for s in step_indices]
+            else:
+                raise ValueError(
+                    f"Unsupported sampling strategy '{self.sampling_strategy}'."
+                )
+        return samples
+
+    def get(self) -> List[Any]:
+        """
+        Returns the metadata of the distribution.
+        """
+        return [self.name, self.low, self.high, self.step, self.offset]
+
+    def has(self, val: datetime) -> bool:
+        """
+        Checks if a datetime value is within the distribution's range.
+        """
+        if self.low is None or self.high is None:
+            raise ValueError("Cannot determine 'has' because 'low' or 'high' is None.")
+        return self.low <= val <= self.high
+
+    def includes(self, other: "Distribution") -> bool:
+        """
+        Checks if another datetime distribution is entirely within this distribution, considering the offset.
+        """
+        if self.low is None or self.high is None:
+            return False
+        if other.min() is None or other.max() is None:
+            return False
+        return (
+            self.low - self.offset <= other.min()
+            and other.max() <= self.high + self.offset
+        )
+
+    def as_constraint(self) -> Constraints:
+        """
+        Converts the distribution to a set of constraints.
+        """
+        return Constraints(
+            rules=[
+                (self.name, "le", self.high),
+                (self.name, "ge", self.low),
+                (self.name, "dtype", "datetime"),
+            ]
+        )
+
+    def min(self) -> Optional[datetime]:
+        """
+        Returns the minimum datetime value of the distribution.
+        """
+        return self.low
+
+    def max(self) -> Optional[datetime]:
+        """
+        Returns the maximum datetime value of the distribution.
+        """
+        return self.high
+
+    def dtype(self) -> str:
+        """
+        Returns the data type of the distribution.
+        """
+        return "datetime"
+
+
+class PassThroughDistribution(Distribution):
+    """
+    .. inheritance-diagram:: synthcity.plugins.core.distribution.PassThroughDistribution
+        :parts: 1
+    """
+
+    data: pd.Series
+    _dtype: str = PrivateAttr("")
+
+    def setup_distribution(self) -> None:
+        if self.data is None:
+            raise ValueError("'data' must be provided for PassThroughDistribution.")
+
+        # No additional attributes to set up since 'data' is used directly
+        # Optionally, store the data type for dtype method
+        self._dtype = str(self.data.dtype)
+
+    def sample(self, count: int = 1) -> Any:
+        msamples = self.sample_marginal(count)
+        if msamples is not None:
+            return msamples
+        return self.data.sample(
+            n=count, replace=True, random_state=self.random_state
+        ).values
+
+    def as_constraint(self) -> Constraints:
+        # No constraints needed for pass-through columns
+        return Constraints(rules=[])
+
+    def get(self) -> List[Any]:
+        # Return the unique values or any relevant info
+        return [self.name]
+
+    def has(self, val: Any) -> bool:
+        # Check if the value exists in the data
+        return val in self.data.values
+
+    def includes(self, other: "Distribution") -> bool:
+        # Since we are passing through values, we can define includes as checking if all values in other are in self.data
+        if isinstance(other, PassThroughDistribution):
+            return set(other.data.unique()).issubset(set(self.data.unique()))
+        else:
+            return False
+
+    def min(self) -> Any:
+        return self.data.min()
+
+    def max(self) -> Any:
+        return self.data.max()
+
+    def dtype(self) -> str:
+        return str(self.data.dtype)
+
+
+def constraint_to_distribution(constraints: Constraints, feature: str) -> Distribution:
+    """Infer Distribution from Constraints.
+
+    Args:
+        constraints: Constraints
+            The Constraints on features.
+        feature: str
+            The name of the feature in question.
+
+    Returns:
+        The inferred Distribution.
+    """
+    dist_name, dist_args = constraints.feature_params(feature)
+
+    if dist_name == "categorical":
+        dist_template = CategoricalDistribution
+    elif dist_name == "integer":
+        dist_template = IntegerDistribution
+    elif dist_name == "datetime":
+        dist_template = DatetimeDistribution
+    else:
+        dist_template = FloatDistribution
+
+    return dist_template(name=feature, **dist_args)
+
+

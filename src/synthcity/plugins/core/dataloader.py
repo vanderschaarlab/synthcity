@@ -1819,3 +1819,228 @@ def create_from_info(
         return ImageDataLoader.from_info(data, info)
     else:
         raise RuntimeError(f"invalid datatype {info}")
+
+
+from synthcity.plugins.core.constraints import Constraints
+from synthcity.plugins.core.models.syn_seq_encoder import Syn_SeqEncoder
+
+
+class Syn_SeqDataLoader(DataLoader):
+    """
+    A DataLoader that applies Syn_Seq-style preprocessing to input data,
+    inheriting directly from DataLoader and implementing all required
+    abstract methods.
+
+    - syn_order: The order of columns to keep or process. If not provided (None or empty),
+                 use the raw DataFrame column order.
+    - columns_special_values: A dict of { column_name : list_of_special_values },
+      specifying which values to treat as 'special' or missing in numeric columns.
+    - col_type: A dict { column_name : "category"/"numeric"/"date"/... } used to force
+      how each column is handled.
+    - max_categories: numeric threshold for deciding numeric vs. categorical if col_type
+      isn't specified.
+    """
+
+    def __init__(
+        self,
+        data: pd.DataFrame,
+        syn_order: Optional[List[str]] = None,
+        special_value: Optional[Dict[str, List[Any]]] = None,
+        col_type: Optional[Dict[str, str]] = None,
+        max_categories: int = 20,
+        random_state: int = 0,
+        train_size: float = 0.8,
+        **kwargs: Any,
+    ) -> None:
+        """
+        Args:
+            data: the raw DataFrame
+            syn_order: optional list of columns in the desired processing order
+            special_value: { "col_name": [list_of_special_values], ... }
+            col_type: { "col_name": "category"/"numeric"/"date"/... }
+            max_categories: threshold for deciding numeric vs. categorical if not declared
+            random_state: for reproducibility
+            train_size: fraction of data for 'train' (rest goes to 'test')
+        """
+        if not syn_order:
+            print("[INFO] syn_order not provided; using data.columns as default.")
+            syn_order = list(data.columns)
+
+        # ensure all requested columns exist
+        missing_columns = set(syn_order) - set(data.columns)
+        if missing_columns:
+            raise ValueError(f"Missing columns in input data: {missing_columns}")
+
+        # store user parameters
+        self.syn_order = syn_order
+        self.columns_special_values = special_value or {}
+        self.col_type = col_type or {}
+        self.max_categories = max_categories
+
+        # reorder data based on syn_order
+        filtered_data = data[self.syn_order].copy()
+
+        # call parent constructor
+        super().__init__(
+            data_type="syn_seq",
+            data=filtered_data,
+            random_state=random_state,
+            train_size=train_size,
+            **kwargs,
+        )
+
+        # keep a reference
+        self._df = filtered_data
+
+        # debug print
+        print("[INFO] Syn_SeqDataLoader init complete:")
+        print(f"  - syn_order: {self.syn_order}")
+        print(f"  - special_value (columns_special_values): {self.columns_special_values}")
+        print(f"  - col_type: {self.col_type}")
+        print(f"  - data shape: {self._df.shape}")
+
+        # create + fit our Syn_SeqEncoder (just fit, actual transform is in encode())
+        self._encoder = Syn_SeqEncoder(
+            columns_special_values=self.columns_special_values,
+            syn_order=self.syn_order,
+            max_categories=self.max_categories,
+            col_type=self.col_type,
+        )
+        self._encoder.fit(self._df)
+
+        print("[DEBUG] After encoder.fit(), detected info:")
+        print(f"  - encoder.column_order_: {self._encoder.column_order_}")
+        print(f"  - numeric_info_: {self._encoder.numeric_info_}")
+        print(f"  - categorical_info_: {self._encoder.categorical_info_}")
+        if self._encoder.variable_selection_ is not None:
+            print("  - variable_selection_:\n", self._encoder.variable_selection_)
+        print("----------------------------------------------------------------")
+
+    # ----------------------------------------------------------------
+    # Inherited/required abstract methods
+    # ----------------------------------------------------------------
+    @property
+    def shape(self) -> tuple:
+        return self._df.shape
+
+    @property
+    def columns(self) -> list:
+        return list(self._df.columns)
+
+    def dataframe(self) -> pd.DataFrame:
+        return self._df
+
+    def numpy(self) -> pd.DataFrame:
+        return self._df.values
+
+    def info(self) -> dict:
+        return {
+            "data_type": self.data_type,
+            "len": len(self),
+            "train_size": self.train_size,
+            "random_state": self.random_state,
+            "syn_order": self.syn_order,
+            "max_categories": self.max_categories,
+            "col_type": self.col_type,
+            "columns_special_values": self.columns_special_values,
+        }
+
+    def __len__(self) -> int:
+        return len(self._df)
+
+    def satisfies(self, constraints: Constraints) -> bool:
+        return constraints.is_valid(self._df)
+
+    def match(self, constraints: Constraints) -> "Syn_SeqDataLoader":
+        matched_df = constraints.match(self._df)
+        return self.decorate(matched_df)
+
+    @staticmethod
+    def from_info(data: pd.DataFrame, info: dict) -> "Syn_SeqDataLoader":
+        return Syn_SeqDataLoader(
+            data=data,
+            syn_order=info.get("syn_order"),
+            special_value=info.get("columns_special_values", {}),
+            col_type=info.get("col_type", {}),
+            max_categories=info.get("max_categories", 20),
+            random_state=info["random_state"],
+            train_size=info["train_size"],
+        )
+
+    def sample(self, count: int, random_state: int = 0) -> "Syn_SeqDataLoader":
+        sampled_df = self._df.sample(count, random_state=random_state)
+        return self.decorate(sampled_df)
+
+    def drop(self, columns: list = []) -> "Syn_SeqDataLoader":
+        dropped_df = self._df.drop(columns=columns, errors="ignore")
+        return self.decorate(dropped_df)
+
+    def __getitem__(self, feature: Union[str, list, int]) -> Any:
+        return self._df[feature]
+
+    def __setitem__(self, feature: str, val: Any) -> None:
+        self._df[feature] = val
+
+    def train(self) -> "Syn_SeqDataLoader":
+        ntrain = int(len(self._df) * self.train_size)
+        train_df = self._df.iloc[:ntrain].copy()
+        return self.decorate(train_df)
+
+    def test(self) -> "Syn_SeqDataLoader":
+        ntrain = int(len(self._df) * self.train_size)
+        test_df = self._df.iloc[ntrain:].copy()
+        return self.decorate(test_df)
+
+    def fillna(self, value: Any) -> "Syn_SeqDataLoader":
+        filled_df = self._df.fillna(value)
+        return self.decorate(filled_df)
+
+    def compression_protected_features(self) -> list:
+        return []
+
+    def is_tabular(self) -> bool:
+        return True
+
+    def unpack(self, as_numpy: bool = False, pad: bool = False) -> Any:
+        if as_numpy:
+            return self._df.to_numpy()
+        return self._df
+
+    def get_fairness_column(self) -> Union[str, Any]:
+        return None
+
+    # ----------------------------------------------------------------
+    # Syn_Seq-specific encode/decode
+    # ----------------------------------------------------------------
+    def encode(
+        self, encoders: Optional[Dict[str, Any]] = None
+    ) -> Tuple["Syn_SeqDataLoader", Dict]:
+        if encoders is None:
+            encoded_data = self._encoder.transform(self._df)
+            new_loader = self.decorate(encoded_data)
+            return new_loader, {"syn_seq_encoder": self._encoder}
+        else:
+            return self, encoders
+
+    def decode(self, encoders: Dict[str, Any]) -> "Syn_SeqDataLoader":
+        if "syn_seq_encoder" in encoders:
+            encoder = encoders["syn_seq_encoder"]
+            if not isinstance(encoder, Syn_SeqEncoder):
+                raise TypeError(f"Expected Syn_SeqEncoder, got {type(encoder)}")
+            decoded_data = encoder.inverse_transform(self._df)
+            return self.decorate(decoded_data)
+        return self
+
+    def decorate(self, data: pd.DataFrame) -> "Syn_SeqDataLoader":
+        """
+        Helper for creating a new instance with the same settings but new data.
+        """
+        return Syn_SeqDataLoader(
+            data=data,
+            syn_order=self.syn_order,
+            special_value=self.columns_special_values,
+            col_type=self.col_type,
+            max_categories=self.max_categories,
+            random_state=self.random_state,
+            train_size=self.train_size,
+        )
