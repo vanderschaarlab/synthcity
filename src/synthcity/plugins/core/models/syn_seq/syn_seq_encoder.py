@@ -1,9 +1,10 @@
+# synthcity/plugins/core/models/syn_seq/syn_seq_encoder.py
+
 from typing import Optional, Dict, Any, List, Union
 import pandas as pd
 import numpy as np
 from sklearn.base import TransformerMixin, BaseEstimator
 
-# [ADDED/CHANGED] We'll import datetime conversion if needed
 from synthcity.plugins.core.models.feature_encoder import DatetimeEncoder
 
 class Syn_SeqEncoder(TransformerMixin, BaseEstimator):

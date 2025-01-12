@@ -3,6 +3,14 @@ import os
 # 1) Put all the file paths here.
 FILE_PATHS = [
     "src/synthcity/plugins/core/models/syn_seq/syn_seq_encoder.py",
+    "src/synthcity/plugins/core/models/syn_seq/cart.py",
+    "src/synthcity/plugins/core/models/syn_seq/ctree.py",
+    "src/synthcity/plugins/core/models/syn_seq/logreg.py",
+    "src/synthcity/plugins/core/models/syn_seq/misc.py",
+    "src/synthcity/plugins/core/models/syn_seq/norm.py",
+    "src/synthcity/plugins/core/models/syn_seq/pmm.py",
+    "src/synthcity/plugins/core/models/syn_seq/polyreg.py",
+    "src/synthcity/plugins/core/models/syn_seq/rf.py",
     "src/synthcity/plugins/core/models/syn_seq/syn_seq.py",
     "src/synthcity/plugins/core/models/syn_seq/syn_seq_constraints.py",
     "src/synthcity/plugins/core/dataloader.py",
