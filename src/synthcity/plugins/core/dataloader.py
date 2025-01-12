@@ -21,6 +21,9 @@ from synthcity.plugins.core.models.feature_encoder import DatetimeEncoder
 from synthcity.utils.compression import compress_dataset, decompress_dataset
 from synthcity.utils.serialization import dataframe_hash
 
+# Syn_Seq
+from synthcity.plugins.core.models.syn_seq.syn_seq_encoder import Syn_SeqEncoder
+
 
 class DataLoader(metaclass=ABCMeta):
     """
@@ -1819,10 +1822,6 @@ def create_from_info(
         return ImageDataLoader.from_info(data, info)
     else:
         raise RuntimeError(f"invalid datatype {info}")
-
-
-from synthcity.plugins.core.constraints import Constraints
-from synthcity.plugins.core.models.syn_seq.syn_seq_encoder import Syn_SeqEncoder
 
 
 class Syn_SeqDataLoader(DataLoader):
