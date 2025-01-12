@@ -12,7 +12,7 @@ from synthcity.plugins.core.schema import Schema
 from synthcity.plugins.core.constraints import Constraints
 
 # local aggregator
-from synthcity.plugins.core.models.syn_seq import Syn_Seq
+from synthcity.plugins.core.models.syn_seq.syn_seq import Syn_Seq
 
 
 class Syn_SeqPlugin(Plugin):

@@ -1822,7 +1822,7 @@ def create_from_info(
 
 
 from synthcity.plugins.core.constraints import Constraints
-from synthcity.plugins.core.models.syn_seq_encoder import Syn_SeqEncoder
+from synthcity.plugins.core.models.syn_seq.syn_seq_encoder import Syn_SeqEncoder
 
 
 class Syn_SeqDataLoader(DataLoader):

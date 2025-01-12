@@ -11,9 +11,9 @@ import numpy as np
 from random import sample
 
 # local references
-from src.synthcity.plugins.core.dataloader import Syn_SeqDataLoader
-from src.synthcity.plugins.core.constraints import Constraints
-from src.synthcity.plugins.core.models.syn_seq_constraints import SynSeqConstraints
+from synthcity.plugins.core.dataloader import Syn_SeqDataLoader
+from synthcity.plugins.core.constraints import Constraints
+from synthcity.plugins.core.models.syn_seq.syn_seq_constraints import SynSeqConstraints
 
 
 def _to_synseq_constraints(
