@@ -1,4 +1,3 @@
 INSTRUCTION:
-Hey guys, our captain(main model) and I have discussed some changes in syn_seq.py, base model. There are some major modifications.
-Revise your parts and generate the code if there's modification to be made. If you don't have anything to change, just tell me there's nothing to change at the moment.
+Hey guys, Revise your parts and generate the code if there's modification to be made. If you don't have anything to change, just tell me there's nothing to change at the moment.
 Thanks.

@@ -2,11 +2,11 @@ import os
 
 # 1) Put all the file paths here.
 FILE_PATHS = [
-    "src/synthcity/plugins/core/models/syn_seq_encoder.py",
-    "src/synthcity/plugins/core/models/syn_seq.py",
+    "src/synthcity/plugins/core/models/syn_seq/syn_seq_encoder.py",
+    "src/synthcity/plugins/core/models/syn_seq/syn_seq.py",
+    "src/synthcity/plugins/core/models/syn_seq/syn_seq_constraints.py",
     "src/synthcity/plugins/core/dataloader.py",
-    "src/synthcity/plugins/generic/plugin_syn_seq.py",
-    "src/synthcity/plugins/core/models/syn_seq_constraints.py"
+    "src/synthcity/plugins/generic/plugin_syn_seq.py"
 ]
 
 # 2) Specify the output file name here.
