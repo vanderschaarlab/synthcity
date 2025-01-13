@@ -11,6 +11,14 @@ class Syn_SeqEncoder(TransformerMixin, BaseEstimator):
     """
     Syn_SeqEncoder handles preprocessing and postprocessing tasks using fit/transform pattern,
     plus manages a 'variable_selection' matrix (like a prediction matrix).
+    
+    This encoder:
+      - Orders columns (if syn_order specified).
+      - Attempts to detect if a column is numeric, category, or date (or uses the user’s col_type).
+      - Splits numeric columns into a “clean numeric” + a “_cat” column for special-value or missing marking.
+      - Builds a default or user-provided variable_selection matrix (row=target, col=predictor).
+      - Assigns placeholder methods (so that we have some field to see them). 
+        (Now revised to match aggregator’s recognized method strings like “SWR” and “CART”.)
     """
 
     def __init__(
@@ -19,7 +27,7 @@ class Syn_SeqEncoder(TransformerMixin, BaseEstimator):
         syn_order: Optional[List[str]] = None,
         max_categories: int = 20,
         user_variable_selection: Optional[pd.DataFrame] = None,
-        # [ADDED/CHANGED] user-declared column types (e.g. {"C1":"category","N1":"numeric","D1":"date"})
+        # user-declared column types (e.g. {"C1":"category","N1":"numeric","D1":"date"})
         col_type: Optional[Dict[str, str]] = None,
     ) -> None:
         """
@@ -38,14 +46,14 @@ class Syn_SeqEncoder(TransformerMixin, BaseEstimator):
         # track info about columns
         self.categorical_info_: Dict[str, Dict[str, Any]] = {}
         self.numeric_info_: Dict[str, Dict[str, Any]] = {}
-        # [ADDED/CHANGED] We'll track date columns separately
+        # We'll track date columns separately
         self.date_info_: Dict[str, Dict[str, Any]] = {}
 
         self.column_order_: List[str] = []
         self.method_assignments: Dict[str, str] = {}
         self.variable_selection_: Optional[pd.DataFrame] = None
 
-        # [ADDED/CHANGED] store user col_type
+        # store user col_type
         self.col_type = col_type or {}
 
     def fit(self, X: pd.DataFrame, y=None) -> "Syn_SeqEncoder":
@@ -67,7 +75,7 @@ class Syn_SeqEncoder(TransformerMixin, BaseEstimator):
         X = self._split_numeric_cols(X)
         # 3) update dtypes (including date if declared)
         X = self._update_column_types(X)
-        # 4) assign placeholder methods
+        # 4) assign placeholder methods (aligned with aggregator’s method names)
         X = self._assign_methods(X)
         # 5) update variable_selection for newly created columns
         self._update_variable_selection_after_split(X)
@@ -198,7 +206,7 @@ class Syn_SeqEncoder(TransformerMixin, BaseEstimator):
         self.date_info_.clear()
 
         for col in X.columns:
-            declared_type = self.col_type.get(col, "").lower()  # [ADDED/CHANGED]
+            declared_type = self.col_type.get(col, "").lower()
             if declared_type == "category":
                 self.categorical_info_[col] = {"dtype": "category"}
             elif declared_type == "numeric":
@@ -224,7 +232,7 @@ class Syn_SeqEncoder(TransformerMixin, BaseEstimator):
         and store in columns_special_values. The user can override or supply additional.
         """
         for col in X.columns:
-            freq = X[col].value_counts(normalize=True)
+            freq = X[col].value_counts(dropna=False, normalize=True)
             high_vals = freq[freq > 0.9].index.tolist()
             if high_vals:
                 existing_vals = self.columns_special_values.get(col, [])
@@ -283,22 +291,21 @@ class Syn_SeqEncoder(TransformerMixin, BaseEstimator):
 
     def _assign_methods(self, X: pd.DataFrame) -> pd.DataFrame:
         """
-        Assign placeholder methods to each column, purely for demonstration
-        (the real logic in R's synthpop is more dynamic).
+        Assign placeholder methods to each column, 
+        matching the aggregator's known method strings:
+          - the aggregator typically uses "SWR" for the first column
+          - default "CART" for subsequent columns
         """
         self.method_assignments.clear()
         first = True
         for c in X.columns:
             if first:
-                self.method_assignments[c] = "random_sampling"
+                self.method_assignments[c] = "SWR"
                 first = False
             else:
                 self.method_assignments[c] = "CART"
         return X
 
-    # -----------------------------------------------------
-    # user update variable selection
-    # -----------------------------------------------------
     @staticmethod
     def update_variable_selection(
         var_sel_df: pd.DataFrame,
