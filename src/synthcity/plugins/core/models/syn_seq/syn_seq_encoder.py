@@ -1,331 +1,263 @@
-# synthcity/plugins/core/models/syn_seq/syn_seq_encoder.py
-
-from typing import Optional, Dict, Any, List, Union
+from typing import Optional, Dict, List
 import pandas as pd
 import numpy as np
 from sklearn.base import TransformerMixin, BaseEstimator
 
-from synthcity.plugins.core.models.feature_encoder import DatetimeEncoder
 
 class Syn_SeqEncoder(TransformerMixin, BaseEstimator):
     """
-    Syn_SeqEncoder handles preprocessing and postprocessing tasks using fit/transform pattern,
-    plus manages a 'variable_selection' matrix (like a prediction matrix).
-    
-    This encoder:
-      - Orders columns (if syn_order specified).
-      - Attempts to detect if a column is numeric, category, or date (or uses the user’s col_type).
-      - Splits numeric columns into a “clean numeric” + a “_cat” column for special-value or missing marking.
-      - Builds a default or user-provided variable_selection matrix (row=target, col=predictor).
-      - Assigns placeholder methods (so that we have some field to see them). 
-        (Now revised to match aggregator’s recognized method strings like “SWR” and “CART”.)
+    - 내부적으로 "date" = day-offset numeric 으로 변환.
+    - aggregator(학습) 측에는 "numeric" or "category"로만 보이길 원함.
+    - 하지만 inverse_transform 때는 원래 date로 복원해야 하므로, 
+      내부에서는 "date" 정보를 별도 보관.
     """
 
     def __init__(
         self,
-        columns_special_values: Optional[Dict[str, Any]] = None,
+        columns_special_values: Optional[Dict[str, List]] = None,
         syn_order: Optional[List[str]] = None,
         max_categories: int = 20,
-        user_variable_selection: Optional[pd.DataFrame] = None,
-        # user-declared column types (e.g. {"C1":"category","N1":"numeric","D1":"date"})
         col_type: Optional[Dict[str, str]] = None,
     ) -> None:
-        """
-        Args:
-            columns_special_values : {colName : [specialVals...]}
-            syn_order : optional column order to use
-            max_categories : threshold for deciding numeric vs categorical
-            user_variable_selection : optional DataFrame(n x n) with row=target, col=predictor
-            col_type : user-declared column types, e.g. {"C2":"category","N1":"numeric","D1":"date"}
-        """
         self.columns_special_values = columns_special_values or {}
         self.syn_order = syn_order or []
         self.max_categories = max_categories
-        self.user_variable_selection = user_variable_selection
 
-        # track info about columns
-        self.categorical_info_: Dict[str, Dict[str, Any]] = {}
-        self.numeric_info_: Dict[str, Dict[str, Any]] = {}
-        # We'll track date columns separately
-        self.date_info_: Dict[str, Dict[str, Any]] = {}
+        # 유저 선언 { "col":"numeric"/"category"/"date" }
+        # => detect 결과를 합쳐 최종 col_type[col] = "numeric"/"category"/"date"
+        self.col_type: Dict[str, str] = col_type.copy() if col_type else {}
+
+        # 원본 dtype: "float64", "int64", "object", "datetime64[ns]" ...
+        self.original_dtype_map: Dict[str, str] = {}
 
         self.column_order_: List[str] = []
-        self.method_assignments: Dict[str, str] = {}
         self.variable_selection_: Optional[pd.DataFrame] = None
 
-        # store user col_type
-        self.col_type = col_type or {}
+        # 날짜 min => offset 변환용
+        self.date_mins: Dict[str, pd.Timestamp] = {}
 
+    # ------------------- FIT -------------------
     def fit(self, X: pd.DataFrame, y=None) -> "Syn_SeqEncoder":
-        # copy X to avoid side effects
         X = X.copy()
-
         self._detect_column_order(X)
-        self._detect_col_types(X)
+        self._detect_col_types_and_store_original(X)
         self._detect_special_values(X)
-        self._build_variable_selection_matrix(X)
+        self._build_variable_selection(X)
+        self._store_date_min(X)
         return self
 
+    # ------------------- TRANSFORM -------------------
     def transform(self, X: pd.DataFrame) -> pd.DataFrame:
         X = X.copy()
-
-        # 1) reorder columns
+        # 1) reorder
         X = self._reorder_columns(X)
-        # 2) split numeric => numeric + numeric_cat
+        # 2) date => numeric offset
+        X = self._convert_date_to_offset(X)
+        # 3) split numeric => col_cat
         X = self._split_numeric_cols(X)
-        # 3) update dtypes (including date if declared)
-        X = self._update_column_types(X)
-        # 4) assign placeholder methods (aligned with aggregator’s method names)
-        X = self._assign_methods(X)
-        # 5) update variable_selection for newly created columns
+        # 4) apply role => numeric/category
+        X = self._apply_role_dtype(X)
+        # 5) expand variable_selection if splitted
         self._update_variable_selection_after_split(X)
-
         return X
 
+    # ------------------- INVERSE_TRANSFORM -------------------
     def inverse_transform(self, X: pd.DataFrame) -> pd.DataFrame:
         X = X.copy()
+        # 1) numeric special => single val restore
+        for col, specs in self.columns_special_values.items():
+            if col in X.columns and len(specs) == 1:
+                X[col] = X[col].replace(pd.NA, specs[0])
 
-        # 1) restore special values for numeric/date
-        for col, vals in self.columns_special_values.items():
-            if col in X.columns:
-                # if a single special value, use it directly
-                if isinstance(vals, list) and len(vals) == 1:
-                    vals = vals[0]
-                X[col] = X[col].replace(pd.NA, vals)
+        # 2) numeric offset => date
+        X = self._convert_offset_to_date(X)
 
-        # 2) restore dtype for categorical
-        for col, info in self.categorical_info_.items():
-            if col in X.columns:
-                X[col] = X[col].astype(info["dtype"])
-
-        # 3) restore date columns
-        for col, info in self.date_info_.items():
-            if col in X.columns:
-                X[col] = pd.to_datetime(X[col], errors="coerce")
-
-        # 4) restore numeric
-        for col, info in self.numeric_info_.items():
-            if col in X.columns:
-                X[col] = X[col].astype(info["dtype"])
-
+        # 3) restore original dtype
+        for col in list(X.columns):
+            if col.endswith("_cat"):
+                continue
+            if col in self.original_dtype_map:
+                odtype = self.original_dtype_map[col]
+                try:
+                    X[col] = X[col].astype(odtype)
+                except:
+                    pass
         return X
 
-    # -----------------------------------------------------
-    # variable_selection building
-    # -----------------------------------------------------
-    def _build_variable_selection_matrix(self, X: pd.DataFrame) -> None:
+    # ------------------- aggregator에 전달: changed_dtype -------------------
+    def get_changed_dtype_map(self) -> Dict[str, str]:
         """
-        If user provided a variable_selection DataFrame, validate it. Otherwise,
-        build a default (row=target, columns=all prior columns).
+        여기서 "date"도 학습단계에선 "numeric" 취급해주고 싶다면,
+        date -> numeric 치환해서 반환하면 됨.
         """
-        n = len(self.column_order_)
-        df_cols = self.column_order_
-
-        if self.user_variable_selection is not None:
-            vs = self.user_variable_selection.copy()
-            if vs.shape != (n, n):
-                raise ValueError(
-                    f"user_variable_selection must be shape ({n},{n}), got {vs.shape}"
-                )
-            # check row/col alignment
-            if list(vs.index) != df_cols or list(vs.columns) != df_cols:
-                raise ValueError(
-                    "Mismatch in user_variable_selection index/columns vs syn_order."
-                )
-            self.variable_selection_ = vs
-        else:
-            # default: row=target col=predictor => row i uses columns [0..i-1]
-            vs = pd.DataFrame(0, index=df_cols, columns=df_cols)
-            for i in range(n):
-                for j in range(i):
-                    vs.iat[i, j] = 1
-            self.variable_selection_ = vs
-
-    def _update_variable_selection_after_split(self, X: pd.DataFrame) -> None:
-        """
-        If numeric columns were split (col => col + col_cat), we add the new
-        columns into the variable_selection matrix. They replicate the row/col
-        from the original but don't self-predict.
-        """
-        if self.variable_selection_ is None:
-            return
-        old_vs = self.variable_selection_
-        old_rows = old_vs.index.tolist()
-        old_cols = old_vs.columns.tolist()
-
-        final_cols = list(X.columns)
-        new_cols = [c for c in final_cols if c not in old_rows]
-        if not new_cols:
-            return
-
-        vs_new = pd.DataFrame(0, index=old_rows + new_cols, columns=old_cols + new_cols)
-
-        # copy old content
-        for r in old_rows:
-            for c in old_cols:
-                vs_new.at[r, c] = old_vs.at[r, c]
-
-        # handle new splitted columns
-        for c_new in new_cols:
-            if c_new.endswith("_cat"):
-                c_base = c_new[:-4]  # e.g. "age_cat" => "age"
-                if c_base in vs_new.index and c_base in vs_new.columns:
-                    # copy entire row from base
-                    for c2 in old_cols:
-                        vs_new.at[c_new, c2] = vs_new.at[c_base, c2]
-                    # copy entire column from base
-                    for r2 in old_rows:
-                        vs_new.at[r2, c_new] = vs_new.at[r2, c_base]
-
-                vs_new.at[c_new, c_new] = 0  # new col doesn't predict itself
+        dtype_map = {}
+        for c, role in self.col_type.items():
+            if role == "date":
+                dtype_map[c] = "numeric"  # aggregator는 numeric처럼 처리
             else:
-                # brand new col => remain all zeros
-                pass
+                dtype_map[c] = role
+        return dtype_map
 
-        self.variable_selection_ = vs_new
-
-    # -----------------------------------------------------
-    # HELPER sub-routines
-    # -----------------------------------------------------
+    # ===================== Internals =====================
     def _detect_column_order(self, X: pd.DataFrame):
-        """
-        If user gave syn_order, we filter columns. Otherwise, use X.columns.
-        """
         if self.syn_order:
             self.column_order_ = [c for c in self.syn_order if c in X.columns]
         else:
             self.column_order_ = list(X.columns)
 
-    def _detect_col_types(self, X: pd.DataFrame):
-        """
-        For each column, decide if numeric/categorical/date, unless
-        col_type overrides. Then store in numeric_info_, categorical_info_, date_info_.
-        """
-        self.numeric_info_.clear()
-        self.categorical_info_.clear()
-        self.date_info_.clear()
+    def _detect_col_types_and_store_original(self, X: pd.DataFrame):
+        for col in self.column_order_:
+            if col not in X.columns:
+                continue
+            # 원본 dtype 저장
+            self.original_dtype_map[col] = str(X[col].dtype)
 
-        for col in X.columns:
-            declared_type = self.col_type.get(col, "").lower()
-            if declared_type == "category":
-                self.categorical_info_[col] = {"dtype": "category"}
-            elif declared_type == "numeric":
-                self.numeric_info_[col] = {"dtype": X[col].dtype}
-            elif declared_type == "date":
-                self.date_info_[col] = {"dtype": "datetime64[ns]"}
+            # user가 선언?
+            user_decl = self.col_type.get(col, "").lower()
+            if user_decl in ("numeric","category","date"):
+                self.col_type[col] = user_decl
+                continue
+
+            # fallback auto
+            if pd.api.types.is_datetime64_any_dtype(X[col]):
+                self.col_type[col] = "date"
             else:
-                # fallback auto-detect
                 nuniq = X[col].nunique()
-                # if #unique <= max_categories => treat as category
+                # max_categories 보다 크면 numeric
                 if nuniq > self.max_categories:
-                    # might be numeric or date
-                    if pd.api.types.is_datetime64_any_dtype(X[col]):
-                        self.date_info_[col] = {"dtype": "datetime64[ns]"}
-                    else:
-                        self.numeric_info_[col] = {"dtype": X[col].dtype}
+                    self.col_type[col] = "numeric"
                 else:
-                    self.categorical_info_[col] = {"dtype": "category"}
+                    self.col_type[col] = "category"
 
     def _detect_special_values(self, X: pd.DataFrame):
-        """
-        For each col, if a single value has >90% freq, consider it a "special" value
-        and store in columns_special_values. The user can override or supply additional.
-        """
-        for col in X.columns:
+        for col in self.column_order_:
+            if col not in X.columns:
+                continue
             freq = X[col].value_counts(dropna=False, normalize=True)
-            high_vals = freq[freq > 0.9].index.tolist()
-            if high_vals:
-                existing_vals = self.columns_special_values.get(col, [])
-                combined = set(existing_vals).union(set(high_vals))
-                self.columns_special_values[col] = list(combined)
+            big_ones = freq[freq>0.9].index.tolist()
+            if big_ones:
+                exist = self.columns_special_values.get(col, [])
+                merged = set(exist).union(big_ones)
+                self.columns_special_values[col] = list(merged)
+
+    def _build_variable_selection(self, X: pd.DataFrame):
+        df_cols = self.column_order_
+        vs = pd.DataFrame(0, index=df_cols, columns=df_cols)
+        for i in range(len(df_cols)):
+            for j in range(i):
+                vs.iat[i,j] = 1
+        self.variable_selection_ = vs
+
+    def _store_date_min(self, X: pd.DataFrame):
+        self.date_mins.clear()
+        for col, role in self.col_type.items():
+            if role == "date" and col in X.columns:
+                dt = pd.to_datetime(X[col], errors="coerce")
+                self.date_mins[col] = dt.min()
 
     def _reorder_columns(self, X: pd.DataFrame) -> pd.DataFrame:
-        if self.column_order_:
-            new_cols = [c for c in self.column_order_ if c in X.columns]
-            return X[new_cols]
+        keep_cols = [c for c in self.column_order_ if c in X.columns]
+        return X[keep_cols]
+
+    def _convert_date_to_offset(self, X: pd.DataFrame) -> pd.DataFrame:
+        """
+        date -> (X[col] - mindate).dt.days
+        """
+        for col, role in self.col_type.items():
+            if role == "date" and col in X.columns:
+                X[col] = pd.to_datetime(X[col], errors="coerce")
+                m = self.date_mins.get(col, None)
+                if m is None:
+                    m = X[col].min()
+                    self.date_mins[col] = m
+                X[col] = (X[col] - m).dt.days
         return X
 
     def _split_numeric_cols(self, X: pd.DataFrame) -> pd.DataFrame:
         """
-        For numeric columns, create an extra col for "special or missing" => col_cat
-        Then in col, we set them to NA to ensure they are not used as numeric. 
+        numeric -> col, col_cat
         """
-        for col in list(self.numeric_info_.keys()):
+        for col, role in list(self.col_type.items()):
+            if role != "numeric":
+                continue
             if col not in X.columns:
                 continue
-            cat_col = f"{col}_cat"
-            special_vals = self.columns_special_values.get(col, [])
+            specials = self.columns_special_values.get(col, [])
+            cat_col = col + "_cat"
 
-            # Mark special or missing in cat_col
             X[cat_col] = X[col].apply(
-                lambda x: x if (x in special_vals or pd.isna(x)) else -777
+                lambda v: v if (pd.isna(v) or v in specials) else -777
             )
-            X[cat_col] = X[cat_col].fillna(-9999)  # placeholder for NA
-            # In the numeric column, remove those special/NA
+            X[cat_col] = X[cat_col].fillna(-9999)
             X[col] = X[col].apply(
-                lambda x: x if (x not in special_vals and not pd.isna(x)) else pd.NA
+                lambda v: v if (not pd.isna(v) and v not in specials) else pd.NA
             )
             X[cat_col] = X[cat_col].astype("category")
-
         return X
 
-    def _update_column_types(self, X: pd.DataFrame) -> pd.DataFrame:
-        """
-        Attempt to cast date columns to datetime,
-        numeric to numeric dtype,
-        categorical to category dtype.
-        """
-        # handle date columns first
-        for col in self.date_info_:
-            if col in X.columns:
-                X[col] = pd.to_datetime(X[col], errors="coerce")
-
-        # handle numeric / categorical
-        for col in X.columns:
-            if col in self.numeric_info_:
-                X[col] = X[col].astype(self.numeric_info_[col]["dtype"])
-            elif col in self.categorical_info_:
+    def _apply_role_dtype(self, X: pd.DataFrame) -> pd.DataFrame:
+        for col, role in self.col_type.items():
+            if col not in X.columns:
+                continue
+            if role == "numeric":
+                X[col] = pd.to_numeric(X[col], errors="coerce")
+            elif role == "category":
                 X[col] = X[col].astype("category")
-
+            elif role == "date":
+                # 이미 day-offset float
+                pass
         return X
 
-    def _assign_methods(self, X: pd.DataFrame) -> pd.DataFrame:
-        """
-        Assign placeholder methods to each column, 
-        matching the aggregator's known method strings:
-          - the aggregator typically uses "SWR" for the first column
-          - default "CART" for subsequent columns
-        """
-        self.method_assignments.clear()
-        first = True
-        for c in X.columns:
-            if first:
-                self.method_assignments[c] = "SWR"
-                first = False
-            else:
-                self.method_assignments[c] = "CART"
+    def _convert_offset_to_date(self, X: pd.DataFrame) -> pd.DataFrame:
+        for col, role in self.col_type.items():
+            if role == "date" and col in X.columns:
+                m = self.date_mins.get(col, None)
+                if m is None:
+                    continue
+                X[col] = pd.to_numeric(X[col], errors="coerce")
+                X[col] = pd.to_timedelta(X[col], unit="D") + m
         return X
+
+    def _update_variable_selection_after_split(self, X: pd.DataFrame):
+        if self.variable_selection_ is None:
+            return
+        old_vs = self.variable_selection_
+        old_rows = list(old_vs.index)
+        old_cols = list(old_vs.columns)
+
+        new_cols = [c for c in X.columns if c not in old_rows]
+        if not new_cols:
+            return
+        vs_new = pd.DataFrame(0, index=old_rows+new_cols, columns=old_cols+new_cols)
+        for r in old_rows:
+            for c in old_cols:
+                vs_new.at[r, c] = old_vs.at[r, c]
+
+        for c_new in new_cols:
+            if c_new.endswith("_cat"):
+                c_base = c_new[:-4]
+                if c_base in vs_new.index and c_base in vs_new.columns:
+                    for c2 in old_cols:
+                        vs_new.at[c_new, c2] = vs_new.at[c_base, c2]
+                    for r2 in old_rows:
+                        vs_new.at[r2, c_new] = vs_new.at[r2, c_base]
+                vs_new.at[c_new, c_new] = 0
+
+        self.variable_selection_ = vs_new
 
     @staticmethod
     def update_variable_selection(
         var_sel_df: pd.DataFrame,
         user_dict: Dict[str, List[str]]
     ) -> pd.DataFrame:
-        """
-        In the variable_selection matrix, set row=target_col => 1 in the predictor columns.
-          user_dict = { "D": ["B","C"], "A": ["B"] }
-          => row "D", col "B","C" => 1, row "A", col "B" => 1
-        """
-        for target_col, predictor_list in user_dict.items():
-            if target_col not in var_sel_df.index:
-                print(f"[WARNING] '{target_col}' not in var_sel_df.index => skipping.")
+        for tgt, preds in user_dict.items():
+            if tgt not in var_sel_df.index:
+                print(f"[WARNING] {tgt} not in var_sel_df => skip")
                 continue
-            # set row=target_col to 0 first
-            var_sel_df.loc[target_col, :] = 0
-            # set 1 only for the user-specified predictors
-            for pred in predictor_list:
-                if pred in var_sel_df.columns:
-                    var_sel_df.loc[target_col, pred] = 1
+            var_sel_df.loc[tgt, :] = 0
+            for p in preds:
+                if p in var_sel_df.columns:
+                    var_sel_df.loc[tgt, p] = 1
                 else:
-                    print(f"[WARNING] predictor '{pred}' not in columns => skipping.")
+                    print(f"[WARNING] predictor {p} not in columns => skip")
         return var_sel_df
