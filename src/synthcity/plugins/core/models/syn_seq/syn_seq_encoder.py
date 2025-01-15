@@ -1,15 +1,17 @@
-from typing import Optional, Dict, List
+from typing import Optional, Dict, List, Any
 import pandas as pd
 import numpy as np
 from sklearn.base import TransformerMixin, BaseEstimator
 
-
 class Syn_SeqEncoder(TransformerMixin, BaseEstimator):
     """
-    - 내부적으로 "date" = day-offset numeric 으로 변환.
-    - aggregator(학습) 측에는 "numeric" or "category"로만 보이길 원함.
-    - 하지만 inverse_transform 때는 원래 date로 복원해야 하므로, 
-      내부에서는 "date" 정보를 별도 보관.
+    A minimal version of the syn_seq encoder that:
+      - Maintains col_map with { original_dtype, converted_type, method } for each column
+      - For date columns, does day-offset numeric transformation => converted_type="numeric"
+      - Splits numeric columns into col + col_cat, with col_cat placed before the original col in syn_order
+      - Expands variable_selection_ accordingly
+      - inverse_transform can restore date columns from day-offset,
+        and attempt to restore original_dtype if possible
     """
 
     def __init__(
@@ -18,119 +20,159 @@ class Syn_SeqEncoder(TransformerMixin, BaseEstimator):
         syn_order: Optional[List[str]] = None,
         max_categories: int = 20,
         col_type: Optional[Dict[str, str]] = None,
+        default_method: str = "cart",
     ) -> None:
+        """
+        Args:
+            columns_special_values: { colName : [specialVals...] } ex) {"age":[999], "bp":[-0.04]}
+            syn_order: column order to follow
+            max_categories: threshold for deciding numeric vs category if not declared
+            col_type: user overrides => { "birthdate":"date","sex":"category","bp":"numeric"... }
+            default_method: default method name for newly recognized columns
+        """
         self.columns_special_values = columns_special_values or {}
         self.syn_order = syn_order or []
         self.max_categories = max_categories
+        self.col_type = (col_type or {}).copy()  # user override
+        self.default_method = default_method
 
-        # 유저 선언 { "col":"numeric"/"category"/"date" }
-        # => detect 결과를 합쳐 최종 col_type[col] = "numeric"/"category"/"date"
-        self.col_type: Dict[str, str] = col_type.copy() if col_type else {}
+        # col_map: each col -> { "original_dtype", "converted_type", "method" }
+        # converted_type ∈ {"numeric","category"}
+        self.col_map: Dict[str, Dict[str, Any]] = {}
 
-        # 원본 dtype: "float64", "int64", "object", "datetime64[ns]" ...
-        self.original_dtype_map: Dict[str, str] = {}
-
-        self.column_order_: List[str] = []
-        self.variable_selection_: Optional[pd.DataFrame] = None
-
-        # 날짜 min => offset 변환용
+        # date minimums for offset
         self.date_mins: Dict[str, pd.Timestamp] = {}
 
-    # ------------------- FIT -------------------
+        # variable_selection matrix
+        self.variable_selection_: Optional[pd.DataFrame] = None
+
+    # ----------------------------------------------------------------
+    # Fit
+    # ----------------------------------------------------------------
     def fit(self, X: pd.DataFrame, y=None) -> "Syn_SeqEncoder":
         X = X.copy()
-        self._detect_column_order(X)
-        self._detect_col_types_and_store_original(X)
+        # 1) Decide syn_order (if not given)
+        self._detect_syn_order(X)
+        # 2) init col_map
+        self._init_col_map(X)
+        # 3) detect major special values
         self._detect_special_values(X)
+        # 4) build default variable_selection
         self._build_variable_selection(X)
+        # 5) store date mins
         self._store_date_min(X)
         return self
 
-    # ------------------- TRANSFORM -------------------
+    # ----------------------------------------------------------------
+    # Transform
+    # ----------------------------------------------------------------
     def transform(self, X: pd.DataFrame) -> pd.DataFrame:
         X = X.copy()
-        # 1) reorder
+
+        # 1) reorder columns
         X = self._reorder_columns(X)
-        # 2) date => numeric offset
+        # 2) date -> day offset => converted_type="numeric"
         X = self._convert_date_to_offset(X)
-        # 3) split numeric => col_cat
-        X = self._split_numeric_cols(X)
-        # 4) apply role => numeric/category
-        X = self._apply_role_dtype(X)
-        # 5) expand variable_selection if splitted
+        # 3) numeric -> split col_cat, place col_cat before original col
+        X = self._split_numeric_cols_in_front(X)
+        # 4) apply final dtype => numeric or category
+        X = self._apply_converted_dtype(X)
+        # 5) expand variable_selection if splitted col
         self._update_variable_selection_after_split(X)
         return X
 
-    # ------------------- INVERSE_TRANSFORM -------------------
+    # ----------------------------------------------------------------
+    # inverse_transform
+    # ----------------------------------------------------------------
     def inverse_transform(self, X: pd.DataFrame) -> pd.DataFrame:
         X = X.copy()
-        # 1) numeric special => single val restore
+
+        # 1) single special => restore
         for col, specs in self.columns_special_values.items():
-            if col in X.columns and len(specs) == 1:
+            if col in X.columns and len(specs)==1:
                 X[col] = X[col].replace(pd.NA, specs[0])
 
-        # 2) numeric offset => date
+        # 2) offset -> date
         X = self._convert_offset_to_date(X)
 
-        # 3) restore original dtype
-        for col in list(X.columns):
-            if col.endswith("_cat"):
+        # 3) restore original_dtype if possible
+        for col in X.columns:
+            if col not in self.col_map:
+                # splitted col?
                 continue
-            if col in self.original_dtype_map:
-                odtype = self.original_dtype_map[col]
+            orig_dt = self.col_map[col]["original_dtype"]
+            if orig_dt is not None:
                 try:
-                    X[col] = X[col].astype(odtype)
+                    X[col] = X[col].astype(orig_dt)
                 except:
                     pass
         return X
 
-    # ------------------- aggregator에 전달: changed_dtype -------------------
-    def get_changed_dtype_map(self) -> Dict[str, str]:
-        """
-        여기서 "date"도 학습단계에선 "numeric" 취급해주고 싶다면,
-        date -> numeric 치환해서 반환하면 됨.
-        """
-        dtype_map = {}
-        for c, role in self.col_type.items():
-            if role == "date":
-                dtype_map[c] = "numeric"  # aggregator는 numeric처럼 처리
-            else:
-                dtype_map[c] = role
-        return dtype_map
+    # ----------------------------------------------------------------
+    # set_method / get_method : if aggregator or user wants to override
+    # ----------------------------------------------------------------
+    def set_method(self, col: str, method: str) -> None:
+        """Override method for a column."""
+        if col not in self.col_map:
+            print(f"[WARNING] col_map has no '{col}'")
+            return
+        self.col_map[col]["method"] = method
 
-    # ===================== Internals =====================
-    def _detect_column_order(self, X: pd.DataFrame):
-        if self.syn_order:
-            self.column_order_ = [c for c in self.syn_order if c in X.columns]
+    def get_method_map(self) -> Dict[str, str]:
+        """Return { col : method } for all columns in col_map."""
+        return { c: info["method"] for c, info in self.col_map.items() }
+
+    # =================================================================
+    # Internals
+    # =================================================================
+    def _detect_syn_order(self, X: pd.DataFrame):
+        if not self.syn_order:
+            self.syn_order = list(X.columns)
         else:
-            self.column_order_ = list(X.columns)
+            self.syn_order = [c for c in self.syn_order if c in X.columns]
 
-    def _detect_col_types_and_store_original(self, X: pd.DataFrame):
-        for col in self.column_order_:
+    def _init_col_map(self, X: pd.DataFrame):
+        """
+        For each col in syn_order, decide if numeric or category or date => eventually store converted_type
+         - date => will become numeric in transform, but we'll keep track for inverse
+        """
+        self.col_map.clear()
+
+        for col in self.syn_order:
             if col not in X.columns:
                 continue
-            # 원본 dtype 저장
-            self.original_dtype_map[col] = str(X[col].dtype)
+            orig_dt = str(X[col].dtype)
 
-            # user가 선언?
-            user_decl = self.col_type.get(col, "").lower()
-            if user_decl in ("numeric","category","date"):
-                self.col_type[col] = user_decl
-                continue
-
-            # fallback auto
-            if pd.api.types.is_datetime64_any_dtype(X[col]):
-                self.col_type[col] = "date"
+            # Decide if date => (converted_type="numeric"), else numeric/category
+            declared = self.col_type.get(col, "").lower()
+            if declared == "date":
+                # We'll treat as numeric, but keep date info for inverse
+                conv_type = "numeric"
+            elif declared == "numeric":
+                conv_type = "numeric"
+            elif declared == "category":
+                conv_type = "category"
             else:
-                nuniq = X[col].nunique()
-                # max_categories 보다 크면 numeric
-                if nuniq > self.max_categories:
-                    self.col_type[col] = "numeric"
+                # fallback auto
+                if pd.api.types.is_datetime64_any_dtype(X[col]):
+                    conv_type = "numeric"  # internally day-offset
+                    self.col_type[col] = "date"  # mark for inverse
                 else:
-                    self.col_type[col] = "category"
+                    nuniq = X[col].nunique()
+                    if nuniq > self.max_categories:
+                        conv_type = "numeric"
+                    else:
+                        conv_type = "category"
+
+            # save to col_map
+            self.col_map[col] = {
+                "original_dtype": orig_dt,
+                "converted_type": conv_type,
+                "method": self.default_method
+            }
 
     def _detect_special_values(self, X: pd.DataFrame):
-        for col in self.column_order_:
+        for col in self.syn_order:
             if col not in X.columns:
                 continue
             freq = X[col].value_counts(dropna=False, normalize=True)
@@ -141,49 +183,57 @@ class Syn_SeqEncoder(TransformerMixin, BaseEstimator):
                 self.columns_special_values[col] = list(merged)
 
     def _build_variable_selection(self, X: pd.DataFrame):
-        df_cols = self.column_order_
-        vs = pd.DataFrame(0, index=df_cols, columns=df_cols)
-        for i in range(len(df_cols)):
+        idx = self.syn_order
+        vs = pd.DataFrame(0, index=idx, columns=idx)
+        for i in range(len(idx)):
             for j in range(i):
                 vs.iat[i,j] = 1
         self.variable_selection_ = vs
 
     def _store_date_min(self, X: pd.DataFrame):
-        self.date_mins.clear()
-        for col, role in self.col_type.items():
-            if role == "date" and col in X.columns:
-                dt = pd.to_datetime(X[col], errors="coerce")
-                self.date_mins[col] = dt.min()
+        """For date columns => store min date for offset calc"""
+        for col in self.syn_order:
+            # if user said date or we auto-detected => self.col_type[col]=="date"
+            # but in col_map => "converted_type":"numeric"
+            # we can check self.col_type if "date"
+            if self.col_type.get(col) == "date":
+                dt_series = pd.to_datetime(X[col], errors="coerce")
+                self.date_mins[col] = dt_series.min()
 
     def _reorder_columns(self, X: pd.DataFrame) -> pd.DataFrame:
-        keep_cols = [c for c in self.column_order_ if c in X.columns]
-        return X[keep_cols]
+        keep = [c for c in self.syn_order if c in X.columns]
+        return X[keep]
 
     def _convert_date_to_offset(self, X: pd.DataFrame) -> pd.DataFrame:
         """
-        date -> (X[col] - mindate).dt.days
+        If col_type[col]=="date", then X[col] => day offset vs min
+        col_map[col]["converted_type"] stays "numeric"
         """
-        for col, role in self.col_type.items():
-            if role == "date" and col in X.columns:
+        for col in self.syn_order:
+            if self.col_type.get(col) == "date" and col in X.columns:
+                mindt = self.date_mins.get(col, None)
                 X[col] = pd.to_datetime(X[col], errors="coerce")
-                m = self.date_mins.get(col, None)
-                if m is None:
-                    m = X[col].min()
-                    self.date_mins[col] = m
-                X[col] = (X[col] - m).dt.days
+                if mindt is None:
+                    mindt = X[col].min()
+                    self.date_mins[col] = mindt
+                X[col] = (X[col] - mindt).dt.days
         return X
 
-    def _split_numeric_cols(self, X: pd.DataFrame) -> pd.DataFrame:
+    def _split_numeric_cols_in_front(self, X: pd.DataFrame) -> pd.DataFrame:
         """
-        numeric -> col, col_cat
+        For each col whose converted_type is "numeric", create col_cat.
+        Insert col_cat before col in syn_order, add to col_map
         """
-        for col, role in list(self.col_type.items()):
-            if role != "numeric":
+        for col in list(self.syn_order):
+            if col not in self.col_map:
+                continue
+            if self.col_map[col]["converted_type"] != "numeric":
                 continue
             if col not in X.columns:
                 continue
-            specials = self.columns_special_values.get(col, [])
+
             cat_col = col + "_cat"
+            specials = self.columns_special_values.get(col, [])
 
             X[cat_col] = X[col].apply(
                 lambda v: v if (pd.isna(v) or v in specials) else -777
@@ -193,63 +243,86 @@ class Syn_SeqEncoder(TransformerMixin, BaseEstimator):
                 lambda v: v if (not pd.isna(v) and v not in specials) else pd.NA
             )
             X[cat_col] = X[cat_col].astype("category")
+
+            # insert cat_col in syn_order
+            if cat_col not in self.syn_order:
+                idx = self.syn_order.index(col)
+                self.syn_order.insert(idx, cat_col)
+
+            # add to col_map
+            self.col_map[cat_col] = {
+                "original_dtype": None,
+                "converted_type": "category",
+                "method": self.default_method
+            }
+
         return X
 
-    def _apply_role_dtype(self, X: pd.DataFrame) -> pd.DataFrame:
-        for col, role in self.col_type.items():
+    def _apply_converted_dtype(self, X: pd.DataFrame) -> pd.DataFrame:
+        """
+        If converted_type=="numeric" => to_numeric
+        else "category" => astype("category")
+        """
+        for col in self.syn_order:
             if col not in X.columns:
                 continue
-            if role == "numeric":
+            cinfo = self.col_map.get(col, {})
+            ctype = cinfo.get("converted_type","category")
+            if ctype=="numeric":
                 X[col] = pd.to_numeric(X[col], errors="coerce")
-            elif role == "category":
+            else:
                 X[col] = X[col].astype("category")
-            elif role == "date":
-                # 이미 day-offset float
-                pass
         return X
 
     def _convert_offset_to_date(self, X: pd.DataFrame) -> pd.DataFrame:
-        for col, role in self.col_type.items():
-            if role == "date" and col in X.columns:
-                m = self.date_mins.get(col, None)
-                if m is None:
-                    continue
-                X[col] = pd.to_numeric(X[col], errors="coerce")
-                X[col] = pd.to_timedelta(X[col], unit="D") + m
+        """
+        If self.col_type[col]=="date", => offset => date
+        """
+        for col in self.syn_order:
+            if self.col_type.get(col)=="date" and col in X.columns:
+                offset = pd.to_numeric(X[col], errors="coerce")
+                mindt = self.date_mins.get(col, None)
+                if mindt is not None:
+                    X[col] = pd.to_timedelta(offset, unit="D") + mindt
         return X
 
     def _update_variable_selection_after_split(self, X: pd.DataFrame):
         if self.variable_selection_ is None:
             return
         old_vs = self.variable_selection_
-        old_rows = list(old_vs.index)
+        old_idx = list(old_vs.index)
         old_cols = list(old_vs.columns)
-
-        new_cols = [c for c in X.columns if c not in old_rows]
+        new_cols = [c for c in X.columns if c not in old_idx]
         if not new_cols:
             return
-        vs_new = pd.DataFrame(0, index=old_rows+new_cols, columns=old_cols+new_cols)
-        for r in old_rows:
+
+        vs_new = pd.DataFrame(0, index=old_idx+new_cols, columns=old_cols+new_cols)
+        for r in old_idx:
             for c in old_cols:
-                vs_new.at[r, c] = old_vs.at[r, c]
+                vs_new.at[r,c] = old_vs.at[r,c]
 
         for c_new in new_cols:
             if c_new.endswith("_cat"):
                 c_base = c_new[:-4]
+                # copy row/col from base
                 if c_base in vs_new.index and c_base in vs_new.columns:
                     for c2 in old_cols:
                         vs_new.at[c_new, c2] = vs_new.at[c_base, c2]
-                    for r2 in old_rows:
+                    for r2 in old_idx:
                         vs_new.at[r2, c_new] = vs_new.at[r2, c_base]
                 vs_new.at[c_new, c_new] = 0
 
         self.variable_selection_ = vs_new
 
+    # ------------------ update_variable_selection
     @staticmethod
     def update_variable_selection(
         var_sel_df: pd.DataFrame,
         user_dict: Dict[str, List[str]]
     ) -> pd.DataFrame:
+        """
+        For row=target, col= predictor => set 1
+        """
         for tgt, preds in user_dict.items():
             if tgt not in var_sel_df.index:
                 print(f"[WARNING] {tgt} not in var_sel_df => skip")
