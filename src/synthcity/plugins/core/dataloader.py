@@ -1804,25 +1804,6 @@ class ImageDataLoader(DataLoader):
         raise NotImplementedError()
 
 
-@validate_arguments(config=dict(arbitrary_types_allowed=True))
-def create_from_info(
-    data: Union[pd.DataFrame, torch.utils.data.Dataset], info: dict
-) -> "DataLoader":
-    """Helper for creating a DataLoader from existing information."""
-    if info["data_type"] == "generic":
-        return GenericDataLoader.from_info(data, info)
-    elif info["data_type"] == "survival_analysis":
-        return SurvivalAnalysisDataLoader.from_info(data, info)
-    elif info["data_type"] == "time_series":
-        return TimeSeriesDataLoader.from_info(data, info)
-    elif info["data_type"] == "time_series_survival":
-        return TimeSeriesSurvivalDataLoader.from_info(data, info)
-    elif info["data_type"] == "images":
-        return ImageDataLoader.from_info(data, info)
-    else:
-        raise RuntimeError(f"invalid datatype {info}")
-
-
 class Syn_SeqDataLoader(DataLoader):
     """
     A DataLoader that applies Syn_Seq-style preprocessing to input data,
@@ -1884,23 +1865,33 @@ class Syn_SeqDataLoader(DataLoader):
             print(f"  - col_type: {self.col_type}")
             print(f"  - data shape: {self._df.shape}")
 
-            print("[DEBUG] After encoder.fit(), detected info:")
+            print("\n[DEBUG] After encoder.fit(), ready for preprocessing with detected info:")
 
+            print(f"  - special_value: {self._encoder.columns_special_values}")
             # 1) encoder.col_map (각 컬럼: {original_dtype, converted_type, method})
             if hasattr(self._encoder, "col_map"):
                 print("  - encoder.col_map =>")
                 for col_name, cinfo in self._encoder.col_map.items():
-                    print(f"       {col_name} : {cinfo}")
+                    # 원하는 방식: original_dtype 숨기고 converted_type, method 만 노출
+                    converted_t = cinfo.get("converted_type", "??")
+                    method_t = cinfo.get("method", "??")
+                    print(f"       {col_name} : "
+                        f"converted_type={converted_t}, method={method_t}")
 
             # 2) variable_selection_ (있으면 출력)
             if self._encoder.variable_selection_ is not None:
-                print("  - variable_selection_:\n", self._encoder.variable_selection_)
+                print("  - variable_selection_:")
+                # 예: 만약 열이 많아 한 줄에 짤린다면, pandas display option 조정
+                with pd.option_context('display.max_columns', None, 
+                                    'display.width', 1000):
+                    print(self._encoder.variable_selection_)
 
-            # date_mins 등 다른 필드를 보고 싶다면 아래처럼
-            if hasattr(self._encoder, "date_mins"):
-                print(f"  - date_mins: {self._encoder.date_mins}")
+            # 3) date_mins 등 다른 필드는 사용자가 안 봐도 된다고 했으므로 주석 처리
+            # if hasattr(self._encoder, "date_mins"):
+            #     print(f"  - date_mins: {self._encoder.date_mins}")
 
             print("----------------------------------------------------------------")
+
 
     # ----------------------------------------------------------------
     # Inherited/required abstract methods
@@ -2086,3 +2077,23 @@ class Syn_SeqDataLoader(DataLoader):
         # 대신 자기 자신 그대로 반환
         return self
 
+
+@validate_arguments(config=dict(arbitrary_types_allowed=True))
+def create_from_info(
+    data: Union[pd.DataFrame, torch.utils.data.Dataset], info: dict
+) -> "DataLoader":
+    """Helper for creating a DataLoader from existing information."""
+    if info["data_type"] == "generic":
+        return GenericDataLoader.from_info(data, info)
+    elif info["data_type"] == "survival_analysis":
+        return SurvivalAnalysisDataLoader.from_info(data, info)
+    elif info["data_type"] == "time_series":
+        return TimeSeriesDataLoader.from_info(data, info)
+    elif info["data_type"] == "time_series_survival":
+        return TimeSeriesSurvivalDataLoader.from_info(data, info)
+    elif info["data_type"] == "images":
+        return ImageDataLoader.from_info(data, info)
+    elif info["data_type"] == "syn_seq":
+        return Syn_SeqDataLoader.from_info(data, info)
+    else:
+        raise RuntimeError(f"invalid datatype {info}")

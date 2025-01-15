@@ -54,7 +54,7 @@ class Syn_SeqEncoder(TransformerMixin, BaseEstimator):
         # 1) Decide syn_order (if not given)
         self._detect_syn_order(X)
         # 2) init col_map
-        self._init_col_map(X)
+        self._init_col_map(X)   
         # 3) detect major special values
         self._detect_special_values(X)
         # 4) build default variable_selection
@@ -230,6 +230,11 @@ class Syn_SeqEncoder(TransformerMixin, BaseEstimator):
             if self.col_map[col]["converted_type"] != "numeric":
                 continue
             if col not in X.columns:
+                continue
+
+            specials = self.columns_special_values.get(col, [])
+            if not specials:
+                # specials가 비어 있으면 => skip => split하지 않음
                 continue
 
             cat_col = col + "_cat"
