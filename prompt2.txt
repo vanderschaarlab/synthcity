@@ -1,1676 +1,3 @@
-src/synthcity/plugins/generic/plugin_ctgan.py
-"""
-Reference: "Modeling Tabular Data using Conditional GAN", Xu, Lei et al.
-"""
-
-# stdlib
-from pathlib import Path
-from typing import Any, List, Optional, Union
-
-# third party
-import numpy as np
-import pandas as pd
-
-# Necessary packages
-from pydantic import validate_arguments
-from torch.utils.data import sampler
-
-# synthcity absolute
-from synthcity.metrics.weighted_metrics import WeightedMetrics
-from synthcity.plugins.core.dataloader import DataLoader
-from synthcity.plugins.core.distribution import (
-    CategoricalDistribution,
-    Distribution,
-    FloatDistribution,
-    IntegerDistribution,
-)
-from synthcity.plugins.core.models.tabular_gan import TabularGAN
-from synthcity.plugins.core.plugin import Plugin
-from synthcity.plugins.core.schema import Schema
-from synthcity.utils.constants import DEVICE
-
-
-class CTGANPlugin(Plugin):
-    """
-    .. inheritance-diagram:: synthcity.plugins.generic.plugin_ctgan.CTGANPlugin
-        :parts: 1
-
-
-    Conditional Tabular GAN implementation.
-
-    Args:
-        generator_n_layers_hidden: int
-            Number of hidden layers in the generator
-        generator_n_units_hidden: int
-            Number of hidden units in each layer of the Generator
-        generator_nonlin: string, default 'leaky_relu'
-            Nonlinearity to use in the generator. Can be 'elu', 'relu', 'selu' or 'leaky_relu'.
-        n_iter: int
-            Maximum number of iterations in the Generator.
-        generator_dropout: float
-            Dropout value. If 0, the dropout is not used.
-        discriminator_n_layers_hidden: int
-            Number of hidden layers in the discriminator
-        discriminator_n_units_hidden: int
-            Number of hidden units in each layer of the discriminator
-        discriminator_nonlin: string, default 'leaky_relu'
-            Nonlinearity to use in the discriminator. Can be 'elu', 'relu', 'selu' or 'leaky_relu'.
-        discriminator_n_iter: int
-            Maximum number of iterations in the discriminator.
-        discriminator_dropout: float
-            Dropout value for the discriminator. If 0, the dropout is not used.
-        lr: float
-            learning rate for optimizer.
-        weight_decay: float
-            l2 (ridge) penalty for the weights.
-        batch_size: int
-            Batch size
-        random_state: int
-            random seed to use
-        clipping_value: int, default 0
-            Gradients clipping value. Zero disables the feature
-        encoder_max_clusters: int
-            The max number of clusters to create for continuous columns when encoding
-        adjust_inference_sampling: bool
-            Adjust the marginal probabilities in the synthetic data to closer match the training set. Active only with the ConditionalSampler
-        # early stopping
-        n_iter_print: int
-            Number of iterations after which to print updates and check the validation loss.
-        n_iter_min: int
-            Minimum number of iterations to go through before starting early stopping
-        patience: int
-            Max number of iterations without any improvement before early stopping is trigged.
-        patience_metric: Optional[WeightedMetrics]
-            If not None, the metric is used for evaluation the criterion for early stopping.
-        # Core Plugin arguments
-        workspace: Path.
-            Optional Path for caching intermediary results.
-        compress_dataset: bool. Default = False.
-            Drop redundant features before training the generator.
-        sampling_patience: int.
-            Max inference iterations to wait for the generated data to match the training schema.
-    Example:
-        >>> from sklearn.datasets import load_iris
-        >>> from synthcity.plugins import Plugins
-        >>>
-        >>> X, y = load_iris(as_frame = True, return_X_y = True)
-        >>> X["target"] = y
-        >>>
-        >>> plugin = Plugins().get("ctgan", n_iter = 100)
-        >>> plugin.fit(X)
-        >>>
-        >>> plugin.generate(50)
-
-    """
-
-    @validate_arguments(config=dict(arbitrary_types_allowed=True))
-    def __init__(
-        self,
-        n_iter: int = 2000,
-        generator_n_layers_hidden: int = 2,
-        generator_n_units_hidden: int = 500,
-        generator_nonlin: str = "relu",
-        generator_dropout: float = 0.1,
-        generator_opt_betas: tuple = (0.5, 0.999),
-        discriminator_n_layers_hidden: int = 2,
-        discriminator_n_units_hidden: int = 500,
-        discriminator_nonlin: str = "leaky_relu",
-        discriminator_n_iter: int = 1,
-        discriminator_dropout: float = 0.1,
-        discriminator_opt_betas: tuple = (0.5, 0.999),
-        lr: float = 1e-3,
-        weight_decay: float = 1e-3,
-        batch_size: int = 200,
-        random_state: int = 0,
-        clipping_value: int = 1,
-        lambda_gradient_penalty: float = 10,
-        encoder_max_clusters: int = 10,
-        encoder: Any = None,
-        dataloader_sampler: Optional[sampler.Sampler] = None,
-        device: Any = DEVICE,
-        patience: int = 5,
-        patience_metric: Optional[WeightedMetrics] = None,
-        n_iter_print: int = 50,
-        n_iter_min: int = 100,
-        adjust_inference_sampling: bool = False,
-        # core plugin arguments
-        workspace: Path = Path("workspace"),
-        compress_dataset: bool = False,
-        sampling_patience: int = 500,
-        **kwargs: Any
-    ) -> None:
-        super().__init__(
-            device=device,
-            random_state=random_state,
-            sampling_patience=sampling_patience,
-            workspace=workspace,
-            compress_dataset=compress_dataset,
-            **kwargs
-        )
-        if patience_metric is None:
-            patience_metric = WeightedMetrics(
-                metrics=[("detection", "detection_mlp")],
-                weights=[1],
-                workspace=workspace,
-            )
-        self.generator_n_layers_hidden = generator_n_layers_hidden
-        self.generator_n_units_hidden = generator_n_units_hidden
-        self.generator_nonlin = generator_nonlin
-        self.n_iter = n_iter
-        self.generator_dropout = generator_dropout
-        self.generator_opt_betas = generator_opt_betas
-        self.discriminator_n_layers_hidden = discriminator_n_layers_hidden
-        self.discriminator_n_units_hidden = discriminator_n_units_hidden
-        self.discriminator_nonlin = discriminator_nonlin
-        self.discriminator_n_iter = discriminator_n_iter
-        self.discriminator_dropout = discriminator_dropout
-        self.discriminator_opt_betas = discriminator_opt_betas
-
-        self.lr = lr
-        self.weight_decay = weight_decay
-        self.batch_size = batch_size
-        self.random_state = random_state
-        self.clipping_value = clipping_value
-        self.lambda_gradient_penalty = lambda_gradient_penalty
-
-        self.encoder_max_clusters = encoder_max_clusters
-        self.encoder = encoder
-        self.dataloader_sampler = dataloader_sampler
-
-        self.device = device
-        self.patience = patience
-        self.patience_metric = patience_metric
-        self.n_iter_min = n_iter_min
-        self.n_iter_print = n_iter_print
-        self.adjust_inference_sampling = adjust_inference_sampling
-
-    @staticmethod
-    def name() -> str:
-        return "ctgan"
-
-    @staticmethod
-    def type() -> str:
-        return "generic"
-
-    @staticmethod
-    def hyperparameter_space(**kwargs: Any) -> List[Distribution]:
-        return [
-            IntegerDistribution(name="generator_n_layers_hidden", low=1, high=4),
-            IntegerDistribution(
-                name="generator_n_units_hidden", low=50, high=150, step=50
-            ),
-            CategoricalDistribution(
-                name="generator_nonlin", choices=["relu", "leaky_relu", "tanh", "elu"]
-            ),
-            IntegerDistribution(name="n_iter", low=100, high=1000, step=100),
-            FloatDistribution(name="generator_dropout", low=0, high=0.2),
-            IntegerDistribution(name="discriminator_n_layers_hidden", low=1, high=4),
-            IntegerDistribution(
-                name="discriminator_n_units_hidden", low=50, high=150, step=50
-            ),
-            CategoricalDistribution(
-                name="discriminator_nonlin",
-                choices=["relu", "leaky_relu", "tanh", "elu"],
-            ),
-            IntegerDistribution(name="discriminator_n_iter", low=1, high=5),
-            FloatDistribution(name="discriminator_dropout", low=0, high=0.2),
-            CategoricalDistribution(name="lr", choices=[1e-3, 2e-4, 1e-4]),
-            CategoricalDistribution(name="weight_decay", choices=[1e-3, 1e-4]),
-            CategoricalDistribution(name="batch_size", choices=[100, 200, 500]),
-            IntegerDistribution(name="encoder_max_clusters", low=2, high=20),
-        ]
-
-    def _prepare_cond(
-        self, cond: Optional[Union[pd.DataFrame, pd.Series, np.ndarray, list]]
-    ) -> Optional[np.ndarray]:
-        if cond is None:
-            return None
-
-        cond = np.asarray(cond)
-        if len(cond.shape) == 1:
-            cond = cond.reshape(-1, 1)
-
-        return cond
-
-    def _fit(self, X: DataLoader, *args: Any, **kwargs: Any) -> "CTGANPlugin":
-        cond: Optional[Union[pd.DataFrame, pd.Series]] = None
-        if "cond" in kwargs:
-            cond = self._prepare_cond(kwargs["cond"])
-
-        self.model = TabularGAN(
-            X.dataframe(),
-            cond=cond,
-            n_units_latent=self.generator_n_units_hidden,
-            batch_size=self.batch_size,
-            generator_n_layers_hidden=self.generator_n_layers_hidden,
-            generator_n_units_hidden=self.generator_n_units_hidden,
-            generator_nonlin=self.generator_nonlin,
-            generator_nonlin_out_discrete="softmax",
-            generator_nonlin_out_continuous="none",
-            generator_lr=self.lr,
-            generator_residual=True,
-            generator_n_iter=self.n_iter,
-            generator_batch_norm=False,
-            generator_dropout=0,
-            generator_weight_decay=self.weight_decay,
-            generator_opt_betas=self.generator_opt_betas,
-            generator_extra_penalties=[],
-            discriminator_n_units_hidden=self.discriminator_n_units_hidden,
-            discriminator_n_layers_hidden=self.discriminator_n_layers_hidden,
-            discriminator_n_iter=self.discriminator_n_iter,
-            discriminator_nonlin=self.discriminator_nonlin,
-            discriminator_batch_norm=False,
-            discriminator_dropout=self.discriminator_dropout,
-            discriminator_lr=self.lr,
-            discriminator_weight_decay=self.weight_decay,
-            discriminator_opt_betas=self.discriminator_opt_betas,
-            encoder=self.encoder,
-            clipping_value=self.clipping_value,
-            lambda_gradient_penalty=self.lambda_gradient_penalty,
-            encoder_max_clusters=self.encoder_max_clusters,
-            dataloader_sampler=self.dataloader_sampler,
-            device=self.device,
-            patience=self.patience,
-            patience_metric=self.patience_metric,
-            n_iter_min=self.n_iter_min,
-            n_iter_print=self.n_iter_print,
-            adjust_inference_sampling=self.adjust_inference_sampling,
-        )
-        self.model.fit(X.dataframe(), cond=cond)
-
-        return self
-
-    def _generate(self, count: int, syn_schema: Schema, **kwargs: Any) -> DataLoader:
-        cond: Optional[Union[pd.DataFrame, pd.Series]] = None
-        if "cond" in kwargs:
-            cond = self._prepare_cond(kwargs["cond"])
-
-        return self._safe_generate(self.model.generate, count, syn_schema, cond=cond)
-
-
-plugin = CTGANPlugin
-
-
-src/synthcity/plugins/core/models/tabular_gan.py
-# stdlib
-from typing import Any, Callable, Optional, Union
-
-# third party
-import numpy as np
-import pandas as pd
-import torch
-from pydantic import validate_arguments
-from scipy.optimize import minimize
-from scipy.special import logsumexp
-from sklearn.preprocessing import OneHotEncoder
-
-# synthcity absolute
-from synthcity.metrics.weighted_metrics import WeightedMetrics
-from synthcity.utils.constants import DEVICE
-from synthcity.utils.samplers import BaseSampler, ConditionalDatasetSampler
-
-# synthcity relative
-from .gan import GAN
-from .tabular_encoder import TabularEncoder
-
-
-class TabularGAN(torch.nn.Module):
-    """
-    .. inheritance-diagram:: synthcity.plugins.core.models.tabular_gan.TabularGAN
-        :parts: 1
-
-
-    GAN for tabular data.
-
-    This class combines GAN and tabular encoder to form a generative model for tabular data.
-
-    Args:
-        X: pd.DataFrame
-            Reference dataset, used for training the tabular encoder
-        n_units_latent: int
-            Number of latent units
-        cond: Optional
-            Optional conditional
-        generator_n_layers_hidden: int
-            Number of hidden layers in the generator
-        generator_n_units_hidden: int
-            Number of hidden units in each layer of the Generator
-        generator_nonlin: string, default 'elu'
-            Nonlinearity to use in the generator. Can be 'elu', 'relu', 'selu' or 'leaky_relu'.
-        generator_n_iter: int
-            Maximum number of iterations in the Generator.
-        generator_batch_norm: bool
-            Enable/disable batch norm for the generator
-        generator_dropout: float
-            Dropout value. If 0, the dropout is not used.
-        generator_residual: bool
-            Use residuals for the generator
-        generator_nonlin_out: Optional[List[Tuple[str, int]]]
-            List of activations. Useful with the TabularEncoder
-        generator_lr: float = 2e-4
-            Generator learning rate, used by the Adam optimizer
-        generator_weight_decay: float = 1e-3
-            Generator weight decay, used by the Adam optimizer
-        generator_opt_betas: tuple = (0.9, 0.999)
-            Generator initial decay rates, used by the Adam Optimizer
-        generator_extra_penalties: list
-            Additional penalties for the generator. Values: "identifiability_penalty"
-        generator_extra_penalty_cbks: List[Callable]
-            Additional loss callabacks for the generator. Used by the TabularGAN for the conditional loss
-        discriminator_n_layers_hidden: int
-            Number of hidden layers in the discriminator
-        discriminator_n_units_hidden: int
-            Number of hidden units in each layer of the discriminator
-        discriminator_nonlin: string, default 'relu'
-            Nonlinearity to use in the discriminator. Can be 'elu', 'relu', 'selu' or 'leaky_relu'.
-        discriminator_n_iter: int
-            Maximum number of iterations in the discriminator.
-        discriminator_batch_norm: bool
-            Enable/disable batch norm for the discriminator
-        discriminator_dropout: float
-            Dropout value for the discriminator. If 0, the dropout is not used.
-        discriminator_lr: float
-            Discriminator learning rate, used by the Adam optimizer
-        discriminator_weight_decay: float
-            Discriminator weight decay, used by the Adam optimizer
-        discriminator_opt_betas: tuple
-            Initial weight decays for the Adam optimizer
-        batch_size: int
-            Batch size
-        n_iter_print: int
-            Number of iterations after which to print updates and check the validation loss.
-        random_state: int
-            random_state used
-        n_iter_min: int
-            Minimum number of iterations to go through before starting early stopping
-        clipping_value: int, default 0
-            Gradients clipping value. Zero disables the feature
-        lambda_gradient_penalty: float = 10
-            Weight for the gradient penalty
-        lambda_identifiability_penalty: float = 0.1
-            Weight for the identifiability penalty, if enabled
-        dataloader_sampler: Optional[sampler.Sampler]
-            Optional sampler for the dataloader, useful for conditional sampling
-        device: Any = DEVICE
-            CUDA/CPU
-        adjust_inference_sampling: bool
-            Adjust the marginal probabilities in the synthetic data to closer match the training set. Active only with the ConditionalSampler
-        # privacy settings
-        dp_enabled: bool
-            Train the discriminator with Differential Privacy guarantees
-        dp_delta: Optional[float]
-            Optional DP delta: the probability of information accidentally being leaked. Usually 1 / len(dataset)
-        dp_epsilon: float = 3
-            DP epsilon: privacy budget, which is a measure of the amount of privacy that is preserved by a given algorithm. Epsilon is a number that represents the maximum amount of information that an adversary can learn about an individual from the output of a differentially private algorithm. The smaller the value of epsilon, the more private the algorithm is. For example, an algorithm with an epsilon of 0.1 preserves more privacy than an algorithm with an epsilon of 1.0.
-        dp_max_grad_norm: float
-            max grad norm used for gradient clipping
-        dp_secure_mode: bool = False,
-             if True uses noise generation approach robust to floating point arithmetic attacks.
-
-        encoder_max_clusters: int
-            The max number of clusters to create for continuous columns when encoding
-        encoder:
-            Pre-trained tabular encoder. If None, a new encoder is trained.
-        encoder_whitelist:
-            Ignore columns from encoding
-    """
-
-    @validate_arguments(config=dict(arbitrary_types_allowed=True))
-    def __init__(
-        self,
-        X: pd.DataFrame,
-        n_units_latent: int,
-        cond: Optional[Union[pd.DataFrame, pd.Series, np.ndarray]] = None,
-        generator_n_layers_hidden: int = 2,
-        generator_n_units_hidden: int = 150,
-        generator_nonlin: str = "leaky_relu",
-        generator_nonlin_out_discrete: str = "softmax",
-        generator_nonlin_out_continuous: str = "none",
-        generator_n_iter: int = 1000,
-        generator_batch_norm: bool = False,
-        generator_dropout: float = 0.01,
-        generator_lr: float = 1e-3,
-        generator_weight_decay: float = 1e-3,
-        generator_opt_betas: tuple = (0.9, 0.999),
-        generator_residual: bool = True,
-        generator_extra_penalties: list = [],  # "identifiability_penalty"
-        discriminator_n_layers_hidden: int = 3,
-        discriminator_n_units_hidden: int = 300,
-        discriminator_nonlin: str = "leaky_relu",
-        discriminator_n_iter: int = 1,
-        discriminator_batch_norm: bool = False,
-        discriminator_dropout: float = 0.1,
-        discriminator_lr: float = 1e-3,
-        discriminator_weight_decay: float = 1e-3,
-        discriminator_opt_betas: tuple = (0.9, 0.999),
-        batch_size: int = 64,
-        random_state: int = 0,
-        clipping_value: int = 0,
-        lambda_gradient_penalty: float = 10,
-        lambda_identifiability_penalty: float = 0.1,
-        encoder_max_clusters: int = 20,
-        encoder: Any = None,
-        encoder_whitelist: list = [],
-        dataloader_sampler: Optional[BaseSampler] = None,
-        device: Any = DEVICE,
-        patience: int = 10,
-        patience_metric: Optional[WeightedMetrics] = None,
-        n_iter_print: int = 50,
-        n_iter_min: int = 100,
-        adjust_inference_sampling: bool = False,
-        # privacy settings
-        dp_enabled: bool = False,
-        dp_epsilon: float = 3,
-        dp_delta: Optional[float] = None,
-        dp_max_grad_norm: float = 2,
-        dp_secure_mode: bool = False,
-    ) -> None:
-        super(TabularGAN, self).__init__()
-        self.columns = X.columns
-        self.batch_size = batch_size
-        self.sample_prob: Optional[np.ndarray] = None
-        self._adjust_inference_sampling = adjust_inference_sampling
-        n_units_conditional = 0
-
-        if encoder is not None:
-            self.encoder = encoder
-        else:
-            self.encoder = TabularEncoder(
-                max_clusters=encoder_max_clusters, whitelist=encoder_whitelist
-            ).fit(X)
-
-        self.cond_encoder: Optional[OneHotEncoder] = None
-        if cond is not None:
-            cond = np.asarray(cond)
-            if len(cond.shape) == 1:
-                cond = cond.reshape(-1, 1)
-
-            self.cond_encoder = OneHotEncoder(handle_unknown="ignore").fit(cond)
-            cond = self.cond_encoder.transform(cond).toarray()
-
-            n_units_conditional = cond.shape[-1]
-
-        self.predefined_conditional = cond is not None
-
-        if (
-            dataloader_sampler is None and not self.predefined_conditional
-        ):  # don't mix conditionals
-            dataloader_sampler = ConditionalDatasetSampler(
-                self.encoder.transform(X),
-                self.encoder.layout(),
-            )
-            n_units_conditional = dataloader_sampler.conditional_dimension()
-
-        self.dataloader_sampler = dataloader_sampler
-
-        def _generator_cond_loss(
-            real_samples: torch.tensor,
-            fake_samples: torch.Tensor,
-            cond: Optional[torch.Tensor],
-        ) -> torch.Tensor:
-            if cond is None or self.predefined_conditional:
-                return 0
-
-            losses = []
-
-            idx = 0
-            cond_idx = 0
-
-            for item in self.encoder.layout():
-                length = item.output_dimensions
-
-                if item.feature_type != "discrete":
-                    idx += length
-                    continue
-
-                # create activate feature mask
-                mask = cond[:, cond_idx : cond_idx + length].sum(axis=1).bool()
-
-                if mask.sum() == 0:
-                    idx += length
-                    continue
-
-                if not (fake_samples[mask, idx : idx + length] >= 0).all():
-                    raise RuntimeError(
-                        f"Invalid samples after softmax = {fake_samples[mask, idx : idx + length]}"
-                    )
-                # fake_samples are after the Softmax activation
-                # we filter active features in the mask
-                item_loss = torch.nn.NLLLoss()(
-                    torch.log(fake_samples[mask, idx : idx + length] + 1e-8),
-                    torch.argmax(real_samples[mask, idx : idx + length], dim=1),
-                )
-                losses.append(item_loss)
-
-                cond_idx += length
-                idx += length
-
-            if idx != real_samples.shape[1]:
-                raise ValueError(
-                    f"Invalid offset idx = {idx}; real_samples.shape = {real_samples.shape}"
-                )
-
-            if len(losses) == 0:
-                return 0
-
-            loss = torch.stack(losses, dim=-1)
-
-            return loss.sum() / len(real_samples)
-
-        self.model = GAN(
-            self.encoder.n_features(),
-            n_units_latent=n_units_latent,
-            n_units_conditional=n_units_conditional,
-            batch_size=batch_size,
-            generator_n_layers_hidden=generator_n_layers_hidden,
-            generator_n_units_hidden=generator_n_units_hidden,
-            generator_nonlin=generator_nonlin,
-            generator_nonlin_out=self.encoder.activation_layout(
-                discrete_activation=generator_nonlin_out_discrete,
-                continuous_activation=generator_nonlin_out_continuous,
-            ),
-            generator_n_iter=generator_n_iter,
-            generator_batch_norm=generator_batch_norm,
-            generator_dropout=generator_dropout,
-            generator_lr=generator_lr,
-            generator_residual=generator_residual,
-            generator_weight_decay=generator_weight_decay,
-            generator_opt_betas=generator_opt_betas,
-            generator_extra_penalties=generator_extra_penalties,
-            generator_extra_penalty_cbks=[_generator_cond_loss],
-            discriminator_n_units_hidden=discriminator_n_units_hidden,
-            discriminator_n_layers_hidden=discriminator_n_layers_hidden,
-            discriminator_n_iter=discriminator_n_iter,
-            discriminator_nonlin=discriminator_nonlin,
-            discriminator_batch_norm=discriminator_batch_norm,
-            discriminator_dropout=discriminator_dropout,
-            discriminator_lr=discriminator_lr,
-            discriminator_weight_decay=discriminator_weight_decay,
-            discriminator_opt_betas=discriminator_opt_betas,
-            lambda_gradient_penalty=lambda_gradient_penalty,
-            lambda_identifiability_penalty=lambda_identifiability_penalty,
-            clipping_value=clipping_value,
-            n_iter_print=n_iter_print,
-            random_state=random_state,
-            # early stopping
-            n_iter_min=n_iter_min,
-            dataloader_sampler=dataloader_sampler,
-            device=device,
-            patience=patience,
-            patience_metric=patience_metric,
-            # privacy
-            dp_enabled=dp_enabled,
-            dp_epsilon=dp_epsilon,
-            dp_delta=dp_delta,
-            dp_max_grad_norm=dp_max_grad_norm,
-            dp_secure_mode=dp_secure_mode,
-        )
-
-    @validate_arguments(config=dict(arbitrary_types_allowed=True))
-    def encode(self, X: pd.DataFrame) -> pd.DataFrame:
-        return self.encoder.transform(X)
-
-    @validate_arguments(config=dict(arbitrary_types_allowed=True))
-    def decode(self, X: pd.DataFrame) -> pd.DataFrame:
-        return self.encoder.inverse_transform(X)
-
-    def get_encoder(self) -> TabularEncoder:
-        return self.encoder
-
-    @validate_arguments(config=dict(arbitrary_types_allowed=True))
-    def fit(
-        self,
-        X: pd.DataFrame,
-        cond: Optional[Union[pd.DataFrame, pd.Series, np.ndarray]] = None,
-        fake_labels_generator: Optional[Callable] = None,
-        true_labels_generator: Optional[Callable] = None,
-        encoded: bool = False,
-    ) -> Any:
-        # preprocessing
-        if encoded:
-            X_enc = X
-        else:
-            X_enc = self.encode(X)
-
-        if cond is not None and self.cond_encoder is not None:
-            cond = np.asarray(cond)
-            if len(cond.shape) == 1:
-                cond = cond.reshape(-1, 1)
-
-            cond = self.cond_encoder.transform(cond).toarray()
-
-        if not self.predefined_conditional and self.dataloader_sampler is not None:
-            cond = self.dataloader_sampler.get_dataset_conditionals()
-
-        if cond is not None:
-            if len(cond) != len(X_enc):
-                raise ValueError(
-                    f"Invalid conditional shape. {cond.shape} expected {len(X_enc)}"
-                )
-
-        # training
-        self.model.fit(
-            np.asarray(X_enc),
-            np.asarray(cond),
-            fake_labels_generator=fake_labels_generator,
-            true_labels_generator=true_labels_generator,
-        )
-
-        # post processing
-        self.adjust_inference_sampling(self._adjust_inference_sampling)
-
-        return self
-
-    def adjust_inference_sampling(self, enabled: bool) -> None:
-        if self.predefined_conditional or self.dataloader_sampler is None:
-            return
-
-        self._adjust_inference_sampling = enabled
-
-        if enabled:
-            real_prob = self.dataloader_sampler.conditional_probs()
-            sample_prob = self._extract_sample_prob()
-
-            self.sample_prob = self._find_sample_p(real_prob, sample_prob)
-        else:
-            self.sample_prob = None
-
-    @validate_arguments(config=dict(arbitrary_types_allowed=True))
-    def generate(
-        self,
-        count: int,
-        cond: Optional[Union[pd.DataFrame, pd.Series, np.ndarray]] = None,
-    ) -> pd.DataFrame:
-        samples = self(count, cond)
-        return self.decode(pd.DataFrame(samples))
-
-    def forward(
-        self, count: int, cond: Optional[Union[pd.DataFrame, np.ndarray]] = None
-    ) -> torch.Tensor:
-        if cond is not None and self.cond_encoder is not None:
-            cond = np.asarray(cond)
-            if len(cond.shape) == 1:
-                cond = cond.reshape(-1, 1)
-
-            cond = self.cond_encoder.transform(cond).toarray()
-
-        if not self.predefined_conditional and self.dataloader_sampler is not None:
-            cond = self.dataloader_sampler.sample_conditional(count, p=self.sample_prob)
-
-        return self.model.generate(count, cond=cond)
-
-    def _extract_sample_prob(self) -> Optional[np.ndarray]:
-        if self.predefined_conditional or self.dataloader_sampler is None:
-            return None
-
-        if self.dataloader_sampler.conditional_dimension() == 0:
-            return None
-
-        prob_list = list()
-        batch_size = 10000
-
-        for c in range(self.dataloader_sampler.conditional_dimension()):
-            cond = self.dataloader_sampler.sample_conditional_for_class(batch_size, c)
-            if cond is None:
-                continue
-
-            data_cond = self.model.generate(batch_size, cond=cond)
-
-            syn_dataloader_sampler = ConditionalDatasetSampler(
-                pd.DataFrame(data_cond),
-                self.encoder.layout(),
-            )
-
-            prob = syn_dataloader_sampler.conditional_probs()
-            prob_list.append(prob)
-
-        prob_mat = np.stack(prob_list, axis=-1)
-
-        return prob_mat
-
-    def _find_sample_p(
-        self, prob_real: Optional[np.ndarray], prob_mat: Optional[np.ndarray]
-    ) -> Optional[np.ndarray]:
-        if prob_real is None or prob_mat is None:
-            return None
-
-        def kl(
-            alpha: np.ndarray, prob_real: np.ndarray, prob_mat: np.ndarray
-        ) -> np.ndarray:
-            # alpha: _n_categories
-
-            # f1: same as prob_real
-            alpha_tensor = alpha[None, None, :]
-            f1 = logsumexp(alpha_tensor, axis=-1, b=prob_mat)
-            f2 = logsumexp(alpha)
-            ce = -np.sum(prob_real * f1, axis=1) + f2
-            return np.mean(ce)
-
-        try:
-            res = minimize(kl, np.ones(prob_mat.shape[-1]), (prob_real, prob_mat))
-        except Exception:
-            return np.ones(prob_mat.shape[-1]) / prob_mat.shape[-1]
-
-        return np.exp(res.x) / np.sum(np.exp(res.x))
-
-
-src/synthcity/plugins/core/models/tabular_encoder.py
-"""TabularEncoder module.
-"""
-
-# stdlib
-from typing import Any, List, Optional, Sequence, Tuple, Union
-
-# third party
-import numpy as np
-import pandas as pd
-from pydantic import BaseModel, field_validator, validate_arguments
-from sklearn.base import BaseEstimator, TransformerMixin
-from sklearn.preprocessing import MinMaxScaler
-
-# synthcity absolute
-import synthcity.logger as log
-from synthcity.utils.dataframe import discrete_columns as find_cat_cols
-from synthcity.utils.serialization import dataframe_hash
-
-# synthcity relative
-from .factory import get_feature_encoder
-
-
-class FeatureInfo(BaseModel):
-    name: str
-    feature_type: str
-    transform: Any = None
-    output_dimensions: int
-    transformed_features: List[str]
-    trans_feature_types: List[str]
-
-    @field_validator("feature_type")
-    @classmethod
-    def _feature_type_validator(cls: Any, v: str) -> str:
-        if v not in ["discrete", "continuous"]:
-            raise ValueError(f"Invalid feature type {v}")
-        return v
-
-    @field_validator("transform")
-    @classmethod
-    def _transform_validator(cls: Any, v: Any) -> Any:
-        if not (
-            hasattr(v, "fit")
-            and hasattr(v, "transform")
-            and hasattr(v, "inverse_transform")
-        ):
-            raise ValueError(f"Invalid transform {v}")
-        return v
-
-    @field_validator("output_dimensions")
-    @classmethod
-    def _output_dimensions_validator(cls: Any, v: int) -> int:
-        if v <= 0:
-            raise ValueError(f"Invalid output_dimensions {v}")
-        return v
-
-
-class TabularEncoder(TransformerMixin, BaseEstimator):
-    """Tabular encoder.
-
-    Model continuous columns with a BayesianGMM and normalized to a scalar [0, 1] and a vector.
-    Discrete columns are encoded using a scikit-learn OneHotEncoder.
-    """
-
-    categorical_encoder: Union[str, type] = "onehot"
-    continuous_encoder: Union[str, type] = "bayesian_gmm"
-    cat_encoder_params: dict = dict(handle_unknown="ignore", sparse_output=False)
-    cont_encoder_params: dict = dict(n_components=10)
-
-    @validate_arguments(config=dict(arbitrary_types_allowed=True))
-    def __init__(
-        self,
-        *,
-        whitelist: tuple = (),
-        max_clusters: int = 10,
-        categorical_limit: int = 10,
-        categorical_encoder: Optional[Union[str, type]] = None,
-        continuous_encoder: Optional[Union[str, type]] = None,
-        cat_encoder_params: Optional[dict] = None,
-        cont_encoder_params: Optional[dict] = None,
-    ) -> None:
-        """Create a data transformer.
-
-        Args:
-            whitelist (tuple):
-                Columns that will not be transformed.
-        """
-        self.whitelist = whitelist
-        self.categorical_limit = categorical_limit
-        self.max_clusters = max_clusters
-        if categorical_encoder is not None:
-            self.categorical_encoder = categorical_encoder
-        if continuous_encoder is not None:
-            self.continuous_encoder = continuous_encoder
-        if cat_encoder_params is not None:
-            self.cat_encoder_params = cat_encoder_params
-        else:
-            self.cat_encoder_params = self.cat_encoder_params.copy()
-        if cont_encoder_params is not None:
-            self.cont_encoder_params = cont_encoder_params
-        else:
-            self.cont_encoder_params = self.cont_encoder_params.copy()
-        if self.continuous_encoder == "bayesian_gmm":
-            self.cont_encoder_params["n_components"] = max_clusters
-
-    @validate_arguments(config=dict(arbitrary_types_allowed=True))
-    def _fit_feature(self, feature: pd.Series, feature_type: str) -> FeatureInfo:
-        """Fit the feature encoder on a column.
-
-        Args:
-            feature (pd.Series):
-                A column of a dataframe.
-            feature_type (str):
-                Type of the feature ('discrete' or 'continuous').
-
-        Returns:
-            FeatureInfo:
-                Information of the fitted feature encoder.
-        """
-        if feature_type == "discrete":
-            encoder = get_feature_encoder(
-                self.categorical_encoder, self.cat_encoder_params
-            )
-        else:
-            encoder = get_feature_encoder(
-                self.continuous_encoder, self.cont_encoder_params
-            )
-
-        encoder.fit(feature)
-
-        return FeatureInfo(
-            name=feature.name,
-            feature_type=feature_type,
-            transform=encoder,
-            output_dimensions=encoder.n_features_out,
-            transformed_features=encoder.feature_names_out,
-            trans_feature_types=encoder.feature_types_out,
-        )
-
-    @validate_arguments(config=dict(arbitrary_types_allowed=True))
-    def fit(
-        self, raw_data: pd.DataFrame, discrete_columns: Optional[List] = None
-    ) -> Any:
-        """Fit the ``TabularEncoder``.
-
-        This step also counts the #columns in matrix data and span information.
-        """
-        if discrete_columns is None:
-            discrete_columns = find_cat_cols(raw_data, self.categorical_limit)
-
-        self.output_dimensions = 0
-
-        self._column_raw_dtypes = raw_data.infer_objects().dtypes
-        self._column_transform_info_list: Sequence[FeatureInfo] = []
-
-        for name in raw_data.columns:
-            if name in self.whitelist:
-                continue
-            column_hash = dataframe_hash(raw_data[[name]])
-            log.info(f"Encoding {name} {column_hash}")
-            ftype = "discrete" if name in discrete_columns else "continuous"
-            column_transform_info = self._fit_feature(raw_data[name], ftype)
-
-            self.output_dimensions += column_transform_info.output_dimensions
-            self._column_transform_info_list.append(column_transform_info)
-
-        return self
-
-    def _transform_feature(
-        self, column_transform_info: FeatureInfo, feature: pd.Series
-    ) -> pd.DataFrame:
-        encoder = column_transform_info.transform
-        return pd.DataFrame(
-            encoder.transform(feature).values,
-            columns=column_transform_info.transformed_features,
-        )
-
-    @validate_arguments(config=dict(arbitrary_types_allowed=True))
-    def transform(self, raw_data: pd.DataFrame) -> pd.DataFrame:
-        """Take raw data and output a matrix data."""
-        if len(self._column_transform_info_list) == 0:
-            return pd.DataFrame(np.zeros((len(raw_data), 0)))
-
-        column_data_list = []
-        for name in self.whitelist:
-            if name not in raw_data.columns:
-                continue
-            feature = raw_data[name]
-            column_data_list.append(feature)
-
-        for column_transform_info in self._column_transform_info_list:
-            feature = raw_data[column_transform_info.name]
-            column_data_list.append(
-                self._transform_feature(column_transform_info, feature)
-            )
-
-        result = pd.concat(column_data_list, axis=1)
-        result.index = raw_data.index
-
-        return result
-
-    @validate_arguments(config=dict(arbitrary_types_allowed=True))
-    def _inverse_transform_feature(
-        self,
-        column_transform_info: FeatureInfo,
-        column_data: pd.DataFrame,
-    ) -> pd.Series:
-        encoder = column_transform_info.transform
-        return encoder.inverse_transform(column_data)
-
-    @validate_arguments(config=dict(arbitrary_types_allowed=True))
-    def inverse_transform(self, data: pd.DataFrame) -> pd.DataFrame:
-        """Take matrix data and output raw data.
-
-        Output uses the same type as input to the transform function.
-        """
-        if len(self._column_transform_info_list) == 0:
-            return pd.DataFrame(np.zeros((len(data), 0)))
-
-        st = 0
-        names = []
-        feature_types = []
-        recovered_feature_list = []
-
-        for name in self.whitelist:
-            if name not in data.columns:
-                continue
-            names.append(name)
-            feature_types.append(self._column_raw_dtypes)
-            recovered_feature_list.append(data[name])
-
-        for column_transform_info in self._column_transform_info_list:
-            dim = column_transform_info.output_dimensions
-            column_data = data.iloc[:, list(range(st, st + dim))]
-            recovered_feature = self._inverse_transform_feature(
-                column_transform_info, column_data
-            )
-            recovered_feature_list.append(recovered_feature)
-            names.append(column_transform_info.name)
-            st += dim
-
-        recovered_data = np.column_stack(recovered_feature_list)
-        recovered_data = pd.DataFrame(
-            recovered_data, columns=names, index=data.index
-        ).astype(self._column_raw_dtypes.filter(names))
-        return recovered_data
-
-    def layout(self) -> Sequence[FeatureInfo]:
-        """Get the layout of the encoded dataset.
-
-        Returns a list of tuple, describing each column as:
-            - continuous, and with length 1 + number of GMM clusters.
-            - discrete, and with length <N>, the length of the one-hot encoding.
-        """
-        return self._column_transform_info_list
-
-    def n_features(self) -> int:
-        return np.sum(
-            column_transform_info.output_dimensions
-            for column_transform_info in self._column_transform_info_list
-        )
-
-    def get_column_info(self, name: str) -> FeatureInfo:
-        for column_transform_info in self._column_transform_info_list:
-            if column_transform_info.name == name:
-                return column_transform_info
-
-        raise RuntimeError(f"Unknown column {name}")
-
-    @validate_arguments(config=dict(arbitrary_types_allowed=True))
-    def activation_layout(
-        self, discrete_activation: str, continuous_activation: str
-    ) -> Sequence[Tuple[str, int]]:
-        """Get the layout of the activations.
-
-        Returns a list of tuple, describing each column as:
-            - continuous, and with length 1 + number of GMM clusters.
-            - discrete, and with length <N>, the length of the one-hot encoding.
-        """
-        out = []
-        acts = dict(discrete=discrete_activation, continuous=continuous_activation)
-        for column_transform_info in self._column_transform_info_list:
-            ct = column_transform_info.trans_feature_types[0]
-            d = 0
-            for t in column_transform_info.trans_feature_types:
-                if t != ct:
-                    out.append((acts[ct], d))
-                    ct = t
-                    d = 0
-                d += 1
-            out.append((acts[ct], d))
-        return out
-
-
-class BinEncoder(TabularEncoder):
-    """Binary encoder (for SurvivalGAN).
-
-    Model continuous columns with a BayesianGMM and normalized to a scalar [0, 1] and a vector.
-    Discrete columns are encoded using a scikit-learn OneHotEncoder.
-    """
-
-    continuous_encoder = "bayesian_gmm"
-    cont_encoder_params = dict(n_components=2)
-    categorical_encoder = "passthrough"  # "onehot"
-    cat_encoder_params = dict()  # dict(handle_unknown="ignore", sparse=False)
-
-    def _transform_feature(
-        self, column_transform_info: FeatureInfo, feature: pd.Series
-    ) -> pd.DataFrame:
-        if column_transform_info.feature_type == "discrete":
-            return super()._transform_feature(column_transform_info, feature)
-        bgm = column_transform_info.transform
-        out = bgm.transform(feature)
-        return pd.DataFrame(
-            out.values[:, 1:].argmax(axis=1), columns=[bgm.feature_name_in]
-        )
-
-    def _inverse_transform_feature(
-        self, column_transform_info: FeatureInfo, column_data: pd.DataFrame
-    ) -> pd.Series:
-        if column_transform_info == "discrete":
-            return super()._inverse_transform_feature(
-                column_transform_info, column_data
-            )
-        bgm = column_transform_info.transform
-        components = column_data.values.reshape(-1)
-        features = bgm.means[components]
-        return pd.Series(features, name=bgm.feature_name_in)
-
-
-class TimeSeriesTabularEncoder(TransformerMixin, BaseEstimator):
-    """TimeSeries Tabular encoder.
-
-    Model continuous columns with a BayesianGMM and normalized to a scalar [0, 1] and a vector.
-    Discrete columns are encoded using a scikit-learn OneHotEncoder.
-    """
-
-    @validate_arguments(config=dict(arbitrary_types_allowed=True))
-    def __init__(
-        self,
-        max_clusters: int = 10,
-        categorical_limit: int = 10,
-        whitelist: list = [],
-    ) -> None:
-        self.max_clusters = max_clusters
-        self.categorical_limit = categorical_limit
-        self.whitelist = whitelist
-
-    def fit_temporal(
-        self,
-        temporal_data: List[pd.DataFrame],
-        observation_times: List,
-        discrete_columns: Optional[List] = None,
-    ) -> "TimeSeriesTabularEncoder":
-        # Temporal
-        self.temporal_encoder = TabularEncoder(
-            max_clusters=self.max_clusters,
-            categorical_limit=self.categorical_limit,
-            whitelist=self.whitelist,
-        )
-        temporal_features = temporal_data[0].columns
-
-        temporal_arr = np.asarray(temporal_data)
-        temporal_arr = np.swapaxes(temporal_arr, -1, 0).reshape(
-            len(temporal_features), -1
-        )
-        temporal_df = pd.DataFrame(temporal_arr.T, columns=temporal_features)
-
-        self.temporal_encoder.fit(temporal_df)
-
-        # Temporal horizons
-        self.observation_times_encoder = MinMaxScaler().fit(
-            np.asarray(observation_times).reshape(-1, 1)
-        )
-
-        return self
-
-    def fit(
-        self,
-        static_data: pd.DataFrame,
-        temporal_data: List[pd.DataFrame],
-        observation_times: List,
-        discrete_columns: Optional[List] = None,
-    ) -> "TimeSeriesTabularEncoder":
-        # Static
-        self.static_encoder = TabularEncoder(
-            max_clusters=self.max_clusters,
-            categorical_limit=self.categorical_limit,
-            whitelist=self.whitelist,
-        )
-        self.static_encoder.fit(static_data, discrete_columns=discrete_columns)
-
-        # Temporal
-        self.fit_temporal(
-            temporal_data, observation_times, discrete_columns=discrete_columns
-        )
-
-        return self
-
-    @validate_arguments(config=dict(arbitrary_types_allowed=True))
-    def transform_observation_times(
-        self,
-        observation_times: List,
-    ) -> List:
-        horizons_encoded = (
-            self.observation_times_encoder.transform(
-                np.asarray(observation_times).reshape(-1, 1)
-            )
-            .reshape(len(observation_times), -1)
-            .tolist()
-        )
-        return horizons_encoded
-
-    @validate_arguments(config=dict(arbitrary_types_allowed=True))
-    def transform_temporal(
-        self,
-        temporal_data: List[pd.DataFrame],
-        observation_times: List,
-    ) -> Tuple[pd.DataFrame, List]:
-        temporal_encoded = []
-        for item in temporal_data:
-            temporal_encoded.append(self.temporal_encoder.transform(item))
-
-        horizons_encoded = self.transform_observation_times(observation_times)
-
-        return temporal_encoded, horizons_encoded
-
-    @validate_arguments(config=dict(arbitrary_types_allowed=True))
-    def transform_static(
-        self,
-        static_data: pd.DataFrame,
-    ) -> pd.DataFrame:
-        static_encoded = self.static_encoder.transform(static_data)
-
-        return static_encoded
-
-    @validate_arguments(config=dict(arbitrary_types_allowed=True))
-    def transform(
-        self,
-        static_data: pd.DataFrame,
-        temporal_data: List[pd.DataFrame],
-        observation_times: List,
-    ) -> Tuple[pd.DataFrame, pd.DataFrame, List]:
-        static_encoded = self.transform_static(static_data)
-
-        temporal_encoded, horizons_encoded = self.transform_temporal(
-            temporal_data, observation_times
-        )
-
-        return static_encoded, temporal_encoded, horizons_encoded
-
-    @validate_arguments(config=dict(arbitrary_types_allowed=True))
-    def fit_transform_temporal(
-        self,
-        temporal_data: List[pd.DataFrame],
-        observation_times: List,
-    ) -> Tuple[pd.DataFrame, List]:
-        return self.fit_temporal(temporal_data, observation_times).transform_temporal(
-            temporal_data, observation_times
-        )
-
-    @validate_arguments(config=dict(arbitrary_types_allowed=True))
-    def fit_transform(
-        self,
-        static_data: pd.DataFrame,
-        temporal_data: List[pd.DataFrame],
-        observation_times: List,
-    ) -> Tuple[pd.DataFrame, pd.DataFrame, List]:
-        return self.fit(static_data, temporal_data, observation_times).transform(
-            static_data, temporal_data, observation_times
-        )
-
-    @validate_arguments(config=dict(arbitrary_types_allowed=True))
-    def inverse_transform_observation_times(
-        self,
-        observation_times: List,
-    ) -> pd.DataFrame:
-        horizons_decoded = (
-            self.observation_times_encoder.inverse_transform(
-                np.asarray(observation_times).reshape(-1, 1)
-            )
-            .reshape(len(observation_times), -1)
-            .tolist()
-        )
-        return horizons_decoded
-
-    @validate_arguments(config=dict(arbitrary_types_allowed=True))
-    def inverse_transform_temporal(
-        self,
-        temporal_encoded: List[pd.DataFrame],
-        observation_times: List,
-    ) -> pd.DataFrame:
-        temporal_decoded = []
-        for item in temporal_encoded:
-            temporal_decoded.append(self.temporal_encoder.inverse_transform(item))
-
-        horizons_decoded = self.inverse_transform_observation_times(observation_times)
-
-        return temporal_decoded, horizons_decoded
-
-    @validate_arguments(config=dict(arbitrary_types_allowed=True))
-    def inverse_transform_static(
-        self,
-        static_encoded: pd.DataFrame,
-    ) -> pd.DataFrame:
-        static_decoded = self.static_encoder.inverse_transform(static_encoded)
-        return static_decoded
-
-    @validate_arguments(config=dict(arbitrary_types_allowed=True))
-    def inverse_transform(
-        self,
-        static_encoded: pd.DataFrame,
-        temporal_encoded: List[pd.DataFrame],
-        observation_times: List,
-    ) -> pd.DataFrame:
-        static_decoded = self.inverse_transform_static(static_encoded)
-
-        temporal_decoded, horizons_decoded = self.inverse_transform_temporal(
-            temporal_encoded, observation_times
-        )
-        return static_decoded, temporal_decoded, horizons_decoded
-
-    def layout(self) -> Tuple[List, List]:
-        return self.static_encoder.layout(), self.temporal_encoder.layout()
-
-    def n_features(self) -> Tuple:
-        return self.static_encoder.n_features(), self.temporal_encoder.n_features()
-
-    @validate_arguments(config=dict(arbitrary_types_allowed=True))
-    def activation_layout_temporal(
-        self, discrete_activation: str, continuous_activation: str
-    ) -> Any:
-        return self.temporal_encoder.activation_layout(
-            discrete_activation, continuous_activation
-        )
-
-    @validate_arguments(config=dict(arbitrary_types_allowed=True))
-    def activation_layout(
-        self, discrete_activation: str, continuous_activation: str
-    ) -> Tuple:
-        return self.static_encoder.activation_layout(
-            discrete_activation, continuous_activation
-        ), self.temporal_encoder.activation_layout(
-            discrete_activation, continuous_activation
-        )
-
-
-class TimeSeriesBinEncoder(TransformerMixin, BaseEstimator):
-    """Time series Bin encoder.
-
-    Model continuous columns with a BayesianGMM and normalized to a scalar [0, 1] and a vector.
-    Discrete columns are encoded using a scikit-learn OneHotEncoder.
-    """
-
-    @validate_arguments(config=dict(arbitrary_types_allowed=True))
-    def __init__(
-        self,
-        max_clusters: int = 10,
-        categorical_limit: int = 10,
-        continuous_encoder: str = "gmm",
-    ) -> None:
-        """Create a data transformer.
-
-        Args:
-            max_clusters (int):
-                Maximum number of Gaussian distributions in Bayesian GMM.
-        """
-        self.encoder = BinEncoder(
-            max_clusters=max_clusters,
-            categorical_limit=categorical_limit,
-            continuous_encoder=continuous_encoder,
-        )
-
-    def _prepare(
-        self,
-        static_data: pd.DataFrame,
-        temporal_data: List[pd.DataFrame],
-        observation_times: List,
-    ) -> pd.DataFrame:
-        temporal_init = np.asarray(temporal_data)[:, 0, :].squeeze()
-        temporal_init_df = pd.DataFrame(temporal_init, columns=temporal_data[0].columns)
-
-        out = pd.concat(
-            [
-                static_data.reset_index(drop=True),
-                temporal_init_df.reset_index(drop=True),
-            ],
-            axis=1,
-        )
-        out.columns = np.asarray(range(len(out.columns)))
-        out.columns = out.columns.astype(str)
-
-        return out
-
-    def fit(
-        self,
-        static_data: pd.DataFrame,
-        temporal_data: List[pd.DataFrame],
-        observation_times: List,
-        discrete_columns: Optional[List] = None,
-    ) -> "TimeSeriesBinEncoder":
-        """Fit the TimeSeriesBinEncoder"""
-
-        data = self._prepare(static_data, temporal_data, observation_times)
-
-        self.encoder.fit(data, discrete_columns=discrete_columns)
-        return self
-
-    @validate_arguments(config=dict(arbitrary_types_allowed=True))
-    def transform(
-        self,
-        static_data: pd.DataFrame,
-        temporal_data: List[pd.DataFrame],
-        observation_times: List,
-    ) -> pd.DataFrame:
-        """Take raw data and output a matrix data."""
-        data = self._prepare(static_data, temporal_data, observation_times)
-        return self.encoder.transform(data)
-
-    @validate_arguments(config=dict(arbitrary_types_allowed=True))
-    def fit_transform(
-        self,
-        static: pd.DataFrame,
-        temporal: List[pd.DataFrame],
-        observation_times: List,
-    ) -> pd.DataFrame:
-        return self.fit(static, temporal, observation_times).transform(
-            static, temporal, observation_times
-        )
-
-
-src/synthcity/plugins/core/models/feature_encoder.py
-# stdlib
-from typing import Any, List, Optional, Type, Union
-
-# third party
-import numpy as np
-import pandas as pd
-from pydantic import validate_arguments
-from sklearn.base import BaseEstimator, TransformerMixin
-from sklearn.mixture import BayesianGaussianMixture
-from sklearn.preprocessing import (
-    LabelEncoder,
-    MinMaxScaler,
-    OneHotEncoder,
-    OrdinalEncoder,
-    QuantileTransformer,
-    RobustScaler,
-    StandardScaler,
-)
-
-
-def validate_shape(x: np.ndarray, n_dim: int) -> np.ndarray:
-    if n_dim == 1:
-        if x.ndim == 2:
-            x = np.squeeze(x, axis=1)
-        if x.ndim != 1:
-            raise ValueError("array must be 1D")
-        return x
-    elif n_dim == 2:
-        if x.ndim == 1:
-            x = x.reshape(-1, 1)
-        if x.ndim != 2:
-            raise ValueError("array must be 2D")
-        return x
-    else:
-        raise ValueError("n_dim must be 1 or 2")
-
-
-FeatureEncoder = Any  # tried to use ForwardRef but it didn't work under mypy
-
-
-class FeatureEncoder(TransformerMixin, BaseEstimator):  # type: ignore
-    """
-    Base feature encoder with sklearn-style API.
-    """
-
-    n_dim_in: int = 1
-    n_dim_out: int = 2
-    n_features_out: int
-    feature_name_in: str
-    feature_names_out: List[str]
-    feature_types_out: List[str]
-    categorical: bool = False  # used by get_feature_types_out
-
-    def __init__(
-        self, n_dim_in: Optional[int] = None, n_dim_out: Optional[int] = None
-    ) -> None:
-        super().__init__()
-        if n_dim_in is not None:
-            self.n_dim_in = n_dim_in
-        if n_dim_out is not None:
-            self.n_dim_out = n_dim_out
-
-    @validate_arguments(config=dict(arbitrary_types_allowed=True))
-    def fit(self, x: pd.Series, y: Any = None, **kwargs: Any) -> FeatureEncoder:
-        self.feature_name_in = x.name
-        self.feature_type_in = self._get_feature_type(x)
-        input = validate_shape(x.values, self.n_dim_in)
-        output = self._fit(input, **kwargs)._transform(input)
-        self._out_shape = (-1, *output.shape[1:])  # for inverse_transform
-        output = validate_shape(output, self.n_dim_out)
-        if self.n_dim_out == 1:
-            self.n_features_out = 1
-        else:
-            self.n_features_out = output.shape[1]
-        self.feature_names_out = self.get_feature_names_out()
-        self.feature_types_out = self.get_feature_types_out(output)
-        return self
-
-    def _fit(self, x: np.ndarray, **kwargs: Any) -> FeatureEncoder:
-        return self
-
-    @validate_arguments(config=dict(arbitrary_types_allowed=True))
-    def transform(self, x: pd.Series) -> Union[pd.DataFrame, pd.Series]:
-        data = validate_shape(x.values, self.n_dim_in)
-        out = self._transform(data)
-        out = validate_shape(out, self.n_dim_out)
-        if self.n_dim_out == 1:
-            return pd.Series(out, name=self.feature_name_in)
-        else:
-            return pd.DataFrame(out, columns=self.feature_names_out)
-
-    def _transform(self, x: np.ndarray) -> np.ndarray:
-        return x
-
-    def get_feature_names_out(self) -> List[str]:
-        n = self.n_features_out
-        if n == 1:
-            return [self.feature_name_in]
-        else:
-            return [f"{self.feature_name_in}_{i}" for i in range(n)]
-
-    def get_feature_types_out(self, output: np.ndarray) -> List[str]:
-        t = self._get_feature_type(output)
-        return [t] * self.n_features_out
-
-    def _get_feature_type(self, x: Any) -> str:
-        if self.categorical:
-            return "discrete"
-        elif np.issubdtype(x.dtype, np.floating):
-            return "continuous"
-        elif np.issubdtype(x.dtype, np.datetime64):
-            return "datetime"
-        else:
-            return "discrete"
-
-    @validate_arguments(config=dict(arbitrary_types_allowed=True))
-    def inverse_transform(self, df: Union[pd.DataFrame, pd.Series]) -> pd.Series:
-        y = df.values.reshape(self._out_shape)
-        x = self._inverse_transform(y)
-        x = validate_shape(x, 1)
-        return pd.Series(x, name=self.feature_name_in)
-
-    def _inverse_transform(self, data: np.ndarray) -> np.ndarray:
-        return data
-
-    @classmethod
-    def wraps(
-        cls: type, encoder_class: TransformerMixin, **params: Any
-    ) -> Type[FeatureEncoder]:
-        """Wraps sklearn transformer to FeatureEncoder."""
-
-        class WrappedEncoder(FeatureEncoder):
-            n_dim_in = 2  # most sklearn transformers accept 2D input
-
-            def __init__(self, *args: Any, **kwargs: Any) -> None:
-                self.encoder = encoder_class(*args, **kwargs)
-
-            def _fit(self, x: np.ndarray, **kwargs: Any) -> FeatureEncoder:
-                self.encoder.fit(x, **kwargs)
-                return self
-
-            def _transform(self, x: np.ndarray) -> np.ndarray:
-                return self.encoder.transform(x)
-
-            def _inverse_transform(self, data: np.ndarray) -> np.ndarray:
-                return self.encoder.inverse_transform(data)
-
-            def get_feature_names_out(self) -> List[str]:
-                return list(self.encoder.get_feature_names_out([self.feature_name_in]))
-
-        for attr in ("__name__", "__qualname__", "__doc__"):
-            setattr(WrappedEncoder, attr, getattr(encoder_class, attr))
-        for attr, val in params.items():
-            setattr(WrappedEncoder, attr, val)
-
-        return WrappedEncoder
-
-
-OneHotEncoder = FeatureEncoder.wraps(
-    OneHotEncoder, categorical=True, handle_unknown="ignore"
-)
-OrdinalEncoder = FeatureEncoder.wraps(OrdinalEncoder, categorical=True)
-LabelEncoder = FeatureEncoder.wraps(LabelEncoder, n_dim_out=1, categorical=True)
-StandardScaler = FeatureEncoder.wraps(StandardScaler)
-MinMaxScaler = FeatureEncoder.wraps(MinMaxScaler)
-RobustScaler = FeatureEncoder.wraps(RobustScaler)
-
-
-class DatetimeEncoder(FeatureEncoder):
-    """Datetime variables encoder"""
-
-    n_dim_out = 1
-
-    def _transform(self, x: np.ndarray) -> np.ndarray:
-        return pd.to_numeric(x).astype(float)
-
-    def _inverse_transform(self, data: np.ndarray) -> np.ndarray:
-        return pd.to_datetime(data)
-
-
-class BayesianGMMEncoder(FeatureEncoder):
-    """Bayesian Gaussian Mixture encoder"""
-
-    n_dim_in = 2
-
-    def __init__(
-        self,
-        n_components: int = 10,
-        random_state: int = 0,
-        weight_threshold: float = 0.005,
-        clip_output: bool = True,
-        std_multiplier: int = 4,
-    ) -> None:
-        self.n_components = n_components
-        self.weight_threshold = weight_threshold
-        self.clip_output = clip_output
-        self.std_multiplier = std_multiplier
-        self.model = BayesianGaussianMixture(
-            n_components=n_components,
-            random_state=random_state,
-            weight_concentration_prior=1e-3,
-        )
-
-    def _fit(self, x: np.ndarray, **kwargs: Any) -> "BayesianGaussianMixture":
-        self.min_value = x.min()
-        self.max_value = x.max()
-
-        self.model.fit(x)
-        self.weights = self.model.weights_
-        self.means = self.model.means_.reshape(-1)
-        self.stds = np.sqrt(self.model.covariances_).reshape(-1)
-
-        return self
-
-    def _transform(self, x: np.ndarray) -> np.ndarray:
-        means = self.means.reshape(1, -1)
-        stds = self.stds.reshape(1, -1)
-
-        # predict cluster value
-        normalized_values = (x - means) / (self.std_multiplier * stds)
-
-        # predict cluster
-        component_probs = self.model.predict_proba(x)
-
-        components = np.argmax(component_probs, axis=1)
-
-        normalized = normalized_values[np.arange(len(x)), components]
-        if self.clip_output:  # why use 0.99 instead of 1?
-            normalized = np.clip(normalized, -0.99, 0.99)
-        normalized = normalized.reshape(-1, 1)
-
-        components = np.eye(self.n_components, dtype=int)[components]
-        return np.hstack([normalized, components])
-
-    def get_feature_names_out(self) -> List[str]:
-        name = self.feature_name_in
-        return [f"{name}.value"] + [
-            f"{name}.component_{i}" for i in range(self.n_components)
-        ]
-
-    def get_feature_types_out(self, output: np.ndarray) -> List[str]:
-        return ["continuous"] + ["discrete"] * self.n_components
-
-    def _inverse_transform(self, data: np.ndarray) -> np.ndarray:
-        components = np.argmax(data[:, 1:], axis=1)
-
-        data = data[:, 0]
-        if self.clip_output:
-            data = np.clip(data, -1.0, 1.0)
-
-        # recreate data
-        mean_t = self.means[components]
-        std_t = self.stds[components]
-        reversed_data = data * self.std_multiplier * std_t + mean_t
-
-        # clip values
-        return np.clip(reversed_data, self.min_value, self.max_value)
-
-
-@FeatureEncoder.wraps
-class GaussianQuantileTransformer(QuantileTransformer):
-    """Quantile transformer with Gaussian distribution"""
-
-    def __init__(
-        self,
-        *,
-        ignore_implicit_zeros: bool = False,
-        subsample: int = 10000,
-        random_state: Any = None,
-        copy: bool = True,
-    ) -> None:
-        super().__init__(
-            n_quantiles=None,
-            output_distribution="normal",
-            ignore_implicit_zeros=ignore_implicit_zeros,
-            subsample=subsample,
-            random_state=random_state,
-            copy=copy,
-        )
-
-    def fit(self, x: np.ndarray, y: Any = None) -> "GaussianQuantileTransformer":
-        self.n_quantiles = max(min(len(x) // 30, 1000), 10)
-        return super().fit(x, y)
-
-
 src/synthcity/plugins/core/plugin.py
 # stdlib
 import importlib.util
@@ -3260,197 +1587,6 @@ class Constraints(BaseModel):
         return dist_template, dist_args
 
 
-src/synthcity/plugins/core/dataset.py
-# stdlib
-from typing import List, Optional, Tuple
-
-# third party
-import numpy as np
-import torch
-
-# synthcity absolute
-from synthcity.utils.constants import DEVICE
-
-
-class FlexibleDataset(torch.utils.data.Dataset):
-    """Helper dataset wrapper for post-processing or transforming another dataset. Used for controlling the image sizes for the synthcity models.
-
-    The class supports adding custom transforms to existing datasets, and to subsample a set of indices.
-
-    Args:
-        data: torch.Dataset
-        transform: An optional list of transforms
-        indices: An optional list of indices to subsample
-    """
-
-    def __init__(
-        self,
-        data: torch.utils.data.Dataset,
-        transform: Optional[torch.nn.Module] = None,
-        indices: Optional[list] = None,
-    ) -> None:
-        super().__init__()
-
-        if indices is None:
-            indices = np.arange(len(data))
-
-        self.indices = np.asarray(indices)
-        self.data = data
-        self.transform = transform
-        self.ndarrays: Optional[Tuple[torch.Tensor, torch.Tensor]] = None
-
-    def __getitem__(self, index: int) -> Tuple[torch.Tensor, torch.Tensor]:
-        x, y = self.data[self.indices[index]]
-        if self.transform:
-            x = self.transform(x)
-        return x, y
-
-    def __len__(self) -> int:
-        return len(self.indices)
-
-    def shape(self) -> Tuple:
-        x, _ = self[self.indices[0]]
-
-        return (len(self), *x.shape)
-
-    def numpy(self) -> Tuple[np.ndarray, np.ndarray]:
-        if self.ndarrays is not None:
-            return self.ndarrays
-
-        x_buff = []
-        y_buff = []
-        for idx in range(len(self)):
-            x_local, y_local = self[idx]
-            x_buff.append(x_local.unsqueeze(0).cpu().numpy())
-            y_buff.append(y_local)
-
-        x = np.concatenate(x_buff, axis=0)
-        y = np.asarray(y_buff)
-
-        self.ndarrays = (x, y)
-        return x, y
-
-    def tensors(self) -> Tuple[torch.Tensor, torch.Tensor]:
-        x, y = self.numpy()
-
-        return torch.from_numpy(x), torch.from_numpy(y)
-
-    def labels(self) -> np.ndarray:
-        labels = []
-        for idx in self.indices:
-            _, y = self.data[idx]
-            labels.append(y)
-
-        return np.asarray(labels)
-
-    def filter_indices(self, indices: List[int]) -> "FlexibleDataset":
-        for idx in indices:
-            if idx >= len(self.indices):
-                raise ValueError(
-                    "Invalid filtering list. {idx} not found in the current list of indices"
-                )
-        return FlexibleDataset(
-            data=self.data, transform=self.transform, indices=self.indices[indices]
-        )
-
-
-class TensorDataset(torch.utils.data.Dataset):
-    """Helper dataset for wrapping existing tensors
-
-    Args:
-        images: Tensor
-        targets: Tensor
-    """
-
-    def __init__(
-        self,
-        images: torch.Tensor,
-        targets: Optional[torch.Tensor],
-    ) -> None:
-        super().__init__()
-
-        if targets is not None and len(targets) != len(images):
-            raise ValueError("Invalid input")
-
-        self.images = images
-        self.targets = targets
-
-    def __getitem__(self, index: int) -> Tuple[torch.Tensor, Optional[torch.Tensor]]:
-        y: Optional[torch.Tensor] = None
-        x = self.images[index]
-
-        if self.targets is not None:
-            y = self.targets[index]
-
-        return x, y
-
-    def __len__(self) -> int:
-        return len(self.images)
-
-    def labels(self) -> Optional[np.ndarray]:
-        if self.targets is None:
-            return None
-
-        return self.targets.cpu().numpy()
-
-
-class ConditionalDataset(torch.utils.data.Dataset):
-    """Helper dataset for wrapping existing datasets with custom tensors
-
-    Args:
-        data: torch.Dataset
-        cond: Optional Tensor
-    """
-
-    def __init__(
-        self,
-        data: torch.utils.data.Dataset,
-        cond: Optional[torch.Tensor] = None,
-    ) -> None:
-        super().__init__()
-
-        if cond is not None and len(cond) != len(data):
-            raise ValueError("Invalid input")
-
-        self.data = data
-        self.cond = cond
-
-    def __getitem__(self, index: int) -> Tuple[torch.Tensor, Optional[torch.Tensor]]:
-        cond: Optional[torch.Tensor] = None
-        x = self.data[index][0]
-
-        if self.cond is not None:
-            cond = self.cond[index]
-
-        return x, cond
-
-    def __len__(self) -> int:
-        return len(self.data)
-
-
-class NumpyDataset(torch.utils.data.Dataset):
-    """Helper class for wrapping Numpy arrays in torch Datasets
-    Args:
-        X: np.ndarray
-        y: np.ndarray
-    """
-
-    def __init__(self, X: np.ndarray, y: np.ndarray) -> None:
-        super().__init__()
-
-        self.X = X
-        self.y = y
-
-    def __getitem__(self, index: int) -> Tuple[torch.Tensor, torch.Tensor]:
-        x = self.X[index]
-        y = self.y[index]
-
-        return torch.from_numpy(x).to(DEVICE), y
-
-    def __len__(self) -> int:
-        return len(self.X)
-
-
 src/synthcity/plugins/core/distribution.py
 # stdlib
 from abc import ABCMeta, abstractmethod
@@ -4317,5 +2453,3723 @@ def constraint_to_distribution(constraints: Constraints, feature: str) -> Distri
         dist_template = FloatDistribution
 
     return dist_template(name=feature, **dist_args)
+
+
+src/synthcity/plugins/core/dataset.py
+# stdlib
+from typing import List, Optional, Tuple
+
+# third party
+import numpy as np
+import torch
+
+# synthcity absolute
+from synthcity.utils.constants import DEVICE
+
+
+class FlexibleDataset(torch.utils.data.Dataset):
+    """Helper dataset wrapper for post-processing or transforming another dataset. Used for controlling the image sizes for the synthcity models.
+
+    The class supports adding custom transforms to existing datasets, and to subsample a set of indices.
+
+    Args:
+        data: torch.Dataset
+        transform: An optional list of transforms
+        indices: An optional list of indices to subsample
+    """
+
+    def __init__(
+        self,
+        data: torch.utils.data.Dataset,
+        transform: Optional[torch.nn.Module] = None,
+        indices: Optional[list] = None,
+    ) -> None:
+        super().__init__()
+
+        if indices is None:
+            indices = np.arange(len(data))
+
+        self.indices = np.asarray(indices)
+        self.data = data
+        self.transform = transform
+        self.ndarrays: Optional[Tuple[torch.Tensor, torch.Tensor]] = None
+
+    def __getitem__(self, index: int) -> Tuple[torch.Tensor, torch.Tensor]:
+        x, y = self.data[self.indices[index]]
+        if self.transform:
+            x = self.transform(x)
+        return x, y
+
+    def __len__(self) -> int:
+        return len(self.indices)
+
+    def shape(self) -> Tuple:
+        x, _ = self[self.indices[0]]
+
+        return (len(self), *x.shape)
+
+    def numpy(self) -> Tuple[np.ndarray, np.ndarray]:
+        if self.ndarrays is not None:
+            return self.ndarrays
+
+        x_buff = []
+        y_buff = []
+        for idx in range(len(self)):
+            x_local, y_local = self[idx]
+            x_buff.append(x_local.unsqueeze(0).cpu().numpy())
+            y_buff.append(y_local)
+
+        x = np.concatenate(x_buff, axis=0)
+        y = np.asarray(y_buff)
+
+        self.ndarrays = (x, y)
+        return x, y
+
+    def tensors(self) -> Tuple[torch.Tensor, torch.Tensor]:
+        x, y = self.numpy()
+
+        return torch.from_numpy(x), torch.from_numpy(y)
+
+    def labels(self) -> np.ndarray:
+        labels = []
+        for idx in self.indices:
+            _, y = self.data[idx]
+            labels.append(y)
+
+        return np.asarray(labels)
+
+    def filter_indices(self, indices: List[int]) -> "FlexibleDataset":
+        for idx in indices:
+            if idx >= len(self.indices):
+                raise ValueError(
+                    "Invalid filtering list. {idx} not found in the current list of indices"
+                )
+        return FlexibleDataset(
+            data=self.data, transform=self.transform, indices=self.indices[indices]
+        )
+
+
+class TensorDataset(torch.utils.data.Dataset):
+    """Helper dataset for wrapping existing tensors
+
+    Args:
+        images: Tensor
+        targets: Tensor
+    """
+
+    def __init__(
+        self,
+        images: torch.Tensor,
+        targets: Optional[torch.Tensor],
+    ) -> None:
+        super().__init__()
+
+        if targets is not None and len(targets) != len(images):
+            raise ValueError("Invalid input")
+
+        self.images = images
+        self.targets = targets
+
+    def __getitem__(self, index: int) -> Tuple[torch.Tensor, Optional[torch.Tensor]]:
+        y: Optional[torch.Tensor] = None
+        x = self.images[index]
+
+        if self.targets is not None:
+            y = self.targets[index]
+
+        return x, y
+
+    def __len__(self) -> int:
+        return len(self.images)
+
+    def labels(self) -> Optional[np.ndarray]:
+        if self.targets is None:
+            return None
+
+        return self.targets.cpu().numpy()
+
+
+class ConditionalDataset(torch.utils.data.Dataset):
+    """Helper dataset for wrapping existing datasets with custom tensors
+
+    Args:
+        data: torch.Dataset
+        cond: Optional Tensor
+    """
+
+    def __init__(
+        self,
+        data: torch.utils.data.Dataset,
+        cond: Optional[torch.Tensor] = None,
+    ) -> None:
+        super().__init__()
+
+        if cond is not None and len(cond) != len(data):
+            raise ValueError("Invalid input")
+
+        self.data = data
+        self.cond = cond
+
+    def __getitem__(self, index: int) -> Tuple[torch.Tensor, Optional[torch.Tensor]]:
+        cond: Optional[torch.Tensor] = None
+        x = self.data[index][0]
+
+        if self.cond is not None:
+            cond = self.cond[index]
+
+        return x, cond
+
+    def __len__(self) -> int:
+        return len(self.data)
+
+
+class NumpyDataset(torch.utils.data.Dataset):
+    """Helper class for wrapping Numpy arrays in torch Datasets
+    Args:
+        X: np.ndarray
+        y: np.ndarray
+    """
+
+    def __init__(self, X: np.ndarray, y: np.ndarray) -> None:
+        super().__init__()
+
+        self.X = X
+        self.y = y
+
+    def __getitem__(self, index: int) -> Tuple[torch.Tensor, torch.Tensor]:
+        x = self.X[index]
+        y = self.y[index]
+
+        return torch.from_numpy(x).to(DEVICE), y
+
+    def __len__(self) -> int:
+        return len(self.X)
+
+
+src/synthcity/plugins/core/models/syn_seq/syn_seq_encoder.py
+# File: syn_seq_encoder.py
+
+from typing import Optional, Dict, List, Any
+import pandas as pd
+import numpy as np
+from sklearn.base import TransformerMixin, BaseEstimator
+
+
+class Syn_SeqEncoder(TransformerMixin, BaseEstimator):
+    """
+    Splits numeric columns with special values (≥1) into col + col_cat,
+    leaving col_cat as a 'category' for modeling. 
+    Also respects user col_type overrides for 'category' or 'numeric'.
+    If no override is given, we do cardinality-based auto:
+        - ≤ max_categories => 'category'
+        - else => 'numeric'
+    Date columns => numeric offsets internally.
+    We also maintain a variable_selection_ matrix for the final shape.
+
+    Example:
+        encoder = Syn_SeqEncoder(
+            columns_special_values={"bp":[-0.04, -0.005]},
+            syn_order=["age","sex","bmi",...],
+            col_type={"age":"category"},
+            max_categories=20,
+        )
+        X_enc = encoder.fit_transform(df)
+        # => splitted col_cat columns appear
+    """
+
+    def __init__(
+        self,
+        columns_special_values: Optional[Dict[str, List[Any]]] = None,
+        syn_order: Optional[List[str]] = None,
+        max_categories: int = 20,
+        col_type: Optional[Dict[str, str]] = None,
+        default_method: str = "cart",
+    ):
+        self.columns_special_values = columns_special_values or {}
+        self.syn_order = syn_order or []
+        self.max_categories = max_categories
+        self.col_type = (col_type or {}).copy()  # user overrides
+        self.default_method = default_method
+
+        # col_map => col => {original_dtype, converted_type, method}
+        self.col_map: Dict[str, Dict[str, Any]] = {}
+        # minimal dates
+        self.date_mins: Dict[str, pd.Timestamp] = {}
+        # variable_selection => row=col, col=col => 1/0
+        self.variable_selection_: Optional[pd.DataFrame] = None
+
+    def fit(self, X: pd.DataFrame, y=None) -> "Syn_SeqEncoder":
+        X = X.copy()
+        self._detect_syn_order(X)
+        self._init_col_map(X)
+        self._detect_special_values(X)
+        self._build_variable_selection()
+        self._store_date_min(X)
+        return self
+
+    def transform(self, X: pd.DataFrame) -> pd.DataFrame:
+        X = X.copy()
+        X = self._reorder_columns(X)
+        X = self._convert_date_to_offset(X)
+        X = self._split_numeric_cols_in_front(X)
+        X = self._apply_converted_dtype(X)
+        self._update_variable_selection_after_split(X)
+        return X
+
+    def inverse_transform(self, X: pd.DataFrame) -> pd.DataFrame:
+        X = X.copy()
+        # single special => restore
+        for col, spvals in self.columns_special_values.items():
+            if col in X.columns and len(spvals) == 1:
+                X[col] = X[col].replace({pd.NA: spvals[0]})
+
+        X = self._convert_offset_to_date(X)
+
+        # attempt to restore original dtype
+        for col in X.columns:
+            if col in self.col_map:
+                orig_dt = self.col_map[col].get("original_dtype")
+                if orig_dt:
+                    try:
+                        X[col] = X[col].astype(orig_dt)
+                    except:
+                        pass
+        return X
+
+    # -----------------------------------
+    # Internals
+    # -----------------------------------
+    def _detect_syn_order(self, X: pd.DataFrame):
+        if not self.syn_order:
+            self.syn_order = list(X.columns)
+        else:
+            self.syn_order = [c for c in self.syn_order if c in X.columns]
+
+    def _init_col_map(self, X: pd.DataFrame):
+        self.col_map.clear()
+        for col in self.syn_order:
+            if col not in X.columns:
+                continue
+            orig_dt = str(X[col].dtype)
+            declared = self.col_type.get(col, "").lower()
+            if declared == "date":
+                conv_type = "numeric"
+            elif declared == "numeric":
+                conv_type = "numeric"
+            elif declared == "category":
+                conv_type = "category"
+            else:
+                # auto
+                if pd.api.types.is_datetime64_any_dtype(X[col]):
+                    conv_type = "numeric"
+                    self.col_type[col] = "date"
+                else:
+                    nuniq = X[col].nunique(dropna=True)
+                    if nuniq <= self.max_categories:
+                        conv_type = "category"
+                    else:
+                        conv_type = "numeric"
+
+            self.col_map[col] = {
+                "original_dtype": orig_dt,
+                "converted_type": conv_type,
+                "method": self.default_method
+            }
+
+    def _detect_special_values(self, X: pd.DataFrame):
+        # If top freq covers ≥ 0.9 => treat as special unless user override says category
+        for col in self.syn_order:
+            if col not in X.columns:
+                continue
+            if self.col_map[col]["converted_type"] != "numeric":
+                continue
+            freq = X[col].value_counts(dropna=False, normalize=True)
+            if not freq.empty and freq.iloc[0] >= 0.9:
+                top_val = freq.index[0]
+                exist = self.columns_special_values.get(col, [])
+                merged = set(exist).union([top_val])
+                self.columns_special_values[col] = list(merged)
+
+    def _build_variable_selection(self):
+        idx = self.syn_order
+        vs = pd.DataFrame(0, index=idx, columns=idx)
+        for i in range(len(idx)):
+            for j in range(i):
+                vs.iat[i,j] = 1
+        self.variable_selection_ = vs
+
+    def _store_date_min(self, X: pd.DataFrame):
+        for col in self.syn_order:
+            if self.col_type.get(col) == "date":
+                dt_series = pd.to_datetime(X[col], errors="coerce")
+                self.date_mins[col] = dt_series.min()
+
+    def _reorder_columns(self, X: pd.DataFrame) -> pd.DataFrame:
+        keep = [c for c in self.syn_order if c in X.columns]
+        return X[keep]
+
+    def _convert_date_to_offset(self, X: pd.DataFrame) -> pd.DataFrame:
+        for col in self.syn_order:
+            if self.col_type.get(col) == "date" and col in X.columns:
+                mindt = self.date_mins.get(col, None)
+                X[col] = pd.to_datetime(X[col], errors="coerce")
+                if mindt is None:
+                    mindt = X[col].min()
+                    self.date_mins[col] = mindt
+                X[col] = (X[col] - mindt).dt.days
+        return X
+
+    def _split_numeric_cols_in_front(self, X: pd.DataFrame) -> pd.DataFrame:
+        # For numeric columns => if spvals => create col_cat
+        for col in list(self.syn_order):
+            if col not in self.col_map:
+                continue
+            if self.col_map[col]["converted_type"] != "numeric":
+                continue
+            if col not in X.columns:
+                continue
+
+            spvals = self.columns_special_values.get(col, [])
+            if len(spvals) == 0:
+                # no special => do not create col_cat
+                continue
+
+            cat_col = col + "_cat"
+            # cat col => if value is spval or nan => put that value, else -777
+            X[cat_col] = X[col].apply(
+                lambda v: v if (pd.isna(v) or (v in spvals)) else -777
+            )
+            X[cat_col] = X[cat_col].fillna(-9999).astype("category")
+
+            # main col => set np.nan where spval or original nan
+            X[col] = X[col].apply(
+                lambda v: v if (not pd.isna(v) and (v not in spvals)) else pd.NA
+            )
+
+            # Insert cat_col before col
+            if cat_col not in self.syn_order:
+                idx = self.syn_order.index(col)
+                self.syn_order.insert(idx, cat_col)
+
+            self.col_map[cat_col] = {
+                "original_dtype": None,
+                "converted_type": "category",
+                "method": "cart"
+            }
+
+        return X
+
+    def _apply_converted_dtype(self, X: pd.DataFrame) -> pd.DataFrame:
+        for col in self.syn_order:
+            if col not in X.columns:
+                continue
+            info = self.col_map.get(col, {})
+            ctype = info.get("converted_type", "category")
+            if ctype == "numeric":
+                X[col] = pd.to_numeric(X[col], errors="coerce")
+            else:
+                X[col] = X[col].astype("category")
+        return X
+
+    def _convert_offset_to_date(self, X: pd.DataFrame) -> pd.DataFrame:
+        for col in self.syn_order:
+            if self.col_type.get(col) == "date" and col in X.columns:
+                offset = pd.to_numeric(X[col], errors="coerce")
+                mindt = self.date_mins.get(col, None)
+                if mindt is not None:
+                    X[col] = pd.to_timedelta(offset, unit="D") + mindt
+        return X
+
+    def _update_variable_selection_after_split(self, X: pd.DataFrame):
+        if self.variable_selection_ is None:
+            return
+        old_vs = self.variable_selection_
+        old_idx = list(old_vs.index)
+        old_cols = list(old_vs.columns)
+
+        new_cols = [c for c in X.columns if c not in old_idx]
+        if not new_cols:
+            return
+
+        vs_new = pd.DataFrame(0, index=old_idx + new_cols, columns=old_cols + new_cols)
+        # copy old
+        for r in old_idx:
+            for c2 in old_cols:
+                vs_new.loc[r,c2] = old_vs.loc[r,c2]
+
+        # for each new col => replicate from base
+        for nc in new_cols:
+            if nc.endswith("_cat"):
+                base_c = nc[:-4]
+                if base_c in vs_new.index and base_c in vs_new.columns:
+                    for cc in old_cols:
+                        vs_new.loc[nc, cc] = vs_new.loc[base_c, cc]
+                    for rr in old_idx:
+                        vs_new.loc[rr, nc] = vs_new.loc[rr, base_c]
+                vs_new.loc[nc, nc] = 0
+
+        self.variable_selection_ = vs_new
+
+    @staticmethod
+    def update_variable_selection(
+        var_sel_df: pd.DataFrame,
+        user_dict: Dict[str, List[str]]
+    ) -> pd.DataFrame:
+        for tgt, preds in user_dict.items():
+            if tgt not in var_sel_df.index:
+                print(f"[WARNING] {tgt} not in var_sel => skip")
+                continue
+            var_sel_df.loc[tgt,:] = 0
+            for p in preds:
+                if p in var_sel_df.columns:
+                    var_sel_df.loc[tgt,p] = 1
+                else:
+                    print(f"[WARNING] predictor {p} not found => skip")
+        return var_sel_df
+
+
+src/synthcity/plugins/core/models/syn_seq/syn_seq.py
+# File: syn_seq.py
+
+from typing import Any, Dict, List, Optional
+import pandas as pd
+import numpy as np
+
+# column-by-column methods
+from synthcity.plugins.core.models.syn_seq.methods.cart import syn_cart
+from synthcity.plugins.core.models.syn_seq.methods.ctree import syn_ctree
+from synthcity.plugins.core.models.syn_seq.methods.rf import syn_rf
+from synthcity.plugins.core.models.syn_seq.methods.norm import syn_norm, syn_lognorm
+from synthcity.plugins.core.models.syn_seq.methods.pmm import syn_pmm
+from synthcity.plugins.core.models.syn_seq.methods.logreg import syn_logreg
+from synthcity.plugins.core.models.syn_seq.methods.polyreg import syn_polyreg
+from synthcity.plugins.core.models.syn_seq.methods.misc import syn_swr, syn_random
+
+from synthcity.plugins.core.models.syn_seq.syn_seq_constraints import Syn_SeqConstraints
+
+ALLOWED_NUMERIC_METHODS = {
+    "norm","lognorm","pmm","cart","ctree","rf","random","swr","polyreg","logreg"
+}
+ALLOWED_CATEGORY_METHODS = {
+    "cart","ctree","rf","logreg","polyreg","random","swr"
+}
+
+
+class Syn_Seq:
+    """
+    The aggregator that:
+      1) Merges user_custom => loader.update_user_custom(...)
+      2) loader.encode() => splitted columns
+      3) build "fit_order":
+          - cat columns => forced "cart"
+          - main col => user-chosen or fallback if mismatch
+      4) partial fit
+      5) generate => produce splitted columns in that hidden order, apply constraints, decode => final
+    """
+
+    def __init__(
+        self,
+        random_state: int = 0,
+        strict: bool = True,
+        sampling_patience: int = 100,
+        default_first_method: str = "swr",
+        default_other_method: str = "cart",
+        seq_id_col: str = "seq_id",
+        seq_time_col: str = "seq_time_id",
+    ):
+        self.random_state = random_state
+        self.strict = strict
+        self.sampling_patience = sampling_patience
+        self.default_first_method = default_first_method
+        self.default_other_method = default_other_method
+        self.seq_id_col = seq_id_col
+        self.seq_time_col = seq_time_col
+
+        self._col_models: Dict[str, Dict[str, Any]] = {}
+        self._model_trained = False
+        self._enc_dict: Dict[str, Any] = {}
+
+    def fit(
+        self,
+        loader: Any,
+        nrows: int,
+        user_custom: Optional[dict] = None,
+        *args,
+        **kwargs
+    ) -> "Syn_Seq":
+        # 1) user overrides
+        if user_custom:
+            loader.update_user_custom(user_custom)
+
+        # 2) encode => splitted columns
+        encoded_loader, enc_dict = loader.encode(encoders=None)
+        self._enc_dict = enc_dict
+
+        df_enc = encoded_loader.dataframe()
+        if df_enc.empty:
+            raise ValueError("No data after encoding => cannot train on empty DataFrame.")
+
+        syn_order = encoded_loader.syn_order
+        varsel_df = getattr(encoded_loader._encoder, "variable_selection_", None)
+        method_map = getattr(encoded_loader, "_method", {})
+        col_type_map = getattr(encoded_loader, "col_type", {})
+
+        if varsel_df is None:
+            varsel_df = pd.DataFrame(0, index=syn_order, columns=syn_order)
+
+        # fill fallback method
+        final_method: Dict[str, str] = {}
+        for i, col in enumerate(syn_order):
+            if col not in method_map:
+                final_method[col] = self.default_first_method if (i==0) else self.default_other_method
+            else:
+                final_method[col] = method_map[col]
+
+        # splitted => e.g. "bp" => ["bp_cat","bp"]
+        splitted_map: Dict[str, List[str]] = {}
+        for c in syn_order:
+            splitted_map[c] = []
+        for c_enc in df_enc.columns:
+            base_c = c_enc[:-4] if c_enc.endswith("_cat") else c_enc
+            splitted_map.setdefault(base_c, []).append(c_enc)
+
+        # build final fit_order
+        fit_order: List[str] = []
+        method_for_col: Dict[str, str] = {}
+
+        for i, base_col in enumerate(syn_order):
+            sub_cols = splitted_map.get(base_col, [])
+            cat_cols = [x for x in sub_cols if x.endswith("_cat")]
+            main_cols = [x for x in sub_cols if not x.endswith("_cat")]
+
+            # cat => forced "cart"
+            for cc in cat_cols:
+                fit_order.append(cc)
+                method_for_col[cc] = "cart"
+
+            # main => check numeric vs category => fix method if mismatch
+            chosen = final_method.get(base_col, self.default_other_method)
+            declared_t = col_type_map.get(base_col, "category")
+            cfix = chosen.strip().lower()
+            if declared_t.lower() == "numeric" and cfix not in ALLOWED_NUMERIC_METHODS:
+                fallback = self.default_first_method if (i == 0) else "norm"
+                print(f"[TYPE-CHECK] '{base_col}' is numeric => fallback '{fallback}'")
+                cfix = fallback
+            elif declared_t.lower() == "category" and cfix not in ALLOWED_CATEGORY_METHODS:
+                fallback = "cart"
+                print(f"[TYPE-CHECK] '{base_col}' is category => fallback 'cart'")
+                cfix = fallback
+
+            for mc in main_cols:
+                fit_order.append(mc)
+                method_for_col[mc] = cfix
+
+        # leftover columns not in fit_order
+        leftover = [c for c in df_enc.columns if c not in fit_order]
+        for c in leftover:
+            fit_order.append(c)
+            method_for_col[c] = self.default_other_method
+
+        # Log
+        print("[INFO] final synthesis:")
+        print(f"  - syn_order: {syn_order}")
+        print(f"  - method: {final_method}")
+        print("  - variable_selection_:")
+        print(varsel_df)
+        print("\n[INFO] model fitting")
+
+        self._col_models.clear()
+        for col_enc in fit_order:
+            base_c = col_enc[:-4] if col_enc.endswith("_cat") else col_enc
+            chosen_m = method_for_col[col_enc]
+
+            preds_list = []
+            if base_c in varsel_df.index:
+                row_mask = varsel_df.loc[base_c] == 1
+                col_preds = varsel_df.columns[row_mask].tolist()
+                col_preds = [p for p in col_preds if p in df_enc.columns]
+                preds_list = col_preds
+
+            y_obs = df_enc[col_enc].values
+            X_obs = df_enc[preds_list].values if preds_list else np.zeros((len(y_obs),0))
+
+            print(f"Fitting '{col_enc}' ... ", end="")
+            fit_info = {
+                "obs_y": y_obs,
+                "obs_X": X_obs,
+                "type": chosen_m.lower(),
+            }
+            self._col_models[col_enc] = {
+                "method": chosen_m.lower(),
+                "predictors": preds_list,
+                "fit_info": fit_info
+            }
+            print("Done!")
+
+        self._model_trained = True
+        return self
+
+    def generate(
+        self,
+        nrows: int,
+        encoded_loader: Any,
+        constraints: Optional[Dict[str, List[Any]]] = None,
+        **kwargs
+    ) -> pd.DataFrame:
+        if not self._model_trained:
+            raise RuntimeError("Must fit aggregator before generating.")
+
+        if constraints is not None:
+            final_constraints = Syn_SeqConstraints(chained_rules=constraints)
+        else:
+            final_constraints = None
+
+        if final_constraints and self.strict:
+            df_synth = self._attempt_strict_generation(nrows, final_constraints)
+        else:
+            df_synth = self._generate_once(nrows)
+            if final_constraints:
+                df_synth = final_constraints.correct_equals(df_synth)
+                df_synth = final_constraints.match(df_synth)
+
+        tmp_loader = encoded_loader.decorate(df_synth)
+        final_loader = tmp_loader.decode(self._enc_dict)
+        return final_loader.dataframe()
+
+    def _attempt_strict_generation(self, nrows: int, constraints: Syn_SeqConstraints) -> pd.DataFrame:
+        result_df = pd.DataFrame()
+        tries = 0
+        while len(result_df) < nrows and tries < self.sampling_patience:
+            tries += 1
+            chunk = self._generate_once(nrows)
+            chunk = constraints.correct_equals(chunk)
+            chunk = constraints.match(chunk).drop_duplicates()
+            result_df = pd.concat([result_df, chunk], ignore_index=True)
+        return result_df.head(nrows)
+
+    def _generate_once(self, nrows: int) -> pd.DataFrame:
+        fit_order = list(self._col_models.keys())
+        syn_df = pd.DataFrame(index=range(nrows))
+
+        print("")
+        for col_enc in fit_order:
+            info = self._col_models[col_enc]
+            method = info["method"]
+            preds = info["predictors"]
+            fit_data = info["fit_info"]
+
+            safe_preds = [p for p in preds if p in syn_df.columns]
+            Xp = syn_df[safe_preds].values if safe_preds else np.zeros((nrows,0))
+
+            print(f"Generating '{col_enc}' ... ", end="")
+            new_col = self._generate_single_column(method, fit_data, Xp, nrows)
+            syn_df[col_enc] = new_col
+            print("Done!")
+
+        return syn_df
+
+    def _generate_single_column(
+        self, method: str, fit_info: Dict[str, Any], Xp: np.ndarray, nrows: int
+    ) -> pd.Series:
+        m = method.lower()
+        y_obs = fit_info["obs_y"]
+        X_obs = fit_info["obs_X"]
+
+        if m == "cart":
+            res = syn_cart(y=y_obs, X=X_obs, Xp=Xp, random_state=self.random_state)
+        elif m == "ctree":
+            res = syn_ctree(y=y_obs, X=X_obs, Xp=Xp, random_state=self.random_state)
+        elif m == "rf":
+            res = syn_rf(y=y_obs, X=X_obs, Xp=Xp, random_state=self.random_state)
+        elif m == "norm":
+            res = syn_norm(y=y_obs, X=X_obs, Xp=Xp, random_state=self.random_state)
+        elif m == "lognorm":
+            res = syn_lognorm(y=y_obs, X=X_obs, Xp=Xp, random_state=self.random_state)
+        elif m == "pmm":
+            res = syn_pmm(y=y_obs, X=X_obs, Xp=Xp, random_state=self.random_state)
+        elif m == "logreg":
+            res = syn_logreg(y=y_obs, X=X_obs, Xp=Xp, random_state=self.random_state)
+        elif m == "polyreg":
+            res = syn_polyreg(y=y_obs, X=X_obs, Xp=Xp, random_state=self.random_state)
+        elif m == "swr":
+            res = syn_swr(y=y_obs, X=None, Xp=np.zeros((nrows,1)), random_state=self.random_state)
+        elif m == "random":
+            res = syn_random(y=y_obs, X=None, Xp=np.zeros((nrows,1)), random_state=self.random_state)
+        else:
+            res = syn_random(y=y_obs, X=None, Xp=np.zeros((nrows,1)), random_state=self.random_state)
+
+        return pd.Series(res["res"])
+
+
+src/synthcity/plugins/core/models/syn_seq/syn_seq_constraints.py
+# File: syn_seq_constraints.py
+
+from typing import Any, Dict, List, Tuple
+import pandas as pd
+
+from pydantic import Field
+from synthcity.plugins.core.constraints import Constraints
+
+
+class Syn_SeqConstraints(Constraints):
+    """
+    Extended constraints with chained sub-rules. Example:
+        {
+          "target":[ ("bmi", ">", 0.15), ("target", ">",0) ]
+        }
+    If row passes the first sub-rule => also must pass next, else drop or correct.
+    """
+
+    chained_rules: Dict[str, List[Tuple[str, str, Any]]] = Field(default_factory=dict)
+
+    def match(self, X: pd.DataFrame) -> pd.DataFrame:
+        base_mask = super().filter(X)
+        df_filtered = X[base_mask].copy()
+        if df_filtered.empty:
+            return df_filtered
+        return self._match_chained(df_filtered)
+
+    def _match_chained(self, X: pd.DataFrame) -> pd.DataFrame:
+        df = X.copy()
+        for tgt_key, rule_chain in self.chained_rules.items():
+            keep_mask = pd.Series([True]*len(df), index=df.index)
+            for (feature, op, val) in rule_chain:
+                if feature not in df.columns:
+                    continue
+                mask_i = self._eval(df, feature, op, val)
+                keep_mask = keep_mask & mask_i
+            df = df[keep_mask].copy()
+            if df.empty:
+                break
+        return df
+
+    def _eval(self, X: pd.DataFrame, feature: str, op: str, operand: Any) -> pd.Series:
+        if op in ["=", "=="]:
+            if feature not in X.columns:
+                return pd.Series([True]*len(X), index=X.index)
+            return (X[feature]==operand) | (X[feature].isna())
+        return super()._eval(X, feature, op, operand)
+
+    def correct_equals(self, X: pd.DataFrame) -> pd.DataFrame:
+        df = X.copy()
+        for tgt_key, rule_chain in self.chained_rules.items():
+            for (feature, op, val) in rule_chain:
+                if op in ["=", "=="] and (feature in df.columns):
+                    df.loc[:, feature] = val
+        return df
+
+
+src/synthcity/plugins/core/dataloader.py
+# stdlib
+import random
+from abc import ABCMeta, abstractmethod
+from typing import Any, Dict, List, Optional, Tuple, Union
+
+# third party
+import numpy as np
+import numpy.ma as ma
+import pandas as pd
+import PIL
+import torch
+from pydantic import validate_arguments
+from sklearn.model_selection import train_test_split
+from sklearn.preprocessing import LabelEncoder
+from torchvision import transforms
+
+# synthcity absolute
+from synthcity.plugins.core.constraints import Constraints
+from synthcity.plugins.core.dataset import FlexibleDataset, TensorDataset
+from synthcity.plugins.core.models.feature_encoder import DatetimeEncoder
+from synthcity.utils.compression import compress_dataset, decompress_dataset
+from synthcity.utils.serialization import dataframe_hash
+
+# Syn_Seq
+from synthcity.plugins.core.models.syn_seq.syn_seq_encoder import Syn_SeqEncoder
+
+
+class DataLoader(metaclass=ABCMeta):
+    """
+    .. inheritance-diagram:: synthcity.plugins.core.dataloader.DataLoader
+        :parts: 1
+
+    Base class for all data loaders.
+
+    Each derived class must implement the following methods:
+        unpack() - a method that unpacks the columns and returns features and labels (X, y).
+        decorate() - a method that creates a new instance of DataLoader by decorating the input data with the same DataLoader properties (e.g. sensitive features, target column, etc.)
+        dataframe() - a method that returns the pandas dataframe that contains all features and samples
+        numpy() - a method that returns the numpy array that contains all features and samples
+        info() - a method that returns a dictionary of DataLoader information
+        __len__() - a method that returns the number of samples in the DataLoader
+        satisfies() - a method that tests if the current DataLoader satisfies the constraint provided
+        match() - a method that returns a new DataLoader where the provided constraints are met
+        from_info() - a static method that creates a DataLoader from the data and the information dictionary
+        sample() - returns a new DataLoader that contains a random subset of N samples
+        drop() - returns a new DataLoader with a list of columns dropped
+        __getitem__() - getting features by names
+        __setitem__() - setting features by names
+        train() - returns a DataLoader containing the training set
+        test() - returns a DataLoader containing the testing set
+        fillna() - returns a DataLoader with NaN filled by the provided number(s)
+
+
+    If any method implementation is missing, the class constructor will fail.
+
+    Constructor Args:
+        data_type: str
+            The type of DataLoader, currently supports "generic", "time_series" and "survival".
+        data: Any
+            The object that contains the data
+        static_features: List[str]
+            List of feature names that are static features (as opposed to temporal features).
+        temporal_features:
+            List of feature names that are temporal features, i.e. observed over time.
+        sensitive_features: List[str]
+            Name of sensitive features.
+        important_features: List[str]
+            Default: None. Only relevant for SurvivalGAN method.
+        outcome_features:
+            The feature name that provides labels for downstream tasks.
+    """
+
+    def __init__(
+        self,
+        data_type: str,
+        data: Any,
+        static_features: List[str] = [],
+        temporal_features: List[str] = [],
+        sensitive_features: List[str] = [],
+        important_features: List[str] = [],
+        outcome_features: List[str] = [],
+        train_size: float = 0.8,
+        random_state: int = 0,
+        **kwargs: Any,
+    ) -> None:
+        self.static_features = static_features
+        self.temporal_features = temporal_features
+        self.sensitive_features = sensitive_features
+        self.important_features = important_features
+        self.outcome_features = outcome_features
+        self.random_state = random_state
+
+        self.data = data
+        self.data_type = data_type
+        self.train_size = train_size
+
+    def raw(self) -> Any:
+        return self.data
+
+    @abstractmethod
+    def unpack(self, as_numpy: bool = False, pad: bool = False) -> Any:
+        ...
+
+    @abstractmethod
+    def decorate(self, data: Any) -> "DataLoader":
+        ...
+
+    def type(self) -> str:
+        return self.data_type
+
+    @property
+    @abstractmethod
+    def shape(self) -> tuple:
+        ...
+
+    @property
+    @abstractmethod
+    def columns(self) -> list:
+        ...
+
+    @abstractmethod
+    def dataframe(self) -> pd.DataFrame:
+        ...
+
+    @abstractmethod
+    def numpy(self) -> np.ndarray:
+        ...
+
+    @property
+    def values(self) -> np.ndarray:
+        return self.numpy()
+
+    @abstractmethod
+    def info(self) -> dict:
+        ...
+
+    @abstractmethod
+    def __len__(self) -> int:
+        ...
+
+    @abstractmethod
+    def satisfies(self, constraints: Constraints) -> bool:
+        ...
+
+    @abstractmethod
+    def match(self, constraints: Constraints) -> "DataLoader":
+        ...
+
+    @staticmethod
+    @abstractmethod
+    def from_info(data: pd.DataFrame, info: dict) -> "DataLoader":
+        ...
+
+    @abstractmethod
+    def sample(self, count: int, random_state: int = 0) -> "DataLoader":
+        ...
+
+    @abstractmethod
+    def drop(self, columns: list = []) -> "DataLoader":
+        ...
+
+    @abstractmethod
+    def __getitem__(self, feature: Union[str, list]) -> Any:
+        ...
+
+    @abstractmethod
+    def __setitem__(self, feature: str, val: Any) -> None:
+        ...
+
+    @abstractmethod
+    def train(self) -> "DataLoader":
+        ...
+
+    @abstractmethod
+    def test(self) -> "DataLoader":
+        ...
+
+    def hash(self) -> str:
+        return dataframe_hash(self.dataframe())
+
+    def __repr__(self, *args: Any, **kwargs: Any) -> str:
+        return self.dataframe().__repr__(*args, **kwargs)
+
+    def _repr_html_(self, *args: Any, **kwargs: Any) -> Any:
+        return self.dataframe()._repr_html_(*args, **kwargs)
+
+    @abstractmethod
+    def fillna(self, value: Any) -> "DataLoader":
+        ...
+
+    @abstractmethod
+    def compression_protected_features(self) -> list:
+        ...
+
+    def domain(self) -> Optional[str]:
+        return None
+
+    def compress(
+        self,
+    ) -> Tuple["DataLoader", Dict]:
+        to_compress = self.data.copy().drop(
+            columns=self.compression_protected_features()
+        )
+        compressed, context = compress_dataset(to_compress)
+        for protected_col in self.compression_protected_features():
+            compressed[protected_col] = self.data[protected_col]
+
+        return self.decorate(compressed), context
+
+    def decompress(self, context: Dict) -> "DataLoader":
+        decompressed = decompress_dataset(self.data, context)
+
+        return self.decorate(decompressed)
+
+    def encode(
+        self,
+        encoders: Optional[Dict[str, Any]] = None,
+    ) -> Tuple["DataLoader", Dict]:
+        encoded = self.dataframe().copy()
+        if encoders is not None:
+            for col in encoders:
+                if col not in encoded.columns:
+                    continue
+                encoded[col] = encoders[col].transform(encoded[col])
+        else:
+            encoders = {}
+
+            for col in encoded.columns:
+                if (
+                    encoded[col].infer_objects().dtype.kind == "i"
+                    and encoded[col].min() == 0
+                    and encoded[col].max() == len(encoded[col].unique()) - 1
+                ):
+                    continue
+
+                if (
+                    encoded[col].infer_objects().dtype.kind in ["O", "b"]
+                    or len(encoded[col].unique()) < 15
+                ):
+                    encoder = LabelEncoder().fit(encoded[col])
+                    encoded[col] = encoder.transform(encoded[col])
+                    encoders[col] = encoder
+                elif encoded[col].infer_objects().dtype.kind in ["M"]:
+                    encoder = DatetimeEncoder().fit(encoded[col])
+                    encoded[col] = encoder.transform(encoded[col]).values
+                    encoders[col] = encoder
+        return self.from_info(encoded, self.info()), encoders
+
+    def decode(
+        self,
+        encoders: Dict[str, Any],
+    ) -> "DataLoader":
+        decoded = self.dataframe().copy()
+
+        for col in encoders:
+            if isinstance(encoders[col], LabelEncoder):
+                decoded[col] = decoded[col].astype(int)
+            else:
+                decoded[col] = decoded[col].astype(float)
+
+            decoded[col] = encoders[col].inverse_transform(decoded[col])
+
+        return self.from_info(decoded, self.info())
+
+    @abstractmethod
+    def is_tabular(self) -> bool:
+        ...
+
+    @abstractmethod
+    def get_fairness_column(self) -> Union[str, Any]:
+        ...
+
+
+class GenericDataLoader(DataLoader):
+    """
+    .. inheritance-diagram:: synthcity.plugins.core.dataloader.GenericDataLoader
+        :parts: 1
+
+    Data loader for generic tabular data.
+
+    Constructor Args:
+        data: Union[pd.DataFrame, list, np.ndarray]
+            The dataset. Either a Pandas DataFrame or a Numpy Array.
+        sensitive_features: List[str]
+            Name of sensitive features.
+        important_features: List[str]
+            Default: None. Only relevant for SurvivalGAN method.
+        target_column: Optional[str]
+            The feature name that provides labels for downstream tasks.
+        fairness_column: Optional[str]
+            Optional fairness column label, used for fairness benchmarking.
+        domain_column: Optional[str]
+            Optional domain label, used for domain adaptation algorithms.
+        random_state: int
+            Defaults to zero.
+
+    Example:
+        >>> from sklearn.datasets import load_diabetes
+        >>> from synthcity.plugins.core.dataloader import GenericDataLoader
+        >>> X, y = load_diabetes(return_X_y=True, as_frame=True)
+        >>> X["target"] = y
+        >>> # Important note: preprocessing data with OneHotEncoder or StandardScaler is not needed or recommended.
+        >>> # Synthcity handles feature encoding and standardization internally.
+        >>> loader = GenericDataLoader(X, target_column="target", sensitive_columns=["sex"],)
+    """
+
+    @validate_arguments(config=dict(arbitrary_types_allowed=True))
+    def __init__(
+        self,
+        data: Union[pd.DataFrame, list, np.ndarray],
+        sensitive_features: List[str] = [],
+        important_features: List[str] = [],
+        target_column: Optional[str] = None,
+        fairness_column: Optional[str] = None,
+        domain_column: Optional[str] = None,
+        random_state: int = 0,
+        train_size: float = 0.8,
+        **kwargs: Any,
+    ) -> None:
+        if not isinstance(data, pd.DataFrame):
+            data = pd.DataFrame(data)
+
+        data.columns = data.columns.astype(str)
+        if target_column is not None:
+            self.target_column = target_column
+        elif len(data.columns) > 0:
+            self.target_column = data.columns[-1]
+        else:
+            self.target_column = "---"
+
+        self.fairness_column = fairness_column
+        self.domain_column = domain_column
+
+        super().__init__(
+            data_type="generic",
+            data=data,
+            static_features=list(data.columns),
+            sensitive_features=sensitive_features,
+            important_features=important_features,
+            outcome_features=[self.target_column],
+            random_state=random_state,
+            train_size=train_size,
+            **kwargs,
+        )
+
+    @property
+    def shape(self) -> tuple:
+        return self.data.shape
+
+    def domain(self) -> Optional[str]:
+        return self.domain_column
+
+    def get_fairness_column(self) -> Union[str, Any]:
+        return self.fairness_column
+
+    @property
+    def columns(self) -> list:
+        return list(self.data.columns)
+
+    def compression_protected_features(self) -> list:
+        out = [self.target_column]
+        domain = self.domain()
+
+        if domain is not None:
+            out.append(domain)
+
+        return out
+
+    def unpack(self, as_numpy: bool = False, pad: bool = False) -> Any:
+        X = self.data.drop(columns=[self.target_column])
+        y = self.data[self.target_column]
+
+        if as_numpy:
+            return np.asarray(X), np.asarray(y)
+        return X, y
+
+    def dataframe(self) -> pd.DataFrame:
+        return self.data
+
+    def numpy(self) -> np.ndarray:
+        return self.dataframe().values
+
+    def info(self) -> dict:
+        return {
+            "data_type": self.data_type,
+            "len": len(self),
+            "static_features": self.static_features,
+            "sensitive_features": self.sensitive_features,
+            "important_features": self.important_features,
+            "outcome_features": self.outcome_features,
+            "target_column": self.target_column,
+            "fairness_column": self.fairness_column,
+            "domain_column": self.domain_column,
+            "train_size": self.train_size,
+        }
+
+    def __len__(self) -> int:
+        return len(self.data)
+
+    def decorate(self, data: Any) -> "DataLoader":
+        return GenericDataLoader(
+            data,
+            sensitive_features=self.sensitive_features,
+            important_features=self.important_features,
+            target_column=self.target_column,
+            random_state=self.random_state,
+            train_size=self.train_size,
+            fairness_column=self.fairness_column,
+            domain_column=self.domain_column,
+        )
+
+    def satisfies(self, constraints: Constraints) -> bool:
+        return constraints.is_valid(self.data)
+
+    def match(self, constraints: Constraints) -> "DataLoader":
+        return self.decorate(constraints.match(self.data))
+
+    def sample(self, count: int, random_state: int = 0) -> "DataLoader":
+        return self.decorate(self.data.sample(count, random_state=random_state))
+
+    def drop(self, columns: list = []) -> "DataLoader":
+        return self.decorate(self.data.drop(columns=columns))
+
+    @staticmethod
+    def from_info(data: pd.DataFrame, info: dict) -> "GenericDataLoader":
+        if not isinstance(data, pd.DataFrame):
+            raise ValueError(f"Invalid data type {type(data)}")
+
+        return GenericDataLoader(
+            data,
+            sensitive_features=info["sensitive_features"],
+            important_features=info["important_features"],
+            target_column=info["target_column"],
+            fairness_column=info["fairness_column"],
+            domain_column=info["domain_column"],
+            train_size=info["train_size"],
+        )
+
+    def __getitem__(self, feature: Union[str, list, int]) -> Any:
+        return self.data[feature]
+
+    def __setitem__(self, feature: str, val: Any) -> None:
+        self.data[feature] = val
+
+    def _train_test_split(self) -> Tuple:
+        stratify = None
+        if self.target_column in self.data:
+            target = self.data[self.target_column]
+            if target.value_counts().min() > 1:
+                stratify = target
+
+        return train_test_split(
+            self.data,
+            train_size=self.train_size,
+            random_state=self.random_state,
+            stratify=stratify,
+        )
+
+    def train(self) -> "DataLoader":
+        train_data, _ = self._train_test_split()
+        return self.decorate(train_data.reset_index(drop=True))
+
+    def test(self) -> "DataLoader":
+        _, test_data = self._train_test_split()
+        return self.decorate(test_data.reset_index(drop=True))
+
+    def fillna(self, value: Any) -> "DataLoader":
+        self.data = self.data.fillna(value)
+        return self
+
+    def is_tabular(self) -> bool:
+        return True
+
+
+class SurvivalAnalysisDataLoader(DataLoader):
+    """
+    .. inheritance-diagram:: synthcity.plugins.core.dataloader.SurvivalAnalysisDataLoader
+        :parts: 1
+
+    Data Loader for Survival Analysis Data
+
+    Constructor Args:
+        data: Union[pd.DataFrame, list, np.ndarray]
+            The dataset. Either a Pandas DataFrame or a Numpy Array.
+        time_to_event_column: str
+            Survival Analysis specific time-to-event feature
+        target_column: str
+            The outcome: event or censoring.
+        sensitive_features: List[str]
+            Name of sensitive features.
+        important_features: List[str]
+            Default: None. Only relevant for SurvivalGAN method.
+        target_column: str
+            The feature name that provides labels for downstream tasks.
+        fairness_column: Optional[str]
+            Optional fairness column label, used for fairness benchmarking.
+        domain_column: Optional[str]
+            Optional domain label, used for domain adaptation algorithms.
+        random_state: int
+            Defaults to zero.
+        train_size: float
+            The ratio to use for train splits.
+
+    Example:
+        >>> TODO
+    """
+
+    @validate_arguments(config=dict(arbitrary_types_allowed=True))
+    def __init__(
+        self,
+        data: pd.DataFrame,
+        time_to_event_column: str,
+        target_column: str,
+        time_horizons: list = [],
+        sensitive_features: List[str] = [],
+        important_features: List[str] = [],
+        fairness_column: Optional[str] = None,
+        random_state: int = 0,
+        train_size: float = 0.8,
+        **kwargs: Any,
+    ) -> None:
+        if target_column not in data.columns:
+            raise ValueError(f"Event column {target_column} not found in the dataframe")
+
+        if time_to_event_column not in data.columns:
+            raise ValueError(
+                f"Time to event column {time_to_event_column} not found in the dataframe"
+            )
+
+        T = data[time_to_event_column]
+        data_filtered = data[T > 0]
+        row_diff = data.shape[0] - data_filtered.shape[0]
+        if row_diff > 0:
+            raise ValueError(
+                f"The time_to_event_column contains {row_diff} values less than or equal to zero. Please remove them."
+            )
+
+        if len(time_horizons) == 0:
+            time_horizons = np.linspace(T.min(), T.max(), num=5)[1:-1].tolist()
+
+        data.columns = data.columns.astype(str)
+
+        self.target_column = target_column
+        self.time_to_event_column = time_to_event_column
+        self.time_horizons = time_horizons
+        self.fairness_column = fairness_column
+
+        super().__init__(
+            data_type="survival_analysis",
+            data=data,
+            static_features=list(data.columns.astype(str)),
+            sensitive_features=sensitive_features,
+            important_features=important_features,
+            outcome_features=[self.target_column],
+            random_state=random_state,
+            train_size=train_size,
+            **kwargs,
+        )
+
+    @property
+    def shape(self) -> tuple:
+        return self.data.shape
+
+    @property
+    def columns(self) -> list:
+        return list(self.data.columns)
+
+    def get_fairness_column(self) -> Union[str, Any]:
+        return self.fairness_column
+
+    def compression_protected_features(self) -> list:
+        out = [self.target_column, self.time_to_event_column]
+        domain = self.domain()
+
+        if domain is not None:
+            out.append(domain)
+
+        return out
+
+    def unpack(self, as_numpy: bool = False, pad: bool = False) -> Any:
+        X = self.data.drop(columns=[self.target_column, self.time_to_event_column])
+        T = self.data[self.time_to_event_column]
+        E = self.data[self.target_column]
+
+        if as_numpy:
+            return np.asarray(X), np.asarray(T), np.asarray(E)
+
+        return X, T, E
+
+    def dataframe(self) -> pd.DataFrame:
+        return self.data
+
+    def numpy(self) -> np.ndarray:
+        return self.dataframe().values
+
+    def info(self) -> dict:
+        return {
+            "data_type": self.data_type,
+            "len": len(self),
+            "static_features": list(self.static_features),
+            "sensitive_features": self.sensitive_features,
+            "important_features": self.important_features,
+            "outcome_features": self.outcome_features,
+            "target_column": self.target_column,
+            "fairness_column": self.fairness_column,
+            "time_to_event_column": self.time_to_event_column,
+            "time_horizons": self.time_horizons,
+            "train_size": self.train_size,
+        }
+
+    def __len__(self) -> int:
+        return len(self.data)
+
+    def decorate(self, data: Any) -> "DataLoader":
+        return SurvivalAnalysisDataLoader(
+            data,
+            sensitive_features=self.sensitive_features,
+            important_features=self.important_features,
+            target_column=self.target_column,
+            fairness_column=self.fairness_column,
+            time_to_event_column=self.time_to_event_column,
+            time_horizons=self.time_horizons,
+            random_state=self.random_state,
+            train_size=self.train_size,
+        )
+
+    def satisfies(self, constraints: Constraints) -> bool:
+        return constraints.is_valid(self.data)
+
+    def match(self, constraints: Constraints) -> "DataLoader":
+        return self.decorate(
+            constraints.match(self.data),
+        )
+
+    def sample(self, count: int, random_state: int = 0) -> "DataLoader":
+        return self.decorate(
+            self.data.sample(count, random_state=random_state),
+        )
+
+    def drop(self, columns: list = []) -> "DataLoader":
+        return self.decorate(
+            self.data.drop(columns=columns),
+        )
+
+    @staticmethod
+    def from_info(data: pd.DataFrame, info: dict) -> "DataLoader":
+        if not isinstance(data, pd.DataFrame):
+            raise ValueError(f"Invalid data type {type(data)}")
+
+        return SurvivalAnalysisDataLoader(
+            data,
+            target_column=info["target_column"],
+            time_to_event_column=info["time_to_event_column"],
+            sensitive_features=info["sensitive_features"],
+            important_features=info["important_features"],
+            time_horizons=info["time_horizons"],
+            fairness_column=info["fairness_column"],
+        )
+
+    def __getitem__(self, feature: Union[str, list, int]) -> Any:
+        return self.data[feature]
+
+    def __setitem__(self, feature: str, val: Any) -> None:
+        self.data[feature] = val
+
+    def train(self) -> "DataLoader":
+        stratify = self.data[self.target_column]
+        train_data, _ = train_test_split(
+            self.data, train_size=self.train_size, random_state=0, stratify=stratify
+        )
+        return self.decorate(
+            train_data.reset_index(drop=True),
+        )
+
+    def test(self) -> "DataLoader":
+        stratify = self.data[self.target_column]
+        _, test_data = train_test_split(
+            self.data,
+            train_size=self.train_size,
+            random_state=0,
+            stratify=stratify,
+        )
+        return self.decorate(
+            test_data.reset_index(drop=True),
+        )
+
+    def fillna(self, value: Any) -> "DataLoader":
+        self.data = self.data.fillna(value)
+        return self
+
+    def is_tabular(self) -> bool:
+        return True
+
+
+class TimeSeriesDataLoader(DataLoader):
+    """
+    .. inheritance-diagram:: synthcity.plugins.core.dataloader.TimeSeriesDataLoader
+        :parts: 1
+
+    Data Loader for Time Series Data
+
+    Constructor Args:
+        temporal data: List[pd.DataFrame]
+            The temporal data. A list of pandas DataFrames
+        observation times: List
+            List of arrays mapping directly to index of each dataframe in temporal_data
+        outcome: Optional[pd.DataFrame] = None
+            pandas DataFrame thatn can be anything (eg, labels, regression outcome)
+        static_data: Optional[pd.DataFrame] = None
+            pandas DataFrame mapping directly to index of each dataframe in temporal_data
+        sensitive_features: List[str]
+            Name of sensitive features
+        important_features List[str]
+            Default: None. Only relevant for SurvivalGAN method
+        fairness_column: Optional[str]
+            Optional fairness column label, used for fairness benchmarking.
+        random_state: int
+            Defaults to zero.
+
+    Example:
+        >>> TODO
+    """
+
+    @validate_arguments(config=dict(arbitrary_types_allowed=True))
+    def __init__(
+        self,
+        temporal_data: List[pd.DataFrame],
+        observation_times: List,
+        outcome: Optional[pd.DataFrame] = None,
+        static_data: Optional[pd.DataFrame] = None,
+        sensitive_features: List[str] = [],
+        important_features: List[str] = [],
+        fairness_column: Optional[str] = None,
+        random_state: int = 0,
+        train_size: float = 0.8,
+        seq_offset: int = 0,
+        **kwargs: Any,
+    ) -> None:
+        static_features = []
+        self.outcome_features = []
+
+        if len(temporal_data) == 0:
+            raise ValueError("Empty temporal data")
+
+        temporal_features = TimeSeriesDataLoader.unique_temporal_features(temporal_data)
+
+        max_window_len = max([len(t) for t in temporal_data])
+        if static_data is not None:
+            if len(static_data) != len(temporal_data):
+                raise ValueError("Static and temporal data mismatch")
+            static_features = list(static_data.columns)
+        else:
+            static_data = pd.DataFrame(np.zeros((len(temporal_data), 0)))
+
+        if outcome is not None:
+            if len(outcome) != len(temporal_data):
+                raise ValueError("Temporal and outcome data mismatch")
+            self.outcome_features = list(outcome.columns)
+        else:
+            outcome = pd.DataFrame(np.zeros((len(temporal_data), 0)))
+
+        self.window_len = max_window_len
+        self.fill = np.nan
+        self.seq_offset = seq_offset
+
+        (
+            static_data,
+            temporal_data,
+            observation_times,
+            outcome,
+            seq_df,
+            seq_info,
+        ) = TimeSeriesDataLoader.pack_raw_data(
+            static_data,
+            temporal_data,
+            observation_times,
+            outcome,
+            fill=self.fill,
+            seq_offset=seq_offset,
+        )
+        self.seq_info = seq_info
+        self.fairness_column = fairness_column
+
+        super().__init__(
+            data={
+                "static_data": static_data,
+                "temporal_data": temporal_data,
+                "observation_times": observation_times,
+                "outcome": outcome,
+                "seq_data": seq_df,
+            },
+            data_type="time_series",
+            static_features=static_features,
+            temporal_features=temporal_features,
+            outcome_features=self.outcome_features,
+            sensitive_features=sensitive_features,
+            important_features=important_features,
+            random_state=random_state,
+            train_size=train_size,
+            **kwargs,
+        )
+
+    @property
+    def shape(self) -> tuple:
+        return self.data["seq_data"].shape
+
+    @property
+    def columns(self) -> list:
+        return self.data["seq_data"].columns
+
+    def get_fairness_column(self) -> Union[str, Any]:
+        return self.fairness_column
+
+    def compression_protected_features(self) -> list:
+        return self.outcome_features
+
+    @property
+    def raw_columns(self) -> list:
+        return self.static_features + self.temporal_features + self.outcome_features
+
+    def dataframe(self) -> pd.DataFrame:
+        return self.data["seq_data"].copy()
+
+    def numpy(self) -> np.ndarray:
+        return self.dataframe().values
+
+    def info(self) -> dict:
+        generic_info = {
+            "data_type": self.data_type,
+            "len": len(self),
+            "static_features": self.static_features,
+            "temporal_features": self.temporal_features,
+            "outcome_features": self.outcome_features,
+            "outcome_len": len(self.data["outcome"].values.reshape(-1))
+            / len(self.data["outcome"]),
+            "window_len": self.window_len,
+            "sensitive_features": self.sensitive_features,
+            "important_features": self.important_features,
+            "fairness_column": self.fairness_column,
+            "random_state": self.random_state,
+            "train_size": self.train_size,
+            "fill": self.fill,
+        }
+
+        for key in self.seq_info:
+            generic_info[key] = self.seq_info[key]
+
+        return generic_info
+
+    def __len__(self) -> int:
+        return len(self.data["seq_data"])
+
+    def decorate(self, data: Any) -> "DataLoader":
+        static_data, temporal_data, observation_times, outcome = data
+
+        return TimeSeriesDataLoader(
+            temporal_data,
+            observation_times=observation_times,
+            static_data=static_data,
+            outcome=outcome,
+            sensitive_features=self.sensitive_features,
+            important_features=self.important_features,
+            fairness_column=self.fairness_column,
+            random_state=self.random_state,
+            train_size=self.train_size,
+            seq_offset=self.seq_offset,
+        )
+
+    def unpack_and_decorate(self, data: pd.DataFrame) -> "DataLoader":
+        unpacked_data = TimeSeriesDataLoader.unpack_raw_data(
+            data,
+            self.info(),
+        )
+
+        return self.decorate(unpacked_data)
+
+    def satisfies(self, constraints: Constraints) -> bool:
+        seq_df = self.dataframe()
+
+        return constraints.is_valid(seq_df)
+
+    def match(self, constraints: Constraints) -> "DataLoader":
+        return self.unpack_and_decorate(
+            constraints.match(self.dataframe()),
+        )
+
+    def drop(self, columns: list = []) -> "DataLoader":
+        new_data = self.data["seq_data"].drop(columns=columns)
+        return self.unpack_and_decorate(new_data)
+
+    @staticmethod
+    def from_info(data: pd.DataFrame, info: dict) -> "DataLoader":
+        (
+            static_data,
+            temporal_data,
+            observation_times,
+            outcome,
+        ) = TimeSeriesDataLoader.unpack_raw_data(
+            data,
+            info,
+        )
+        return TimeSeriesDataLoader(
+            temporal_data,
+            observation_times=observation_times,
+            static_data=static_data,
+            outcome=outcome,
+            sensitive_features=info["sensitive_features"],
+            important_features=info["important_features"],
+            fairness_column=info["fairness_column"],
+            fill=info["fill"],
+            seq_offset=info["seq_offset"],
+        )
+
+    def unpack(self, as_numpy: bool = False, pad: bool = False) -> Any:
+        if pad:
+            (
+                static_data,
+                temporal_data,
+                observation_times,
+                outcome,
+            ) = TimeSeriesDataLoader.pad_and_mask(
+                self.data["static_data"],
+                self.data["temporal_data"],
+                self.data["observation_times"],
+                self.data["outcome"],
+            )
+        else:
+            static_data, temporal_data, observation_times, outcome = (
+                self.data["static_data"],
+                self.data["temporal_data"],
+                self.data["observation_times"],
+                self.data["outcome"],
+            )
+
+        if as_numpy:
+            longest_observation_seq = max([len(seq) for seq in temporal_data])
+            padded_temporal_data = np.zeros(
+                (len(temporal_data), longest_observation_seq, 5)
+            )
+            mask = np.ones((len(temporal_data), longest_observation_seq, 5), dtype=bool)
+            for i, arr in enumerate(temporal_data):
+                padded_temporal_data[i, : arr.shape[0], :] = arr  # Copy the actual data
+                mask[
+                    i, : arr.shape[0], :
+                ] = False  # Set mask to False where actual data is present
+
+            masked_temporal_data = ma.masked_array(padded_temporal_data, mask)
+            return (
+                np.asarray(static_data),
+                masked_temporal_data,  # TODO: check this works with time series benchmarks
+                # masked array to handle variable length sequences
+                ma.vstack(
+                    [
+                        ma.array(
+                            np.resize(ot, longest_observation_seq),
+                            mask=[True for i in range(len(ot))]
+                            + [False for j in range(longest_observation_seq - len(ot))],
+                        )
+                        for ot in observation_times
+                    ]
+                ),
+                np.asarray(outcome),
+            )
+        return (
+            static_data,
+            temporal_data,
+            observation_times,
+            outcome,
+        )
+
+    def __getitem__(self, feature: Union[str, list, int]) -> Any:
+        return self.data["seq_data"][feature]
+
+    def __setitem__(self, feature: str, val: Any) -> None:
+        self.data["seq_data"][feature] = val
+
+    def ids(self) -> list:
+        id_col = self.seq_info["seq_id_feature"]
+        ids = self.data["seq_data"][id_col]
+
+        return list(ids.unique())
+
+    def filter_ids(self, ids_list: list) -> pd.DataFrame:
+        seq_data = self.data["seq_data"]
+        id_col = self.info()["seq_id_feature"]
+
+        return seq_data[seq_data[id_col].isin(ids_list)]
+
+    def train(self) -> "DataLoader":
+        # TODO: stratify
+        ids = self.ids()
+        train_ids, _ = train_test_split(
+            ids,
+            train_size=self.train_size,
+            random_state=self.random_state,
+        )
+        return self.unpack_and_decorate(self.filter_ids(train_ids))
+
+    def test(self) -> "DataLoader":
+        # TODO: stratify
+        ids = self.ids()
+        _, test_ids = train_test_split(
+            ids,
+            train_size=self.train_size,
+            random_state=self.random_state,
+        )
+        return self.unpack_and_decorate(self.filter_ids(test_ids))
+
+    def sample(self, count: int, random_state: int = 0) -> "DataLoader":
+        ids = self.ids()
+        count = min(count, len(ids))
+        sampled_ids = random.sample(ids, count)
+
+        return self.unpack_and_decorate(self.filter_ids(sampled_ids))
+
+    def fillna(self, value: Any) -> "DataLoader":
+        for key in ["static_data", "outcome", "seq_data"]:
+            if self.data[key] is not None:
+                self.data[key] = self.data[key].fillna(value)
+
+        for idx, item in enumerate(self.data["temporal_data"]):
+            self.data["temporal_data"][idx] = self.data["temporal_data"][idx].fillna(
+                value
+            )
+
+        return self
+
+    @staticmethod
+    def unique_temporal_features(temporal_data: List[pd.DataFrame]) -> List:
+        temporal_features = []
+        for item in temporal_data:
+            temporal_features.extend(item.columns)
+        return sorted(np.unique(temporal_features).tolist())
+
+    # Padding helpers
+    @staticmethod
+    @validate_arguments(config=dict(arbitrary_types_allowed=True))
+    def pad_raw_features(
+        static_data: Optional[pd.DataFrame],
+        temporal_data: List[pd.DataFrame],
+        observation_times: List,
+        outcome: Optional[pd.DataFrame],
+    ) -> Any:
+        fill = np.nan
+
+        temporal_features = TimeSeriesDataLoader.unique_temporal_features(temporal_data)
+
+        for idx, item in enumerate(temporal_data):
+            # handling missing features
+            for col in temporal_features:
+                if col not in item.columns:
+                    item[col] = fill
+            item = item[temporal_features]
+
+            if list(item.columns) != list(temporal_features):
+                raise RuntimeError("Invalid features for packing")
+
+            temporal_data[idx] = item.fillna(fill)
+
+        return static_data, temporal_data, observation_times, outcome
+
+    @staticmethod
+    @validate_arguments(config=dict(arbitrary_types_allowed=True))
+    def pad_raw_data(
+        static_data: Optional[pd.DataFrame],
+        temporal_data: List[pd.DataFrame],
+        observation_times: List,
+        outcome: Optional[pd.DataFrame],
+    ) -> Any:
+        fill = np.nan
+
+        (
+            static_data,
+            temporal_data,
+            observation_times,
+            outcome,
+        ) = TimeSeriesDataLoader.pad_raw_features(
+            static_data, temporal_data, observation_times, outcome
+        )
+        max_window_len = max([len(t) for t in temporal_data])
+        temporal_features = TimeSeriesDataLoader.unique_temporal_features(temporal_data)
+
+        for idx, item in enumerate(temporal_data):
+            if len(item) != max_window_len:
+                pads = fill * np.ones(
+                    (max_window_len - len(item), len(temporal_features))
+                )
+                start = 0
+                if len(item.index) > 0:
+                    start = max(item.index) + 1
+                pads_df = pd.DataFrame(
+                    pads,
+                    index=[start + i for i in range(len(pads))],
+                    columns=item.columns,
+                )
+                item = pd.concat([item, pads_df])
+
+            # handle missing time points
+            if list(item.columns) != list(temporal_features):
+                raise RuntimeError(
+                    f"Invalid features {item.columns}. Expected {temporal_features}"
+                )
+            if len(item) != max_window_len:
+                raise RuntimeError("Invalid window len")
+
+            temporal_data[idx] = item
+
+        observation_times_padded = []
+        for idx, item in enumerate(observation_times):
+            item = list(item)
+            if len(item) != max_window_len:
+                pads = fill * np.ones(max_window_len - len(item))
+                item.extend(pads.tolist())
+            observation_times_padded.append(item)
+
+        return static_data, temporal_data, observation_times_padded, outcome
+
+    # Masking helpers
+    @staticmethod
+    def extract_masked_features(full_temporal_features: list) -> tuple:
+        temporal_features = []
+        mask_features = []
+        mask_prefix = "masked_"
+        for feat in full_temporal_features:
+            feat = str(feat)
+            if not feat.startswith(mask_prefix):
+                temporal_features.append(feat)
+                continue
+
+            other_feat = feat[len(mask_prefix) :]
+            if other_feat in full_temporal_features:
+                mask_features.append(feat)
+            else:
+                temporal_features.append(feat)
+
+        return temporal_features, mask_features
+
+    @staticmethod
+    @validate_arguments(config=dict(arbitrary_types_allowed=True))
+    def mask_temporal_data(
+        temporal_data: List[pd.DataFrame],
+        observation_times: List,
+        fill: Any = 0,
+    ) -> Any:
+        nan_cnt = 0
+        for item in temporal_data:
+            nan_cnt += np.asarray(np.isnan(item)).sum()
+
+        if nan_cnt == 0:
+            return temporal_data, observation_times
+
+        temporal_features = TimeSeriesDataLoader.unique_temporal_features(temporal_data)
+        masked_features = [f"masked_{feat}" for feat in temporal_features]
+
+        for idx, item in enumerate(temporal_data):
+            item[masked_features] = (~np.isnan(item)).astype(int)
+            item = item.fillna(fill)
+            temporal_data[idx] = item
+
+        for idx, item in enumerate(observation_times):
+            item = np.nan_to_num(item, nan=fill).tolist()
+
+            observation_times[idx] = item
+
+        return temporal_data, observation_times
+
+    @staticmethod
+    @validate_arguments(config=dict(arbitrary_types_allowed=True))
+    def unmask_temporal_data(
+        temporal_data: List[pd.DataFrame],
+        observation_times: List,
+        fill: Any = np.nan,
+    ) -> Any:
+        temporal_features = TimeSeriesDataLoader.unique_temporal_features(temporal_data)
+        temporal_features, mask_features = TimeSeriesDataLoader.extract_masked_features(
+            temporal_features
+        )
+
+        missing_horizons = []
+        for idx, item in enumerate(temporal_data):
+            # handle existing mask
+            if len(mask_features) > 0:
+                mask = temporal_data[idx][mask_features].astype(bool)
+                item[~mask] = np.nan
+
+            item_missing_rows = item.isna().sum(axis=1).values
+            missing_horizons.append(item_missing_rows == len(temporal_features))
+
+            # TODO: review impact on horizons
+            temporal_data[idx] = item.dropna()
+
+        observation_times_unmasked = []
+        for idx, item in enumerate(observation_times):
+            item = list(item)
+
+            for midx, mval in enumerate(missing_horizons[idx]):
+                if mval:
+                    item[midx] = np.nan
+
+            local_horizons = list(filter(lambda v: v == v, item))
+            observation_times_unmasked.append(local_horizons)
+
+        return temporal_data, observation_times_unmasked
+
+    @staticmethod
+    @validate_arguments(config=dict(arbitrary_types_allowed=True))
+    def pad_and_mask(
+        static_data: Optional[pd.DataFrame],
+        temporal_data: List[pd.DataFrame],
+        observation_times: List,
+        outcome: Optional[pd.DataFrame],
+        only_features: Any = False,
+        fill: Any = 0,
+    ) -> Any:
+        if only_features:
+            (
+                static_data,
+                temporal_data,
+                observation_times,
+                outcome,
+            ) = TimeSeriesDataLoader.pad_raw_features(
+                static_data,
+                temporal_data,
+                observation_times,
+                outcome,
+            )
+        else:
+            (
+                static_data,
+                temporal_data,
+                observation_times,
+                outcome,
+            ) = TimeSeriesDataLoader.pad_raw_data(
+                static_data,
+                temporal_data,
+                observation_times,
+                outcome,
+            )
+
+        temporal_data, observation_times = TimeSeriesDataLoader.mask_temporal_data(
+            temporal_data, observation_times, fill=fill
+        )
+
+        return static_data, temporal_data, observation_times, outcome
+
+    @staticmethod
+    def sequential_view(
+        static_data: Optional[pd.DataFrame],
+        temporal_data: List[pd.DataFrame],
+        observation_times: List,
+        outcome: Optional[pd.DataFrame],
+        id_col: str = "seq_id",
+        time_id_col: str = "seq_time_id",
+        seq_offset: int = 0,
+    ) -> Tuple[pd.DataFrame, dict]:  # sequential dataframe, loader info
+        (
+            static_data,
+            temporal_data,
+            observation_times,
+            outcome,
+        ) = TimeSeriesDataLoader.pad_and_mask(
+            static_data, temporal_data, observation_times, outcome, only_features=True
+        )
+        raw_static_features = list(static_data.columns)
+        static_features = [f"seq_static_{col}" for col in raw_static_features]
+
+        raw_outcome_features = list(outcome.columns)
+        outcome_features = [f"seq_out_{col}" for col in raw_outcome_features]
+
+        raw_temporal_features = TimeSeriesDataLoader.unique_temporal_features(
+            temporal_data
+        )
+        temporal_features = [f"seq_temporal_{col}" for col in raw_temporal_features]
+        cols = (
+            [id_col, time_id_col]
+            + static_features
+            + temporal_features
+            + outcome_features
+        )
+
+        seq = []
+        for sidx, static_item in static_data.iterrows():
+            real_tidx = 0
+            for tidx, temporal_item in temporal_data[sidx].iterrows():
+                local_seq_data = (
+                    [
+                        sidx + seq_offset,
+                        observation_times[sidx][real_tidx],
+                    ]
+                    + static_item[raw_static_features].values.tolist()
+                    + temporal_item[raw_temporal_features].values.tolist()
+                    + outcome.loc[sidx, raw_outcome_features].values.tolist()
+                )
+                seq.append(local_seq_data)
+                real_tidx += 1
+
+        seq_df = pd.DataFrame(seq, columns=cols)
+        info = {
+            "seq_static_features": static_features,
+            "seq_temporal_features": temporal_features,
+            "seq_outcome_features": outcome_features,
+            "seq_offset": seq_offset,
+            "seq_id_feature": id_col,
+            "seq_time_id_feature": time_id_col,
+            "seq_features": list(seq_df.columns),
+        }
+        return seq_df, info
+
+    @staticmethod
+    @validate_arguments(config=dict(arbitrary_types_allowed=True))
+    def pack_raw_data(
+        static_data: Optional[pd.DataFrame],
+        temporal_data: List[pd.DataFrame],
+        observation_times: List,
+        outcome: Optional[pd.DataFrame],
+        fill: Any = np.nan,
+        seq_offset: int = 0,
+    ) -> pd.DataFrame:
+        # Temporal data: (subjects, temporal_sequence, temporal_feature)
+        temporal_features = TimeSeriesDataLoader.unique_temporal_features(temporal_data)
+        temporal_features, mask_features = TimeSeriesDataLoader.extract_masked_features(
+            temporal_features
+        )
+        temporal_data, observation_times = TimeSeriesDataLoader.unmask_temporal_data(
+            temporal_data, observation_times
+        )
+        seq_df, info = TimeSeriesDataLoader.sequential_view(
+            static_data=static_data,
+            temporal_data=temporal_data,
+            observation_times=observation_times,
+            outcome=outcome,
+            seq_offset=seq_offset,
+        )
+
+        return static_data, temporal_data, observation_times, outcome, seq_df, info
+
+    @staticmethod
+    @validate_arguments(config=dict(arbitrary_types_allowed=True))
+    def unpack_raw_data(
+        data: pd.DataFrame,
+        info: dict,
+    ) -> Tuple[
+        Optional[pd.DataFrame], List[pd.DataFrame], List, Optional[pd.DataFrame]
+    ]:
+        id_col = info["seq_id_feature"]
+        time_col = info["seq_time_id_feature"]
+
+        static_cols = info["seq_static_features"]
+        new_static_cols = [feat.split("seq_static_")[1] for feat in static_cols]
+
+        temporal_cols = info["seq_temporal_features"]
+        new_temporal_cols = [feat.split("seq_temporal_")[1] for feat in temporal_cols]
+
+        outcome_cols = info["seq_outcome_features"]
+        new_outcome_cols = [feat.split("seq_out_")[1] for feat in outcome_cols]
+
+        ids = sorted(list(set(data[id_col])))
+
+        static_data = []
+        temporal_data = []
+        observation_times = []
+        outcome_data = []
+
+        for item_id in ids:
+            item_data = data[data[id_col] == item_id]
+
+            static_data.append(item_data[static_cols].head(1).values.squeeze().tolist())
+            outcome_data.append(
+                item_data[outcome_cols].head(1).values.squeeze().tolist()
+            )
+            local_temporal_data = item_data[temporal_cols].copy()
+            local_observation_times = item_data[time_col].values.tolist()
+            local_temporal_data.columns = new_temporal_cols
+            # TODO: review impact on horizons
+            local_temporal_data = local_temporal_data.dropna()
+
+            temporal_data.append(local_temporal_data)
+            observation_times.append(local_observation_times)
+
+        static_df = pd.DataFrame(static_data, columns=new_static_cols)
+        outcome_df = pd.DataFrame(outcome_data, columns=new_outcome_cols)
+
+        return static_df, temporal_data, observation_times, outcome_df
+
+    def is_tabular(self) -> bool:
+        return True
+
+
+class TimeSeriesSurvivalDataLoader(TimeSeriesDataLoader):
+    """
+    .. inheritance-diagram:: synthcity.plugins.core.dataloader.TimeSeriesSurvivalDataLoader
+        :parts: 1
+
+    Data loader for Time series survival data
+
+    Constructor Args:
+        temporal_data: List[pd.DataFrame}
+            The temporal data. A list of pandas DataFrames.
+        observation_times: List
+            List of arrays mapping directly to index of each dataframe in temporal_data
+        T: Union[pd.Series, np.ndarray, pd.Series]
+            Time-to-event data
+        E: Union[pd.Series, np.ndarray, pd.Series]
+            E is censored/event data
+        static_data Optional[pd.DataFrame] = None
+            pandas DataFrame of static features for each subject
+        sensitive_features: List[str]
+            Name of sensitive features
+        important_features: List[str}
+            Default: None. Only relevant for SurvivalGAN method.
+        fairness_column: Optional[str]
+            Optional fairness column label, used for fairness benchmarking.
+        random_state. int
+            Defaults to zero.
+
+    Example:
+        >>> TODO
+
+    """
+
+    @validate_arguments(config=dict(arbitrary_types_allowed=True))
+    def __init__(
+        self,
+        temporal_data: List[pd.DataFrame],
+        observation_times: Union[List, np.ndarray, pd.Series],
+        T: Union[pd.Series, np.ndarray, pd.Series],
+        E: Union[pd.Series, np.ndarray, pd.Series],
+        static_data: Optional[pd.DataFrame] = None,
+        sensitive_features: List[str] = [],
+        important_features: List[str] = [],
+        time_horizons: list = [],
+        fairness_column: Optional[str] = None,
+        random_state: int = 0,
+        train_size: float = 0.8,
+        seq_offset: int = 0,
+        **kwargs: Any,
+    ) -> None:
+        self.time_to_event_col = "time_to_event"
+        self.event_col = "event"
+        self.fairness_column = fairness_column
+
+        if len(time_horizons) == 0:
+            time_horizons = np.linspace(T.min(), T.max(), num=5)[1:-1].tolist()
+        self.time_horizons = time_horizons
+        outcome = pd.concat([pd.Series(T), pd.Series(E)], axis=1)
+        outcome.columns = [self.time_to_event_col, self.event_col]
+
+        self.fill = np.nan
+
+        super().__init__(
+            temporal_data=temporal_data,
+            observation_times=observation_times,
+            outcome=outcome,
+            static_data=static_data,
+            sensitive_features=sensitive_features,
+            important_features=important_features,
+            random_state=random_state,
+            train_size=train_size,
+            seq_offset=seq_offset,
+            **kwargs,
+        )
+        self.data_type = "time_series_survival"
+
+    def get_fairness_column(self) -> Union[str, Any]:
+        return self.fairness_column
+
+    def info(self) -> dict:
+        parent_info = super().info()
+        parent_info["time_to_event_column"] = self.time_to_event_col
+        parent_info["event_column"] = self.event_col
+        parent_info["time_horizons"] = self.time_horizons
+        parent_info["fill"] = self.fill
+
+        return parent_info
+
+    def decorate(self, data: Any) -> "DataLoader":
+        static_data, temporal_data, observation_times, outcome = data
+        if self.time_to_event_col not in outcome:
+            raise ValueError(
+                f"Survival outcome is missing tte column {self.time_to_event_col}"
+            )
+        if self.event_col not in outcome:
+            raise ValueError(
+                f"Survival outcome is missing event column {self.event_col}"
+            )
+
+        return TimeSeriesSurvivalDataLoader(
+            temporal_data,
+            observation_times=observation_times,
+            static_data=static_data,
+            T=outcome[self.time_to_event_col],
+            E=outcome[self.event_col],
+            sensitive_features=self.sensitive_features,
+            important_features=self.important_features,
+            fairness_column=self.fairness_column,
+            random_state=self.random_state,
+            time_horizons=self.time_horizons,
+            train_size=self.train_size,
+            seq_offset=self.seq_offset,
+        )
+
+    @staticmethod
+    def from_info(data: pd.DataFrame, info: dict) -> "DataLoader":
+        (
+            static_data,
+            temporal_data,
+            observation_times,
+            outcome,
+        ) = TimeSeriesSurvivalDataLoader.unpack_raw_data(
+            data,
+            info,
+        )
+        return TimeSeriesSurvivalDataLoader(
+            temporal_data,
+            observation_times=observation_times,
+            static_data=static_data,
+            T=outcome[info["time_to_event_column"]],
+            E=outcome[info["event_column"]],
+            sensitive_features=info["sensitive_features"],
+            important_features=info["important_features"],
+            fairness_column=info["fairness_column"],
+            time_horizons=info["time_horizons"],
+            seq_offset=info["seq_offset"],
+        )
+
+    def unpack(self, as_numpy: bool = False, pad: bool = False) -> Any:
+        if pad:
+            (
+                static_data,
+                temporal_data,
+                observation_times,
+                outcome,
+            ) = TimeSeriesSurvivalDataLoader.pad_and_mask(
+                self.data["static_data"],
+                self.data["temporal_data"],
+                self.data["observation_times"],
+                self.data["outcome"],
+            )
+        else:
+            static_data, temporal_data, observation_times, outcome = (
+                self.data["static_data"],
+                self.data["temporal_data"],
+                self.data["observation_times"],
+                self.data["outcome"],
+            )
+
+        if as_numpy:
+            return (
+                np.asarray(static_data),
+                np.asarray(temporal_data, dtype=object),
+                np.asarray(observation_times, dtype=object),
+                np.asarray(outcome[self.time_to_event_col]),
+                np.asarray(outcome[self.event_col]),
+            )
+        return (
+            static_data,
+            temporal_data,
+            observation_times,
+            outcome[self.time_to_event_col],
+            outcome[self.event_col],
+        )
+
+    def match(self, constraints: Constraints) -> "DataLoader":
+        return self.unpack_and_decorate(
+            constraints.match(self.dataframe()),
+        )
+
+    def train(self) -> "DataLoader":
+        stratify = self.data["outcome"][self.event_col]
+
+        ids = self.ids()
+        train_ids, _ = train_test_split(
+            ids,
+            train_size=self.train_size,
+            random_state=self.random_state,
+            stratify=stratify,
+        )
+        return self.unpack_and_decorate(self.filter_ids(train_ids))
+
+    def test(self) -> "DataLoader":
+        stratify = self.data["outcome"][self.event_col]
+        ids = self.ids()
+        _, test_ids = train_test_split(
+            ids,
+            train_size=self.train_size,
+            random_state=self.random_state,
+            stratify=stratify,
+        )
+        return self.unpack_and_decorate(self.filter_ids(test_ids))
+
+
+class ImageDataLoader(DataLoader):
+    """
+    .. inheritance-diagram:: synthcity.plugins.core.dataloader.ImageDataLoader
+        :parts: 1
+
+    Data loader for generic image data.
+
+    Constructor Args:
+        data: torch.utils.data.Dataset or torch.Tensor
+            The image dataset or a tuple of (tensor images, tensor labels)
+        random_state: int
+            Defaults to zero.
+        height: int. Default = 32
+            Height to use internally
+        width: Optional[int]
+            Optional width to use internally. If None, it is used the same value as height.
+        train_size: float = 0.8
+            Train dataset ratio.
+    Example:
+        >>> dataset = datasets.MNIST(".", download=True)
+        >>>
+        >>> loader = ImageDataLoader(
+        >>>     data=dataset,
+        >>>     train_size=0.8,
+        >>>     height=32,
+        >>>     width=w32,
+        >>> )
+
+    """
+
+    @validate_arguments(config=dict(arbitrary_types_allowed=True))
+    def __init__(
+        self,
+        data: Union[torch.utils.data.Dataset, Tuple[torch.Tensor, torch.Tensor]],
+        height: int = 32,
+        width: Optional[int] = None,
+        random_state: int = 0,
+        train_size: float = 0.8,
+        **kwargs: Any,
+    ) -> None:
+        if width is None:
+            width = height
+
+        if isinstance(data, tuple):
+            X, y = data
+            data = TensorDataset(images=X, targets=y)
+
+        self.data_transform = None
+
+        dummy, _ = data[0]
+        img_transform = []
+        if not isinstance(dummy, PIL.Image.Image):
+            img_transform = [transforms.ToPILImage()]
+
+        img_transform.extend(
+            [
+                transforms.Resize((height, width)),
+                transforms.ToTensor(),
+                transforms.Normalize(mean=(0.5,), std=(0.5,)),
+            ]
+        )
+
+        self.data_transform = transforms.Compose(img_transform)
+        data = FlexibleDataset(data, transform=self.data_transform)
+
+        self.height = height
+        self.width = width
+        self.channels = data.shape()[1]
+
+        super().__init__(
+            data_type="images",
+            data=data,
+            random_state=random_state,
+            train_size=train_size,
+            **kwargs,
+        )
+
+    @property
+    def shape(self) -> tuple:
+        return self.data.shape()
+
+    def get_fairness_column(self) -> None:
+        """Not implemented for ImageDataLoader"""
+        ...
+
+    def unpack(self, as_numpy: bool = False, pad: bool = False) -> Any:
+        return self.data
+
+    def numpy(self) -> np.ndarray:
+        x, _ = self.data.numpy()
+
+        return x
+
+    def dataframe(self) -> pd.DataFrame:
+        x = self.numpy().reshape(len(self), -1)
+
+        x = pd.DataFrame(x)
+        x.columns = x.columns.astype(str)
+
+        return x
+
+    def info(self) -> dict:
+        return {
+            "data_type": self.data_type,
+            "len": len(self),
+            "train_size": self.train_size,
+            "height": self.height,
+            "width": self.width,
+            "channels": self.channels,
+            "random_state": self.random_state,
+        }
+
+    def __len__(self) -> int:
+        return len(self.data)
+
+    def decorate(self, data: Any) -> "DataLoader":
+        return ImageDataLoader(
+            data,
+            random_state=self.random_state,
+            train_size=self.train_size,
+            height=self.height,
+            width=self.width,
+        )
+
+    def sample(self, count: int, random_state: int = 0) -> "DataLoader":
+        idxs = np.random.choice(len(self), count, replace=False)
+        subset = FlexibleDataset(self.data.data, indices=idxs)
+        return self.decorate(subset)
+
+    @staticmethod
+    def from_info(data: torch.utils.data.Dataset, info: dict) -> "ImageDataLoader":
+        if not isinstance(data, torch.utils.data.Dataset):
+            raise ValueError(f"Invalid data type {type(data)}")
+
+        return ImageDataLoader(
+            data,
+            train_size=info["train_size"],
+            height=info["height"],
+            width=info["width"],
+            random_state=info["random_state"],
+        )
+
+    def __getitem__(self, index: Union[list, int, str]) -> Any:
+        if isinstance(index, str):
+            return self.dataframe()[index]
+
+        return self.numpy()[index]
+
+    def _train_test_split(self) -> Tuple:
+        indices = np.arange(len(self.data))
+        _, stratify = self.data.numpy()
+
+        return train_test_split(
+            indices,
+            train_size=self.train_size,
+            random_state=self.random_state,
+            stratify=stratify,
+        )
+
+    def train(self) -> "DataLoader":
+        train_idx, _ = self._train_test_split()
+        subset = FlexibleDataset(self.data.data, indices=train_idx)
+        return self.decorate(subset)
+
+    def test(self) -> "DataLoader":
+        _, test_idx = self._train_test_split()
+        subset = FlexibleDataset(self.data.data, indices=test_idx)
+        return self.decorate(subset)
+
+    def compress(
+        self,
+    ) -> Tuple["DataLoader", Dict]:
+        return self, {}
+
+    def decompress(self, context: Dict) -> "DataLoader":
+        return self
+
+    def encode(
+        self,
+        encoders: Optional[Dict[str, Any]] = None,
+    ) -> Tuple["DataLoader", Dict]:
+        return self, {}
+
+    def decode(
+        self,
+        encoders: Dict[str, Any],
+    ) -> "DataLoader":
+        return self
+
+    def is_tabular(self) -> bool:
+        return False
+
+    @property
+    def columns(self) -> list:
+        return list(self.dataframe().columns)
+
+    def satisfies(self, constraints: Constraints) -> bool:
+        return True
+
+    def match(self, constraints: Constraints) -> "DataLoader":
+        return self
+
+    def compression_protected_features(self) -> list:
+        raise NotImplementedError("Images do not support the compression call")
+
+    def drop(self, columns: list = []) -> "DataLoader":
+        raise NotImplementedError()
+
+    def __setitem__(self, feature: str, val: Any) -> None:
+        raise NotImplementedError()
+
+    def fillna(self, value: Any) -> "DataLoader":
+        raise NotImplementedError()
+
+
+@validate_arguments(config=dict(arbitrary_types_allowed=True))
+def create_from_info(
+    data: Union[pd.DataFrame, torch.utils.data.Dataset], info: dict
+) -> "DataLoader":
+    """Helper for creating a DataLoader from existing information."""
+    if info["data_type"] == "generic":
+        return GenericDataLoader.from_info(data, info)
+    elif info["data_type"] == "survival_analysis":
+        return SurvivalAnalysisDataLoader.from_info(data, info)
+    elif info["data_type"] == "time_series":
+        return TimeSeriesDataLoader.from_info(data, info)
+    elif info["data_type"] == "time_series_survival":
+        return TimeSeriesSurvivalDataLoader.from_info(data, info)
+    elif info["data_type"] == "images":
+        return ImageDataLoader.from_info(data, info)
+    else:
+        raise RuntimeError(f"invalid datatype {info}")
+
+
+# File: dataloader.py
+
+import pandas as pd
+from typing import Any, Dict, List, Optional, Union
+
+from synthcity.plugins.core.dataloader import DataLoader
+from synthcity.plugins.core.constraints import Constraints
+from synthcity.plugins.core.models.syn_seq.syn_seq_encoder import Syn_SeqEncoder
+
+
+class Syn_SeqDataLoader(DataLoader):
+    """
+    DataLoader specialized for the Syn_Seq aggregator:
+      - Takes col_type overrides
+      - Takes special_value => automatically splits numeric col => col_cat
+      - Maintains variable_selection
+      - aggregator calls .encode() => we run Syn_SeqEncoder => splitted columns
+    """
+
+    def __init__(
+        self,
+        data: pd.DataFrame,
+        syn_order: Optional[List[str]] = None,
+        special_value: Optional[Dict[str, List[Any]]] = None,
+        col_type: Optional[Dict[str, str]] = None,
+        max_categories: int = 20,
+        random_state: int = 0,
+        train_size: float = 0.8,
+        verbose: bool = True,
+        **kwargs: Any,
+    ):
+        if not syn_order and verbose:
+            print("[INFO] Most of the time, it is recommened to have category variables before synthesizing numeric variables.")
+
+        syn_order = syn_order or list(data.columns)
+        missing_cols = set(syn_order) - set(data.columns)
+        if missing_cols:
+            raise ValueError(f"Missing columns in input data: {missing_cols}")
+
+        self.syn_order = syn_order
+        self.columns_special_values = special_value or {}
+        self.col_type = col_type or {}
+        self.max_categories = max_categories
+        self._verbose = verbose
+
+        df = data[self.syn_order].copy()
+
+        super().__init__(
+            data_type="syn_seq",
+            data=df,
+            random_state=random_state,
+            train_size=train_size,
+            **kwargs,
+        )
+
+        self._encoder = Syn_SeqEncoder(
+            columns_special_values=self.columns_special_values,
+            syn_order=self.syn_order,
+            max_categories=self.max_categories,
+            col_type=self.col_type,
+        )
+        self._encoder.fit(df)
+
+        if self._verbose:
+            print("[INFO] Syn_SeqDataLoader init complete:")
+            print(f"  - syn_order: {self.syn_order}")
+            print(f"  - special_value: {self.columns_special_values}")
+            print(f"  - col_type: {self.col_type}")
+            print(f"  - data shape: {df.shape}")
+            print("[DEBUG] After encoder.fit(), detected info:")
+            print("  - encoder.col_map =>")
+            for ckey, cinfo in self._encoder.col_map.items():
+                print(f"       {ckey} : {cinfo}")
+            if self._encoder.variable_selection_ is not None:
+                print("  - variable_selection_:\n", self._encoder.variable_selection_)
+            print(f"  - date_mins: {self._encoder.date_mins}")
+            print("----------------------------------------------------------------")
+
+    @property
+    def shape(self) -> tuple:
+        return self.data.shape
+
+    @property
+    def columns(self) -> list:
+        return list(self.data.columns)
+
+    def dataframe(self) -> pd.DataFrame:
+        return self.data
+
+    def numpy(self) -> np.ndarray:
+        return self.data.values
+
+    def info(self) -> dict:
+        return {
+            "data_type": self.data_type,
+            "len": len(self),
+            "train_size": self.train_size,
+            "random_state": self.random_state,
+            "syn_order": self.syn_order,
+            "max_categories": self.max_categories,
+            "col_type": self.col_type,
+            "columns_special_values": self.columns_special_values,
+        }
+
+    def __len__(self) -> int:
+        return len(self.data)
+
+    def satisfies(self, constraints: Constraints) -> bool:
+        return constraints.is_valid(self.data)
+
+    def match(self, constraints: Constraints) -> "Syn_SeqDataLoader":
+        matched_df = constraints.match(self.data)
+        return self.decorate(matched_df)
+
+    @staticmethod
+    def from_info(data: pd.DataFrame, info: dict) -> "Syn_SeqDataLoader":
+        return Syn_SeqDataLoader(
+            data=data,
+            syn_order=info.get("syn_order"),
+            special_value=info.get("columns_special_values", {}),
+            col_type=info.get("col_type", {}),
+            max_categories=info.get("max_categories", 20),
+            random_state=info["random_state"],
+            train_size=info["train_size"],
+            verbose=False,
+        )
+
+    def sample(self, count: int, random_state: int = 0) -> "Syn_SeqDataLoader":
+        samp = self.data.sample(count, random_state=random_state)
+        return self.decorate(samp)
+
+    def drop(self, columns: list = []) -> "Syn_SeqDataLoader":
+        new_df = self.data.drop(columns=columns, errors="ignore")
+        return self.decorate(new_df)
+
+    def __getitem__(self, feature: Union[str, list, int]) -> Any:
+        return self.data[feature]
+
+    def __setitem__(self, feature: str, val: Any) -> None:
+        self.data[feature] = val
+
+    def train(self) -> "Syn_SeqDataLoader":
+        ntrain = int(len(self.data)*self.train_size)
+        return self.decorate(self.data.iloc[:ntrain])
+
+    def test(self) -> "Syn_SeqDataLoader":
+        ntrain = int(len(self.data)*self.train_size)
+        return self.decorate(self.data.iloc[ntrain:])
+
+    def fillna(self, value: Any) -> "Syn_SeqDataLoader":
+        new_df = self.data.fillna(value)
+        return self.decorate(new_df)
+
+    def compression_protected_features(self) -> list:
+        return []
+
+    def is_tabular(self) -> bool:
+        return True
+
+    def unpack(self, as_numpy: bool = False, pad: bool = False) -> Any:
+        if as_numpy:
+            return self.data.to_numpy()
+        return self.data
+
+    def get_fairness_column(self) -> Union[str, Any]:
+        return None
+
+    # aggregator usage
+    def encode(self, encoders: Optional[Dict[str, Any]] = None):
+        if encoders is None:
+            enc_data = self._encoder.transform(self.data)
+            new_loader = self.decorate(enc_data)
+            return new_loader, {"syn_seq_encoder": self._encoder}
+        else:
+            return self, encoders
+
+    def decode(self, encoders: Dict[str, Any]):
+        if "syn_seq_encoder" in encoders:
+            dec_data = encoders["syn_seq_encoder"].inverse_transform(self.data)
+            return self.decorate(dec_data)
+        return self
+
+    def decorate(self, data: pd.DataFrame) -> "Syn_SeqDataLoader":
+        loader = Syn_SeqDataLoader(
+            data=data,
+            syn_order=self.syn_order,
+            special_value=self.columns_special_values,
+            col_type=self.col_type,
+            max_categories=self.max_categories,
+            random_state=self.random_state,
+            train_size=self.train_size,
+            verbose=self._verbose,
+        )
+        return loader
+
+    def update_user_custom(self, user_custom: Dict[str, Any]) -> "Syn_SeqDataLoader":
+        # 1) syn_order
+        if "syn_order" in user_custom:
+            self.syn_order = user_custom["syn_order"]
+            self._encoder.syn_order = user_custom["syn_order"]
+
+        # 2) variable_selection
+        if "variable_selection" in user_custom:
+            vs_val = user_custom["variable_selection"]
+            if self._encoder.variable_selection_ is None:
+                idx = self.syn_order
+                self._encoder.variable_selection_ = pd.DataFrame(0, index=idx, columns=idx)
+            if isinstance(vs_val, dict):
+                new_vs = self._encoder.update_variable_selection(self._encoder.variable_selection_, vs_val)
+                self._encoder.variable_selection_ = new_vs
+            elif isinstance(vs_val, pd.DataFrame):
+                self._encoder.variable_selection_ = vs_val.copy()
+
+        # 3) method
+        if "method" in user_custom:
+            self._method = user_custom["method"]
+
+        return self
+
+
+src/synthcity/plugins/generic/plugin_syn_seq.py
+# File: plugin_syn_seq.py
+
+from typing import Any, Optional, Dict
+import pandas as pd
+
+from synthcity.plugins.core.plugin import Plugin
+from synthcity.plugins.core.dataloader import DataLoader, Syn_SeqDataLoader
+from synthcity.plugins.core.constraints import Constraints
+from synthcity.utils.reproducibility import enable_reproducible_results
+
+from synthcity.plugins.core.models.syn_seq.syn_seq import Syn_Seq
+
+
+class Syn_SeqPlugin(Plugin):
+    """
+    Plugin wrapping Syn_Seq aggregator for sequential, column-by-column synthetic data generation.
+
+    usage:
+       from synthcity.plugins import Plugins
+       plugin = Plugins().get("syn_seq")(random_state=42)
+       plugin.fit(X=some_syn_seq_loader, nrows=len(some_syn_seq_loader), user_custom={...})
+       syn_data = plugin.generate(nrows=100, constraints=myconstraints)
+    """
+
+    @staticmethod
+    def name() -> str:
+        return "syn_seq"
+
+    @staticmethod
+    def type() -> str:
+        return "syn_seq"
+
+    @staticmethod
+    def hyperparameter_space(**kwargs: Any):
+        return []
+
+    def __init__(
+        self,
+        random_state: int = 0,
+        default_first_method: str = "swr",
+        default_other_method: str = "cart",
+        strict: bool = True,
+        sampling_patience: int = 100,
+        **kwargs: Any,
+    ):
+        super().__init__(random_state=random_state, **kwargs)
+
+        self._aggregator = Syn_Seq(
+            random_state=random_state,
+            strict=strict,
+            sampling_patience=sampling_patience,
+            default_first_method=default_first_method,
+            default_other_method=default_other_method,
+        )
+        self._model_trained = False
+        self._fitted_loader: Optional[Syn_SeqDataLoader] = None
+
+    def _fit(
+        self,
+        X: DataLoader,
+        nrows: int,
+        user_custom: Optional[dict] = None,
+        *args: Any,
+        **kwargs: Any
+    ) -> "Syn_SeqPlugin":
+        if not isinstance(X, Syn_SeqDataLoader):
+            raise TypeError("Syn_SeqPlugin.fit expects a Syn_SeqDataLoader")
+
+        self._aggregator.fit(
+            loader=X,
+            nrows=nrows,
+            user_custom=user_custom,
+            *args,
+            **kwargs
+        )
+        self._model_trained = True
+        self._fitted_loader = X
+        return self
+
+    def _generate(
+        self,
+        count: int,
+        syn_schema,
+        constraints: Optional[Constraints] = None,
+        X: Optional[DataLoader] = None,
+        **kwargs: Any
+    ) -> DataLoader:
+        # We override generate() below, so not used
+        raise NotImplementedError("Use .generate(nrows=..., constraints=...)")
+
+    def generate(
+        self,
+        nrows: int,
+        constraints: Optional[Constraints] = None,
+        random_state: Optional[int] = None,
+        **kwargs: Any
+    ) -> DataLoader:
+        if not self._model_trained:
+            raise RuntimeError("Syn_SeqPlugin is not fitted yet")
+
+        if self._fitted_loader is None:
+            raise RuntimeError("No fitted loader found")
+
+        if random_state is not None:
+            enable_reproducible_results(random_state)
+
+        if constraints is not None and isinstance(constraints, Constraints):
+            constraints_dict = constraints
+        else:
+            constraints_dict = constraints
+
+        df_synth = self._aggregator.generate(
+            nrows=nrows,
+            encoded_loader=self._fitted_loader,
+            constraints=constraints_dict,
+            **kwargs
+        )
+        return self._fitted_loader.decorate(df_synth)
+plugin = Syn_SeqPlugin
+
+src/synthcity/utils/reproducibility.py
+# stdlib
+import random
+
+# third party
+import numpy as np
+import torch
+
+
+def enable_reproducible_results(random_state: int = 0) -> None:
+    np.random.seed(random_state)
+    try:
+        torch.manual_seed(random_state)
+    except BaseException:
+        pass
+    random.seed(random_state)
+    # TODO: Implement dgl seeding, like below:
+    # dgl.seed(random_state)
+
+
+def clear_cache() -> None:
+    try:
+        torch.cuda.empty_cache()
+    except BaseException:
+        pass
+
+
+src/synthcity/utils/samplers.py
+# stdlib
+from typing import Any, Generator, List, Optional, Tuple
+
+# third party
+import numpy as np
+import pandas as pd
+import torch
+import torch.utils.data
+from pydantic import validate_arguments
+from sklearn.model_selection import train_test_split
+
+# synthcity absolute
+from synthcity.plugins.core.models.tabular_encoder import FeatureInfo
+from synthcity.utils.constants import DEVICE
+
+
+class BaseSampler(torch.utils.data.sampler.Sampler):
+    """DataSampler samples the conditional vector and corresponding data."""
+
+    def get_dataset_conditionals(self) -> np.ndarray:
+        return None
+
+    @validate_arguments(config=dict(arbitrary_types_allowed=True))
+    def sample_conditional(self, batch: int, **kwargs: Any) -> Optional[Tuple]:
+        return None
+
+    @validate_arguments(config=dict(arbitrary_types_allowed=True))
+    def sample_conditional_for_class(self, batch: int, c: int) -> Optional[np.ndarray]:
+        return None
+
+    def conditional_dimension(self) -> int:
+        """Return the total number of categories."""
+        return 0
+
+    def conditional_probs(self) -> Optional[np.ndarray]:
+        """Return the total number of categories."""
+        return None
+
+    def train_test(self) -> Tuple:
+        raise NotImplementedError()
+
+
+class ImbalancedDatasetSampler(BaseSampler):
+    """Samples elements randomly from a given list of indices for imbalanced dataset"""
+
+    @validate_arguments(config=dict(arbitrary_types_allowed=True))
+    def __init__(self, labels: List, train_size: float = 0.8) -> None:
+        # if indices is not provided, all elements in the dataset will be considered
+        indices = list(range(len(labels)))
+        self.train_idx, self.test_idx = train_test_split(indices, train_size=train_size)
+        self.train_mapping = {
+            old_idx: new_idx for new_idx, old_idx in enumerate(self.train_idx)
+        }
+
+        # if num_samples is not provided, draw `len(indices)` samples in each iteration
+        self.num_train_samples = len(self.train_idx)
+
+        # distribution of classes in the dataset
+        df = pd.DataFrame()
+        df["label"] = labels
+        df.index = indices
+
+        df = df.loc[self.train_idx]
+
+        df = df.sort_index()
+
+        label_to_count = df["label"].value_counts()
+
+        weights = 1.0 / label_to_count[df["label"]]
+
+        self.weights = torch.DoubleTensor(weights.to_list())
+
+    def __iter__(self) -> Generator:
+        return (
+            self.train_mapping[self.train_idx[i]]
+            for i in torch.multinomial(
+                self.weights, self.num_train_samples, replacement=True
+            )
+        )
+
+    def __len__(self) -> int:
+        return len(self.train_idx)
+
+    def train_test(self) -> Tuple:
+        return self.train_idx, self.test_idx
+
+
+class ConditionalDatasetSampler(BaseSampler):
+    """DataSampler samples the conditional vector and corresponding data."""
+
+    @validate_arguments(config=dict(arbitrary_types_allowed=True))
+    def __init__(
+        self,
+        data: pd.DataFrame,
+        output_info: List[FeatureInfo],
+        device: Any = DEVICE,
+        train_size: float = 0.8,
+    ) -> None:
+        self._device = device
+
+        indices = np.arange(0, len(data))
+        self._train_idx, self._test_idx = train_test_split(
+            indices, train_size=train_size
+        )
+        self._train_mapping = {
+            old_idx: new_idx for new_idx, old_idx in enumerate(self._train_idx)
+        }
+        self._num_items = len(indices)
+
+        self._internal_setup(data, output_info)
+
+        self._prepare_dataset_conditionals()
+
+    def _random_choice_prob_index(self, discrete_column_id: int) -> np.ndarray:
+        probs = self._discrete_feat_value_prob[discrete_column_id]
+        r = np.expand_dims(np.random.rand(probs.shape[0]), axis=1)
+        return (probs.cumsum(axis=1) > r).argmax(axis=1)
+
+    def get_dataset_conditionals(self) -> np.ndarray:
+        return self._dataset_conditional
+
+    @validate_arguments(config=dict(arbitrary_types_allowed=True))
+    def sample_conditional(
+        self, batch: int, with_ids: bool = False, p: Optional[np.ndarray] = None
+    ) -> Any:
+        """Generate the conditional vector for training.
+
+        Returns:
+            cond (batch x #categories):
+                The conditional vector.
+            discrete column id (batch):
+                Integer representation of mask.
+            category_id_in_col (batch):
+                Selected category in the selected discrete column.
+            p: Optional np.ndarray
+                Optional probability for each discrete column
+        """
+        if self._n_discrete_columns == 0:
+            return None
+
+        if p is not None:
+            if p.shape[-1] != self._n_conditional_dimension:
+                raise ValueError(f"Invalid probability shape {p.shape}")
+
+            cond_res = np.zeros((batch, self._n_conditional_dimension), dtype="float32")
+
+            ind = np.random.choice(self._n_conditional_dimension, batch, p=p)
+
+            cond_res[np.arange(batch), ind] = 1
+
+            return cond_res
+
+        discrete_column_id = np.random.choice(
+            np.arange(self._n_discrete_columns), batch
+        )
+
+        cond = np.zeros((batch, self._n_conditional_dimension)).astype(float)
+        category_id_in_col = self._random_choice_prob_index(discrete_column_id)
+        category_id = (
+            self._categorical_feat_offset[discrete_column_id] + category_id_in_col
+        )
+        cond[np.arange(batch), category_id] = 1
+
+        if with_ids:
+            return cond, discrete_column_id, category_id_in_col
+
+        return cond
+
+    @validate_arguments(config=dict(arbitrary_types_allowed=True))
+    def sample_conditional_for_class(self, batch: int, c: int) -> Optional[np.ndarray]:
+        cond = np.zeros((batch, self._n_conditional_dimension)).astype(float)
+        cond[..., c] = 1
+
+        return cond
+
+    @validate_arguments(config=dict(arbitrary_types_allowed=True))
+    def sample_conditional_indices(
+        self,
+        cat_feats: np.ndarray,
+        cat_values: np.ndarray,
+    ) -> List[int]:
+        """Sample data from original training data satisfying the sampled conditional vector.
+
+        Returns:
+            n rows of matrix data.
+        """
+        if len(cat_values) != len(cat_feats):
+            raise ValueError(f"Invalid categorical features {cat_values}")
+
+        idx = []
+        for c, o in zip(cat_feats, cat_values):
+            idx.append(np.random.choice(self._categorical_value_to_row_[c][o]))
+
+        return idx
+
+    def conditional_dimension(self) -> int:
+        """Return the total number of categories."""
+        return self._n_conditional_dimension
+
+    def conditional_probs(self) -> Optional[np.ndarray]:
+        return self._conditional_probs
+
+    def __iter__(self) -> Generator:
+        np.random.shuffle(self._train_idx)
+
+        for idx in self._train_idx:
+            yield self._train_mapping[idx]
+
+    def __len__(self) -> int:
+        return len(self._train_idx)
+
+    def _internal_setup(
+        self,
+        data: pd.DataFrame,
+        output_info: List[FeatureInfo],
+    ) -> None:
+        if data.shape[1] != sum([item.output_dimensions for item in output_info]):
+            raise ValueError("Invalid data shape {data.shape}")
+
+        def is_discrete_column(column_info: FeatureInfo) -> bool:
+            return column_info.feature_type == "discrete"
+
+        n_discrete_columns = sum(
+            [1 for column_info in output_info if is_discrete_column(column_info)]
+        )
+
+        data = np.asarray(data)
+        # Store the row id for each category in each categorical column.
+        # For example _rid_by_cat_cols[a][b] is a list of all rows with the
+        # a-th discrete column equal value b.
+        self._categorical_value_to_row_ = []
+
+        # Compute _rid_by_cat_cols
+        st = 0
+        for column_info in output_info:
+            if is_discrete_column(column_info):
+                rid_by_cat = []
+                for j in range(column_info.output_dimensions):
+                    rid_by_cat.append(np.nonzero(data[:, st + j])[0])
+                self._categorical_value_to_row_.append(rid_by_cat)
+
+            st += column_info.output_dimensions
+
+        if st != data.shape[1]:
+            raise RuntimeError(f"Invalid offset {st} {data.shape}")
+
+        # Prepare an interval matrix for efficiently sample conditional vector
+        max_category = max(
+            [
+                column_info.output_dimensions
+                for column_info in output_info
+                if is_discrete_column(column_info)
+            ],
+            default=0,
+        )
+
+        self._categorical_feat_offset = np.zeros(n_discrete_columns, dtype="int32")
+        self._categorical_feat_dimension = np.zeros(n_discrete_columns, dtype="int32")
+        self._discrete_feat_value_prob = np.zeros((n_discrete_columns, max_category))
+        self._n_discrete_columns = n_discrete_columns
+        self._n_conditional_dimension = sum(
+            [
+                column_info.output_dimensions
+                for column_info in output_info
+                if is_discrete_column(column_info)
+            ]
+        )
+        self._conditional_probs = np.zeros(self._n_conditional_dimension)
+
+        st = 0
+        current_id = 0
+        current_cond_st = 0
+        for column_info in output_info:
+            if is_discrete_column(column_info):
+                ed = st + column_info.output_dimensions
+                cond_ed = current_cond_st + column_info.output_dimensions
+
+                category_freq = np.sum(data[:, st:ed], axis=0)
+                self._conditional_probs[current_cond_st:cond_ed] = category_freq
+                category_prob = category_freq / np.sum(category_freq)
+                self._discrete_feat_value_prob[
+                    current_id, : column_info.output_dimensions
+                ] = category_prob
+                self._categorical_feat_offset[current_id] = current_cond_st
+                self._categorical_feat_dimension[
+                    current_id
+                ] = column_info.output_dimensions
+
+                current_cond_st += column_info.output_dimensions
+                current_id += 1
+
+            st += column_info.output_dimensions
+        if st != data.shape[1]:
+            raise ValueError(f"Invalid offset {st} {data.shape}")
+
+        self._conditional_probs = self._conditional_probs / (
+            np.sum(self._conditional_probs) + 1e-8
+        )
+
+    def _prepare_dataset_conditionals(self) -> None:
+        self._dataset_conditional = None
+        if self._n_discrete_columns == 0:
+            return
+
+        (
+            self._dataset_conditional,
+            categoricals,
+            categoricals_vals,
+        ) = self.sample_conditional(self._num_items, with_ids=True)
+
+        sampling_indices = self.sample_conditional_indices(
+            categoricals, categoricals_vals
+        )
+
+        self._train_idx = [idx for idx in sampling_indices if idx in self._train_idx]
+        self._train_mapping = {
+            old_idx: new_idx for new_idx, old_idx in enumerate(self._train_idx)
+        }
+
+    def train_test(self) -> Tuple:
+        return self._train_idx, self._test_idx
+
+
+src/synthcity/utils/serialization.py
+# stdlib
+import hashlib
+from pathlib import Path
+from typing import Any, List, Union
+
+# third party
+import cloudpickle
+import pandas as pd
+from opacus import PrivacyEngine
+
+# The list of plugins that are not simply loadable with cloudpickle
+unloadable_plugins: List[str] = [
+    "dpgan",  # DP-GAN plugin id not loadable with cloudpickle due to the DPOptimizer
+]
+
+
+# TODO: simplify this function back to just cloudpickle.dumps(model), if possible (i.e. if the DPOptimizer is not needed or becomes loadable with cloudpickle)
+def save(custom_model: Any) -> bytes:
+    """
+    Serialize a custom model object that may or may not contain a PyTorch model with a privacy engine.
+
+    Args:
+        custom_model: The custom model object to serialize, potentially containing a PyTorch model with a privacy engine.
+
+    Returns:
+        bytes: Serialized model state as bytes.
+    """
+    # Checks is custom model is not a plugin without circular import
+    if not hasattr(custom_model, "name"):
+        return cloudpickle.dumps(custom_model)
+
+    if custom_model.name() not in unloadable_plugins:
+        return cloudpickle.dumps(custom_model)
+
+    # Initialize the checkpoint dictionary
+    checkpoint = {
+        "custom_model_state": None,
+        "pytorch_model_state": None,
+        "privacy_engine_state": None,
+        "optimizer_state": None,
+        "optimizer_class": None,
+        "optimizer_defaults": None,
+    }
+
+    # Save the state of the custom model object (excluding the PyTorch model and optimizer)
+    custom_model_state = {
+        key: value for key, value in custom_model.__dict__.items() if key != "model"
+    }
+    checkpoint["custom_model_state"] = cloudpickle.dumps(custom_model_state)
+
+    # Check if the custom model contains a PyTorch model
+    pytorch_model = None
+    if hasattr(custom_model, "model"):
+        pytorch_model = getattr(custom_model, "model")
+
+    # If a PyTorch model is found, check if it's using Opacus for DP
+    if pytorch_model:
+        checkpoint["pytorch_model_state"] = pytorch_model.state_dict()
+        if hasattr(pytorch_model, "privacy_engine") and isinstance(
+            pytorch_model.privacy_engine, PrivacyEngine
+        ):
+            # Handle DP Optimizer
+            optimizer = pytorch_model.privacy_engine.optimizer
+
+            checkpoint.update(
+                {
+                    "optimizer_state": optimizer.state_dict(),
+                    "privacy_engine_state": pytorch_model.privacy_engine.state_dict(),
+                    "optimizer_class": optimizer.__class__,
+                    "optimizer_defaults": optimizer.defaults,
+                }
+            )
+
+    # Serialize the entire state with cloudpickle
+    return cloudpickle.dumps(checkpoint)
+
+
+# TODO: simplify this function back to just cloudpickle.loads(model), if possible (i.e. if the DPOptimizer is not needed or becomes loadable with cloudpickle)
+def load(buff: bytes, custom_model: Any = None) -> Any:
+    """
+    Deserialize a custom model object that may or may not contain a PyTorch model with a privacy engine.
+
+    Args:
+        buff (bytes): Serialized model state as bytes.
+        custom_model: The custom model instance to load the state into.
+
+    Returns:
+        custom_model: The deserialized custom model with its original state.
+    """
+    # Load the checkpoint
+    if custom_model is None or custom_model.name() not in unloadable_plugins:
+        return cloudpickle.loads(buff)
+
+    if custom_model is None:
+        raise ValueError(
+            f"custom_model must be provided when loading one of the following plugins: {unloadable_plugins}"
+        )
+
+    checkpoint = cloudpickle.loads(buff)
+    # Restore the custom model's own state (excluding the PyTorch model)
+    custom_model_state = cloudpickle.loads(checkpoint["custom_model_state"])
+    for key, value in custom_model_state.items():
+        setattr(custom_model, key, value)
+
+    # Find the PyTorch model inside the custom model if it exists
+    pytorch_model = None
+    if hasattr(custom_model, "model"):
+        pytorch_model = getattr(custom_model, "model")
+
+    # Load the states into the PyTorch model if it exists
+    if pytorch_model and checkpoint["pytorch_model_state"] is not None:
+        pytorch_model.load_state_dict(checkpoint["pytorch_model_state"])
+
+        # Check if the serialized model had a privacy engine
+        if checkpoint["privacy_engine_state"] is not None:
+            # If there was a privacy engine, recreate and reattach it
+            optimizer_class = checkpoint["optimizer_class"]
+            optimizer_defaults = checkpoint["optimizer_defaults"]
+
+            # Ensure the optimizer is correctly created with model's parameters
+            optimizer = optimizer_class(
+                pytorch_model.parameters(), **optimizer_defaults
+            )
+
+            # Recreate the privacy engine
+            privacy_engine = PrivacyEngine(
+                pytorch_model,
+                sample_rate=optimizer.defaults.get(
+                    "sample_rate", 0.01
+                ),  # Use saved or default values
+                noise_multiplier=optimizer.defaults.get("noise_multiplier", 1.0),
+                max_grad_norm=optimizer.defaults.get("max_grad_norm", 1.0),
+            )
+            privacy_engine.attach(optimizer)
+
+            # Load the saved states
+            optimizer.load_state_dict(checkpoint["optimizer_state"])
+            privacy_engine.load_state_dict(checkpoint["privacy_engine_state"])
+
+            # Assign back to the PyTorch model (or the appropriate container)
+            pytorch_model.privacy_engine = privacy_engine
+
+    return custom_model
+
+
+def save_to_file(path: Union[str, Path], model: Any) -> Any:
+    path = Path(path)
+    ppath = path.absolute().parent
+
+    if not ppath.exists():
+        ppath.mkdir(parents=True, exist_ok=True)
+
+    with open(path, "wb") as f:
+        return cloudpickle.dump(model, f)
+
+
+def load_from_file(path: Union[str, Path]) -> Any:
+    with open(path, "rb") as f:
+        return cloudpickle.load(f)
+
+
+def dataframe_hash(df: pd.DataFrame) -> str:
+    """Dataframe hashing, used for caching/backups"""
+    cols = sorted(list(df.columns))
+    return str(abs(pd.util.hash_pandas_object(df[cols].fillna(0)).sum()))
+
+
+def dataframe_cols_hash(df: pd.DataFrame) -> str:
+    df.columns = df.columns.map(str)
+    cols = "--".join(list(sorted(df.columns)))
+
+    return hashlib.sha256(cols.encode()).hexdigest()
+
+
+src/synthcity/utils/dataframe.py
+# third party
+import pandas as pd
+
+
+def constant_columns(dataframe: pd.DataFrame) -> list:
+    """
+    Find constant value columns in a pandas dataframe.
+    """
+    return discrete_columns(dataframe, 1)
+
+
+def discrete_columns(
+    dataframe: pd.DataFrame, max_classes: int = 10, return_counts: bool = False
+) -> list:
+    """
+    Find columns containing discrete values in a pandas dataframe.
+    """
+    return [
+        (col, cnt) if return_counts else col
+        for col, vals in dataframe.items()
+        for cnt in [vals.nunique()]
+        if cnt <= max_classes
+    ]
+
+
+src/synthcity/utils/compression.py
+# stdlib
+from typing import Dict, List
+
+# third party
+import pandas as pd
+from pydantic import validate_arguments
+from sklearn.preprocessing import LabelEncoder
+from xgboost import XGBClassifier, XGBRegressor
+
+# synthcity relative
+from .evaluation import evaluate_classifier, evaluate_regression
+
+
+@validate_arguments(config=dict(arbitrary_types_allowed=True))
+def compress_dataset(
+    df: pd.DataFrame,
+    cat_limit: int = 10,
+    impute: bool = True,
+    score_threshold: float = 0.98,
+) -> pd.DataFrame:
+    df = df.copy()
+    original_dtypes = df.infer_objects().dtypes
+
+    if impute:
+        df = df.fillna(0)  # TODO: should we use a special symbol?
+    df.columns = df.columns.astype(str)
+
+    # check redundant columns
+    covariates = df.columns
+    redundant: List[str] = []
+
+    # encode
+    encoders = {}
+    for col in df.columns:
+        if df[col].dtype not in ["object", "category"]:
+            continue
+
+        encoders[col] = LabelEncoder().fit(df[col])
+        df[col] = encoders[col].transform(df[col])
+
+    # compress
+    compressers = {}
+    for column in covariates:
+        X = df[covariates].drop(columns=redundant + [column])
+        y = df[column]
+
+        if len(df[column].unique()) < cat_limit:
+            model = model = XGBClassifier(
+                tree_method="approx",
+                n_jobs=2,
+                verbosity=0,
+                depth=3,
+            )
+            try:
+                score = evaluate_classifier(model, X, y)["clf"]["aucroc"][0]
+            except BaseException:
+                continue
+
+        else:
+            model = XGBRegressor()
+
+            try:
+                score = evaluate_regression(model, X, y)["clf"]["r2"][0]
+            except BaseException:
+                continue
+
+        if score >= score_threshold:
+            redundant.append(column)
+            model.fit(X, y)
+
+            src_cols = X.columns
+            compressers[column] = {
+                "cols": list(src_cols),
+                "model": model,
+                "min": y.min(),
+                "max": y.max(),
+            }
+    df = df.drop(columns=redundant)
+    covariates = df.columns
+
+    # compress categoricals
+    compressers_categoricals = {}
+    categoricals: List[List[str]] = [[]]
+
+    for column in covariates:
+        if len(df[column].unique()) > cat_limit:
+            continue
+
+        categoricals[-1].append(column)
+
+        if len(df[categoricals[-1]].drop_duplicates()) >= cat_limit:
+            categoricals.append([])
+
+    for cats in categoricals:
+        if len(cats) <= 1:
+            continue
+        cat_types = df[cats].infer_objects().dtypes
+
+        aggr = df[cats].astype(str).agg(" ".join, 1)
+
+        encoder = LabelEncoder().fit(aggr)
+        encoded = encoder.transform(aggr)
+        encoded_col = " ".join(cats)
+        df[encoded_col] = encoded
+        df = df.drop(columns=cats)
+
+        compressers_categoricals[encoded_col] = {
+            "cols": cats,
+            "model": encoder,
+            "types": cat_types,
+        }
+
+    context = {
+        "encoders": encoders,
+        "compressers": compressers,
+        "compressers_categoricals": compressers_categoricals,
+        "original_dtypes": original_dtypes,
+    }
+    return df, context
+
+
+@validate_arguments(config=dict(arbitrary_types_allowed=True))
+def decompress_dataset(
+    df: pd.DataFrame, context: Dict, cat_limit: int = 10
+) -> pd.DataFrame:
+    if "encoders" not in context:
+        raise ValueError("Invalid context. missing encoders")
+
+    if "compressers" not in context:
+        raise ValueError("Invalid context. missing compressers")
+
+    if "compressers_categoricals" not in context:
+        raise ValueError("Invalid context. missing compressers_categoricals")
+
+    df = df.copy()
+    df.columns = df.columns.astype(str)
+
+    # decompress categoricals
+    for cat_group in context["compressers_categoricals"]:
+        if cat_group not in df.columns:
+            raise ValueError(f"Invalid categories {cat_group}")
+
+        encoder = context["compressers_categoricals"][cat_group]["model"]
+        src_cols = context["compressers_categoricals"][cat_group]["cols"]
+        dtypes = context["compressers_categoricals"][cat_group]["types"]
+
+        df[cat_group] = encoder.inverse_transform(df[cat_group])
+        decoded = df[cat_group].str.split(" ", n=-1, expand=True)
+
+        if decoded.shape[1] != len(src_cols):
+            raise ValueError(
+                f"Invalid decoding shape {decoded.shape} expected {len(src_cols)}"
+            )
+
+        df[src_cols] = decoded.astype(dtypes.reset_index(drop=True))
+        df = df.drop(columns=[cat_group])
+
+    # decompress redundant
+
+    for i in range(len(context["compressers"].keys())):
+        todo_cols = list(context["compressers"].keys())
+        if pd.Series(todo_cols).isin(df.columns).sum() == len(todo_cols):
+            break
+
+        for col in context["compressers"]:
+            if col in df.columns:
+                continue
+
+            model = context["compressers"][col]["model"]
+            src_cols = context["compressers"][col]["cols"]
+            vmin = context["compressers"][col]["min"]
+            vmax = context["compressers"][col]["max"]
+
+            if pd.Series(src_cols).isin(df.columns).sum() != len(
+                src_cols
+            ):  # need to decode something else first
+                continue
+
+            src_covs = df[src_cols]
+            df[col] = model.predict(src_covs)
+            df[col].clip(lower=vmin, upper=vmax, inplace=True)
+
+    # decode categoricals
+    for col in context["encoders"]:
+        if col not in df:
+            raise ValueError(f"Missing {col} for decoding")
+        df[col] = context["encoders"][col].inverse_transform(df[col])
+
+    original_dtypes = context["original_dtypes"]
+    df = df.astype(original_dtypes.filter(df.columns))
+
+    return df
 
 
