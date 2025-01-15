@@ -1,0 +1,24 @@
+INSTRUCTION
+
+
+
+BACKGROUND
+
+Initially, there was a problem with running the syn_seq is that our 'categorization' approach is conflict with original 'schema' framework. Since some numeric columns that has special values, manually assigned or imbalanced distribution are 'categorized' but current generating structure throw out error because of data types.
+To be more precise, while loading and fitting the model such columns are assigned as 'category' and their data types are string. But when we try to build the schema using base structure, it recognize the variable as numeric.
+It is true that they should be 'numeric' at the end but during the fitting and generation they should be left as categorical. This flow is conflict with current synthcity structure.
+This is why despite we are using encoder and decoder to even map the data types it still throws error.
+We cannot patch constraints.py, distribution.py, schema.py, nor any core modules because they are for general purposes.
+We resolved this issue but another error appeared.
+
+Now there are two issues. First, when generating the syn_seq data, it requires first variable to be generated with random sampling but random sampled data is not passed until generation. In fact, after fit, only encoder dictionary is passed.
+This is wrong. Also, we need to build the schema right before generation according to encoded data which has _cat columns. This is because we also generate _cat columns.
+Make the structure efficient and remove redundancies.
+I don't want to add any more parameters for .generator which now has nrows and constraints.
+I also want encode/decode to be in encoder and dataloader only calls them like loader.encode or loader.decode.
+
+Following code after CODE SO FAR section contains what we intended. However, it has many flaws and doesn't run properly.
+I want them to run fully functional as a plugin inside synthcity. I see hope! New kinds of errors.
+
+DESIRED INPUT-OUTPUT
+
