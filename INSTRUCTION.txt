@@ -1,3 +1,119 @@
-INSTRUCTION:
-Hey guys, Revise your parts and generate the code if there's modification to be made. If you don't have anything to change, just tell me there's nothing to change at the moment.
-Thanks.
+INSTRUCTION
+
+Thanks for your work!
+Refine, modify, fix syn_seq.py entirely to make the best sequential synthesis package we can based on our discussion so far.
+I have changed some part of the code and make sure those changes are implemented.
+
+Project Outline
+
+Explanation: From the following example, we have used sample dataset. We assume 'target' column is highly imbalanced which there are majority of 0 values.
+That's why loader automatically assigned 0 for its special value. We also designated special value for 'bp' column.
+For 'age' column, syn_seq automatically assign it as numeric so user assigned it as category. There are only two column types, numeric and category.
+In following example, user changed syn_order and method of some variable. Use also implemented constraint on variable which if bmi is greater than certain value, target must be greater than 0.
+Always remember you are building package, not the one time running code. This is just an example. It needs to be highly generalizable.
+Package also changed variable selection matrix accordingly and printed it out it fit process.
+Also notice that '_cat' columns were created for numeric variables with special values. They were used in fitting and generating the data.
+To be more specific, when plugin takes input loader and run fit, loader.encode is run and return new loader. This is processed loader with new dataframe which contains _cat columns, new order, new methods and all the attributes updated.
+Given new loader, syn_seq now starts fitting the model and save them for later generation. We believed that new loader contains all the necessary information to decode the synthesized dataframe so we decided not to return encoder.
+To elaborate, after synthesizing 'age', if we use default methods, cart fit 'sex'~'age' and save the model. After saving the model, predict 'sex' based on synthesized(sampled) 'age' and generate the next column.
+Once this process is done, 'bmi' is generated with 'bmi'~('sex', 'age'). Now 'bmi' is predicted with two synthesized variables. This is why it is called sequential synthesis. In case of _cat columns, it is fitted and generated as the others. However, method is fixed to 'cart'.
+Such synthesis order and variable selection is controled with syn_order and variable_selection. Issue is that when _cat column is created, syn_order and variable_selection needs modification.
+For example, if 'bp_cat' and 'target_cat' are created, we need to have temporary syn_order ['sex', 'bmi', 'age', 'bp_cat', 'bp', 's1', 's2', 's3', 's4', 's5', 's6', 'target_cat', 'target'] which is not directly shown to the user but we use this order.
+If in variable selection we don't use 'bp', that means we also don't use 'bp_cat' to predict such variable.
+In case of original 'bp' column, fit is applied only with numerics. 'bp_cat' is fit back later into 'bp' where it is coded nan temporary. In generation step, for example at cart, it is re-sampled at leaf node if constraint is not met.
+If it is equality constraint, it is substituted. If it is other constraints, prediction is done again. If prediction never finds value appropriate for constraint, it means there's something wrong with data so through an error.
+
+EXAMPLE OUTPUT
+
+from synthcity.plugins import Plugins
+ods = pd.read_csv("ods.csv", header = True)
+
+loader = Syn_SeqDataLoader(ods, col_type = {'age':'category'}, columns_special_values{'bp':[-0.040099, -0.005670]})
+[INFO] original input:
+  - syn_order: ['age', 'sex', 'bmi', 'bp', 's1', 's2', 's3', 's4', 's5', 's6', 'target']
+  - method: {'age':'swr', 'sex':'cart', 'bmi':'cart', 'bp':'cart', 's1':'cart', 's2':'cart', 's3':'cart', 's4':'cart', 's5':'cart', 's6':'cart', 'target':'cart'}
+  - special_value (columns_special_values): {'age':[], 'sex':[], 'bmi':[], 'bp':[-0.040099, -0.005670], 's1':[],
+  's2':[], 's3':[], 's4':[], 's5':[], 's6':[], 'target':[0]}
+  - numeric_cols: ['age', 'sex']
+  - category_cols: ['bmi', 'bp', 's1', 's2', 's3', 's4', 's5', 's6', 'target']
+  - data shape: (442, 11)
+  - variable_selection_:
+         age  sex  bmi  bp  s1  s2  s3  s4  s5  s6  target
+age       0    0    0   0   0   0   0   0   0   0       0
+sex       1    0    0   0   0   0   0   0   0   0       0
+bmi       1    1    0   0   0   0   0   0   0   0       0
+bp        1    1    1   0   0   0   0   0   0   0       0
+s1        1    1    1   1   0   0   0   0   0   0       0
+s2        1    1    1   1   1   0   0   0   0   0       0
+s3        1    1    1   1   1   1   0   0   0   0       0
+s4        1    1    1   1   1   1   1   0   0   0       0
+s5        1    1    1   1   1   1   1   1   0   0       0
+s6        1    1    1   1   1   1   1   1   1   0       0
+target    1    1    1   1   1   1   1   1   1   1       0
+----------------------------------------------------------------
+
+user_custom = {
+  'syn_order' : ['sex', 'bmi', 'age', 'bp', 's1', 's2', 's3', 's4', 's5', 's6', 'target'],
+  'method' : {'bp':'polyreg'},
+  'variable_selection' : {
+    "s4": ['sex', 'bmi', 'age', 'bp', 's1', 's2']
+    "target": ['sex', 'bmi', 'age', 'bp', 's1', 's2', 's3']
+  }
+}
+
+syn_model = Plugins().get("syn_seq")
+syn_model.fit(nrows = len(ods),user_custom)
+
+[INFO] final synthesis:
+  - syn_order: ['sex', 'bmi', 'age', 'bp', 's1', 's2', 's3', 's4', 's5', 's6', 'target']
+  - method: {'age':'swr', 'sex':'cart', 'bmi':'cart', 'bp':'polyreg', 's1':'cart', 's2':'cart', 's3':'cart', 's4':'cart', 's5':'cart', 's6':'cart', 'target':'cart'}
+  - variable_selection_:
+        sex  bmi  age  bp  s1  s2  s3  s4  s5  s6  target
+age       0    0    0   0   0   0   0   0   0   0       0
+sex       1    0    0   0   0   0   0   0   0   0       0
+bmi       1    1    0   0   0   0   0   0   0   0       0
+bp        1    1    1   0   0   0   0   0   0   0       0
+s1        1    1    1   1   0   0   0   0   0   0       0
+s2        1    1    1   1   1   0   0   0   0   0       0
+s3        1    1    1   1   1   1   0   0   0   0       0
+s4        1    1    1   1   1   1   0   0   0   0       0
+s5        1    1    1   1   1   1   1   1   0   0       0
+s6        1    1    1   1   1   1   1   1   1   0       0
+target    1    1    1   1   1   1   1   0   0   0       0
+
+[INFO] model fitting
+Fitting 'sex' ... Done!
+Fitting 'bmi' ... Done!
+Fitting 'age' ... Done!
+Fitting 'bp_cat' ... Done!
+Fitting 'bp' ... Done!
+Fitting 's1' ... Done!
+Fitting 's2' ... Done!
+Fitting 's3' ... Done!
+Fitting 's4' ... Done!
+Fitting 's5' ... Done!
+Fitting 's6' ... Done!
+Fitting 'target_cat' ... Done!
+Fitting 'target' ... Done!
+
+constraints = {
+  "target":[
+    ("bmi", ">", 0.15),
+    ("target", ">", 0)
+  ]
+}
+synthetic_data = syn_model.generate(nrows = len(ods), constraints = constraints).dataframe()
+
+Generating 'sex' ... Done!
+Generating 'bmi' ... Done!
+Generating 'age' ... Done!
+Generating 'bp_cat' ... Done!
+Generating 'bp' ... Done!
+Generating 's1' ... Done!
+Generating 's2' ... Done!
+Generating 's3' ... Done!
+Generating 's4' ... Done!
+Generating 's5' ... Done!
+Generating 's6' ... Done!
+Generating 'target_cat' ... Done!
+Generating 'target' ... Done!

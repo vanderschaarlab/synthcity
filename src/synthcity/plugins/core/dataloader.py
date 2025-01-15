@@ -1845,7 +1845,7 @@ class Syn_SeqDataLoader(DataLoader):
         **kwargs: Any,
     ) -> None:
         if not syn_order and verbose:
-            print("[INFO] syn_order not provided; using data.columns as default.")
+            print("[INFO] Most of the time, it is recommened to have category variables before synthesizing numeric variables")
         syn_order = syn_order or list(data.columns)
 
         missing_columns = set(syn_order) - set(data.columns)

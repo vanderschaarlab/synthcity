@@ -1,15 +1,13 @@
 # File: syn_seq.py
 
-from typing import Any, Dict, List, Optional, Union
+from typing import Any, Dict, List, Optional, Tuple, Union
 import pandas as pd
 import numpy as np
 
-# synergy imports
-from synthcity.plugins.core.dataloader import Syn_SeqDataLoader
-from synthcity.plugins.core.constraints import Constraints
-from synthcity.plugins.core.models.syn_seq.syn_seq_constraints import SynSeqConstraints
+# If your constraints class is in syn_seq_constraints.py
+from synthcity.plugins.core.models.syn_seq.syn_seq_constraints import Syn_SeqConstraints
 
-# methods for actual column-by-column synthesis
+# The column-by-column methods
 from synthcity.plugins.core.models.syn_seq.methods.cart import syn_cart
 from synthcity.plugins.core.models.syn_seq.methods.ctree import syn_ctree
 from synthcity.plugins.core.models.syn_seq.methods.logreg import syn_logreg
@@ -19,354 +17,338 @@ from synthcity.plugins.core.models.syn_seq.methods.polyreg import syn_polyreg
 from synthcity.plugins.core.models.syn_seq.methods.rf import syn_rf
 from synthcity.plugins.core.models.syn_seq.methods.misc import syn_random, syn_swr
 
-
-def _to_synseq_constraints(
-    constraint_input: Union[None, Dict[str, List[Any]], Constraints]
-) -> Optional[SynSeqConstraints]:
-    """
-    Converts user-supplied constraints (dict or Constraints object) 
-    into a SynSeqConstraints object, so we can do direct substitution or row filtering.
-    """
-    if constraint_input is None:
-        return None
-
-    if isinstance(constraint_input, Constraints):
-        if isinstance(constraint_input, SynSeqConstraints):
-            return constraint_input
-        else:
-            return SynSeqConstraints(rules=constraint_input.rules)
-
-    if isinstance(constraint_input, dict):
-        rules_list = []
-        for col, rule_list in constraint_input.items():
-            if not isinstance(rule_list, list) or len(rule_list) < 2:
-                print(f"[WARNING] Malformed constraint for '{col}' => {rule_list}")
-                continue
-            op = rule_list[0]
-            val = rule_list[1]
-            rules_list.append((col, op, val))
-        return SynSeqConstraints(rules=rules_list)
-
-    raise ValueError(f"Unsupported constraint type: {type(constraint_input)}")
-
-
 class Syn_Seq:
     """
-    A 'synthpop'-like sequential aggregator for synthetic data generation.
-    
-    Overview of the process:
-      - We accept a Syn_SeqDataLoader, but we do NOT automatically rely on the 
-        numeric splitting from the loader itself. Instead, we explicitly call
-        'encode(...)' here using the same Syn_SeqEncoder. 
-      - This means, at .fit() time, we transform the user’s data => an encoded DataFrame
-        with any numeric columns possibly split into "col" + "col_cat." We then fit
-        each column method (cart/pmm/etc.) on that encoded data.
-      - At .generate() time, we produce synthetic data in that encoded space, then 
-        call 'decode(...)' to revert to the user’s original columns.
-      - If constraints are provided, we either do repeated tries ('strict=True') 
-        or a single pass filtering approach.
+    A sequential-synthesis aggregator.
 
-    NOTE: We are NOT modifying the DataLoader or the Syn_SeqEncoder code itself. 
-          We only use them as intended: 'encode' for splitting before .fit, 
-          then 'decode' after generating the final data.
+    Steps:
+      1) If user_custom => call loader.update_user_custom(user_custom).
+         That might change loader.syn_order, loader.method, loader.variable_selection, etc.
+      2) aggregator calls encoded_loader, enc_dict = loader.encode(...) => new loader with _cat columns
+      3) aggregator partial-fits each splitted column in a hidden order:
+         - any "bp_cat" or "target_cat" columns first (forced "cart" method),
+         - then the main column "bp" or "target" with the user-chosen or fallback method.
+      4) generate(...) => synthesizes columns in that order, optionally applying constraints.
+      5) decode => final output is a plain DataFrame with only original columns (no _cat).
     """
 
     def __init__(
         self,
         random_state: int = 0,
-        default_first_method: str = "SWR",
-        default_other_method: str = "CART",
         strict: bool = True,
-        sampling_patience: int = 500,
+        sampling_patience: int = 100,
+        default_first_method: str = "swr",
+        default_other_method: str = "cart",
         seq_id_col: str = "seq_id",
         seq_time_col: str = "seq_time_id",
-        **kwargs: Any
     ):
         """
         Args:
-            random_state: for reproducibility
-            default_first_method: fallback if the user does not specify method for col 0
-            default_other_method: fallback for subsequent columns
+            random_state: reproducibility
             strict: if True => repeated tries to meet constraints
-            sampling_patience: max tries in strict mode
-            seq_id_col, seq_time_col: used by constraints if needed
-            **kwargs: aggregator-level arguments (unused here)
+            sampling_patience: max tries if strict
+            default_first_method: fallback if the first column has no method
+            default_other_method: fallback for subsequent columns if no user-specified method
+            seq_id_col, seq_time_col: for group-based constraints if needed
         """
         self.random_state = random_state
-        self.default_first_method = default_first_method
-        self.default_other_method = default_other_method
         self.strict = strict
         self.sampling_patience = sampling_patience
+        self.default_first_method = default_first_method
+        self.default_other_method = default_other_method
+
         self.seq_id_col = seq_id_col
         self.seq_time_col = seq_time_col
 
-        # Store per-column model info: method, predictor columns, fit_info, etc.
-        self._column_models: Dict[str, Dict[str, Any]] = {}
-
-        # The user can pass a list of methods or a variable_selection dict
-        self.method_list: List[str] = []
-        self.variable_selection: Dict[str, List[str]] = {}
-
-        # For encode/decode usage
-        self._encoders: Dict[str, Any] = {}
-
+        # We'll store partial fits in a dict: col_enc => { "method":..., "predictors":..., "fit_info":... }
+        self._col_models: Dict[str, Dict[str, Any]] = {}
         self._model_trained = False
 
-    # ----------------------------------------------------------------
-    # fit(...)
-    # ----------------------------------------------------------------
+        # We'll store the encoding dictionary from loader.encode(...) so we can decode automatically
+        self._enc_dict: Dict[str, Any] = {}
+
     def fit(
         self,
-        loader: Syn_SeqDataLoader,
-        method: Optional[List[str]] = None,
-        variable_selection: Optional[Dict[str, List[str]]] = None,
-        *args: Any,
-        **kwargs: Any
+        loader: Any,  # typically a Syn_SeqDataLoader
+        user_custom: Optional[dict] = None,
+        *args,
+        **kwargs
     ) -> "Syn_Seq":
         """
-        1) We call loader.encode(...) => splitted/encoded data, plus the encoder dict.
-        2) Build predictor matrix from user variable_selection or default sequential logic.
-        3) For each (encoded) column => store a partial model fit.
+        1) Merge user_custom into loader (if any).
+        2) loader.encode(...) => returns encoded_loader, enc_dict
+        3) partial-fit each splitted column (including _cat).
+        4) store partial fits in self._col_models
         """
-        if not isinstance(loader, Syn_SeqDataLoader):
-            raise TypeError("Syn_Seq aggregator requires a Syn_SeqDataLoader.")
+        # (1) incorporate any user overrides
+        if user_custom:
+            loader.update_user_custom(user_custom)
 
-        # 1) encode => splitted/encoded data
-        encoded_loader, self._encoders = loader.encode(encoders=None)
+        # (2) encode => splitted loader with `_cat` columns
+        #    We do NOT do partial sampling => use entire dataset
+        encoded_loader, enc_dict = loader.encode(encoders=None)
+        self._enc_dict = enc_dict  # so we can decode after generation
+
         df_encoded = encoded_loader.dataframe()
         if df_encoded.empty:
-            raise ValueError("No data after encoding. Cannot train on empty DataFrame.")
+            raise ValueError("No data after encoding => cannot train on empty DataFrame.")
 
-        self.method_list = method or []
-        self.variable_selection = variable_selection or {}
+        syn_order = encoded_loader.syn_order  # e.g. ["age","sex","bmi","bp","target"]
+        method_dict = encoded_loader.method   # e.g. {"bp":"polyreg","bmi":"cart",...}
+        varsel_df = encoded_loader.variable_selection  # k-by-k DataFrame
 
-        col_list = list(df_encoded.columns)
-        n_cols = len(col_list)
-
-        # 2) expand user methods if needed
-        final_methods = []
-        for i, col in enumerate(col_list):
-            if i < len(self.method_list):
-                final_methods.append(self.method_list[i])
-            else:
-                fallback = (
+        # 2a) figure out final method for each original col in syn_order
+        final_method: Dict[str, str] = {}
+        for i, col_name in enumerate(syn_order):
+            if col_name not in method_dict:
+                # fallback
+                final_method[col_name] = (
                     self.default_first_method if i == 0 else self.default_other_method
                 )
-                final_methods.append(fallback)
+            else:
+                final_method[col_name] = method_dict[col_name]
 
-        # Build a default predictor matrix
-        vs_matrix = pd.DataFrame(0, index=col_list, columns=col_list)
-        for i in range(n_cols):
-            vs_matrix.iloc[i, :i] = 1
+        # 2b) build a splitted map => for each base col => a list of splitted columns [col_cat, col]
+        splitted_map: Dict[str, List[str]] = {c: [] for c in syn_order}
+        for c_enc in df_encoded.columns:
+            base_c = c_enc[:-4] if c_enc.endswith("_cat") else c_enc
+            if base_c not in splitted_map:
+                splitted_map[base_c] = [c_enc]
+            else:
+                splitted_map[base_c].append(c_enc)
 
-        # incorporate user variable_selection
-        for target_col, pred_cols in self.variable_selection.items():
-            if target_col in vs_matrix.index:
-                vs_matrix.loc[target_col, :] = 0
-                for pc in pred_cols:
-                    if pc in vs_matrix.columns:
-                        vs_matrix.loc[target_col, pc] = 1
+        # 3) flatten them => cat first => forced "cart", then main col => user or fallback
+        fit_order: List[str] = []
+        method_map: Dict[str, str] = {}
 
-        print("[INFO] aggregator: final method assignment:")
-        for col, meth in zip(col_list, final_methods):
-            print(f"   - {col} => {meth}")
-        print("[INFO] aggregator: final variable_selection matrix:")
-        print(vs_matrix)
+        for i, base_col in enumerate(syn_order):
+            sub_cols = splitted_map.get(base_col, [])
+            cat_cols = [x for x in sub_cols if x.endswith("_cat")]
+            main_cols = [x for x in sub_cols if not x.endswith("_cat")]
+            chosen = final_method[base_col]
 
-        # 3) train each encoded column
-        self._column_models.clear()
-        for i, col in enumerate(col_list):
-            chosen_method = final_methods[i]
-            pred_mask = vs_matrix.loc[col] == 1
-            preds = vs_matrix.columns[pred_mask].tolist()
+            # cat columns => forced "cart"
+            for sc in cat_cols:
+                fit_order.append(sc)
+                method_map[sc] = "cart"
 
-            y = df_encoded[col].values
-            X = df_encoded[preds].values if preds else np.zeros((len(y), 0))
+            # main col => chosen/fallback
+            for sc in main_cols:
+                fit_order.append(sc)
+                method_map[sc] = chosen
 
-            print(f"[INFO] Fitting encoded column '{col}' with method '{chosen_method}'...")
-            self._column_models[col] = {
-                "method": chosen_method,
-                "predictors": preds,
-                "fit_info": self._fit_single_column(y, X, chosen_method),
+        # leftover columns not in syn_order
+        leftover = [c for c in df_encoded.columns if c not in fit_order]
+        for c in leftover:
+            fit_order.append(c)
+            method_map[c] = self.default_other_method  # fallback
+
+        # Logging
+        print("[INFO] final synthesis:")
+        print(f"  - syn_order: {syn_order}")
+        print(f"  - method: {final_method}")
+        print("  - variable_selection_:")
+        print(varsel_df)
+        print("[INFO] model fitting")
+
+        # 4) partial-fit each splitted column
+        self._col_models.clear()
+        for col_enc in fit_order:
+            base_c = col_enc[:-4] if col_enc.endswith("_cat") else col_enc
+            chosen_m = method_map[col_enc]
+
+            # get predictor set from varsel_df
+            if base_c in varsel_df.index:
+                pred_mask = varsel_df.loc[base_c] == 1
+                preds_list = varsel_df.columns[pred_mask].tolist()
+                # If user doesn't want "bp", also exclude "bp_cat"
+                # e.g. if "bp" not in preds, then remove "bp_cat"
+                preds_list = [
+                    p for p in preds_list
+                    if not (p.endswith("_cat") and p[:-4] not in preds_list)
+                ]
+            else:
+                preds_list = []
+
+            y = df_encoded[col_enc].values
+            X = df_encoded[preds_list].values if preds_list else np.zeros((len(y), 0))
+
+            print(f"Fitting '{col_enc}' ... ", end="")
+            fit_info = self._fit_single_column(y, X, chosen_m)
+            self._col_models[col_enc] = {
+                "method": chosen_m,
+                "predictors": preds_list,
+                "fit_info": fit_info,
             }
+            print("Done!")
 
         self._model_trained = True
         return self
 
     def _fit_single_column(
-        self, y: np.ndarray, X: np.ndarray, method: str
+        self, y: np.ndarray, X: np.ndarray, method_name: str
     ) -> Dict[str, Any]:
         """
-        For each column, store (obs_y, obs_X) and the method type. 
-        Actual training might happen again at generation time or partial store here.
+        We store partial info (obs_y, obs_X, method_type).
+        e.g. { "type": "cart", "obs_y": y, "obs_X": X }
+        We'll use it at generation time.
         """
-        method_lower = method.strip().lower()
-
-        if method_lower in {
-            "cart", "ctree", "rf", "norm", "lognorm", 
-            "pmm", "logreg", "polyreg",
+        m = method_name.strip().lower()
+        if m in {
+            "cart", "ctree", "rf", "norm", "lognorm",
+            "pmm", "logreg", "polyreg"
         }:
-            return {"type": method_lower, "obs_y": y, "obs_X": X}
-        elif method_lower == "swr":
+            return {"type": m, "obs_y": y, "obs_X": X}
+        elif m == "swr":
             return {"type": "swr", "obs_y": y}
-        elif method_lower == "random":
+        elif m == "random":
             return {"type": "random", "obs_y": y}
         else:
             # fallback => random
             return {"type": "random", "obs_y": y}
 
-    # ----------------------------------------------------------------
-    # generate(...)
-    # ----------------------------------------------------------------
     def generate(
         self,
         count: int,
-        constraint: Union[None, Dict[str, List[Any]], Constraints] = None,
-        *args: Any,
-        **kwargs: Any
-    ) -> Syn_SeqDataLoader:
+        encoded_loader: Any,
+        constraints: Optional[Dict[str, List[Any]]] = None,
+        *args,
+        **kwargs
+    ) -> pd.DataFrame:
         """
-        1) Generate 'encoded' synthetic data column by column.
-        2) If constraints => either repeated tries or single pass filter.
-        3) Finally, 'decode' to revert to the original user columns 
-           (merging splitted numeric columns, etc.).
+        1) Generate splitted columns
+        2) If constraints => strict or single-pass filtering
+        3) decode => revert to original columns
+        4) Return final DataFrame
         """
         if not self._model_trained:
-            raise RuntimeError("Must fit Syn_Seq before calling generate().")
+            raise RuntimeError("Must fit(...) aggregator before generate().")
 
-        # unify constraints as a SynSeqConstraints
-        syn_constraints = _to_synseq_constraints(constraint)
-        if syn_constraints:
-            syn_constraints.seq_id_feature = self.seq_id_col
-            syn_constraints.seq_time_id_feature = self.seq_time_col
+        # Build constraints object if dictionary is provided
+        syn_constraints = None
+        if constraints is not None:
+            syn_constraints = Syn_SeqConstraints(chained_rules=constraints)
 
-        # Use strict or single-pass approach
-        if self.strict and syn_constraints is not None:
-            encoded_df = self._attempt_strict_generation(count, syn_constraints)
+        if self.strict and syn_constraints:
+            df_synth = self._attempt_strict_generation(count, syn_constraints)
         else:
-            encoded_df = self._generate_once(count)
+            df_synth = self._generate_once(count)
             if syn_constraints:
-                encoded_df = self._apply_constraint_corrections(encoded_df, syn_constraints)
-                encoded_df = syn_constraints.match(encoded_df)
+                df_synth = syn_constraints.correct_equals(df_synth)
+                df_synth = syn_constraints.match(df_synth)
 
-        # Now decode to revert from splitted columns => original user columns
-        # Wrap 'encoded_df' in a minimal loader so we can call decode(...)
-        temp_loader = Syn_SeqDataLoader(data=encoded_df, syn_order=list(encoded_df.columns))
-        decoded_loader = temp_loader.decode(self._encoders)
+        # decode => get only original user columns
+        tmp_loader = encoded_loader.decorate(df_synth)
+        final_loader = tmp_loader.decode(self._enc_dict)
+        return final_loader.dataframe()
 
-        # Return the final (decoded) data loader
-        return decoded_loader
-
-    def _generate_once(self, count: int) -> pd.DataFrame:
-        """
-        Single pass ignoring constraints. 
-        Produces data in the encoded space (splitted columns).
-        """
-        col_list = list(self._column_models.keys())
-        syn_df = pd.DataFrame(index=range(count))
-
-        for col in col_list:
-            info = self._column_models[col]
-            method = info["method"]
-            preds = info["predictors"]
-            fit_data = info["fit_info"]
-
-            Xp = syn_df[preds].values if preds else np.zeros((count, 0))
-            print(f"[INFO] Generating encoded column '{col}' with method '{method}'...")
-
-            new_vals = self._generate_single_column(method, fit_data, Xp, count)
-            syn_df[col] = new_vals
-
-        return syn_df
-
-    def _generate_single_column(
-        self,
-        method: str,
-        fit_model: Dict[str, Any],
-        Xp: np.ndarray,
-        count: int
-    ) -> pd.Series:
-        """
-        Calls the appropriate method for generating that encoded column's data.
-        """
-        method_lower = method.strip().lower()
-
-        y_obs = fit_model.get("obs_y", None)
-        X_obs = fit_model.get("obs_X", None)
-
-        if method_lower == "cart":
-            res = syn_cart(y=y_obs, X=X_obs, Xp=Xp, random_state=self.random_state)
-            return pd.Series(res["res"])
-        elif method_lower == "ctree":
-            res = syn_ctree(y=y_obs, X=X_obs, Xp=Xp, random_state=self.random_state)
-            return pd.Series(res["res"])
-        elif method_lower == "rf":
-            res = syn_rf(y=y_obs, X=X_obs, Xp=Xp, random_state=self.random_state)
-            return pd.Series(res["res"])
-        elif method_lower == "norm":
-            res = syn_norm(y=y_obs, X=X_obs, Xp=Xp, random_state=self.random_state)
-            return pd.Series(res["res"])
-        elif method_lower == "lognorm":
-            res = syn_lognorm(y=y_obs, X=X_obs, Xp=Xp, random_state=self.random_state)
-            return pd.Series(res["res"])
-        elif method_lower == "pmm":
-            res = syn_pmm(y=y_obs, X=X_obs, Xp=Xp, random_state=self.random_state)
-            return pd.Series(res["res"])
-        elif method_lower == "logreg":
-            res = syn_logreg(y=y_obs, X=X_obs, Xp=Xp, random_state=self.random_state)
-            return pd.Series(res["res"])
-        elif method_lower == "polyreg":
-            res = syn_polyreg(y=y_obs, X=X_obs, Xp=Xp, random_state=self.random_state)
-            return pd.Series(res["res"])
-        elif method_lower == "swr":
-            res = syn_swr(y=y_obs, X=None, Xp=np.zeros((count, 1)), random_state=self.random_state)
-            return pd.Series(res["res"])
-        elif method_lower == "random":
-            res = syn_random(y=y_obs, X=None, Xp=np.zeros((count, 1)), random_state=self.random_state)
-            return pd.Series(res["res"])
-        else:
-            # fallback => random
-            fallback = syn_random(y=y_obs, X=None, Xp=np.zeros((count, 1)), random_state=self.random_state)
-            return pd.Series(fallback["res"])
-
-    # ----------------------------------------------------------------
-    # strict approach
-    # ----------------------------------------------------------------
     def _attempt_strict_generation(
         self,
         count: int,
-        syn_constraints: SynSeqConstraints
+        syn_constraints: Syn_SeqConstraints
     ) -> pd.DataFrame:
         """
-        If 'strict' => we generate repeatedly until constraints are satisfied 
-        or we exhaust the sampling_patience. 
-        We keep accumulating unique rows in the encoded space.
+        repeated attempts => gather rows meeting constraints
+        if equality => direct substitution first => then filter => drop_duplicates
         """
         result_df = pd.DataFrame()
         tries = 0
         while len(result_df) < count and tries < self.sampling_patience:
             tries += 1
             chunk = self._generate_once(count)
-
-            chunk = self._apply_constraint_corrections(chunk, syn_constraints)
+            chunk = syn_constraints.correct_equals(chunk)
             chunk = syn_constraints.match(chunk)
             chunk = chunk.drop_duplicates()
-
             result_df = pd.concat([result_df, chunk], ignore_index=True)
 
         return result_df.head(count)
 
-    def _apply_constraint_corrections(
+    def _generate_once(self, count: int) -> pd.DataFrame:
+        """
+        single pass => produce splitted columns in fit_order (the order of self._col_models)
+        """
+        col_list = list(self._col_models.keys())
+        syn_df = pd.DataFrame(index=range(count))
+
+        print("")
+        for col_enc in col_list:
+            info = self._col_models[col_enc]
+            method_name = info["method"]
+            preds = info["predictors"]
+            fit_data = info["fit_info"]
+
+            if preds:
+                Xp = syn_df[preds].values
+            else:
+                Xp = np.zeros((count, 0))
+
+            print(f"Generating '{col_enc}' ... ", end="")
+            new_vals = self._generate_single_column(method_name, fit_data, Xp, count)
+            syn_df[col_enc] = new_vals
+            print("Done!")
+
+        return syn_df
+
+    def _generate_single_column(
         self,
-        df: pd.DataFrame,
-        syn_constraints: SynSeqConstraints
-    ) -> pd.DataFrame:
+        method: str,
+        fit_info: Dict[str, Any],
+        Xp: np.ndarray,
+        count: int
+    ) -> pd.Series:
         """
-        For '=' constraints, do direct substitution first. 
-        For other constraints => let match(...) do filtering.
+        For each method type, dispatch to the corresponding generator function
         """
-        new_df = df.copy()
-        for (feature, op, val) in syn_constraints.rules:
-            if op in ["=", "=="]:
-                new_df = syn_constraints._correct(new_df, feature, op, val)
-        return new_df
+        m = method.strip().lower()
+        y_obs = fit_info.get("obs_y")
+        X_obs = fit_info.get("obs_X")
+
+        if m == "cart":
+            result = syn_cart(y=y_obs, X=X_obs, Xp=Xp, random_state=self.random_state)
+            return pd.Series(result["res"])
+        elif m == "ctree":
+            result = syn_ctree(y=y_obs, X=X_obs, Xp=Xp, random_state=self.random_state)
+            return pd.Series(result["res"])
+        elif m == "rf":
+            result = syn_rf(y=y_obs, X=X_obs, Xp=Xp, random_state=self.random_state)
+            return pd.Series(result["res"])
+        elif m == "norm":
+            result = syn_norm(y=y_obs, X=X_obs, Xp=Xp, random_state=self.random_state)
+            return pd.Series(result["res"])
+        elif m == "lognorm":
+            result = syn_lognorm(y=y_obs, X=X_obs, Xp=Xp, random_state=self.random_state)
+            return pd.Series(result["res"])
+        elif m == "pmm":
+            result = syn_pmm(y=y_obs, X=X_obs, Xp=Xp, random_state=self.random_state)
+            return pd.Series(result["res"])
+        elif m == "logreg":
+            result = syn_logreg(y=y_obs, X=X_obs, Xp=Xp, random_state=self.random_state)
+            return pd.Series(result["res"])
+        elif m == "polyreg":
+            result = syn_polyreg(y=y_obs, X=X_obs, Xp=Xp, random_state=self.random_state)
+            return pd.Series(result["res"])
+        elif m == "swr":
+            result = syn_swr(
+                y=y_obs,
+                X=None,
+                Xp=np.zeros((count,1)),
+                random_state=self.random_state
+            )
+            return pd.Series(result["res"])
+        elif m == "random":
+            result = syn_random(
+                y=y_obs,
+                X=None,
+                Xp=np.zeros((count,1)),
+                random_state=self.random_state
+            )
+            return pd.Series(result["res"])
+        else:
+            # fallback => random
+            fallback = syn_random(
+                y=y_obs,
+                X=None,
+                Xp=np.zeros((count,1)),
+                random_state=self.random_state
+            )
+            return pd.Series(fallback["res"])
