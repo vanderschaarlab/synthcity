@@ -27,7 +27,7 @@ from synthcity.plugins.core.constraints import Constraints
 # If the first sub-rule is satisfied but not the second => row fails entirely.
 #
 
-class SynSeqConstraints(Constraints):
+class Syn_SeqConstraints(Constraints):
     """
     An extension that supports "chained" constraints for sequential logic:
       - If sub-rule 1 is satisfied => we must also pass sub-rule 2, and so on.

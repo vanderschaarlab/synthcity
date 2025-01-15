@@ -17,19 +17,51 @@ from synthcity.plugins.core.models.syn_seq.methods.polyreg import syn_polyreg
 from synthcity.plugins.core.models.syn_seq.methods.rf import syn_rf
 from synthcity.plugins.core.models.syn_seq.methods.misc import syn_random, syn_swr
 
+
+###############################################
+# Define which methods are allowed for numeric vs. category
+###############################################
+ALLOWED_NUMERIC_METHODS = {
+    "norm",
+    "lognorm",
+    "pmm",
+    "cart",
+    "ctree",
+    "rf",
+    "random",
+    "swr",
+    # possibly "polyreg", "logreg" if numeric is strictly binary, etc.
+}
+
+ALLOWED_CATEGORY_METHODS = {
+    "cart",
+    "ctree",
+    "rf",
+    "logreg",   # if user wants logistic for binary categories
+    "polyreg",  # multi-category
+    "random",
+    "swr",
+}
+
+
 class Syn_Seq:
     """
-    A sequential-synthesis aggregator.
+    A sequential-synthesis aggregator that:
 
-    Steps:
-      1) If user_custom => call loader.update_user_custom(user_custom).
-         That might change loader.syn_order, loader.method, loader.variable_selection, etc.
-      2) aggregator calls encoded_loader, enc_dict = loader.encode(...) => new loader with _cat columns
-      3) aggregator partial-fits each splitted column in a hidden order:
-         - any "bp_cat" or "target_cat" columns first (forced "cart" method),
-         - then the main column "bp" or "target" with the user-chosen or fallback method.
-      4) generate(...) => synthesizes columns in that order, optionally applying constraints.
-      5) decode => final output is a plain DataFrame with only original columns (no _cat).
+      1) If user_custom => we call loader.update_user_custom(user_custom)
+         so that 'syn_order', 'method', 'variable_selection' are updated.
+      2) We do encoded_loader, enc_dict = loader.encode(...) => returns a new encoded loader
+         which has:
+           - possible _cat columns for special values
+           - updated method dictionary
+           - updated variable_selection
+           - updated col_type
+      3) We partial-fit each splitted column in a hidden order (any X_cat first => forced "cart" method),
+         then the main col => user-chosen or fallback. We also check col_type (numeric vs. category)
+         to ensure the chosen method is appropriate. If not, we fallback.
+      4) generate(...) => synthesizes col-by-col in that hidden order, optionally applying constraints.
+         If strict => multiple attempts until we gather enough rows passing constraints.
+      5) decode => final result is a pd.DataFrame with only the original columns (no _cat).
     """
 
     def __init__(
@@ -45,26 +77,25 @@ class Syn_Seq:
         """
         Args:
             random_state: reproducibility
-            strict: if True => repeated tries to meet constraints
+            strict: if True => repeated attempts to meet constraints
             sampling_patience: max tries if strict
             default_first_method: fallback if the first column has no method
-            default_other_method: fallback for subsequent columns if no user-specified method
-            seq_id_col, seq_time_col: for group-based constraints if needed
+            default_other_method: fallback for subsequent columns if user didn't specify
+            seq_id_col, seq_time_col: for sequence-based constraints if needed
         """
         self.random_state = random_state
         self.strict = strict
         self.sampling_patience = sampling_patience
         self.default_first_method = default_first_method
         self.default_other_method = default_other_method
-
         self.seq_id_col = seq_id_col
         self.seq_time_col = seq_time_col
 
-        # We'll store partial fits in a dict: col_enc => { "method":..., "predictors":..., "fit_info":... }
+        # We'll store partial fits: splitted_col => {method, predictors, fit_info}
         self._col_models: Dict[str, Dict[str, Any]] = {}
         self._model_trained = False
 
-        # We'll store the encoding dictionary from loader.encode(...) so we can decode automatically
+        # We'll store enc_dict from loader.encode(...) so we can decode after generation
         self._enc_dict: Dict[str, Any] = {}
 
     def fit(
@@ -75,49 +106,49 @@ class Syn_Seq:
         **kwargs
     ) -> "Syn_Seq":
         """
-        1) Merge user_custom into loader (if any).
-        2) loader.encode(...) => returns encoded_loader, enc_dict
-        3) partial-fit each splitted column (including _cat).
-        4) store partial fits in self._col_models
+        1) Merge user_custom => loader.update_user_custom(...)
+        2) encode => splitted loader => new df with _cat columns => encoded_loader
+        3) partial-fit each splitted column, forcing 'cart' for *cat columns,
+           adjusting method based on col_type if there's a mismatch
+        4) store partial fits
         """
-        # (1) incorporate any user overrides
+        # (1) incorporate user overrides
         if user_custom:
             loader.update_user_custom(user_custom)
 
-        # (2) encode => splitted loader with `_cat` columns
-        #    We do NOT do partial sampling => use entire dataset
+        # (2) encode => splitted columns
         encoded_loader, enc_dict = loader.encode(encoders=None)
-        self._enc_dict = enc_dict  # so we can decode after generation
+        self._enc_dict = enc_dict
 
+        # get references
         df_encoded = encoded_loader.dataframe()
         if df_encoded.empty:
             raise ValueError("No data after encoding => cannot train on empty DataFrame.")
 
-        syn_order = encoded_loader.syn_order  # e.g. ["age","sex","bmi","bp","target"]
-        method_dict = encoded_loader.method   # e.g. {"bp":"polyreg","bmi":"cart",...}
-        varsel_df = encoded_loader.variable_selection  # k-by-k DataFrame
+        syn_order = encoded_loader.syn_order            # e.g. ["age","sex","bmi","bp","target"]
+        method_dict = getattr(encoded_loader, "_method", {})  # user might store it here
+        varsel_df = getattr(encoded_loader._encoder, "variable_selection_", None)
+        if varsel_df is None:
+            varsel_df = pd.DataFrame(0, index=syn_order, columns=syn_order)
 
-        # 2a) figure out final method for each original col in syn_order
+        # fallback if user didn't specify a method => default
         final_method: Dict[str, str] = {}
         for i, col_name in enumerate(syn_order):
             if col_name not in method_dict:
-                # fallback
-                final_method[col_name] = (
-                    self.default_first_method if i == 0 else self.default_other_method
-                )
+                final_method[col_name] = self.default_first_method if i == 0 else self.default_other_method
             else:
                 final_method[col_name] = method_dict[col_name]
 
-        # 2b) build a splitted map => for each base col => a list of splitted columns [col_cat, col]
+        # read col_type from encoded_loader
+        col_type_map = getattr(encoded_loader, "col_type", {})
+
+        # now do a splitted_map => e.g. "bp" => ["bp_cat","bp"], etc.
         splitted_map: Dict[str, List[str]] = {c: [] for c in syn_order}
         for c_enc in df_encoded.columns:
             base_c = c_enc[:-4] if c_enc.endswith("_cat") else c_enc
-            if base_c not in splitted_map:
-                splitted_map[base_c] = [c_enc]
-            else:
-                splitted_map[base_c].append(c_enc)
+            splitted_map.setdefault(base_c, []).append(c_enc)
 
-        # 3) flatten them => cat first => forced "cart", then main col => user or fallback
+        # build final "fit_order" => cat first => forced 'cart'
         fit_order: List[str] = []
         method_map: Dict[str, str] = {}
 
@@ -125,23 +156,42 @@ class Syn_Seq:
             sub_cols = splitted_map.get(base_col, [])
             cat_cols = [x for x in sub_cols if x.endswith("_cat")]
             main_cols = [x for x in sub_cols if not x.endswith("_cat")]
-            chosen = final_method[base_col]
 
-            # cat columns => forced "cart"
+            # (A) cat columns => forced "cart"
             for sc in cat_cols:
                 fit_order.append(sc)
                 method_map[sc] = "cart"
 
-            # main col => chosen/fallback
+            # (B) main col => check col_type => fix method if mismatch
+            chosen_m = final_method.get(base_col, self.default_other_method)
+            declared_t = col_type_map.get(base_col, "category")  # default "category"
+
+            # if numeric => ensure chosen_m in ALLOWED_NUMERIC_METHODS
+            # if category => ensure chosen_m in ALLOWED_CATEGORY_METHODS
+            cfix = chosen_m.strip().lower()
+            if declared_t.lower() == "numeric":
+                if cfix not in ALLOWED_NUMERIC_METHODS:
+                    # fallback => e.g. "norm"
+                    fallback_m = self.default_first_method if i == 0 else "norm"
+                    print(f"[TYPE-CHECK] '{base_col}' is numeric but method '{cfix}' invalid => fallback '{fallback_m}'")
+                    cfix = fallback_m
+            else:
+                # category => ensure cfix in ALLOWED_CATEGORY_METHODS
+                if cfix not in ALLOWED_CATEGORY_METHODS:
+                    # fallback => "cart"
+                    print(f"[TYPE-CHECK] '{base_col}' is category but method '{cfix}' invalid => fallback 'cart'")
+                    cfix = "cart"
+
+            # store final
             for sc in main_cols:
                 fit_order.append(sc)
-                method_map[sc] = chosen
+                method_map[sc] = cfix
 
-        # leftover columns not in syn_order
+        # leftover columns not in syn_order => fallback
         leftover = [c for c in df_encoded.columns if c not in fit_order]
         for c in leftover:
             fit_order.append(c)
-            method_map[c] = self.default_other_method  # fallback
+            method_map[c] = self.default_other_method
 
         # Logging
         print("[INFO] final synthesis:")
@@ -149,26 +199,23 @@ class Syn_Seq:
         print(f"  - method: {final_method}")
         print("  - variable_selection_:")
         print(varsel_df)
-        print("[INFO] model fitting")
+        print("\n[INFO] model fitting")
 
-        # 4) partial-fit each splitted column
         self._col_models.clear()
         for col_enc in fit_order:
             base_c = col_enc[:-4] if col_enc.endswith("_cat") else col_enc
             chosen_m = method_map[col_enc]
 
-            # get predictor set from varsel_df
+            # gather predictors from varsel_df
+            preds_list = []
             if base_c in varsel_df.index:
-                pred_mask = varsel_df.loc[base_c] == 1
-                preds_list = varsel_df.columns[pred_mask].tolist()
-                # If user doesn't want "bp", also exclude "bp_cat"
-                # e.g. if "bp" not in preds, then remove "bp_cat"
+                row_mask = varsel_df.loc[base_c] == 1
+                preds_list = varsel_df.columns[row_mask].tolist()
+                # if base is not used => also remove base_cat
                 preds_list = [
                     p for p in preds_list
                     if not (p.endswith("_cat") and p[:-4] not in preds_list)
                 ]
-            else:
-                preds_list = []
 
             y = df_encoded[col_enc].values
             X = df_encoded[preds_list].values if preds_list else np.zeros((len(y), 0))
@@ -185,18 +232,14 @@ class Syn_Seq:
         self._model_trained = True
         return self
 
-    def _fit_single_column(
-        self, y: np.ndarray, X: np.ndarray, method_name: str
-    ) -> Dict[str, Any]:
+    def _fit_single_column(self, y: np.ndarray, X: np.ndarray, method_name: str) -> Dict[str, Any]:
         """
-        We store partial info (obs_y, obs_X, method_type).
-        e.g. { "type": "cart", "obs_y": y, "obs_X": X }
-        We'll use it at generation time.
+        We store partial info for each col => { "type":..., "obs_y":..., "obs_X":... }
+        used at generation time to call e.g. syn_cart(...) or syn_norm(...)
         """
         m = method_name.strip().lower()
         if m in {
-            "cart", "ctree", "rf", "norm", "lognorm",
-            "pmm", "logreg", "polyreg"
+            "cart", "ctree", "rf", "norm", "lognorm", "pmm", "logreg", "polyreg"
         }:
             return {"type": m, "obs_y": y, "obs_X": X}
         elif m == "swr":
@@ -210,21 +253,20 @@ class Syn_Seq:
     def generate(
         self,
         count: int,
-        encoded_loader: Any,
+        encoded_loader: Any,  # same type of Syn_SeqDataLoader
         constraints: Optional[Dict[str, List[Any]]] = None,
         *args,
         **kwargs
     ) -> pd.DataFrame:
         """
-        1) Generate splitted columns
-        2) If constraints => strict or single-pass filtering
+        1) generate splitted columns in the fitted order
+        2) apply constraints if any
         3) decode => revert to original columns
-        4) Return final DataFrame
+        4) return final DataFrame
         """
         if not self._model_trained:
-            raise RuntimeError("Must fit(...) aggregator before generate().")
+            raise RuntimeError("Must fit(...) aggregator before .generate().")
 
-        # Build constraints object if dictionary is provided
         syn_constraints = None
         if constraints is not None:
             syn_constraints = Syn_SeqConstraints(chained_rules=constraints)
@@ -237,19 +279,15 @@ class Syn_Seq:
                 df_synth = syn_constraints.correct_equals(df_synth)
                 df_synth = syn_constraints.match(df_synth)
 
-        # decode => get only original user columns
+        # decode => final
         tmp_loader = encoded_loader.decorate(df_synth)
         final_loader = tmp_loader.decode(self._enc_dict)
         return final_loader.dataframe()
 
-    def _attempt_strict_generation(
-        self,
-        count: int,
-        syn_constraints: Syn_SeqConstraints
-    ) -> pd.DataFrame:
+    def _attempt_strict_generation(self, count: int, syn_constraints: Syn_SeqConstraints) -> pd.DataFrame:
         """
-        repeated attempts => gather rows meeting constraints
-        if equality => direct substitution first => then filter => drop_duplicates
+        repeated tries => gather enough rows that pass constraints
+        do direct substitution for '=' => then match => drop_duplicates => accumulate
         """
         result_df = pd.DataFrame()
         tries = 0
@@ -265,23 +303,19 @@ class Syn_Seq:
 
     def _generate_once(self, count: int) -> pd.DataFrame:
         """
-        single pass => produce splitted columns in fit_order (the order of self._col_models)
+        single pass => produce splitted columns in fit_order
         """
-        col_list = list(self._col_models.keys())
+        fit_order = list(self._col_models.keys())  # splitted columns
         syn_df = pd.DataFrame(index=range(count))
 
         print("")
-        for col_enc in col_list:
+        for col_enc in fit_order:
             info = self._col_models[col_enc]
             method_name = info["method"]
             preds = info["predictors"]
             fit_data = info["fit_info"]
 
-            if preds:
-                Xp = syn_df[preds].values
-            else:
-                Xp = np.zeros((count, 0))
-
+            Xp = syn_df[preds].values if preds else np.zeros((count, 0))
             print(f"Generating '{col_enc}' ... ", end="")
             new_vals = self._generate_single_column(method_name, fit_data, Xp, count)
             syn_df[col_enc] = new_vals
@@ -297,7 +331,7 @@ class Syn_Seq:
         count: int
     ) -> pd.Series:
         """
-        For each method type, dispatch to the corresponding generator function
+        Dispatch to the specialized column-synthesis function
         """
         m = method.strip().lower()
         y_obs = fit_info.get("obs_y")
@@ -332,7 +366,7 @@ class Syn_Seq:
                 y=y_obs,
                 X=None,
                 Xp=np.zeros((count,1)),
-                random_state=self.random_state
+                random_state=self.random_state,
             )
             return pd.Series(result["res"])
         elif m == "random":
@@ -340,7 +374,7 @@ class Syn_Seq:
                 y=y_obs,
                 X=None,
                 Xp=np.zeros((count,1)),
-                random_state=self.random_state
+                random_state=self.random_state,
             )
             return pd.Series(result["res"])
         else:
@@ -349,6 +383,6 @@ class Syn_Seq:
                 y=y_obs,
                 X=None,
                 Xp=np.zeros((count,1)),
-                random_state=self.random_state
+                random_state=self.random_state,
             )
             return pd.Series(fallback["res"])

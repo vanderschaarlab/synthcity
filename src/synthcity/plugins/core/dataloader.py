@@ -1823,8 +1823,6 @@ def create_from_info(
         raise RuntimeError(f"invalid datatype {info}")
 
 
-# File: plugins/syn_seq/syn_seq_dataloader.py
-
 class Syn_SeqDataLoader(DataLoader):
     """
     A DataLoader that applies Syn_Seq-style preprocessing to input data,
@@ -1845,7 +1843,7 @@ class Syn_SeqDataLoader(DataLoader):
         **kwargs: Any,
     ) -> None:
         if not syn_order and verbose:
-            print("[INFO] Most of the time, it is recommened to have category variables before synthesizing numeric variables")
+            print("[INFO] Most of the time, it is recommened to have category variables before synthesizing numeric variables.")
         syn_order = syn_order or list(data.columns)
 
         missing_columns = set(syn_order) - set(data.columns)
@@ -1876,7 +1874,6 @@ class Syn_SeqDataLoader(DataLoader):
             syn_order=self.syn_order,
             max_categories=self.max_categories,
             col_type=self.col_type,
-            # default_method="cart" 등 원하는 값
         )
         self._encoder.fit(self._df)
 

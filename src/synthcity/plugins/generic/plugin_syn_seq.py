@@ -11,57 +11,65 @@ from synthcity.plugins.core.dataloader import DataLoader, Syn_SeqDataLoader
 from synthcity.plugins.core.schema import Schema
 from synthcity.plugins.core.constraints import Constraints
 
-# local aggregator
+# Our sequential aggregator
 from synthcity.plugins.core.models.syn_seq.syn_seq import Syn_Seq
 
 
 class Syn_SeqPlugin(Plugin):
     """
-    A plugin for a sequential (column-by-column) synthetic data approach,
-    mirroring R's 'synthpop'. Internally, it delegates to the `Syn_Seq`
-    aggregator from syn_seq.py for the actual column-by-column (sequential) logic.
+    A plugin for column-by-column sequential synthesis (similar to R's 'synthpop').
+    Internally, it delegates to the `Syn_Seq` aggregator for the actual
+    column-by-column logic:
 
-    - This is intended for sequential regression style: each column is modeled
-      in the order, using prior columns as predictors.
-    - We rely on the custom `Syn_SeqDataLoader`, which organizes columns,
-      applies a Syn_SeqEncoder, etc.
-    - The aggregator's generate(...) returns a Syn_SeqDataLoader as well.
+    1) We expect a Syn_SeqDataLoader, which organizes columns, applies
+       Syn_SeqEncoder for special values, etc.
+    2) The aggregator `.fit()` will encode the loader, partial-fit each splitted column.
+    3) The aggregator `.generate()` will produce new synthetic data, decode to original columns.
+    4) This plugin returns that synthesized data as another Syn_SeqDataLoader.
 
-    Basic usage:
+    Example usage:
 
-        # Suppose we have df, and we wrap it in a Syn_SeqDataLoader:
+        from synthcity.plugins.core.dataloader import Syn_SeqDataLoader
+        from synthcity.plugins import Plugins
+
+        # Suppose df is your raw dataset
         loader = Syn_SeqDataLoader(
-            data = df, 
+            df,
             syn_order = [...],
             col_type = {...},
             special_value = {...},
         )
 
-        # Build plugin
-        syn_model = Syn_SeqPlugin(
+        # Build the plugin
+        syn_model = Plugins().get("syn_seq")(
             random_state=42,
-            default_first_method="SWR", 
-            default_other_method="CART",
-            # optionally strict=True, sampling_patience=500, ...
+            default_first_method="swr",
+            default_other_method="cart",
+            strict=True,
+            sampling_patience=500,
         )
 
-        # Fit with per-column method
-        methods = ["SWR"] + ["CART"]*(len(loader.columns)-1)
-        var_sel = {"N2": ["C1","C2"], "N1":["C1","C2","N2"]}
-
-        syn_model.fit(loader, method=methods, variable_selection=var_sel)
-
-        # Now generate
-        synthetic_data_loader = syn_model.generate(count=100)
-        synthetic_df = synthetic_data_loader.dataframe()
-
-        # If you need constraints:
-        constraints = {
-          "N1": [">", 100],
-          "C2": ["in", ["A","B"]]
+        # Optionally define user_custom
+        user_custom = {
+            "syn_order": [...],
+            "method": {"bp":"polyreg"},
+            "variable_selection": {
+                "target": ["bp","bmi","age", ...]
+            }
         }
-        synthetic_data_loader = syn_model.generate(count=100, constraints=constraints)
-        # Above remains a Syn_SeqDataLoader
+
+        # Fit
+        syn_model.fit(loader, user_custom=user_custom)
+
+        # Synthesize
+        constraints = {
+            "target": [
+                ("bmi", ">", 0.15),
+                ("target", ">", 0)
+            ]
+        }
+        synthetic_loader = syn_model.generate(count=1000, constraints=constraints)
+        synthetic_df = synthetic_loader.dataframe()
     """
 
     @staticmethod
@@ -74,54 +82,67 @@ class Syn_SeqPlugin(Plugin):
 
     @staticmethod
     def hyperparameter_space(**kwargs: Any) -> list:
-        # No tunable hyperparameters for now
+        # No hyperparameters to tune by default
         return []
 
     def __init__(
         self,
         random_state: int = 0,
-        default_first_method: str = "SWR",
-        default_other_method: str = "CART",
+        default_first_method: str = "swr",
+        default_other_method: str = "cart",
+        strict: bool = True,
+        sampling_patience: int = 100,
         **kwargs: Any,
     ):
         """
         Args:
-            random_state: For reproducibility.
-            default_first_method: fallback method for the first column if user doesn't override.
-            default_other_method: fallback method for subsequent columns.
-            **kwargs: forwarded to Plugin(...) => can contain strict, sampling_patience, etc.
+            random_state: seed for reproducibility
+            default_first_method: fallback method for the first column (if not user-specified)
+            default_other_method: fallback for subsequent columns
+            strict: if True => repeated attempts to meet constraints
+            sampling_patience: maximum number of tries in strict mode
+            **kwargs: forwarded to the Plugin base class (e.g., plugin name, etc.)
         """
         super().__init__(random_state=random_state, **kwargs)
 
-        # We hold a Syn_Seq aggregator. This aggregator does the real sequential logic:
+        # Build our aggregator with the relevant arguments
         self._aggregator = Syn_Seq(
             random_state=random_state,
+            strict=strict,
+            sampling_patience=sampling_patience,
             default_first_method=default_first_method,
             default_other_method=default_other_method,
-            strict=self.strict,
-            sampling_patience=self.sampling_patience,
         )
         self._model_trained = False
 
     def _fit(
         self,
         X: DataLoader,
-        method: Optional[List[str]] = None,
-        variable_selection: Optional[Dict[str, List[str]]] = None,
+        user_custom: Optional[dict] = None,
         *args: Any,
         **kwargs: Any
     ) -> "Syn_SeqPlugin":
         """
-        We expect X to be a Syn_SeqDataLoader for sequential usage.
-        We pass 'method' and 'variable_selection' to the aggregator.
+        Fit the aggregator using a Syn_SeqDataLoader.
+
+        Args:
+            X: Must be a Syn_SeqDataLoader containing the raw data, syn_order, col_type, etc.
+            user_custom: a dictionary that can specify:
+                - "syn_order" : list of columns in desired order
+                - "method" : { column_name: method_name, ... }
+                - "variable_selection" : { target_col : [predictor_cols] }
+            *args, **kwargs: additional parameters (if needed)
+
+        Raises:
+            TypeError if X is not a Syn_SeqDataLoader
         """
         if not isinstance(X, Syn_SeqDataLoader):
             raise TypeError("Syn_SeqPlugin expects a Syn_SeqDataLoader for sequential usage.")
 
+        # aggregator fit => merges user_custom into loader => encode => partial-fit
         self._aggregator.fit(
             loader=X,
-            method=method,
-            variable_selection=variable_selection,
+            user_custom=user_custom,
             *args,
             **kwargs
         )
@@ -133,19 +154,38 @@ class Syn_SeqPlugin(Plugin):
         count: int,
         syn_schema: Schema,
         constraints: Optional[Constraints] = None,
+        X: Optional[DataLoader] = None,
         **kwargs: Any
     ) -> DataLoader:
         """
-        Create synthetic data as a Syn_SeqDataLoader. We pass optional constraints
-        (which might be a dictionary or a Constraints object) to aggregator.
+        Generate synthetic data as a DataLoader (Syn_SeqDataLoader).
+        We pass optional constraints to aggregator (which can be dict or Constraints object).
+
+        Args:
+            count: number of rows to generate
+            syn_schema: a Schema object (unused here, but required by base)
+            constraints: a constraints dictionary or Constraints object
+            X: a DataLoader. Typically the same we used for fit. If None, aggregator can't decode.
+            **kwargs: additional parameters for aggregator.generate
+
+        Returns:
+            A Syn_SeqDataLoader containing the synthetic data.
         """
         if not self._model_trained:
             raise RuntimeError("Must fit Syn_SeqPlugin before generating data.")
 
-        return self._aggregator.generate(
+        if X is None:
+            raise ValueError("Syn_SeqPlugin.generate requires a DataLoader reference for decoding.")
+
+        # aggregator.generate => returns a pd.DataFrame
+        df_synth = self._aggregator.generate(
             count=count,
-            constraint=constraints,
+            encoded_loader=X,  # pass the same (or similar) loader
+            constraints=constraints,
             **kwargs
         )
+        # We want to return a Syn_SeqDataLoader (like the aggregator once did).
+        # We can just decorate it with X, so the user can .dataframe() or .decode() further.
+        return X.decorate(df_synth)
 
 plugin = Syn_SeqPlugin
