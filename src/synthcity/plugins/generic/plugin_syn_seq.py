@@ -8,15 +8,39 @@ from pydantic import validate_arguments
 
 # synthcity absolute
 from synthcity.plugins.core.plugin import Plugin
-from synthcity.plugins.core.dataloader import DataLoader, Syn_SeqDataLoader
-from synthcity.plugins.core.schema import Schema
-from synthcity.plugins.core.distribution import Distribution
-from synthcity.plugins.core.models.syn_seq.syn_seq import Syn_Seq
+from synthcity.plugins.core.dataloader import (
+    DataLoader,
+    create_from_info,
+)
 from synthcity.plugins.core.constraints import Constraints
+from synthcity.plugins.core.distribution import Distribution
+from synthcity.plugins.core.schema import Schema
+from synthcity.plugins.core.models.syn_seq.syn_seq import Syn_Seq
+
 
 class Syn_SeqPlugin(Plugin):
     """
     A plugin wrapping the 'Syn_Seq' aggregator in the synthcity Plugin interface.
+
+    **Key Features**:
+      - We override .generate() to bypass the parent's domain-based constraints
+        (i.e. skipping `Schema.from_constraints(...))`.
+      - We define a minimal `_generate(...)` method so the class is no longer abstract
+        (the base Plugin requires `_generate(...)` to exist).
+      - After generating, we also decode the data if `self._data_encoders` exists. 
+        This step is essential so the final returned DataLoader matches the original 
+        data format (e.g. reversing label-encodings, etc.).
+
+    Where to put the decoder:
+      - Notice in our `generate(...)` method, after we call
+        `create_from_info(raw_df, self.data_info)`, we get a DataLoader with 
+        the same column structure but still possibly encoded. 
+        If we want the original format (column dtypes, special values, etc.), 
+        we do:
+           if X_syn.is_tabular() and self._data_encoders is not None:
+               X_syn = X_syn.decode(self._data_encoders)
+        Then the returned DataLoader .dataframe() will be in the original format.
+
     """
 
     @staticmethod
@@ -29,7 +53,7 @@ class Syn_SeqPlugin(Plugin):
 
     @staticmethod
     def hyperparameter_space(**kwargs: Any) -> List[Distribution]:
-        # Return an empty list for now, or add distributions for tuning your hyperparams
+        # Provide any hyperparameter distributions you want to tune
         return []
 
     @validate_arguments(config=dict(arbitrary_types_allowed=True))
@@ -43,7 +67,25 @@ class Syn_SeqPlugin(Plugin):
         sampling_strategy: str = "marginal",
         **kwargs: Any
     ) -> None:
-        # Pass these to the base class Plugin
+        """
+        Args:
+            random_state: int
+                Random seed for reproducibility.
+            sampling_patience: int
+                Maximum iterations for sampling if we must meet constraints.
+            strict: bool
+                Whether to drop rows that do not meet constraints (True) 
+                or keep them (False).
+            workspace: Path
+                Caching path.
+            compress_dataset: bool
+                If True, the plugin can optionally compress the dataset 
+                before training (to remove redundancy).
+            sampling_strategy: str
+                Usually "marginal" or "uniform" (internal).
+            **kwargs:
+                Additional plugin arguments if needed.
+        """
         super().__init__(
             random_state=random_state,
             sampling_patience=sampling_patience,
@@ -54,11 +96,14 @@ class Syn_SeqPlugin(Plugin):
         )
         self.model: Optional[Syn_Seq] = None
 
+    # ---------------------------------------------------------------------
+    # 1) Fit the aggregator
+    # ---------------------------------------------------------------------
     def _fit(self, X: DataLoader, *args: Any, **kwargs: Any) -> "Syn_SeqPlugin":
         """
-        Internally call Syn_Seq.fit(...)
+        Internal method for fitting the aggregator to the data
         """
-        # Create aggregator
+        # Build aggregator
         self.model = Syn_Seq(
             random_state=self.random_state,
             strict=self.strict,
@@ -68,28 +113,85 @@ class Syn_SeqPlugin(Plugin):
         self.model.fit(X, *args, **kwargs)
         return self
 
-    def _generate(self, count: int, syn_schema: Schema, **kwargs: Any) -> DataLoader:
+    # ---------------------------------------------------------------------
+    # 2) Minimal _generate(...) to satisfy abstract requirement
+    #    (We do not actually use this code path in this plugin.)
+    # ---------------------------------------------------------------------
+    def _generate(
+        self,
+        count: int,
+        syn_schema: Schema,
+        **kwargs: Any
+    ) -> DataLoader:
         """
-        Use Syn_Seq.generate(...) to produce the raw DataFrame,
-        then convert it to a Syn_SeqDataLoader with the same 'info' as training data (except we just guess).
-        We can also handle user-provided 'rules' from kwargs if needed.
+        The parent's .generate(...) calls ._generate(...) by default. 
+        But here we override .generate(...) entirely, so this is effectively unused.
+        We raise an error or you can choose to do a fallback generation 
+        if you prefer.
         """
-        if self.model is None:
-            raise RuntimeError("Model not fitted yet")
+        raise NotImplementedError(
+            "Syn_SeqPlugin uses a custom .generate() that bypasses the parent's domain constraints."
+        )
+
+    # ---------------------------------------------------------------------
+    # 3) Fully override .generate(...) to skip from_constraints + domain logic
+    # ---------------------------------------------------------------------
+    @validate_arguments(config=dict(arbitrary_types_allowed=True))
+    def generate(
+        self,
+        count: Optional[int] = None,
+        constraints: Optional[Constraints] = None,
+        random_state: Optional[int] = None,
+        **kwargs: Any,
+    ) -> DataLoader:
+        """
+        Custom generate method ignoring parent's ._generate(...) calls.
+
+        Args:
+            count: number of samples to generate. Defaults to length of training data.
+            constraints: optional Constraints object. If `strict=True`, we will filter 
+                         out violating rows after generation.
+            random_state: optional int. If you want reproducible results, pass a new seed.
+            rules: optional dict. e.g. rules = {
+                'colname': [
+                   ('feature1','>', 0.15),
+                   ('colname','>', 0)
+                ]
+            }
+            etc.
+        Returns:
+            A DataLoader with newly generated data, possibly decoded to original format.
+        """
+        if not self.fitted:
+            raise RuntimeError("Must fit() plugin before calling generate().")
+
+        if count is None:
+            count = self.data_info["len"]  # fallback to training set size
+
+        if random_state is not None:
+            # re-seed if desired
+            import numpy as np
+            np.random.seed(random_state)
+
+        # Extract 'rules' from kwargs if passed
         rules = kwargs.pop("rules", None)
 
-        # We'll do the standard "safe_generate" approach
-        def gen_cbk(num_samples: int, **inner_kwargs):
-            # returns a raw pd.DataFrame
-            return self.model.generate(nrows=num_samples, rules=rules)
+        # Use our aggregator's direct generation
+        raw_df = self.model.generate(nrows=count, rules=rules)
+        # Convert raw DataFrame -> DataLoader with the same data_info as training set
+        X_syn = create_from_info(raw_df, self.data_info)
 
-        # If your data is tabular, we can do the usual _safe_generate
-        if self.data_info["data_type"] == "syn_seq":
-            # We do self._safe_generate with gen_cbk
-            return self._safe_generate(gen_cbk, count, syn_schema, **kwargs)
-        elif self.data_info["data_type"] in ["time_series", "time_series_survival"]:
-            return self._safe_generate_time_series(gen_cbk, count, syn_schema, **kwargs)
-        else:
-            return self._safe_generate(gen_cbk, count, syn_schema, **kwargs)
+        # (Optionally) apply constraints if we are strict
+        if constraints is not None and self.strict:
+            X_syn = X_syn.match(constraints)
 
+        # (Optional) decode the data to restore original dtype/encoding
+        # This is the recommended place to ensure returning the original data format:
+        if X_syn.is_tabular() and self._data_encoders is not None:
+            X_syn = X_syn.decode(self._data_encoders)
+
+        return X_syn
+
+
+# Required by the plugin loader
 plugin = Syn_SeqPlugin
