@@ -66,10 +66,12 @@ class Syn_SeqEncoder(TransformerMixin, BaseEstimator):
         X = X.copy()
         X = self._reorder_columns(X)
         X = self._convert_date_to_offset(X)
+        # -------------------- split 발생 --------------------
         X = self._split_numeric_cols_in_front(X)
+        # ----------------------------------------------------
         X = self._apply_converted_dtype(X)
 
-        # 새 col이 생겼을 경우 variable_selection_ dict 업데이트
+        # **split 후 variable_selection_ dict 업데이트**
         self._update_varsel_dict_after_split(X)
         return X
 
@@ -145,19 +147,36 @@ class Syn_SeqEncoder(TransformerMixin, BaseEstimator):
 
     def _update_varsel_dict_after_split(self, X: pd.DataFrame) -> None:
         """
-        split_numeric_cols_in_front(...) 로 "xx_cat" 같은 새 컬럼이 생겼을 때,
-        variable_selection_ dict에도 반영.
-        default로: 새 컬럼 idx = syn_order.index(새컬럼) 이전 것들을 predictor로 할당
+        새로 생긴 col(e.g. bp_cat)에 대해서,
+          1) variable_selection_ dict에 없으면 "기본 predictor" 설정
+          2) 만약 기존 predictor 중 'bp'가 있으면 'bp_cat'도 추가
         """
         if self.variable_selection_ is None:
             return
 
+        # 1) 어떤 base_col -> cat_col 이 생겼는지 확인용 map
+        new_splits = {}  # 예: {"bp": "bp_cat", "xxx": "xxx_cat", ...}
+
+        for col in self.syn_order:
+            if col.endswith("_cat"):
+                base = col[:-4]
+                if base in self.col_map:  # numeric -> cat
+                    new_splits[base] = col
+
+        # 2) variable_selection_에 새 컬럼이 없으면 기본 predictor 세팅
         for col in X.columns:
             if col not in self.variable_selection_ and col in self.syn_order:
-                # 새로 생긴 컬럼. index 찾기
+                # 새로 생긴 컬럼 => 앞의 col들로 default predictor 세팅
                 idx = self.syn_order.index(col)
-                # 앞의 idx개를 predictor로
                 self.variable_selection_[col] = self.syn_order[:idx]
+
+        # 3) "기존 predictor 중 base_col이 있으면 cat_col도 추가"
+        for tgt_col, pred_list in self.variable_selection_.items():
+            updated = set(pred_list)  # 중복 방지 위해 set 사용
+            for base_col, cat_col in new_splits.items():
+                if base_col in updated:
+                    updated.add(cat_col)
+            self.variable_selection_[tgt_col] = list(updated)
 
     def _varsel_dict_to_df(
         self, vs_dict: Dict[str, List[str]], syn_order: List[str]
