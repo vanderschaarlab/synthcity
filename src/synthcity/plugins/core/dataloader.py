@@ -1806,170 +1806,205 @@ class ImageDataLoader(DataLoader):
 
 class Syn_SeqDataLoader(DataLoader):
     """
-    A DataLoader that applies Syn_Seq-style preprocessing to input data,
-    and optionally allows user_custom (syn_order, variable_selection, method) updates
-    via update_user_custom(...).
+    A DataLoader that:
+      1) Receives user_custom for syn_seq-specific settings (syn_order, special_value, col_type, etc).
+      2) During __init__, we do:
+         - parse user_custom
+         - create/fill Syn_SeqEncoder
+         - fit+transform raw_df => splitted_df
+         - call super().__init__ with splitted_df
+      3) Only one-time transformation is done in __init__.
+      4) aggregator가 decode(...) 등 호출 가능
     """
 
     def __init__(
         self,
         data: pd.DataFrame,
-        syn_order: Optional[List[str]] = None,
-        special_value: Optional[Dict[str, List[Any]]] = None,
-        col_type: Optional[Dict[str, str]] = None,
-        max_categories: int = 20,
+        user_custom: Optional[Dict[str, Any]] = None,
         random_state: int = 0,
         train_size: float = 0.8,
+        max_categories: int = 20,
         verbose: bool = True,
         **kwargs: Any,
-    ) -> None:
-        if not syn_order and verbose:
-            print("[INFO] Most of the time, it is recommened to have category variables before synthesizing numeric variables.")
-        syn_order = syn_order or list(data.columns)
+    ):
+        # 1) raw_df 보관
+        self.raw_df = data.copy()
 
-        missing_columns = set(syn_order) - set(data.columns)
-        if missing_columns:
-            raise ValueError(f"Missing columns in input data: {missing_columns}")
+        # 2) user_custom 파싱
+        syn_order = None
+        columns_special_values: Dict[str, List[Any]] = {}
+        col_type: Dict[str, str] = {}
+        # 여기서 variable_selection을 따로 빼서 encoder에 넘기거나 할 수 있지만,
+        # encoder.get_info()만으로도 `variable_selection_`을 다룰 수 있으므로
+        # 꼭 별도 변수로 보관 안 해도 됨.
+        # user_custom["variable_selection"]이 있으면, fit 후에 override 가능
 
-        self.syn_order = syn_order
-        self.columns_special_values = special_value or {}
-        self.col_type = col_type or {}
-        self.max_categories = max_categories
-        self._verbose = verbose
+        if user_custom:
+            if "syn_order" in user_custom:
+                syn_order = user_custom["syn_order"]
+            if "special_value" in user_custom:
+                columns_special_values = user_custom["special_value"]
+            if "col_type" in user_custom:
+                col_type = user_custom["col_type"]
+            if "max_categories" in user_custom:
+                max_categories = user_custom["max_categories"]
 
-        # 재배치된 DataFrame
-        self._df = data[self.syn_order].copy()
+        if syn_order is None:
+            syn_order = list(self.raw_df.columns)
+            if verbose:
+                print("[WARN] user did not specify 'syn_order', using raw_df.columns order.")
 
-        # 부모 DataLoader 생성자
+        missing_cols = set(syn_order) - set(self.raw_df.columns)
+        if missing_cols:
+            raise ValueError(f"Syn_SeqDataLoader init error: missing columns {missing_cols} in data")
+
+        # 3) encoder 생성
+        self._encoder = Syn_SeqEncoder(
+            columns_special_values=columns_special_values,
+            syn_order=syn_order,
+            max_categories=max_categories,
+            col_type=col_type,
+        )
+
+        # 4) fit + transform
+        self._encoder.fit(self.raw_df)
+        splitted_df = self._encoder.transform(self.raw_df)
+
+        # user_custom["variable_selection"]이 있다면, fit 이후에 세팅 가능
+        if user_custom and "variable_selection" in user_custom:
+            vs_dict = user_custom["variable_selection"]
+            # self._encoder.variable_selection_ 이 None이 아니라고 가정
+            if self._encoder.variable_selection_ is not None:
+                for target_col, preds in vs_dict.items():
+                    if target_col in self._encoder.variable_selection_.index:
+                        # reset row
+                        self._encoder.variable_selection_.loc[target_col, :] = 0
+                        for p in preds:
+                            if p in self._encoder.variable_selection_.columns:
+                                self._encoder.variable_selection_.at[target_col, p] = 1
+
+        # 5) 부모 DataLoader init => splitted_df
         super().__init__(
             data_type="syn_seq",
-            data=self._df,
+            data=splitted_df,
             random_state=random_state,
             train_size=train_size,
-            **kwargs,
+            **kwargs
         )
 
-        # ---- encoder 생성 + fit ----
-        self._encoder = Syn_SeqEncoder(
-            columns_special_values=self.columns_special_values,
-            syn_order=self.syn_order,
-            max_categories=self.max_categories,
-            col_type=self.col_type,
-        )
-        self._encoder.fit(self._df)
-
-        if self._verbose:
-            print("[INFO] Syn_SeqDataLoader init complete:")
-            print(f"  - syn_order: {self.syn_order}")
-            print(f"  - special_value: {self.columns_special_values}")
-            print(f"  - col_type: {self.col_type}")
-            print(f"  - data shape: {self._df.shape}")
-
-            print("\n[DEBUG] After encoder.fit(), ready for preprocessing with detected info:")
-
-            print(f"  - special_value: {self._encoder.columns_special_values}")
-            # 1) encoder.col_map (각 컬럼: {original_dtype, converted_type, method})
-            if hasattr(self._encoder, "col_map"):
-                print("  - encoder.col_map =>")
-                for col_name, cinfo in self._encoder.col_map.items():
-                    # 원하는 방식: original_dtype 숨기고 converted_type, method 만 노출
-                    converted_t = cinfo.get("converted_type", "??")
-                    method_t = cinfo.get("method", "??")
-                    print(f"       {col_name} : "
-                        f"converted_type={converted_t}, method={method_t}")
-
-            # 2) variable_selection_ (있으면 출력)
-            if self._encoder.variable_selection_ is not None:
+        if verbose:
+            print("[INFO] Syn_SeqDataLoader init complete. final splitted_df shape =", self.data.shape)
+            enc_info = self._encoder.get_info()
+            print("  - syn_order:", enc_info["syn_order"])
+            print("  - special_value:", enc_info["special_value"])
+            print("  - col_type:", col_type)
+            print("  - max_categories:", max_categories)
+            # encoder.col_map
+            print("  - encoder.col_map =>")
+            for c, cinfo in self._encoder.col_map.items():
+                print(f"    {c}: original_dtype={cinfo['original_dtype']},"
+                      f" converted_type={cinfo['converted_type']}, method={cinfo['method']}")
+            vs_ = enc_info.get("variable_selection")
+            if vs_ is not None:
                 print("  - variable_selection_:")
-                # 예: 만약 열이 많아 한 줄에 짤린다면, pandas display option 조정
-                with pd.option_context('display.max_columns', None, 
-                                    'display.width', 1000):
-                    print(self._encoder.variable_selection_)
-
-            # 3) date_mins 등 다른 필드는 사용자가 안 봐도 된다고 했으므로 주석 처리
-            # if hasattr(self._encoder, "date_mins"):
-            #     print(f"  - date_mins: {self._encoder.date_mins}")
-
+                print(vs_)
             print("----------------------------------------------------------------")
 
-
-    # ----------------------------------------------------------------
-    # Inherited/required abstract methods
-    # ----------------------------------------------------------------
     @property
     def shape(self) -> tuple:
-        return self._df.shape
+        return self.data.shape
 
     @property
     def columns(self) -> list:
-        return list(self._df.columns)
+        return list(self.data.columns)
 
     def dataframe(self) -> pd.DataFrame:
-        return self._df
+        return self.data
 
     def numpy(self) -> pd.DataFrame:
-        return self._df.values
+        return self.data.values
 
     def info(self) -> dict:
-        return {
+        """
+        Return info combining self._encoder.get_info() + DataLoader standard info
+        """
+        base_info = {
             "data_type": self.data_type,
             "len": len(self),
             "train_size": self.train_size,
             "random_state": self.random_state,
-            "syn_order": self.syn_order,
-            "max_categories": self.max_categories,
-            "col_type": self.col_type,
-            "columns_special_values": self.columns_special_values,
         }
+        enc_info = self._encoder.get_info()
+        # 여기 enc_info에는 variable_selection도 들어 있음
+        base_info.update(enc_info)
+        return base_info
 
     def __len__(self) -> int:
-        return len(self._df)
+        return len(self.data)
 
     def satisfies(self, constraints: Constraints) -> bool:
-        return constraints.is_valid(self._df)
+        return constraints.is_valid(self.data)
 
     def match(self, constraints: Constraints) -> "Syn_SeqDataLoader":
-        matched_df = constraints.match(self._df)
+        matched_df = constraints.match(self.data)
         return self.decorate(matched_df)
 
     @staticmethod
     def from_info(data: pd.DataFrame, info: dict) -> "Syn_SeqDataLoader":
+        # rebuild user_custom from info
+        user_custom = {
+            "syn_order": info.get("syn_order"),
+            "special_value": info.get("special_value", {}),
+            "col_type": info.get("col_type", {}),
+            "max_categories": info.get("max_categories", 20),
+        }
+        # variable_selection도 info에 있으면 reconstruct 가능
+        if "variable_selection" in info and info["variable_selection"] is not None:
+            # to DataFrame
+            if isinstance(info["variable_selection"], pd.DataFrame):
+                vs_df = info["variable_selection"].copy()
+            else:
+                # 만약 dict 형태로 저장되어 있다면, 다시 DataFrame으로 구성해야 할 수도 있음
+                vs_df = pd.DataFrame(info["variable_selection"])
+            user_custom["variable_selection"] = {
+                r: vs_df.columns[vs_df.loc[r] == 1].tolist()
+                for r in vs_df.index
+            }
+
         return Syn_SeqDataLoader(
             data=data,
-            syn_order=info.get("syn_order"),
-            special_value=info.get("columns_special_values", {}),
-            col_type=info.get("col_type", {}),
-            max_categories=info.get("max_categories", 20),
-            random_state=info["random_state"],
-            train_size=info["train_size"],
+            user_custom=user_custom,
+            random_state=info.get("random_state", 0),
+            train_size=info.get("train_size", 0.8),
+            verbose=False,
         )
 
     def sample(self, count: int, random_state: int = 0) -> "Syn_SeqDataLoader":
-        sampled_df = self._df.sample(count, random_state=random_state)
+        sampled_df = self.data.sample(count, random_state=random_state)
         return self.decorate(sampled_df)
 
     def drop(self, columns: list = []) -> "Syn_SeqDataLoader":
-        dropped_df = self._df.drop(columns=columns, errors="ignore")
+        dropped_df = self.data.drop(columns=columns, errors="ignore")
         return self.decorate(dropped_df)
 
     def __getitem__(self, feature: Union[str, list, int]) -> Any:
-        return self._df[feature]
+        return self.data[feature]
 
     def __setitem__(self, feature: str, val: Any) -> None:
-        self._df[feature] = val
+        self.data[feature] = val
 
     def train(self) -> "Syn_SeqDataLoader":
-        ntrain = int(len(self._df) * self.train_size)
-        train_df = self._df.iloc[:ntrain].copy()
+        ntrain = int(len(self.data) * self.train_size)
+        train_df = self.data.iloc[:ntrain].copy()
         return self.decorate(train_df)
 
     def test(self) -> "Syn_SeqDataLoader":
-        ntrain = int(len(self._df) * self.train_size)
-        test_df = self._df.iloc[ntrain:].copy()
+        ntrain = int(len(self.data) * self.train_size)
+        test_df = self.data.iloc[ntrain:].copy()
         return self.decorate(test_df)
 
     def fillna(self, value: Any) -> "Syn_SeqDataLoader":
-        filled_df = self._df.fillna(value)
+        filled_df = self.data.fillna(value)
         return self.decorate(filled_df)
 
     def compression_protected_features(self) -> list:
@@ -1980,102 +2015,50 @@ class Syn_SeqDataLoader(DataLoader):
 
     def unpack(self, as_numpy: bool = False, pad: bool = False) -> Any:
         if as_numpy:
-            return self._df.to_numpy()
-        return self._df
+            return self.data.to_numpy()
+        return self.data
 
     def get_fairness_column(self) -> Union[str, Any]:
         return None
 
-    # ----------------------------------------------------------------
-    # encode/decode
-    # ----------------------------------------------------------------
-    def encode(
-        self, encoders: Optional[Dict[str, Any]] = None
-    ) -> Tuple["Syn_SeqDataLoader", Dict]:
-        """
-        Typically used by aggregator's fit step.
-        """
-        if encoders is None:
-            encoded_data = self._encoder.transform(self._df)
-            new_loader = self.decorate(encoded_data)
-            return new_loader, {"syn_seq_encoder": self._encoder}
-        else:
-            return self, encoders
+    def encode(self, encoders: Optional[Dict[str, Any]] = None):
+        print("[WARN] encode() called again. We already splitted in __init__.")
+        return self, {"syn_seq_encoder": self._encoder}
 
     def decode(self, encoders: Dict[str, Any]) -> "Syn_SeqDataLoader":
         if "syn_seq_encoder" in encoders:
-            encoder = encoders["syn_seq_encoder"]
-            if not isinstance(encoder, Syn_SeqEncoder):
-                raise TypeError(f"Expected Syn_SeqEncoder, got {type(encoder)}")
-            decoded_data = encoder.inverse_transform(self._df)
-            return self.decorate(decoded_data)
+            dec_data = encoders["syn_seq_encoder"].inverse_transform(self.data)
+            return self.decorate(dec_data)
         return self
 
     def decorate(self, data: pd.DataFrame) -> "Syn_SeqDataLoader":
-        """
-        Helper for creating a new instance with the same settings but new data.
-        """
+        # decorate with same user_custom (or partial)
+        user_custom = {
+            "syn_order": self._encoder.syn_order,
+            "special_value": self._encoder.columns_special_values,
+            "col_type": self._encoder.col_type,
+            "max_categories": self._encoder.max_categories,
+        }
+        # variable_selection도 다시 reconstruct 가능
+        if self._encoder.variable_selection_ is not None:
+            # 단순히 row-> list of preds
+            vs_dict = {}
+            for row_idx in self._encoder.variable_selection_.index:
+                row_data = self._encoder.variable_selection_.loc[row_idx]
+                used_preds = row_data.index[row_data == 1].tolist()
+                vs_dict[row_idx] = used_preds
+            user_custom["variable_selection"] = vs_dict
+
         new_loader = Syn_SeqDataLoader(
             data=data,
-            syn_order=self.syn_order,
-            special_value=self.columns_special_values,
-            col_type=self.col_type,
-            max_categories=self.max_categories,
+            user_custom=user_custom,
             random_state=self.random_state,
             train_size=self.train_size,
-            verbose=self._verbose,
+            verbose=False
         )
+        # encoder 공유
+        new_loader._encoder = self._encoder
         return new_loader
-    
-    # ----------------------------------------------------------------
-    # RE-INTRODUCE update_user_custom(...)
-    # ----------------------------------------------------------------
-    def update_user_custom(self, user_custom: Dict[str, Any]) -> "Syn_SeqDataLoader":
-        """
-        Allows user to update certain aspects (syn_order, variable_selection, method),
-        without calling transform() here.
-        The aggregator (or user) will later call self.encode() => encoder.transform() once.
-        """
-
-        # 1) syn_order
-        if "syn_order" in user_custom:
-            new_order = user_custom["syn_order"]
-            self.syn_order = new_order
-            self._encoder.syn_order = new_order
-
-        # 2) variable_selection
-        if "variable_selection" in user_custom:
-            vs_val = user_custom["variable_selection"]
-            if isinstance(vs_val, dict):
-                current_vs = self._encoder.variable_selection_
-                if current_vs is None:
-                    # 만약 encoder.variable_selection_이 아직 None이면,
-                    # syn_order 크기에 맞춰 생성
-                    all_cols = self.syn_order
-                    current_vs = pd.DataFrame(0, index=all_cols, columns=all_cols)
-                updated_vs = self._encoder.update_variable_selection(current_vs, vs_val)
-                self._encoder.variable_selection_ = updated_vs
-            elif isinstance(vs_val, pd.DataFrame):
-                # 직접 대입
-                self._encoder.variable_selection_ = vs_val.copy()
-            else:
-                print(f"[WARNING] variable_selection must be dict or DataFrame, got {type(vs_val)}")
-
-        # 3) method
-        if "method" in user_custom:
-            # 여기서는 데이터로더가 직접 method 정보를 쓰지 않을 수도 있음
-            # aggregator fit 시점에 활용하도록, 일단 저장만
-            self._method = user_custom["method"]
-
-        # (중요) transform/decorate 호출 제거 → “한 번만 변환” 원칙
-        # => 아래 두 줄(이전 버전의 step 4,5)은 제거/주석 처리
-        #
-        # encoded_df = self._encoder.transform(self._df)
-        # updated_loader = self.decorate(encoded_df)
-        # self.__dict__.update(updated_loader.__dict__)
-
-        # 대신 자기 자신 그대로 반환
-        return self
 
 
 @validate_arguments(config=dict(arbitrary_types_allowed=True))
