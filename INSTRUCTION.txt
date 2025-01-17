@@ -118,10 +118,6 @@ target    1    1    1   1   1   1   1   0   0   0       0
 ----------------------------------------------------------------
 <expected print output end>
 
-Before fit, user can also customize using methods in dataloder. For instance,
-syn_model.syn_order = ['sex', 'bmi', 'age', 'bp', 's1', 's2', 's3', 's4', 's5', 's6', 'target']
-This would also do the same job as user customization at dataloder stage.
-
 syn_model = Plugins().get("syn_seq")
 syn_model.fit(loader)
 <expected print output begin>
