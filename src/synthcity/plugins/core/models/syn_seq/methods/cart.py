@@ -1,139 +1,102 @@
-# synthcity/plugins/syn_seq/methods/cart.py
-
-"""
-Implementation of CART-based data synthesis.
-
-This approach fits a decision tree (regression or classification) on the observed data.
-Then, for each new input row, we locate the corresponding leaf node and sample the
-synthetic values from the observed data points that ended up in that leaf node.
-
-If the target is numeric, a regression tree is used.
-If the target is categorical, a classification tree is used.
-
-Optionally, you can apply a simple smoothing step for numeric targets by specifying
-`smoothing="density"`.
-"""
-
-from typing import Any, Dict, Optional
+# cart.py
 import numpy as np
 import pandas as pd
 from sklearn.tree import DecisionTreeRegressor, DecisionTreeClassifier
 
-try:
-    from .misc import syn_smooth
-except ImportError:
-    # Fallback if not found
-    def syn_smooth(ysyn: np.ndarray, yobs: np.ndarray) -> np.ndarray:
-        return ysyn  # no-op fallback
 
-
-def syn_cart(
-    y: np.ndarray,
-    X: np.ndarray,
-    Xp: np.ndarray,
-    smoothing: str = "",
-    proper: bool = False,
-    min_samples_leaf: int = 5,
-    max_leaf_nodes: Optional[int] = None,
-    random_state: Optional[int] = None,
-    **kwargs: Any,
-) -> Dict[str, Any]:
+def syn_cart(y, X, random_state=0, **kwargs):
     """
-    CART-based data synthesis.
+    Fit a CART model for the target `y` given predictors `X`.
+    Return a dictionary containing the fitted regressor/classifier or relevant info.
 
-    Parameters
-    ----------
-    y : np.ndarray
-        The target array of shape (n,). Can be numeric or categorical.
-    X : np.ndarray
-        Feature array of shape (n, p) for the training data.
-    Xp : np.ndarray
-        Feature array of shape (m, p) for which to generate synthetic targets.
-    smoothing : str, optional
-        If "density" and y is numeric, apply a small smoothing to the final sampled values.
-    proper : bool, optional
-        If True, apply a bootstrap resample on (X, y) before fitting the tree.
-    min_samples_leaf : int, optional
-        Minimum number of samples per leaf.
-    max_leaf_nodes : int, optional
-        If not None, maximum number of leaf nodes.
-    random_state : int, optional
-        Random seed for reproducibility.
-    **kwargs : Any
-        Additional keyword arguments passed to the DecisionTreeRegressor/Classifier.
-
-    Returns
-    -------
-    result : dict
-        A dictionary containing:
-          - "res": a (m,) array of synthetic targets for Xp
-          - "fit": the fitted decision tree model
+    This implementation also stores each leaf node's distribution of y-values,
+    so that generate_cart() can sample from them rather than just do a point prediction.
     """
-    # Convert to numpy arrays if not already
-    y = np.asarray(y)
+
+    # Convert y, X to numpy if needed
     X = np.asarray(X)
-    Xp = np.asarray(Xp)
+    y = np.asarray(y)
 
-    # Determine if y is numeric or categorical
-    if pd.api.types.is_categorical_dtype(y) or pd.api.types.is_object_dtype(y):
-        is_numeric = False
-    elif pd.api.types.is_integer_dtype(y) or pd.api.types.is_float_dtype(y):
-        is_numeric = True
-    else:
-        is_numeric = np.issubdtype(y.dtype, np.number)
+    # Heuristic: decide classification vs. regression
+    y_series = pd.Series(y)
+    unique_vals = y_series.dropna().unique()
+    is_classification = False
+    if y_series.dtype.name in ["object", "category"]:
+        is_classification = True
+    elif len(unique_vals) < 15 and y_series.dtype.kind in ["i", "u"]:
+        # small unique integer => classification
+        is_classification = True
 
-    # Optional "proper" synthesis: bootstrap (X, y)
-    if proper:
-        n = len(y)
-        rng_boot = np.random.RandomState(random_state)
-        indices = rng_boot.choice(n, size=n, replace=True)
-        y = y[indices]
-        X = X[indices, :]
-
-    # Fit a CART model (regression or classification)
-    if is_numeric:
-        cart_model = DecisionTreeRegressor(
-            min_samples_leaf=min_samples_leaf,
-            max_leaf_nodes=max_leaf_nodes,
-            random_state=random_state,
-            **kwargs
+    # Build the tree
+    if is_classification:
+        estimator = DecisionTreeClassifier(
+            random_state=random_state, **kwargs
         )
     else:
-        cart_model = DecisionTreeClassifier(
-            min_samples_leaf=min_samples_leaf,
-            max_leaf_nodes=max_leaf_nodes,
-            random_state=random_state,
-            **kwargs
+        estimator = DecisionTreeRegressor(
+            random_state=random_state, **kwargs
         )
+    estimator.fit(X, y)
 
-    cart_model.fit(X, y)
+    # Map each training row to its leaf index
+    leaf_ids = estimator.apply(X)
+    # Collect y-values in each leaf
+    leaf_indexed_y = {}
+    for lid, val in zip(leaf_ids, y):
+        if lid not in leaf_indexed_y:
+            leaf_indexed_y[lid] = []
+        leaf_indexed_y[lid].append(val)
+    # Convert to arrays
+    for lid in leaf_indexed_y:
+        leaf_indexed_y[lid] = np.array(leaf_indexed_y[lid])
 
-    # Leaf assignments for new data
-    leaf_ids_syn = cart_model.apply(Xp)
-    # Leaf assignments for observed data
-    leaf_ids_obs = cart_model.apply(X)
+    model = {
+        "name": "cart",
+        "estimator": estimator,
+        "leaf_indexed_y": leaf_indexed_y,
+        "is_classification": is_classification,
+    }
+    return model
 
-    # Build a dict: leaf_id -> original y values in that leaf
-    leaf_dict = {}
-    for leaf_id in np.unique(leaf_ids_obs):
-        mask = (leaf_ids_obs == leaf_id)
-        leaf_dict[leaf_id] = y[mask]
 
-    # Generate synthetic y values by sampling from the leaf distributions
-    rng = np.random.RandomState(random_state)
-    syn_y = []
-    for leaf_id in leaf_ids_syn:
-        donors = leaf_dict.get(leaf_id, [])
-        if len(donors) == 0:
-            # Fallback to full y if no donors found
-            new_val = rng.choice(y)
+def generate_cart(fitted_cart, X_new, random_state=0, **kwargs):
+    """
+    Use the fitted cart model to generate predicted y's or do custom sequential sampling.
+    Return an array-like of predictions.
+
+    Here, for each row in X_new, we:
+      - identify the leaf node via .apply(...)
+      - randomly sample from that leaf's empirical distribution (leaf_indexed_y).
+
+    If the leaf is unknown (e.g. corner case), we fallback to sampling from the entire training distribution.
+    """
+    estimator = fitted_cart["estimator"]
+    leaf_indexed_y = fitted_cart["leaf_indexed_y"]
+
+    # Convert X_new to numpy if needed
+    X_new = np.asarray(X_new)
+
+    # Identify leaves
+    leaf_ids = estimator.apply(X_new)
+
+    # For reproducibility
+    rng = np.random.default_rng(random_state)
+
+    y_syn = []
+    # Precompute a global fallback if needed
+    all_vals = np.concatenate(list(leaf_indexed_y.values())) if leaf_indexed_y else []
+
+    for lid in leaf_ids:
+        if lid in leaf_indexed_y:
+            vals_in_leaf = leaf_indexed_y[lid]
+            idx = rng.integers(len(vals_in_leaf))
+            y_syn.append(vals_in_leaf[idx])
         else:
-            new_val = rng.choice(donors)
-        syn_y.append(new_val)
-    syn_y = np.array(syn_y)
+            # Fallback case
+            if len(all_vals) == 0:
+                y_syn.append(np.nan)
+            else:
+                idx = rng.integers(len(all_vals))
+                y_syn.append(all_vals[idx])
 
-    # Optional smoothing for numeric
-    if is_numeric and smoothing == "density":
-        syn_y = syn_smooth(syn_y, y)
-
-    return {"res": syn_y, "fit": cart_model}
+    return np.array(y_syn)

@@ -1,8 +1,6 @@
 INSTRUCTION
 
-Currently I am writing syn_seq.py.
-Please suggest the structure that can be aligned for all the files in methods/.
-Also generate the code that I can write in methods/__init__.py so I can make the syn_seq.py work.
+Complete "syn_seq.py", "plugin_syn_seq.py", "syn_seq_rules.py". Thanks
 
 ==============================INTRODUCTION, PROJECT STRUCTURE, LOGIC, ISSUES, EXAMPLE TEST RUN I WANT TO SEE, REFERENCE CODES.==============================
 
@@ -53,12 +51,6 @@ Second, variable selection. Even though synthpop already has prediction_matrix f
 Third, rules. Though synthpop had 'rules' feature it only included a direct substitution. For instance, if age is less than 20 but marriage status is 'married' this is legally impossible. In synthpop, after generation, package substituted such values into 'single'. In synthcity package, there also a feature named 'constraints'. This contains re-generating values for variables that does not meet the constraints. For instance, if age is a negative value, synthcity plugins can drop that row and re-generate until required number of rows are met. I am trying to enhance previous synthpop package by making a new constraints for our syn_seq. This requires somehow complicated structure of rules but I have found out that incorporating such features greatly enhance the data quality. I am trying to implement the rules with dictionary structure which for example, rule = {"X3":[("X1", "<", 0),("X3", "=", "default")]} or rule = {"X3":[("X1", "<", 0),("X3", ">", 0)]}. I am not going to do the substitution because I believe it harms the distribution. I would rather use the re-generating strategy. However, it can be true that in predicting space there might not exist values that aligns with the rule. For such cases I think it is necessary to create maximum iteration and return nan value at resulting synthetic data.
 
 Above features are what I am trying to enhance so far from original R package synthpop. However, I am struggling with implementing them into the python synthcity library structure.
-
-LOGIC
-Our program logic is as follows.
-1. Input the data and necessary parameters, run the value counts to see if there's any 'special values' or 'imbalance values' among variables. If there's any, add them to special values dictionary. We also build info when loader is called. Loader takes data input and all the other necessary parameters to fit and transform the data. This would make the _cat columns.
-2. Issue here is that we are trying to implement the preprocessing step automatically but thing is parent loader class is changed by super init. Fit 
-
 
 ISSUES AND UPDATES
 1. We have realized that plugin.py defines schema at generating step based on given dataloader and it is later used in generate stage to construct the schema. With this in mind, I believe that data should be preprocessed as dataloader is called so I moved all the inputs to dataloader.
@@ -200,16 +192,16 @@ import pandas as pd
 import numpy as np
 from sklearn.base import TransformerMixin, BaseEstimator
 
+
 class Syn_SeqEncoder(TransformerMixin, BaseEstimator):
     """
     A minimal version of the syn_seq encoder that:
       - Maintains col_map with { original_dtype, converted_type, method } for each column
       - For date columns, does day-offset numeric transformation => converted_type="numeric"
-      - Splits numeric columns into col + col_cat, with col_cat placed before the original col in syn_order
-      - variable_selection_ is stored internally as {target_col: [predictor_cols...]} dict
-      - get_info() or debug printing can show it as a matrix (DataFrame).
-      - inverse_transform can restore date columns from day-offset,
-        and attempt to restore original_dtype if possible
+      - Splits numeric columns into col + col_cat, placing col_cat before original col in syn_order
+      - variable_selection_ is stored as {target_col: [predictor_cols...]} (dict).
+      - get_info() 시 variable_selection은 dict->DataFrame 변환해 보여줄 수 있음.
+      - inverse_transform() 로 date/원본 dtype 복원.
     """
 
     def __init__(
@@ -219,14 +211,15 @@ class Syn_SeqEncoder(TransformerMixin, BaseEstimator):
         max_categories: int = 20,
         col_type: Optional[Dict[str, str]] = None,
         default_method: str = "cart",
+        # variable_selection을 굳이 init에서 직접 받지 않아도 됨. 필요하면 DataLoader에서 encoder.variable_selection_에 바로 할당 가능
     ) -> None:
         """
         Args:
-            columns_special_values: ex) {"age":[999], "bp":[-0.04]}
-            syn_order: column order to follow
-            max_categories: threshold for deciding numeric vs category if not declared
-            col_type: user overrides => { "birthdate":"date","sex":"category","bp":"numeric"... }
-            default_method: default method name for newly recognized columns
+            columns_special_values: 예: {"bp":[-0.04, -0.01]}
+            syn_order: 컬럼 처리 순서
+            max_categories: auto category vs numeric 구분 임계값
+            col_type: { "age":"category", "birthdate":"date"... } 등 사용자 override
+            default_method: col_map에 기록될 default method
         """
         self.columns_special_values = columns_special_values or {}
         self.syn_order = syn_order or []
@@ -234,46 +227,51 @@ class Syn_SeqEncoder(TransformerMixin, BaseEstimator):
         self.col_type = (col_type or {}).copy()  # user override
         self.default_method = default_method
 
-        # col_map: each col -> { "original_dtype", "converted_type", "method" }
+        # col_map: { col: {"original_dtype":..., "converted_type":..., "method":...}, ...}
         self.col_map: Dict[str, Dict[str, Any]] = {}
-        # date minimums
+
+        # date min 저장용
         self.date_mins: Dict[str, pd.Timestamp] = {}
-        # variable_selection_: internally a dictionary: { target_col: [predictors...] }
+
+        # variable_selection_: dict. 예: {"bp":["sex","bmi"], "target":["sex","bmi","bp"], ...}
         self.variable_selection_: Optional[Dict[str, List[str]]] = None
 
-    # ----------------- fit -----------------
+    # ----------------------- fit -----------------------
     def fit(self, X: pd.DataFrame, y=None) -> "Syn_SeqEncoder":
         X = X.copy()
         self._detect_syn_order(X)
         self._init_col_map(X)
         self._detect_special_values(X)
-        self._build_variable_selection_dict()  # 바뀐 부분
+
+        # 만약 사용자가 미리 variable_selection_을 세팅하지 않았다면, 기본 규칙으로 생성
+        if self.variable_selection_ is None:
+            self.variable_selection_ = self._build_varsel_dict_default()
+        # date mins
         self._store_date_min(X)
         return self
 
-    # ----------------- transform -----------------
+    # ----------------------- transform -----------------------
     def transform(self, X: pd.DataFrame) -> pd.DataFrame:
         X = X.copy()
         X = self._reorder_columns(X)
         X = self._convert_date_to_offset(X)
         X = self._split_numeric_cols_in_front(X)
         X = self._apply_converted_dtype(X)
-        self._update_variable_selection_after_split_dict(X)  # 바뀐 부분
+
+        # 새 col이 생겼을 경우 variable_selection_ dict 업데이트
+        self._update_varsel_dict_after_split(X)
         return X
 
-    # ----------------- inverse_transform -----------------
+    # ----------------------- inverse_transform -----------------------
     def inverse_transform(self, X: pd.DataFrame) -> pd.DataFrame:
         X = X.copy()
-
-        # 1) single special => restore
+        # (1) single special => restore
         for col, specs in self.columns_special_values.items():
             if col in X.columns and len(specs) == 1:
                 X[col] = X[col].replace(pd.NA, specs[0])
-
-        # 2) offset -> date
+        # (2) offset -> date
         X = self._convert_offset_to_date(X)
-
-        # 3) restore original_dtype
+        # (3) restore original dtype
         for col in X.columns:
             if col not in self.col_map:
                 continue
@@ -285,90 +283,90 @@ class Syn_SeqEncoder(TransformerMixin, BaseEstimator):
                     pass
         return X
 
-    # ----------------- get_info() -----------------
+    # ----------------------- get_info() -----------------------
     def get_info(self) -> Dict[str, Any]:
         """
-        Returns a dictionary containing:
-          - syn_order
-          - method : { col : method }
-          - special_value: self.columns_special_values
-          - original_type: { col : original_dtype }
-          - converted_type: { col : converted_type }
-          - variable_selection: for debugging, we can convert the dict -> DataFrame
+        Returns dict with:
+         - syn_order
+         - method (col->method)
+         - special_value
+         - original_type (col-> str)
+         - converted_type(col-> str)
+         - variable_selection => dict->DataFrame 변환
         """
         info_dict: Dict[str, Any] = {}
         info_dict["syn_order"] = self.syn_order
 
-        # method
+        # method/original_type/converted_type
         method_map = {}
         orig_type_map = {}
         conv_type_map = {}
-        for col, cinfo in self.col_map.items():
-            method_map[col] = cinfo.get("method", None)
-            orig_type_map[col] = cinfo.get("original_dtype", None)
-            conv_type_map[col] = cinfo.get("converted_type", None)
+        for c, cinfo in self.col_map.items():
+            method_map[c] = cinfo.get("method")
+            orig_type_map[c] = cinfo.get("original_dtype")
+            conv_type_map[c] = cinfo.get("converted_type")
 
         info_dict["method"] = method_map
         info_dict["special_value"] = self.columns_special_values
         info_dict["original_type"] = orig_type_map
         info_dict["converted_type"] = conv_type_map
+        info_dict["variable_selection"] = self.variable_selection_
 
-        # variable_selection_: internally a dict => convert to DataFrame for display
-        if self.variable_selection_ is not None:
-            df_vs = self._varsel_dict_to_matrix(self.variable_selection_)
-            info_dict["variable_selection"] = df_vs
-        else:
-            info_dict["variable_selection"] = None
+        # variable_selection_: dict -> DataFrame
+        # if self.variable_selection_ is not None:
+        #     df_vs = self._varsel_dict_to_df(self.variable_selection_)
+        #     info_dict["variable_selection"] = df_vs
+        # else:
+        #     info_dict["variable_selection"] = None
 
         return info_dict
 
-    # ----------------- dictionary-based variable_selection_ -----------------
-    def _build_variable_selection_dict(self) -> None:
+    # ------------------- variable_selection dict helpers -------------------
+    def _build_varsel_dict_default(self) -> Dict[str, List[str]]:
         """
-        Instead of building a DataFrame of zeros, we store a dictionary:
-        For each col in syn_order => let's default to "predictors = previous columns".
-        e.g. self.variable_selection_ = { "bmi": ["sex"], "bp": ["sex","bmi"], ... }
+        기본 규칙: syn_order에서 i번째 컬럼은 앞의 i개 컬럼을 predictor로.
+        예: col[0] => [], col[1] => [col[0]], col[2] => [col[0], col[1]] ...
         """
         vs_dict: Dict[str, List[str]] = {}
         for i, col in enumerate(self.syn_order):
-            # default: everything up to i-1 as predictor
             vs_dict[col] = self.syn_order[:i]
-        self.variable_selection_ = vs_dict
+        return vs_dict
 
-    def _update_variable_selection_after_split_dict(self, X: pd.DataFrame) -> None:
+    def _update_varsel_dict_after_split(self, X: pd.DataFrame) -> None:
         """
-        If new splitted columns appear (col_cat), we decide how to handle them in dictionary-based variable_selection_.
-        In the old code, we appended row/column to a DataFrame of zeros.
-        Now we do it for dictionary. e.g. if "bp_cat" was created, do we treat it as new target col? Or skip?
-        For demonstration, let's skip it or keep it empty. You can customize the logic as needed.
+        split_numeric_cols_in_front(...) 로 "xx_cat" 같은 새 컬럼이 생겼을 때,
+        variable_selection_ dict에도 반영.
+        default로: 새 컬럼 idx = syn_order.index(새컬럼) 이전 것들을 predictor로 할당
         """
         if self.variable_selection_ is None:
             return
-        # check new columns not in syn_order before
+
         for col in X.columns:
             if col not in self.variable_selection_ and col in self.syn_order:
-                # newly splitted col => we can decide default
+                # 새로 생긴 컬럼. index 찾기
                 idx = self.syn_order.index(col)
+                # 앞의 idx개를 predictor로
                 self.variable_selection_[col] = self.syn_order[:idx]
 
-    def _varsel_dict_to_matrix(self, vs_dict: Dict[str, List[str]]) -> pd.DataFrame:
+    def _varsel_dict_to_df(
+        self, vs_dict: Dict[str, List[str]], syn_order: List[str]
+    ) -> pd.DataFrame:
         """
-        Convert { target_col: [list_of_predictors], ... } -> DataFrame of 0/1
-        row = target, col = predictor
+        dict -> DataFrame(0/1) 변환, row/col 순서를 syn_order로 맞춘다.
         """
-        all_cols = sorted(list(vs_dict.keys()))
-        # 혹은 self.syn_order를 기반으로 정렬해도 됨
-        df_vs = pd.DataFrame(0, index=all_cols, columns=all_cols, dtype=int)
+        # 1) syn_order 기준으로 빈 0행렬 생성
+        df_vs = pd.DataFrame(0, index=syn_order, columns=syn_order, dtype=int)
 
-        for tgt_col, preds in vs_dict.items():
+        # 2) dict에서 (target_col, predictor_list) 를 읽어서 1 설정
+        for tgt, preds in vs_dict.items():
+            if tgt not in syn_order:
+                continue  # 만약 syn_order 밖의 key면 건너뜀
             for p in preds:
-                if p in df_vs.columns:
-                    df_vs.at[tgt_col, p] = 1
+                if p in syn_order:
+                    df_vs.at[tgt, p] = 1
         return df_vs
 
-    # =================================================================
-    # internals for col_map, date conversions, etc. (unchanged except removing DataFrame references)
-    # =================================================================
+    # ------------------- internal col_map, date conversions, etc. -------------------
     def _detect_syn_order(self, X: pd.DataFrame):
         if not self.syn_order:
             self.syn_order = list(X.columns)
@@ -434,7 +432,7 @@ class Syn_SeqEncoder(TransformerMixin, BaseEstimator):
     def _convert_date_to_offset(self, X: pd.DataFrame) -> pd.DataFrame:
         for col in self.syn_order:
             if self.col_type.get(col) == "date" and col in X.columns:
-                mindt = self.date_mins.get(col, None)
+                mindt = self.date_mins.get(col)
                 X[col] = pd.to_datetime(X[col], errors="coerce")
                 if mindt is None:
                     mindt = X[col].min()
@@ -444,9 +442,10 @@ class Syn_SeqEncoder(TransformerMixin, BaseEstimator):
 
     def _split_numeric_cols_in_front(self, X: pd.DataFrame) -> pd.DataFrame:
         for col in list(self.syn_order):
-            if col not in self.col_map:
+            info = self.col_map.get(col)
+            if info is None:
                 continue
-            if self.col_map[col]["converted_type"] != "numeric":
+            if info["converted_type"] != "numeric":
                 continue
             if col not in X.columns:
                 continue
@@ -497,10 +496,6 @@ class Syn_SeqEncoder(TransformerMixin, BaseEstimator):
                     X[col] = pd.to_timedelta(offset, unit="D") + mindt
         return X
 
-    def _update_variable_selection_after_split(self, X: pd.DataFrame):
-        """Deprecated -> replaced by dictionary version '_update_variable_selection_after_split_dict'."""
-        pass
-
 
 src/synthcity/plugins/core/models/syn_seq/cart.py
 ** Not a valid file path or file does not exist. **
@@ -536,15 +531,25 @@ import numpy as np
 from synthcity.plugins.core.models.syn_seq.syn_seq_rules import Syn_SeqRules
 from synthcity.plugins.core.models.syn_seq.methods import (
     syn_cart,
+    generate_cart,
     syn_ctree,
+    generate_ctree,
     syn_logreg,
+    generate_logreg,
     syn_norm,
-    syn_lognorm,
+    generate_norm,
     syn_pmm,
+    generate_pmm,
     syn_polyreg,
+    generate_polyreg,
     syn_rf,
+    generate_rf,
+    syn_lognorm,
+    generate_lognorm,
     syn_random,
+    generate_random,
     syn_swr,
+    generate_swr
 )
 
 class Syn_Seq:
@@ -616,7 +621,7 @@ class Syn_Seq:
 
     def generate(
         self,
-        nrows: int,
+        colunt: int,
         rules: Optional[Dict[str, List[Any]]] = None,
         *args,
         **kwargs
@@ -626,7 +631,7 @@ class Syn_Seq:
         
         col_with_rules = rules.key()
         generated_data = pd.DataFrame
-        generated_data = self._first_col.sample(nrows)
+        generated_data = self._first_col.sample(count)
 
         if rules:
             rules = Syn_SeqRules(chained_rules=rules)
@@ -2470,15 +2475,8 @@ class ImageDataLoader(DataLoader):
 
 class Syn_SeqDataLoader(DataLoader):
     """
-    A DataLoader that:
-      1) Receives user_custom for syn_seq-specific settings (syn_order, special_value, col_type, etc).
-      2) During __init__, we do:
-         - parse user_custom
-         - create/fill Syn_SeqEncoder
-         - fit+transform raw_df => splitted_df
-         - call super().__init__ with splitted_df
-      3) Only one-time transformation is done in __init__.
-      4) aggregator가 decode(...) 등 호출 가능
+    A DataLoader that uses Syn_SeqEncoder with dictionary-based variable_selection_.
+    If user_custom["variable_selection"]가 있으면, encoder.variable_selection_ = 그 dict 를 미리 세팅 후 fit().
     """
 
     def __init__(
@@ -2495,13 +2493,10 @@ class Syn_SeqDataLoader(DataLoader):
         self.raw_df = data.copy()
 
         # 2) user_custom 파싱
-        syn_order = None
+        syn_order: Optional[List[str]] = None
         columns_special_values: Dict[str, List[Any]] = {}
         col_type: Dict[str, str] = {}
-        # 여기서 variable_selection을 따로 빼서 encoder에 넘기거나 할 수 있지만,
-        # encoder.get_info()만으로도 `variable_selection_`을 다룰 수 있으므로
-        # 꼭 별도 변수로 보관 안 해도 됨.
-        # user_custom["variable_selection"]이 있으면, fit 후에 override 가능
+        variable_selection: Optional[Dict[str, List[str]]] = None  # dict
 
         if user_custom:
             if "syn_order" in user_custom:
@@ -2512,11 +2507,13 @@ class Syn_SeqDataLoader(DataLoader):
                 col_type = user_custom["col_type"]
             if "max_categories" in user_custom:
                 max_categories = user_custom["max_categories"]
+            if "variable_selection" in user_custom:
+                variable_selection = user_custom["variable_selection"]  # dict
 
         if syn_order is None:
             syn_order = list(self.raw_df.columns)
             if verbose:
-                print("[WARN] user did not specify 'syn_order', using raw_df.columns order.")
+                print("[WARN] user did not specify 'syn_order'; using raw_df.columns order.")
 
         missing_cols = set(syn_order) - set(self.raw_df.columns)
         if missing_cols:
@@ -2530,22 +2527,13 @@ class Syn_SeqDataLoader(DataLoader):
             col_type=col_type,
         )
 
+        # 만약 variable_selection dict이 있다면 미리 세팅(=> fit 시점에 그대로 사용)
+        if variable_selection is not None:
+            self._encoder.variable_selection_ = variable_selection
+
         # 4) fit + transform
         self._encoder.fit(self.raw_df)
         splitted_df = self._encoder.transform(self.raw_df)
-
-        # user_custom["variable_selection"]이 있다면, fit 이후에 세팅 가능
-        if user_custom and "variable_selection" in user_custom:
-            vs_dict = user_custom["variable_selection"]
-            # self._encoder.variable_selection_ 이 None이 아니라고 가정
-            if self._encoder.variable_selection_ is not None:
-                for target_col, preds in vs_dict.items():
-                    if target_col in self._encoder.variable_selection_.index:
-                        # reset row
-                        self._encoder.variable_selection_.loc[target_col, :] = 0
-                        for p in preds:
-                            if p in self._encoder.variable_selection_.columns:
-                                self._encoder.variable_selection_.at[target_col, p] = 1
 
         # 5) 부모 DataLoader init => splitted_df
         super().__init__(
@@ -2557,23 +2545,23 @@ class Syn_SeqDataLoader(DataLoader):
         )
 
         if verbose:
-            print("[INFO] Syn_SeqDataLoader init complete. final splitted_df shape =", self.data.shape)
             enc_info = self._encoder.get_info()
-            print("  - syn_order:", enc_info["syn_order"])
-            print("  - special_value:", enc_info["special_value"])
-            print("  - col_type:", col_type)
-            print("  - max_categories:", max_categories)
-            # encoder.col_map
+            print(f"[INFO] Syn_SeqDataLoader init complete. splitted_df shape= {self.data.shape}")
+            print(f"  - syn_order: {enc_info['syn_order']}")
+            print(f"  - special_value: {enc_info['special_value']}")
+            print(f"  - col_type: {col_type}")
+            print(f"  - max_categories: {max_categories}")
             print("  - encoder.col_map =>")
             for c, cinfo in self._encoder.col_map.items():
-                print(f"    {c}: original_dtype={cinfo['original_dtype']},"
+                print(f"     {c}: original_dtype={cinfo['original_dtype']},"
                       f" converted_type={cinfo['converted_type']}, method={cinfo['method']}")
             vs_ = enc_info.get("variable_selection")
             if vs_ is not None:
-                print("  - variable_selection_:")
-                print(vs_)
+                df_vs = self._encoder._varsel_dict_to_df(vs_, syn_order=enc_info['syn_order'])
+                print("  variable_selection_ (matrix form) =>\n", df_vs)
             print("----------------------------------------------------------------")
 
+    # region required abstract methods
     @property
     def shape(self) -> tuple:
         return self.data.shape
@@ -2585,13 +2573,10 @@ class Syn_SeqDataLoader(DataLoader):
     def dataframe(self) -> pd.DataFrame:
         return self.data
 
-    def numpy(self) -> pd.DataFrame:
+    def numpy(self) -> np.ndarray:
         return self.data.values
 
     def info(self) -> dict:
-        """
-        Return info combining self._encoder.get_info() + DataLoader standard info
-        """
         base_info = {
             "data_type": self.data_type,
             "len": len(self),
@@ -2599,7 +2584,6 @@ class Syn_SeqDataLoader(DataLoader):
             "random_state": self.random_state,
         }
         enc_info = self._encoder.get_info()
-        # 여기 enc_info에는 variable_selection도 들어 있음
         base_info.update(enc_info)
         return base_info
 
@@ -2615,25 +2599,27 @@ class Syn_SeqDataLoader(DataLoader):
 
     @staticmethod
     def from_info(data: pd.DataFrame, info: dict) -> "Syn_SeqDataLoader":
-        # rebuild user_custom from info
         user_custom = {
             "syn_order": info.get("syn_order"),
             "special_value": info.get("special_value", {}),
             "col_type": info.get("col_type", {}),
             "max_categories": info.get("max_categories", 20),
         }
-        # variable_selection도 info에 있으면 reconstruct 가능
+        # variable_selection도 있으면 복원
         if "variable_selection" in info and info["variable_selection"] is not None:
-            # to DataFrame
-            if isinstance(info["variable_selection"], pd.DataFrame):
-                vs_df = info["variable_selection"].copy()
-            else:
-                # 만약 dict 형태로 저장되어 있다면, 다시 DataFrame으로 구성해야 할 수도 있음
-                vs_df = pd.DataFrame(info["variable_selection"])
-            user_custom["variable_selection"] = {
-                r: vs_df.columns[vs_df.loc[r] == 1].tolist()
-                for r in vs_df.index
-            }
+            # info["variable_selection"]는 DataFrame이거나 dict라고 가정
+            # dict일 경우 그대로 할당, DataFrame이면 dict 변환
+            vs_val = info["variable_selection"]
+            if isinstance(vs_val, pd.DataFrame):
+                # DF->dict
+                vs_dict = {}
+                for row_idx in vs_val.index:
+                    row_data = vs_val.loc[row_idx]
+                    preds = row_data.index[row_data == 1].tolist()
+                    vs_dict[row_idx] = preds
+                user_custom["variable_selection"] = vs_dict
+            elif isinstance(vs_val, dict):
+                user_custom["variable_selection"] = vs_val
 
         return Syn_SeqDataLoader(
             data=data,
@@ -2685,6 +2671,7 @@ class Syn_SeqDataLoader(DataLoader):
     def get_fairness_column(self) -> Union[str, Any]:
         return None
 
+    # aggregator용 encode/decode
     def encode(self, encoders: Optional[Dict[str, Any]] = None):
         print("[WARN] encode() called again. We already splitted in __init__.")
         return self, {"syn_seq_encoder": self._encoder}
@@ -2696,22 +2683,19 @@ class Syn_SeqDataLoader(DataLoader):
         return self
 
     def decorate(self, data: pd.DataFrame) -> "Syn_SeqDataLoader":
-        # decorate with same user_custom (or partial)
+        """
+        새 DataLoader 생성. encoder 재활용
+        """
+        # 현재 encoder의 config를 user_custom로 재구성
         user_custom = {
             "syn_order": self._encoder.syn_order,
             "special_value": self._encoder.columns_special_values,
             "col_type": self._encoder.col_type,
             "max_categories": self._encoder.max_categories,
         }
-        # variable_selection도 다시 reconstruct 가능
+        # variable_selection dict도 복원
         if self._encoder.variable_selection_ is not None:
-            # 단순히 row-> list of preds
-            vs_dict = {}
-            for row_idx in self._encoder.variable_selection_.index:
-                row_data = self._encoder.variable_selection_.loc[row_idx]
-                used_preds = row_data.index[row_data == 1].tolist()
-                vs_dict[row_idx] = used_preds
-            user_custom["variable_selection"] = vs_dict
+            user_custom["variable_selection"] = self._encoder.variable_selection_
 
         new_loader = Syn_SeqDataLoader(
             data=data,
@@ -2746,6 +2730,70 @@ def create_from_info(
         raise RuntimeError(f"invalid datatype {info}")
 
 src/synthcity/plugins/generic/plugin_syn_seq.py
+
+# stdlib
+from pathlib import Path
+from typing import Any, List, Optional, Union
+
+# third party
+import numpy as np
+import pandas as pd
+
+# Necessary packages
+from pydantic import validate_arguments
+
+# synthcity absolute
+from synthcity.metrics.weighted_metrics import WeightedMetrics
+from synthcity.plugins.core.dataloader import Syn_SeqDataLoader
+from synthcity.plugins.core.distribution import (
+    CategoricalDistribution,
+    Distribution,
+    FloatDistribution,
+    IntegerDistribution,
+)
+from synthcity.plugins.core.models.syn_seq.syn_seq import Syn_Seq
+from synthcity.plugins.core.plugin import Plugin
+from synthcity.plugins.core.schema import Schema
+
+
+class Syn_SeqPlugin(Plugin):
+
+    @validate_arguments(config=dict(arbitrary_types_allowed=True))
+    def __init__(
+        self,
+
+        **kwargs: Any
+    ) -> None:
+        super().__init__(
+
+        )
+ 
+
+    @staticmethod
+    def name() -> str:
+        return "syn_seq"
+
+    @staticmethod
+    def type() -> str:
+        return "syn_seq"
+
+    def _fit(self, X: Syn_SeqDataLoader, *args: Any, **kwargs: Any) -> "Syn_SeqPlugin":
+
+
+        self.model = Syn_Seq(
+            X.dataframe(),
+ 
+        )
+        self.model.fit(X.dataframe(), )
+
+        return self
+
+    def _generate(self, count: int, syn_schema: Schema, **kwargs: Any) -> Syn_SeqDataLoader:
+
+        return self._safe_generate(self.model.generate, count, syn_schema, )
+
+
+plugin = Syn_SeqPlugin
 
 
 src/synthcity/plugins/core/constraints.py
@@ -5397,9 +5445,42 @@ class Serializable:
 
 
 src/synthcity/plugins/core/models/syn_seq/methods/__init__.py
+# methods/__init__.py
 
+# For each file, import the relevant "syn_*" function (and the "generate_*" if you want it accessible).
+from .cart import syn_cart, generate_cart
+from .ctree import syn_ctree, generate_ctree
+from .logreg import syn_logreg, generate_logreg
+from .norm import syn_norm, generate_norm
+from .pmm import syn_pmm, generate_pmm
+from .polyreg import syn_polyreg, generate_polyreg
+from .rf import syn_rf, generate_rf
+from .misc import syn_lognorm, generate_lognorm
+from .misc import syn_random, generate_random
+from .misc import syn_swr, generate_swr
 
-src/synthcity/plugins/core/models/syn_seq/methods/__init__.py
+__all__ = [
+    "syn_cart",
+    "generate_cart",
+    "syn_ctree",
+    "generate_ctree",
+    "syn_logreg",
+    "generate_logreg",
+    "syn_norm",
+    "generate_norm",
+    "syn_pmm",
+    "generate_pmm",
+    "syn_polyreg",
+    "generate_polyreg",
+    "syn_rf",
+    "generate_rf",
+    "syn_lognorm",
+    "generate_lognorm",
+    "syn_random",
+    "generate_random",
+    "syn_swr",
+    "generate_swr",
+]
 
 
 src/synthcity/logger.py

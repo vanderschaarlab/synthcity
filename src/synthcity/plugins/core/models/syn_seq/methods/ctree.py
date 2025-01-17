@@ -1,188 +1,150 @@
-# synthcity/plugins/syn_seq/methods/ctree.py
-
-"""
-Implements a conditional inference tree approach, analogous (in spirit) to R's 'ctree' in the party/partykit package.
-However, Python does not have a built-in `ctree` identical to R's version. We approximate it with sklearn's
-DecisionTreeClassifier/Regressor. The core idea is to split the data based on statistical criteria that mimic 
-conditional inference splitting, then use the leaf 'donor pools' to sample from the observed outcomes.
-
-Key ideas from R's syn.ctree:
-    1. If y is numeric => use a regression tree (DecisionTreeRegressor).
-       - For each new row Xp_i, we find its leaf node, gather the observed y from that leaf, 
-         and sample one at random (possibly with some smoothing or proper approach).
-    2. If y is categorical => use a classification tree (DecisionTreeClassifier).
-       - For each new row Xp_i, find its leaf node, gather the observed y from that leaf, 
-         and sample one at random in proportion to that leaf’s distribution of y.
-    3. If proper=True => bootstrap (X, y) before fitting, as in some 'proper' multiple imputation logic.
-    4. min_samples_leaf, max_depth, etc., can be set as kwargs to control the tree size or structure.
-    5. After training, for each row in Xp, we get the leaf node via `.apply(Xp)`, gather the original training y 
-       in that leaf node, and randomly sample from them to produce synthetic y. 
-       If no donors exist (rare corner case), we fallback to sampling from the entire y.
-
-We call this function `syn_ctree(...)`. The function returns a dict with:
-    "res" => the synthetic output array
-    "fit" => a dict storing the trained model, leaf map, etc., for debugging or reuse.
-"""
-
-from typing import Any, Dict, Optional, Union
-
+# ctree.py
 import numpy as np
 import pandas as pd
-
-from sklearn.tree import DecisionTreeRegressor, DecisionTreeClassifier
-
+from sklearn.tree import DecisionTreeClassifier, DecisionTreeRegressor
 
 def syn_ctree(
-    y: Union[pd.Series, np.ndarray],
-    X: Union[pd.DataFrame, np.ndarray],
-    Xp: Union[pd.DataFrame, np.ndarray],
-    proper: bool = False,
-    random_state: Optional[int] = None,
-    **kwargs: Any,
-) -> Dict[str, Any]:
+    y, 
+    X, 
+    random_state=0, 
+    is_classification=False,
+    max_depth=None,
+    min_samples_leaf=1,
+    **kwargs
+):
     """
-    Synthetic data generation using a 'ctree'-like approach (approximated by sklearn decision trees).
-
+    Fit a conditional inference tree model for `y` given `X`, in a style akin to
+    'conditional inference trees' via scikit-learn's DecisionTreeClassifier/Regressor.
+    
     Args:
-        y: 1D array-like of shape (n,). The response variable.
-            - If numeric => we treat as regression (DecisionTreeRegressor).
-            - If factor/categorical => classification (DecisionTreeClassifier).
-        X: 2D array-like of shape (n, p). Covariates from the training data.
-        Xp: 2D array-like of shape (m, p). Covariates for the new data to synthesize.
-        proper: bool, default=False. If True, bootstrap (X, y) before fitting 
-                to implement a "proper" randomization akin to multiple imputation.
-        random_state: Optional[int]. Seed for reproducibility.
-        **kwargs: Additional arguments for DecisionTreeRegressor/Classifier, e.g.:
-                  - min_samples_leaf=5
-                  - max_depth=None
-                  - etc.
+        y: 1D array-like for the target variable (numeric or categorical).
+        X: 2D array-like for predictor features of shape (n_samples, n_features).
+        random_state: integer seed for reproducibility.
+        is_classification: if True, train a classifier. Otherwise, regress.
+        max_depth: optional int, maximum depth of the tree.
+        min_samples_leaf: optional int, minimum samples per leaf.
+        **kwargs: additional parameters passed to the scikit-learn decision tree.
 
     Returns:
-        A dictionary:
-            {
-                "res": array-like of shape (m,) with the synthetic y for each row in Xp,
-                "fit": {
-                    "model": the trained sklearn tree model,
-                    "leaf_dict": a dict mapping leaf_id -> list of training sample indices,
-                    "unique_labels": optional array of unique labels if classification,
-                    "is_classification": bool,
-                }
-            }
+        A dict containing:
+            "name": "ctree"
+            "model": the trained DecisionTree model.
+            "is_classification": bool indicating classification vs. regression.
+            "leaf_index_map": array-like of sample indices for each leaf node.
+            "train_X": the original training X (for direct leaf-based sampling).
+            "train_y": the original training y.
     """
-
-    rng = np.random.RandomState(random_state)
-
-    # Convert inputs to numpy arrays if they are pandas
-    if isinstance(y, pd.Series):
-        # keep track if it's categorical
-        if pd.api.types.is_categorical_dtype(y):
-            y_categories = y.cat.categories
-        else:
-            y_categories = None
-        y = y.values
-    else:
-        y_categories = None
-
+    # Convert X, y to numpy arrays if needed
     X = np.asarray(X)
-    Xp = np.asarray(Xp)
+    y = np.asarray(y)
 
-    n = len(y)
+    # Remove rows with NaN in y (simple approach; adapt if needed)
+    valid_mask = ~pd.isna(y)
+    y = y[valid_mask]
+    X = X[valid_mask, :]
 
-    # If proper => bootstrap (X, y)
-    if proper:
-        idx_boot = rng.choice(n, size=n, replace=True)
-        X = X[idx_boot, :]
-        y = y[idx_boot]
-
-    # Determine classification vs. regression
-    # If the original y had categories (y_categories), or if dtype is object/strings => classification.
-    is_classification = False
-    if y_categories is not None:
-        is_classification = True
-    elif pd.api.types.is_object_dtype(y) or pd.api.types.is_string_dtype(y):
-        is_classification = True
-
-    # If still not certain, try numeric checks
-    if not is_classification:
-        # numeric if all values are number
-        # we assume an integer/float means regression
-        # if there's a small number of unique values, user might want classification, 
-        # but we'll keep it simple
-        pass
-
+    # Choose classifier or regressor
     if is_classification:
-        # Encode strings if needed
-        unique_labels, y_encoded = np.unique(y, return_inverse=True)
-        model = DecisionTreeClassifier(random_state=rng, **kwargs)
-        model.fit(X, y_encoded)
-
-        train_leaves = model.apply(X)
-        leaf_dict = {}
-        for i, leaf_id in enumerate(train_leaves):
-            if leaf_id not in leaf_dict:
-                leaf_dict[leaf_id] = []
-            leaf_dict[leaf_id].append(i)
-
-        xp_leaves = model.apply(Xp)
-        syn_res = []
-        for leaf_id in xp_leaves:
-            # gather all training y in that leaf
-            if leaf_id not in leaf_dict:
-                # fallback => random from entire training
-                pick_idx = rng.choice(n, size=1)[0]
-                syn_res.append(y[pick_idx])
-            else:
-                donors_idx = leaf_dict[leaf_id]
-                pick_idx = rng.choice(donors_idx, size=1)[0]
-                syn_res.append(y[pick_idx])
-
-        syn_res = np.array(syn_res)
-        # if y_categories is not None, return them with the original categories
-        # else keep them as the same dtype
-        if y_categories is not None:
-            syn_res = pd.Categorical(syn_res, categories=y_categories)
-
-        return {
-            "res": syn_res,
-            "fit": {
-                "model": model,
-                "leaf_dict": leaf_dict,
-                "unique_labels": unique_labels,
-                "is_classification": True,
-            },
-        }
-
+        tree = DecisionTreeClassifier(
+            random_state=random_state,
+            max_depth=max_depth,
+            min_samples_leaf=min_samples_leaf,
+            **kwargs
+        )
     else:
-        # regression
-        model = DecisionTreeRegressor(random_state=rng, **kwargs)
-        model.fit(X, y)
+        tree = DecisionTreeRegressor(
+            random_state=random_state,
+            max_depth=max_depth,
+            min_samples_leaf=min_samples_leaf,
+            **kwargs
+        )
 
-        train_leaves = model.apply(X)
-        leaf_dict = {}
-        for i, leaf_id in enumerate(train_leaves):
-            if leaf_id not in leaf_dict:
-                leaf_dict[leaf_id] = []
-            leaf_dict[leaf_id].append(i)
+    # Fit
+    tree.fit(X, y)
 
-        xp_leaves = model.apply(Xp)
-        syn_res = []
-        for leaf_id in xp_leaves:
-            if leaf_id not in leaf_dict:
-                # fallback => random from entire training
-                pick_idx = rng.choice(n, size=1)[0]
-                syn_res.append(y[pick_idx])
-            else:
-                donors_idx = leaf_dict[leaf_id]
-                pick_idx = rng.choice(donors_idx, size=1)[0]
-                syn_res.append(y[pick_idx])
+    # For each training sample, find which leaf it ends in
+    leaf_ids = tree.apply(X)  # shape (n_samples,)
+    unique_leaf_ids = np.unique(leaf_ids)
 
-        syn_res = np.array(syn_res, dtype=float)
+    # Build an index map: for each leaf id, which training indices are in that leaf?
+    leaf_index_map = []
+    for leaf_id in unique_leaf_ids:
+        idxs = np.where(leaf_ids == leaf_id)[0]
+        leaf_index_map.append(idxs)
 
-        return {
-            "res": syn_res,
-            "fit": {
-                "model": model,
-                "leaf_dict": leaf_dict,
-                "is_classification": False,
-            },
-        }
+    model = {
+        "name": "ctree",
+        "model": tree,
+        "is_classification": is_classification,
+        "leaf_index_map": leaf_index_map,
+        "train_X": X,
+        "train_y": y,
+    }
+    return model
+
+
+def generate_ctree(
+    fitted_ctree,
+    X_new,
+    random_state=0,
+    **kwargs
+):
+    """
+    Generate y values from the fitted ctree model by sampling from leaf-level distributions.
+    
+    Args:
+        fitted_ctree: a dict returned by syn_ctree(...).
+        X_new: 2D array-like (n_samples, n_features) to generate new y's for.
+        random_state: integer seed for reproducibility.
+        **kwargs: unused here, but kept for interface consistency.
+
+    Returns:
+        A 1D numpy array of generated y values. Classification => random draws 
+        from the leaf's classes, Regression => random draws from the leaf's numeric distribution.
+    """
+    rng = np.random.default_rng(random_state)
+
+    tree = fitted_ctree["model"]
+    leaf_index_map = fitted_ctree["leaf_index_map"]
+    is_classification = fitted_ctree["is_classification"]
+    train_X = fitted_ctree["train_X"]
+    train_y = fitted_ctree["train_y"]
+
+    # Which leaf does each X_new sample fall into?
+    X_new = np.asarray(X_new)
+    new_leaf_ids = tree.apply(X_new)
+
+    # Build a dict: leaf_id -> position in leaf_index_map
+    train_leaf_ids = tree.apply(train_X)
+    unique_leaf_ids = np.unique(train_leaf_ids)
+    leafid_to_pos = {leaf_id: i for i, leaf_id in enumerate(unique_leaf_ids)}
+
+    y_syn = []
+    for leaf_id in new_leaf_ids:
+        if leaf_id not in leafid_to_pos:
+            # fallback if leaf_id wasn't seen during training
+            # e.g. out-of-distribution input => just do a normal predict
+            y_syn.append(tree.predict(X_new[[0]])[0])
+            continue
+
+        pos = leafid_to_pos[leaf_id]
+        idxs_in_leaf = leaf_index_map[pos]
+
+        if len(idxs_in_leaf) == 0:
+            # fallback
+            y_syn.append(tree.predict(X_new[[0]])[0])
+            continue
+
+        # pull the actual training labels from this leaf
+        leaf_labels = train_y[idxs_in_leaf]
+
+        if is_classification:
+            # discrete random draw from leaf_labels
+            chosen_idx = rng.integers(0, len(leaf_labels))
+            y_syn.append(leaf_labels[chosen_idx])
+        else:
+            # numeric => random draw from leaf_labels
+            chosen_idx = rng.integers(0, len(leaf_labels))
+            y_syn.append(leaf_labels[chosen_idx])
+
+    return np.array(y_syn)

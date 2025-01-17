@@ -1,151 +1,93 @@
-# synthcity/plugins/syn_seq/methods/pmm.py
-
-"""
-Implements a Predictive Mean Matching (PMM) approach, analogous to R's syn.pmm from the synthpop package.
-
-Key PMM ideas from R syn.pmm:
-    - Fit a linear model on the observed data (X -> y).
-    - Obtain predicted values yhat for both the observed data (training set) and the new data Xp.
-    - For each new row (in Xp), find the 'donors' in the training set whose predicted yhat_obs is closest to yhat_mis.
-    - Randomly sample from those donors' original observed y to get the synthetic values.
-    - Optionally do "proper" synthesis by bootstrapping (resampling) before fitting the model, as in R.
-
-Here, we provide a simple normal linear regression fit (like syn.norm but 'fixed') by default.
-
-Usage example:
-    result = syn_pmm(
-        y, X, Xp,
-        donors=3,
-        proper=False,
-        random_state=42,
-        ...
-    )
-    y_syn = result["res"]
-    model_info = result["fit"]
-"""
-
-from typing import Any, Dict, Optional
+# File: pmm.py
 
 import numpy as np
-import pandas as pd
 from sklearn.linear_model import LinearRegression
 
-
-def _norm_fix_syn(
-    y: np.ndarray,
-    X: np.ndarray,
-    **kwargs: Any
-) -> Dict[str, Any]:
+def syn_pmm(y, X, random_state=0, k=5, use_intercept=True, **kwargs):
     """
-    Equivalent to a simple linear regression fit for a 'fixed' approach.
-    Returns a dictionary with:
-        "coef": the fitted coefficients (1D array)
-        "intercept": the fitted intercept (float)
-        "model": the fitted LinearRegression model (for debugging/reuse)
-    """
-    model = LinearRegression(**kwargs)
-    model.fit(X, y)
-    return {
-        "coef": model.coef_,
-        "intercept": model.intercept_,
-        "model": model,
-    }
-
-
-def _pmm_match_single(
-    z_value: float,
-    yhat_obs: np.ndarray,
-    y_obs: np.ndarray,
-    donors: int,
-    rng: np.random.RandomState,
-) -> float:
-    """
-    For a single predicted value z_value, find the `donors` closest yhat_obs,
-    then randomly pick one from those donors' observed y as the synthetic value.
+    Fit a PMM (Predictive Mean Matching) model.
 
     Args:
-        z_value: float. The predicted value for the row we want to synthesize.
-        yhat_obs: array of shape (n,). Predicted values for the original data.
-        y_obs: array of shape (n,). Actual observed y values in the training set.
-        donors: int. Number of nearest donors to sample from.
-        rng: a np.random.RandomState for reproducibility.
+        y: shape (n_samples,) - target array
+        X: shape (n_samples, n_features) - predictor variables
+        random_state: random seed
+        k: number of nearest neighbors to match
+        use_intercept: whether or not to fit an intercept in the regression
+        kwargs: additional arguments to pass into the regressor if needed
 
     Returns:
-        A float value from the donor pool (observed y values).
+        A dictionary representing the fitted PMM model, containing:
+            - "name" : str
+            - "model": the regression model used to predict
+            - "X": training features
+            - "y": training targets
+            - "y_hat": predicted values on training set
+            - "k": number of neighbors
+            - "random_state": the random seed used
     """
-    # Distances to each predicted yhat_obs
-    diffs = np.abs(yhat_obs - z_value)
-    # Indices of the top donors
-    top_indices = np.argsort(diffs)[:donors]
-    # Randomly pick one from these donors
-    chosen_idx = rng.choice(top_indices, size=1)[0]
-    return y_obs[chosen_idx]
+    rng = np.random.default_rng(random_state)
+
+    # For demonstration, use a linear regressor. Modify or replace as needed.
+    regressor = LinearRegression(fit_intercept=use_intercept, **kwargs)
+    regressor.fit(X, y)
+    y_hat = regressor.predict(X)
+
+    model = {
+        "name": "pmm",
+        "model": regressor,
+        "X": X,
+        "y": y,
+        "y_hat": y_hat,
+        "k": k,
+        "random_state": random_state
+    }
+    return model
 
 
-def syn_pmm(
-    y: np.ndarray,
-    X: np.ndarray,
-    Xp: np.ndarray,
-    donors: int = 3,
-    proper: bool = False,
-    random_state: Optional[int] = None,
-    **kwargs: Any
-) -> Dict[str, Any]:
+def generate_pmm(fitted_pmm, X_new, random_state=None, **kwargs):
     """
-    Predictive Mean Matching for numeric y.
+    Generate new synthetic values using the fitted PMM model.
+
+    For each row in X_new:
+       1) Predict the mean outcome (via the regression model).
+       2) Find the k closest samples in the training set
+          (based on distance in predicted space).
+       3) Randomly pick one neighbor among those k to get the actual y.
 
     Args:
-        y: (n,) array of numeric response values.
-        X: (n, p) array of training covariates.
-        Xp: (m, p) array for new data, the rows to synthesize.
-        donors: how many nearest donors to sample from for each new row.
-        proper: bool. If True, apply bootstrap to (X, y) before fitting (proper imputation).
-        random_state: optional integer seed for reproducibility.
-        **kwargs: Additional arguments for the linear model.
+        fitted_pmm: dictionary from syn_pmm(...)
+        X_new: shape (m, n_features) for which to generate new y
+        random_state: random seed override (optional)
+        kwargs: additional arguments (not used here, but available for extension)
 
     Returns:
-        A dictionary with:
-          "res": (m,) array of synthetic y values for each row in Xp.
-          "fit": dict with "coef", "intercept", "model" describing the fitted model.
+        y_syn: shape (m,) - synthetic target values
     """
-    # Ensure correct type
-    y = np.asarray(y, dtype=float).ravel()
-    X = np.asarray(X, dtype=float)
-    Xp = np.asarray(Xp, dtype=float)
+    if random_state is None:
+        random_state = fitted_pmm.get("random_state", 0)
+    rng = np.random.default_rng(random_state)
 
-    rng = np.random.RandomState(random_state)
+    regressor = fitted_pmm["model"]
+    X_train = fitted_pmm["X"]
+    y_train = fitted_pmm["y"]
+    y_hat_train = fitted_pmm["y_hat"]
+    k = fitted_pmm["k"]
 
-    # If proper => bootstrap the training data
-    if proper:
-        n = len(y)
-        idx_boot = rng.choice(n, size=n, replace=True)
-        X = X[idx_boot, :]
-        y = y[idx_boot]
+    # Predict for the new data
+    y_hat_new = regressor.predict(X_new)
 
-    # Fit a simple linear regression
-    fit_info = _norm_fix_syn(y, X, **kwargs)
-    beta = fit_info["coef"]
-    intercept = fit_info["intercept"]
+    # Container for synthetic outcomes
+    y_syn = np.empty(len(y_hat_new), dtype=y_train.dtype)
 
-    # Predicted values for the observed data
-    yhat_obs = X @ beta + intercept
-    # Predicted values for the new data
-    yhat_mis = Xp @ beta + intercept
+    # PMM logic
+    for i, pred_val in enumerate(y_hat_new):
+        # Distance in predicted space
+        dist = np.abs(y_hat_train - pred_val)
+        # Indices of the k smallest distances
+        neighbor_idxs = np.argpartition(dist, kth=k)[:k]
+        # Pick one random neighbor among these k
+        chosen_idx = rng.choice(neighbor_idxs)
+        # Use that neighbor's actual y
+        y_syn[i] = y_train[chosen_idx]
 
-    # Match and sample
-    synthetic_vals = []
-    for z_val in yhat_mis:
-        picked_val = _pmm_match_single(
-            z_value=z_val,
-            yhat_obs=yhat_obs,
-            y_obs=y,
-            donors=donors,
-            rng=rng,
-        )
-        synthetic_vals.append(picked_val)
-    synthetic_vals = np.array(synthetic_vals)
-
-    return {
-        "res": synthetic_vals,
-        "fit": fit_info,
-    }
+    return np.array(y_syn)

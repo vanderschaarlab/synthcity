@@ -1,221 +1,233 @@
-# synthcity/plugins/syn_seq/methods/misc.py
-
-"""
-A collection of miscellaneous synthesis methods that do not fit neatly into
-the more specific categories (e.g., cart, ctree, logreg, etc.).
-
-Here we provide simple or fallback sampling approaches, such as:
-
-    - syn_random: purely random sampling from the observed y, ignoring X.
-    - syn_constant: fill new rows with a constant value.
-    - syn_identity: pass-through if the new data shape matches the original. Useful for debugging.
-    - syn_swr: "sample without replacement" style, akin to R's "SWR" method in synthpop.
-
-Each function returns a dict with:
-    "res" -> the synthesized values for new data Xp
-    "fit" -> a dictionary with any fitted objects or metadata (optional)
-
-Usage:
-    from .misc import syn_random, syn_constant, syn_identity, syn_swr
-
-    # Example usage:
-    # y is observed data (n, ), X is shape (n, p), Xp is shape (m, p)
-
-    result = syn_random(y, X, Xp, random_state=42)
-    y_syn = result["res"]
-
-    or
-
-    result = syn_swr(y, X, Xp)
-    y_syn = result["res"]
-"""
-
-from typing import Any, Dict, Optional, Union
+# methods/misc.py
 
 import numpy as np
-import pandas as pd
+from typing import Any, Dict, Optional
 
+###############################################################################
+# LOGNORM
+###############################################################################
+
+def syn_lognorm(
+    y: np.ndarray,
+    X: np.ndarray,
+    random_state: int = 0,
+    **kwargs: Any
+) -> Dict[str, Any]:
+    """
+    Fit a 'lognormal' model. Typically you'd compute log of y and estimate 
+    parameters. This is just a stub/demonstration.
+
+    Args:
+        y: 1D array of target values.
+        X: 2D array of predictors (not strictly used here).
+        random_state: random seed for reproducibility.
+        **kwargs: any extra hyperparameters you might use in a real model.
+
+    Returns:
+        model_info: dictionary containing the fitted model parameters.
+    """
+    rng = np.random.default_rng(random_state)
+    
+    # To avoid log of zero/negative values, shift if needed
+    shift = max(0, -y.min() + 1e-9)
+    y_log = np.log(y + shift)
+
+    mu = float(np.mean(y_log))
+    sigma = float(np.std(y_log)) if np.std(y_log) > 0 else 1.0
+
+    model_info = {
+        "model_type": "lognorm",
+        "shift": shift,
+        "mu": mu,
+        "sigma": sigma,
+        "random_state": random_state
+    }
+    return model_info
+
+
+def generate_lognorm(
+    fitted_model: Dict[str, Any],
+    X: np.ndarray,
+    random_state: Optional[int] = None,
+    **kwargs: Any
+) -> np.ndarray:
+    """
+    Generate new y from the previously fitted lognormal parameters.
+
+    Args:
+        fitted_model: The dictionary returned by syn_lognorm(...).
+        X: 2D array of predictors (not used here, but included for consistency).
+        random_state: to override the model's stored random seed.
+        **kwargs: extra arguments for generation.
+
+    Returns:
+        y_gen: 1D numpy array of synthesized target values.
+    """
+    if random_state is not None:
+        rng = np.random.default_rng(random_state)
+    else:
+        rng = np.random.default_rng(fitted_model["random_state"])
+    
+    shift = fitted_model["shift"]
+    mu = fitted_model["mu"]
+    sigma = fitted_model["sigma"]
+
+    n = len(X)
+    # Sample from lognormal
+    y_gen = rng.lognormal(mean=mu, sigma=sigma, size=n)
+    # Shift back
+    y_gen -= shift
+
+    return y_gen
+
+
+###############################################################################
+# RANDOM
+###############################################################################
 
 def syn_random(
-    y: Union[pd.Series, np.ndarray],
-    X: Union[pd.DataFrame, np.ndarray],
-    Xp: Union[pd.DataFrame, np.ndarray],
-    proper: bool = False,
-    random_state: Optional[int] = None,
-    **kwargs: Any,
+    y: np.ndarray,
+    X: np.ndarray,
+    random_state: int = 0,
+    **kwargs: Any
 ) -> Dict[str, Any]:
     """
-    Synthesize new data by simply sampling with replacement from the observed values in y,
-    ignoring X or Xp.
-
-    If 'proper=True', we do a bootstrap on (X, y) so that y is resampled before usage,
-    aligning with 'proper' imputation concepts.
+    Fit a 'random' approach: just store the min and max of y, 
+    so we can sample uniformly in [min, max].
 
     Args:
-        y: 1D array-like of shape (n,). Observed outcome to sample from.
-        X: 2D array-like (n, p). Covariates, not used here but included for signature consistency.
-        Xp: 2D array-like (m, p). Covariates for new data, also not used here.
-        proper: bool, default=False. If True, bootstrap the training data prior to sampling.
-        random_state: int, for reproducibility.
-        **kwargs: Unused here, for signature consistency.
+        y: 1D array of target values.
+        X: 2D array of predictors (not used here).
+        random_state: random seed.
+        **kwargs: placeholders for advanced usage.
 
     Returns:
-        A dictionary with:
-            "res": array-like of shape (m,) with the synthetic outcome for each row in Xp.
-            "fit": empty dictionary or metadata (optional).
+        model_info: dictionary with min_val, max_val, etc.
     """
-    rng = np.random.RandomState(random_state)
-    y_array = y.values if isinstance(y, pd.Series) else np.asarray(y)
-    n = len(y_array)
+    rng = np.random.default_rng(random_state)
 
-    # If proper => bootstrap (X,y) in the sense that we re-sample y
-    if proper:
-        idx_boot = rng.choice(n, size=n, replace=True)
-        y_array = y_array[idx_boot]
+    min_val = float(np.min(y))
+    max_val = float(np.max(y))
 
-    m = len(Xp) if isinstance(Xp, (pd.DataFrame, np.ndarray)) else 0
-    if m == 0:
-        raise ValueError("Xp is empty or invalid, cannot generate new samples.")
-
-    # Now sample m times from y_array (with replacement)
-    syn_index = rng.randint(low=0, high=len(y_array), size=m)
-    syn_values = y_array[syn_index]
-
-    return {
-        "res": syn_values,
-        "fit": {},
+    model_info = {
+        "model_type": "random",
+        "min_val": min_val,
+        "max_val": max_val,
+        "random_state": random_state
     }
+    return model_info
 
+
+def generate_random(
+    fitted_model: Dict[str, Any],
+    X: np.ndarray,
+    random_state: Optional[int] = None,
+    **kwargs: Any
+) -> np.ndarray:
+    """
+    Generate y uniformly between [min_val, max_val].
+
+    Args:
+        fitted_model: The dictionary returned by syn_random(...).
+        X: 2D array of predictors (not used here).
+        random_state: optional seed.
+        **kwargs: unused extras.
+
+    Returns:
+        y_syn: 1D numpy array of uniformly sampled values.
+    """
+    if random_state is not None:
+        rng = np.random.default_rng(random_state)
+    else:
+        rng = np.random.default_rng(fitted_model["random_state"])
+    
+    min_val = fitted_model["min_val"]
+    max_val = fitted_model["max_val"]
+
+    n = len(X)
+    y_syn = rng.uniform(low=min_val, high=max_val, size=n)
+    return y_syn
+
+
+###############################################################################
+# SWR (Sampling Without Replacement)
+###############################################################################
 
 def syn_swr(
-    y: Union[pd.Series, np.ndarray],
-    X: Union[pd.DataFrame, np.ndarray],
-    Xp: Union[pd.DataFrame, np.ndarray],
-    **kwargs: Any,
+    y: np.ndarray,
+    X: np.ndarray,
+    random_state: int = 0,
+    **kwargs: Any
 ) -> Dict[str, Any]:
     """
-    'Sample Without Replacement' approach, akin to R's SWR in synthpop:
-
-    - If we want m samples (m = len(Xp)) and m <= len(y):
-        we pick a unique random subset of y with no replacement.
-    - If m > len(y), then we first pick 'len(y)' unique values from y,
-      then continue sampling from y *with replacement* for the remainder.
-      This logic mimics the notion that we can't pick more unique values than exist.
+    Fit a 'sampling without replacement' approach. We store a random permutation
+    of y. Then we can generate slices from it without replacement.
 
     Args:
-        y: 1D array-like of shape (n,). Observed outcome to sample from.
-        X: 2D array-like (n, p). Covariates for training data (unused here).
-        Xp: 2D array-like (m, p). Covariates of new data for which we want synthetic y.
-        **kwargs: not used.
+        y: 1D array of target values.
+        X: 2D array of predictors (unused here).
+        random_state: random seed.
+        **kwargs: additional arguments if needed.
 
     Returns:
-        A dictionary with:
-            "res": array of shape (m,) with the synthetic y.
-            "fit": empty dictionary or metadata.
+        model_info: dictionary containing the permuted pool of y and a pointer 
+                    for how many draws have been used so far.
     """
-    rng = np.random.RandomState(kwargs.get("random_state", 0))
+    rng = np.random.default_rng(random_state)
+    perm_indices = rng.permutation(len(y))
 
-    y_array = y.values if isinstance(y, pd.Series) else np.asarray(y)
-    n = len(y_array)
-
-    if not isinstance(Xp, (pd.DataFrame, np.ndarray)):
-        raise ValueError("Xp is invalid or empty.")
-
-    m = len(Xp)
-
-    if m <= n:
-        # pick exactly m unique samples from y
-        picks = rng.choice(y_array, size=m, replace=False)
-    else:
-        # pick n unique samples first
-        picks_unique = rng.choice(y_array, size=n, replace=False)
-        # then sample the difference with replacement
-        overshoot = m - n
-        picks_extra = rng.choice(y_array, size=overshoot, replace=True)
-        picks = np.concatenate([picks_unique, picks_extra])
-
-    return {
-        "res": picks,
-        "fit": {},
+    model_info = {
+        "model_type": "swr",
+        "pool": y.copy(),
+        "shuffled_idx": perm_indices,
+        "current_pos": 0,
+        "random_state": random_state
     }
+    return model_info
 
 
-def syn_constant(
-    y: Union[pd.Series, np.ndarray],
-    X: Union[pd.DataFrame, np.ndarray],
-    Xp: Union[pd.DataFrame, np.ndarray],
-    const_value: Any = 0,
-    **kwargs: Any,
-) -> Dict[str, Any]:
+def generate_swr(
+    fitted_model: Dict[str, Any],
+    X: np.ndarray,
+    random_state: Optional[int] = None,
+    **kwargs: Any
+) -> np.ndarray:
     """
-    Synthesize data by returning a constant value for each new record, ignoring y or X.
-
-    Useful as a placeholder or sentinel fill.
+    Generate new y by drawing from the 'pool' of original values WITHOUT REPLACEMENT.
+    If the aggregator calls this multiple times, we continue from where we left off.
 
     Args:
-        y: 1D array-like, shape (n,). Unused, included for signature consistency.
-        X: 2D array-like, shape (n, p). Unused.
-        Xp: 2D array-like, shape (m, p). The size (m) determines how many values to output.
-        const_value: The constant to fill.
-        **kwargs: unused.
+        fitted_model: The dictionary from syn_swr(...).
+        X: 2D array of predictors (not used in this simple approach).
+        random_state: If you want to override the seed, but typically 
+                      we rely on the existing permutation.
+        **kwargs: any additional arguments.
 
     Returns:
-        {
-            "res": shape (m,) array of the constant,
-            "fit": {}
-        }
+        y_syn: 1D array of values from the pool, sampled without replacement.
+
+    Raises:
+        ValueError: if we request more samples than remain in the pool.
     """
-    if isinstance(Xp, (pd.DataFrame, np.ndarray)):
-        m = len(Xp)
-    else:
-        raise ValueError("Xp is invalid or empty")
+    # The random_state argument does not affect the existing permutation. 
+    # The permutation was decided at fit-time.
+    
+    pool = fitted_model["pool"]
+    shuffled_idx = fitted_model["shuffled_idx"]
+    current_pos = fitted_model["current_pos"]
 
-    syn_values = np.full(m, const_value, dtype=object)
+    n = len(X)
+    remaining = len(pool) - current_pos
 
-    return {
-        "res": syn_values,
-        "fit": {},
-    }
-
-
-def syn_identity(
-    y: Union[pd.Series, np.ndarray],
-    X: Union[pd.DataFrame, np.ndarray],
-    Xp: Union[pd.DataFrame, np.ndarray],
-    **kwargs: Any,
-) -> Dict[str, Any]:
-    """
-    A trivial pass-through approach:
-      - If len(Xp) == len(y), we just return y as is.
-      - Otherwise, raise an error.
-
-    Useful for debugging or chain-of-thought checks.
-
-    Args:
-        y: 1D array-like of shape (n,).
-        X: 2D array-like (n, p). Unused.
-        Xp: 2D array-like (m, p). If m != n, raises error.
-        **kwargs: Unused.
-
-    Returns:
-        {
-            "res": simply y if lengths match
-            "fit": {}
-        }
-    """
-    n = len(y)
-    if not isinstance(Xp, (pd.DataFrame, np.ndarray)):
-        raise ValueError("Xp is invalid or empty")
-
-    m = len(Xp)
-    if m != n:
+    if n > remaining:
         raise ValueError(
-            f"syn_identity requires len(Xp) == len(y). Got y={n}, Xp={m}."
+            f"SWR error: requested {n} samples but only {remaining} remain. "
+            "Increase your dataset or reduce requested size."
         )
 
-    y_array = y.values if isinstance(y, pd.Series) else np.asarray(y)
+    selected_idx = shuffled_idx[current_pos: current_pos + n]
+    fitted_model["current_pos"] += n  # move pointer
 
-    return {
-        "res": y_array.copy(),  # or just y_array
-        "fit": {},
-    }
+    # Return these pool values
+    y_syn = pool[selected_idx]
+    return y_syn

@@ -7,15 +7,25 @@ import numpy as np
 from synthcity.plugins.core.models.syn_seq.syn_seq_rules import Syn_SeqRules
 from synthcity.plugins.core.models.syn_seq.methods import (
     syn_cart,
+    generate_cart,
     syn_ctree,
+    generate_ctree,
     syn_logreg,
+    generate_logreg,
     syn_norm,
-    syn_lognorm,
+    generate_norm,
     syn_pmm,
+    generate_pmm,
     syn_polyreg,
+    generate_polyreg,
     syn_rf,
+    generate_rf,
+    syn_lognorm,
+    generate_lognorm,
     syn_random,
+    generate_random,
     syn_swr,
+    generate_swr
 )
 
 class Syn_Seq:
@@ -87,7 +97,7 @@ class Syn_Seq:
 
     def generate(
         self,
-        nrows: int,
+        colunt: int,
         rules: Optional[Dict[str, List[Any]]] = None,
         *args,
         **kwargs
@@ -97,7 +107,7 @@ class Syn_Seq:
         
         col_with_rules = rules.key()
         generated_data = pd.DataFrame
-        generated_data = self._first_col.sample(nrows)
+        generated_data = self._first_col.sample(count)
 
         if rules:
             rules = Syn_SeqRules(chained_rules=rules)
