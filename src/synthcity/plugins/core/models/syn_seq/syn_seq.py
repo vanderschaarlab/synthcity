@@ -1,221 +1,190 @@
 # File: syn_seq.py
 
-from typing import Any, Dict, List, Optional, Union
+from typing import Any, Dict, List, Optional
 import pandas as pd
 import numpy as np
 
+# We import the rules class
 from synthcity.plugins.core.models.syn_seq.syn_seq_rules import Syn_SeqRules
+# We import our method calls from methods/__init__.py
 from synthcity.plugins.core.models.syn_seq.methods import (
-    syn_cart,
-    generate_cart,
-    syn_ctree,
-    generate_ctree,
-    syn_logreg,
-    generate_logreg,
-    syn_norm,
-    generate_norm,
-    syn_pmm,
-    generate_pmm,
-    syn_polyreg,
-    generate_polyreg,
-    syn_rf,
-    generate_rf,
-    syn_lognorm,
-    generate_lognorm,
-    syn_random,
-    generate_random,
-    syn_swr,
-    generate_swr
+    syn_cart, generate_cart,
+    syn_ctree, generate_ctree,
+    syn_logreg, generate_logreg,
+    syn_norm, generate_norm,
+    syn_pmm, generate_pmm,
+    syn_polyreg, generate_polyreg,
+    syn_rf, generate_rf,
+    syn_lognorm, generate_lognorm,
+    syn_random, generate_random,
+    syn_swr, generate_swr
 )
 
-
-def default_method_map():
-    return {
-        "cart": (syn_cart, generate_cart),
-        "ctree": (syn_ctree, generate_ctree),
-        "logreg": (syn_logreg, generate_logreg),
-        "norm": (syn_norm, generate_norm),
-        "pmm": (syn_pmm, generate_pmm),
-        "polyreg": (syn_polyreg, generate_polyreg),
-        "rf": (syn_rf, generate_rf),
-        "lognorm": (syn_lognorm, generate_lognorm),
-        "random": (syn_random, generate_random),
-        "swr": (syn_swr, generate_swr),
-    }
-
+# For convenience, map method_name -> (fit_func, generate_func)
+METHOD_MAP = {
+    "cart": (syn_cart, generate_cart),
+    "ctree": (syn_ctree, generate_ctree),
+    "logreg": (syn_logreg, generate_logreg),
+    "norm": (syn_norm, generate_norm),
+    "pmm": (syn_pmm, generate_pmm),
+    "polyreg": (syn_polyreg, generate_polyreg),
+    "rf": (syn_rf, generate_rf),
+    "lognorm": (syn_lognorm, generate_lognorm),
+    "random": (syn_random, generate_random),
+    "swr": (syn_swr, generate_swr),
+}
 
 class Syn_Seq:
     """
     A sequential-synthesis aggregator that:
 
-      1) user_custom => loader.* has configured syn_order, special_value, variable_selection, etc
-      2) fit => splitted columns => partial-fit each splitted col
-      3) generate => col-by-col in splitted order, applying rules if any
-      4) decode => final result (no _cat columns)
+      1) For each col in syn_order, pick a method => fit => store in _col_models.
+         - The first column can be "swr" or "random" by default if user wants.
+      2) generate(...) => for each col in syn_order, generate new y_syn using the fitted model.
+      3) if rules => attempt re-generation for those rows that fail the rule constraints, up to 'max_iter'.
 
-    Example usage in plugin:
-        syn_seq = Syn_Seq(random_state=0)
-        syn_seq.fit(loader)
-        syn_data = syn_seq.generate(count=1000, rules=rules)
+      It's recommended that after generating, you pass the result to encoder.inverse_transform(...) to revert cat/dates if needed.
     """
 
     def __init__(
         self,
         random_state: int = 0,
         strict: bool = True,
-        sampling_patience: int = 100,  # not used here, but for future
+        sampling_patience: int = 100,
     ):
         self.random_state = random_state
         self.strict = strict
         self.sampling_patience = sampling_patience
+        self._col_models: Dict[str, Dict[str, Any]] = {}
         self._model_trained = False
-        self._col_models: Dict[str, Any] = {}
         self._syn_order: List[str] = []
-        self._method_map = default_method_map()
-        # We store the first col separately because you said it might have a special approach, e.g. swr
-        self._first_col_name: Optional[str] = None
+        self._method_map: Dict[str, str] = {}
+        self._varsel: Dict[str, List[str]] = {}
 
-    def fit(
-        self,
-        loader: Any,
-        *args,
-        **kwargs
-    ) -> "Syn_Seq":
-        # get info from loader
+        self._first_col = None  # We'll store the distribution or data for the first col.
+
+    def fit(self, loader: Any, *args, **kwargs) -> "Syn_Seq":
+        """
+        Args:
+            loader: the fitted DataLoader (Syn_SeqDataLoader).
+                   We read syn_order, method, variable_selection from loader.info
+        """
         info = loader.info()
-        training_data = loader.dataframe()
+        training_data = loader.dataframe().copy()
         if training_data.empty:
             raise ValueError("No data after encoding => cannot train on empty DataFrame.")
 
-        self._syn_order = info["syn_order"]
-        method_dict = info["method"]  # col->method
-        varsel = info["variable_selection"]
-        if varsel is None:
-            raise ValueError("variable_selection dictionary is empty or not set")
+        syn_order: List[str] = info["syn_order"]
+        method_map: Dict[str, str] = info["method"]  # col-> "rf"/"norm"/"cart" ...
+        varsel: Dict[str, List[str]] = info["variable_selection"]  # dict
+
+        self._syn_order = syn_order
+        self._method_map = method_map
+        self._varsel = varsel
 
         print("[INFO] model fitting")
-        # For demonstration, we can print the actual syn_order
-        # or your example "Fitting order => [...]"
-        print("Fitting order =>", self._syn_order)
+        print("Fitting order =>", syn_order)
 
-        # Fit each column
-        np.random.seed(self.random_state)  # set random state for reproducibility
-        for col_idx, col in enumerate(self._syn_order):
-            if col_idx == 0:
-                # user might want a different method for the first col
-                chosen_method = method_dict.get(col, "swr")
-                self._first_col_name = col
-                # We'll store a "dummy" model or keep special note that we only sample from the original data
-                # Actually, let's do the same approach: _fit_col
-                print(f"Fitting '{col}' with method='{chosen_method}' ... Done!")
-                self._col_models[col] = {
-                    "model": None,  # no real model, maybe just store the distribution
-                    "method_name": chosen_method
-                }
-                # Could do: self._col_models[col]["model"] = syn_swr(...)
-                # but let's keep it minimal for now
+        # Fit logic
+        for i, col in enumerate(syn_order):
+            if i == 0:
+                # We'll treat the first col as "swr" by default
+                chosen_m = "swr"
+                self._first_col = training_data[col].values.copy()
+                print(f"Fitting first col '{col}' with method='{chosen_m}' ... Done (no real model).")
                 continue
 
-            chosen_method = method_dict.get(col, "cart")
+            chosen_m = method_map[col]
             preds_list = varsel[col]
+            if len(preds_list) == 0:
+                # e.g. second col might only have the first col as predictor => preds_list = [syn_order[0]], etc.
+                pass
             y = training_data[col].values
             X = training_data[preds_list].values
 
-            print(f"Fitting '{col}' with method='{chosen_method}' ... ", end="")
-
-            syn_fn, _ = self._method_map.get(chosen_method, (None, None))
-            if syn_fn is None:
-                raise ValueError(f"Unknown method '{chosen_method}' for column '{col}'")
-
-            # syn_fn returns something like a fitted model
-            model_obj = syn_fn(y, X, random_state=self.random_state)
-            self._col_models[col] = {
-                "model": model_obj,
-                "method_name": chosen_method
-            }
+            print(f"Fitting '{col}' with method='{chosen_m}' ... ", end="", flush=True)
+            model_dict = self._fit_col(col, y, X, chosen_m)
+            self._col_models[col] = model_dict
             print("Done!")
 
         self._model_trained = True
         return self
 
+    def _fit_col(self, colname: str, y: np.ndarray, X: np.ndarray, method_name: str) -> Dict[str, Any]:
+        """
+        Fit a single column's model using the relevant method from METHOD_MAP.
+        Return a dictionary that stores the fitted model (and anything else).
+        """
+        fit_func, _ = METHOD_MAP[method_name]
+        model = fit_func(y, X, random_state=self.random_state)
+        return {
+            "name": method_name,
+            "fitted_model": model,
+        }
+
     def generate(
         self,
         nrows: int,
         rules: Optional[Dict[str, List[Any]]] = None,
-        *args,
-        **kwargs
+        *args, **kwargs
     ) -> pd.DataFrame:
+        """
+        Generate 'nrows' new samples, col-by-col. If rules => we re-generate for violations.
+        Return a raw DataFrame with the same columns as self._syn_order (including the _cat columns).
+        """
         if not self._model_trained:
             raise RuntimeError("Must fit(...) aggregator before .generate().")
 
-        print(f"Generating synthetic data with nrows={nrows} ...")
-        # We will build the df col by col in the order
-        # For the first col, we sample from the real distribution or from swr if you prefer
+        # We'll create an empty DataFrame for the results
+        gen_df = pd.DataFrame(index=range(nrows))
 
-        gen_data = pd.DataFrame(index=range(nrows))
-        np.random.seed(self.random_state)
+        # Set the first column
+        first_col_name = self._syn_order[0]
+        gen_df[first_col_name] = np.random.choice(self._first_col, size=nrows, replace=True)
 
-        # If user gave rules, wrap them in Syn_SeqRules
-        synseq_rules = Syn_SeqRules(chained_rules=rules) if rules else None
+        # Prepare rules
+        rules_obj = None
+        if rules is not None:
+            rules_obj = Syn_SeqRules(chained_rules=rules, max_iter=10)
 
-        for col_idx, col in enumerate(self._syn_order):
-            method_name = self._col_models[col]["method_name"]
-            # get generation function
-            _, gen_fn = self._method_map.get(method_name, (None, None))
-            if gen_fn is None:
-                raise ValueError(f"No generation fn found for method={method_name}")
+        # For each subsequent column
+        for col in self._syn_order[1:]:
+            chosen_m = self._method_map[col]
+            preds_list = self._varsel[col]
+            X_syn = gen_df[preds_list].values  # shape (nrows, #predictors)
 
-            # predictor columns
-            if col_idx == 0:
-                # first col => special
-                # For demonstration, we do a "simple random sample" from the training data
-                # or a "generate_swr" approach
-                # We'll just do random from original col for minimal example:
-                # (Of course in real usage you'd do something more advanced)
-                # let's produce normal random
-                col_values = np.random.randn(nrows)
-                gen_data[col] = col_values
-                print(f"Generating '{col}' ... Done!")
-            else:
-                preds_list = kwargs.get("varsel", {}).get(col, None)
-                if preds_list is None:
-                    # fallback: from stored varsel
-                    # Note that we have it in self._syn_order => we can do:
-                    # but we stored varsel in _col_models? We didn't. So let's do:
-                    # For minimal approach, just read from the loader info again. Or store in the class.
-                    # Let's just do a quick approach:
-                    # get it from the loader if needed. Or we can read from self?
-                    # We'll store it in training. For minimal example, let's do "predict all previous columns":
-                    preds_list = self._syn_order[:col_idx]
-                # build X for generation
-                Xsyn = gen_data[preds_list].values  # shape = (nrows, len(preds))
+            # Use fitted model to generate
+            y_syn = self._generate_col(col, chosen_m, X_syn)
+            gen_df[col] = y_syn
 
-                # generate col
-                col_model = self._col_models[col]["model"]
-                col_values = gen_fn(col_model, Xsyn)
-                gen_data[col] = col_values
-                print(f"Generating '{col}' ... Done!")
+            # If rules => re-check rows that violate
+            if rules_obj is not None and col in rules_obj.chained_rules:
+                iter_count = 0
+                while True:
+                    viol_idx = rules_obj.check_violations(gen_df, col)
+                    if len(viol_idx) == 0:
+                        break  # no more violations => done
+                    if iter_count >= rules_obj.max_iter:
+                        # we keep them as is => or set them to NaN
+                        gen_df.loc[viol_idx, col] = np.nan
+                        print(f"[WARN] Could not fully satisfy rules for '{col}' after {rules_obj.max_iter} tries. Setting them to NaN.")
+                        break
+                    # re-generate only for those violation rows
+                    X_syn_sub = gen_df.loc[viol_idx, preds_list].values
+                    y_syn_sub = self._generate_col(col, chosen_m, X_syn_sub)
+                    gen_df.loc[viol_idx, col] = y_syn_sub
+                    iter_count += 1
 
-            # apply rules if present
-            if synseq_rules is not None:
-                gen_data = synseq_rules.apply_rules(
-                    gen_data, col,
-                    generation_callback=lambda m, xpreds: gen_fn(m, xpreds.values),
-                    preds_list=self._syn_order[:col_idx],
-                    col_model=self._col_models[col]["model"]
-                )
+            print(f"Generating '{col}' ... Done!")
 
-        # Done all columns
-        print("Generation done!\n")
+        return gen_df
 
-        return gen_data
-
-    def decode(self, df: pd.DataFrame) -> pd.DataFrame:
+    def _generate_col(self, colname: str, method_name: str, X_syn: np.ndarray) -> np.ndarray:
         """
-        If needed, we can remove _cat columns, etc. 
-        But for minimal approach, let's just return df.
+        Call the 'generate_<method>' function to synthesize the target col from the model.
         """
-        # drop columns that end with "_cat" maybe
-        cat_cols = [c for c in df.columns if c.endswith("_cat")]
-        df = df.drop(columns=cat_cols, errors="ignore")
-        return df
+        model_dict = self._col_models[colname]
+        gen_func = METHOD_MAP[method_name][1]  # second element: generate_func
+        # fitted_model is what we stored in model_dict["fitted_model"]
+        y_syn = gen_func(model_dict["fitted_model"], X_syn)
+        return y_syn

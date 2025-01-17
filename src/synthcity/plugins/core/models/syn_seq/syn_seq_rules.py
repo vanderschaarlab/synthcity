@@ -1,115 +1,68 @@
 # File: syn_seq_rules.py
 
-from typing import Dict, List, Any, Tuple, Optional
+from typing import List, Dict, Any
 import pandas as pd
-import numpy as np
-
-"""
-We want to accept something like:
-
-   rules = {
-     "target": [
-       ("bmi", ">", 0.15),
-       ("target", ">", 0)
-     ],
-     "X3": [
-       ("X1", "<", 0),
-       ("X3", ">", 0)
-     ]
-   }
-
-We interpret each key as "col to be tested/regenerated" => list of conditions
-Each condition is (col_if, op, val_if).
-We then do "if row satisfies (col_if op val_if), then row must also satisfy col->some constraints"
-But you said you prefer to re-generate the values until conditions are met or until max iteration.
-If it fails, we fallback to np.nan or some default.
-
-Hence, the logic can be:
-   For each row in generated_data,
-       while not satisfied(rules for col) and iteration < MAX:
-          y_syn[i, col] = regenerate(....)
-       if still not satisfied => y_syn[i, col] = np.nan
-"""
-
 
 class Syn_SeqRules:
-    def __init__(
-        self,
-        chained_rules: Optional[Dict[str, List[Tuple[str, str, Any]]]] = None,
-        max_iterations: int = 20,
-    ) -> None:
-        """
-        chained_rules example:
-          {
-             "X3":[("X1","<",0),("X3",">",0)],
-             "target":[("bmi",">",0.15),("target",">",0)]
-          }
-        """
-        self.rules = chained_rules if chained_rules else {}
-        self.max_iterations = max_iterations
+    """
+    A minimal implementation that reads user-provided rules:
+      e.g. rules = {
+         "target":[
+             ("bmi", ">", 0.15),
+             ("target", ">", 0)
+         ],
+         "bp":[
+             ("bp", "=", 0)
+         ]
+      }
+    The expected usage is:
+      - For each col being generated, we check if col is in the rules dict.
+      - If it is, we attempt to filter rows that do not satisfy all sub-rules => re-generate.
+    """
 
-    def apply_rules(
-        self,
-        data: pd.DataFrame,
-        col: str,
-        generation_callback,
-        preds_list: List[str],
-        col_model: Any,
-    ) -> pd.DataFrame:
+    def __init__(self, chained_rules: Dict[str, List[Any]], max_iter: int = 10):
         """
-        For each row, if the rules are not satisfied, we re-generate the col's value (calling generation_callback).
-        We do this up to self.max_iterations times. If it fails, set np.nan.
-        generation_callback is something like generate_col(...) that returns a new value for that row.
-        preds_list: the predictor columns for this col
-        col_model: the fitted model for this col
+        chained_rules: A dictionary => { "colname": [ (col/feature, op, val), (col, op, val), ... ], ... }
+        max_iter: maximum iteration for re-generation attempts.
         """
-        if col not in self.rules:
-            return data
+        self.chained_rules = chained_rules
+        self.max_iter = max_iter
 
-        conditions = self.rules[col]  # list of (col_if, op, val)
-        for i in range(len(data)):
-            iteration_count = 0
-            while iteration_count < self.max_iterations:
-                if self._satisfied(data, i, conditions):
-                    break
-                # Re-generate that single value
-                new_val = generation_callback(
-                    col_model,
-                    data.loc[[i], preds_list],
-                )
-                data.loc[i, col] = new_val
-                iteration_count += 1
-            if not self._satisfied(data, i, conditions):
-                data.loc[i, col] = np.nan  # fallback
-
-        return data
-
-    def _satisfied(
-        self, data: pd.DataFrame, row_index: int, conditions: List[Tuple[str, str, Any]]
-    ) -> bool:
+    def check_violations(self, df: pd.DataFrame, target_col: str) -> pd.Index:
         """
-        Check if the row data satisfies all conditions in conditions
-        Each condition is (col_if, op, val)
+        Return the df index that violates the rules for `target_col`.
+        We expect rules for `target_col` => [("bmi", ">", 0.15), ("target", ">", 0), ...]
+        We'll interpret each sub-rule as "df[feature] op val must be True" for it to be valid.
+        Return all row indices that fail at least one sub-rule => they violate.
         """
-        row = data.iloc[row_index]
-        for (cif, op, val) in conditions:
-            if not self._op_check(row[cif], op, val):
-                return False
-        return True
+        if target_col not in self.chained_rules:
+            return pd.Index([])  # no rules => no violations
 
-    def _op_check(self, left, op, right):
-        if pd.isna(left):
-            return False
-        if op == "<":
-            return left < right
-        elif op == "<=":
-            return left <= right
-        elif op == ">":
-            return left > right
-        elif op == ">=":
-            return left >= right
-        elif op in ["==", "="]:
-            return left == right
-        else:
-            # fallback
-            return False
+        sub_rules = self.chained_rules[target_col]
+        # We gather boolean mask for "valid rows" across all sub-rules
+        mask_valid = pd.Series([True]*len(df), index=df.index)
+
+        for (col_feat, operator, value) in sub_rules:
+            # If col_feat not in df => skip or treat it as no constraint
+            if col_feat not in df.columns:
+                continue
+
+            if operator == "=" or operator == "==":
+                local_mask = (df[col_feat] == value) | df[col_feat].isna()
+            elif operator == ">":
+                local_mask = (df[col_feat] > value) | df[col_feat].isna()
+            elif operator == ">=":
+                local_mask = (df[col_feat] >= value) | df[col_feat].isna()
+            elif operator == "<":
+                local_mask = (df[col_feat] < value) | df[col_feat].isna()
+            elif operator == "<=":
+                local_mask = (df[col_feat] <= value) | df[col_feat].isna()
+            else:
+                # Could expand for "!=" or "in", etc. as needed
+                local_mask = pd.Series([True]*len(df), index=df.index)
+
+            mask_valid &= local_mask
+
+        # Violations = ~mask_valid
+        violating_index = df.index[~mask_valid]
+        return violating_index
