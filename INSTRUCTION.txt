@@ -1,6 +1,8 @@
 INSTRUCTION
 
-I have rewritten entirely "syn_seq.py", "syn_seq_rules.py" and "plugin_syn_seq.py" but it is incomplete. Please rewrite and complete the code based on all the information necessary.
+Currently I am writing syn_seq.py.
+Please suggest the structure that can be aligned for all the files in methods/.
+Also generate the code that I can write in methods/__init__.py so I can make the syn_seq.py work.
 
 ==============================INTRODUCTION, PROJECT STRUCTURE, LOGIC, ISSUES, EXAMPLE TEST RUN I WANT TO SEE, REFERENCE CODES.==============================
 
@@ -5395,10 +5397,10 @@ class Serializable:
 
 
 src/synthcity/plugins/core/models/syn_seq/methods/__init__.py
-** Not a valid file path or file does not exist. **
+
 
 src/synthcity/plugins/core/models/syn_seq/methods/__init__.py
-** Not a valid file path or file does not exist. **
+
 
 src/synthcity/logger.py
 # stdlib

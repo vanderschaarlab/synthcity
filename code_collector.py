@@ -22,7 +22,6 @@ FILE_PATHS = [
     "src/synthcity/plugins/core/schema.py",
     "src/synthcity/plugins/core/serializable.py",
     "src/synthcity/plugins/core/models/syn_seq/methods/__init__.py",
-    "src/synthcity/plugins/core/models/syn_seq/methods/__init__.py",
     "src/synthcity/logger.py",
     "src/synthcity/benchmark/__init__.py",
     "src/synthcity/metrics/eval.py"
