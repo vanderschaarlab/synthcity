@@ -12,9 +12,19 @@ FILE_PATHS = [
     "src/synthcity/plugins/core/models/syn_seq/polyreg.py",
     "src/synthcity/plugins/core/models/syn_seq/rf.py",
     "src/synthcity/plugins/core/models/syn_seq/syn_seq.py",
-    "src/synthcity/plugins/core/models/syn_seq/syn_seq_constraints.py",
+    "src/synthcity/plugins/core/models/syn_seq/syn_seq_rules.py",
     "src/synthcity/plugins/core/dataloader.py",
-    "src/synthcity/plugins/generic/plugin_syn_seq.py"
+    "src/synthcity/plugins/generic/plugin_syn_seq.py",
+    "src/synthcity/plugins/core/constraints.py",
+    "src/synthcity/plugins/core/dataset.py",
+    "src/synthcity/plugins/core/distribution.py",
+    "src/synthcity/plugins/core/plugin.py",
+    "src/synthcity/plugins/core/schema.py",
+    "src/synthcity/plugins/core/serializable.py",
+    "src/synthcity/plugins/core/models/syn_seq/methods/__init__.py",
+    "src/synthcity/logger.py",
+    "src/synthcity/benchmark/__init__.py",
+    "src/synthcity/metrics/eval.py"
 ]
 
 # 2) Specify the output file name here.
