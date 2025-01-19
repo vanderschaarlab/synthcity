@@ -19,10 +19,10 @@ class Syn_SeqEncoder(TransformerMixin, BaseEstimator):
         self,
         columns_special_values: Optional[Dict[str, List]] = None,
         syn_order: Optional[List[str]] = None,
+        method: Optional[Dict[str, str]] = None,
         max_categories: int = 20,
         col_type: Optional[Dict[str, str]] = None,
-        default_method: str = "cart",
-        # variable_selection을 굳이 init에서 직접 받지 않아도 됨. 필요하면 DataLoader에서 encoder.variable_selection_에 바로 할당 가능
+        variable_selection: Optional[Dict[str, List]] = None,
     ) -> None:
         """
         Args:
@@ -32,32 +32,26 @@ class Syn_SeqEncoder(TransformerMixin, BaseEstimator):
             col_type: { "age":"category", "birthdate":"date"... } 등 사용자 override
             default_method: col_map에 기록될 default method
         """
-        self.columns_special_values = columns_special_values or {}
         self.syn_order = syn_order or []
+        self.method = method
         self.max_categories = max_categories
-        self.col_type = (col_type or {}).copy()  # user override
-        self.default_method = default_method
-
-        # col_map: { col: {"original_dtype":..., "converted_type":..., "method":...}, ...}
-        self.col_map: Dict[str, Dict[str, Any]] = {}
+        self.columns_special_values = columns_special_values or {}
+        self.col_type = col_type or {}
+        self.variable_selection = variable_selection or {}
 
         # date min 저장용
         self.date_mins: Dict[str, pd.Timestamp] = {}
-
-        # variable_selection_: dict. 예: {"bp":["sex","bmi"], "target":["sex","bmi","bp"], ...}
-        self.variable_selection_: Optional[Dict[str, List[str]]] = None
+        info_dict: Dict[str, Any] = {}
 
     # ----------------------- fit -----------------------
-    def fit(self, X: pd.DataFrame, y=None) -> "Syn_SeqEncoder":
+    def fit(self, X: pd.DataFrame) -> "Syn_SeqEncoder":
         X = X.copy()
         self._detect_syn_order(X)
-        self._init_col_map(X)
+        # self._init_col_map(X)
+        self._type_map(X)
         self._detect_special_values(X)
-
-        # 만약 사용자가 미리 variable_selection_을 세팅하지 않았다면, 기본 규칙으로 생성
-        if self.variable_selection_ is None:
-            self.variable_selection_ = self._build_varsel_dict_default()
-        # date mins
+        self._detect_method(X)
+        self._detect_variable_selection(X)
         self._store_date_min(X)
         return self
 
@@ -72,6 +66,7 @@ class Syn_SeqEncoder(TransformerMixin, BaseEstimator):
         X = self._apply_converted_dtype(X)
 
         # **split 후 variable_selection_ dict 업데이트**
+        self._update_method(X)
         self._update_varsel_dict_after_split(X)
         return X
 
@@ -95,54 +90,24 @@ class Syn_SeqEncoder(TransformerMixin, BaseEstimator):
                 except:
                     pass
         return X
-
-    # ----------------------- get_info() -----------------------
-    def get_info(self) -> Dict[str, Any]:
-        """
-        Returns dict with:
-         - syn_order
-         - method (col->method)
-         - special_value
-         - original_type (col-> str)
-         - converted_type(col-> str)
-         - variable_selection => dict->DataFrame 변환
-        """
-        info_dict: Dict[str, Any] = {}
-        info_dict["syn_order"] = self.syn_order
-
-        # method/original_type/converted_type
-        method_map = {}
-        orig_type_map = {}
-        conv_type_map = {}
-        for c, cinfo in self.col_map.items():
-            method_map[c] = cinfo.get("method")
-            orig_type_map[c] = cinfo.get("original_dtype")
-            conv_type_map[c] = cinfo.get("converted_type")
-
-        info_dict["method"] = method_map
-        info_dict["special_value"] = self.columns_special_values
-        info_dict["original_type"] = orig_type_map
-        info_dict["converted_type"] = conv_type_map
-        info_dict["variable_selection"] = self.variable_selection_
-
-        # variable_selection_: dict -> DataFrame
-        # if self.variable_selection_ is not None:
-        #     df_vs = self._varsel_dict_to_df(self.variable_selection_)
-        #     info_dict["variable_selection"] = df_vs
-        # else:
-        #     info_dict["variable_selection"] = None
-
-        return info_dict
-
-    # ------------------- variable_selection dict helpers -------------------
-    def _build_varsel_dict_default(self) -> Dict[str, List[str]]:
-        """
-        기본 규칙: syn_order에서 i번째 컬럼은 앞의 i개 컬럼을 predictor로.
-        예: col[0] => [], col[1] => [col[0]], col[2] => [col[0], col[1]] ...
-        """
+    
+    def _detect_method(self) -> Dict[str, str]:
+        m_dict: Dict[str, str] = {}
+        m_dict[self.syn_order[0]] = "swr"
+        for i+1, col in enumerate(self.syn_order):
+            if col in self.m_dict:
+                m_dict[col] = self.method[col]
+            else:
+                m_dict[col] = self.method["cart"]
+        return m_dict
+    
+    def _detect_variable_selection(self) -> Dict[str, List[str]]:
         vs_dict: Dict[str, List[str]] = {}
         for i, col in enumerate(self.syn_order):
-            vs_dict[col] = self.syn_order[:i]
+            if col in self.variable_selection:
+                vs_dict[col] = self.variable_selection[col]
+            else:
+                vs_dict[col] = self.syn_order[:i]
         return vs_dict
 
     def _update_varsel_dict_after_split(self, X: pd.DataFrame) -> None:
@@ -234,6 +199,7 @@ class Syn_SeqEncoder(TransformerMixin, BaseEstimator):
                 "converted_type": conv_type,
                 "method": self.default_method
             }
+
 
     def _detect_special_values(self, X: pd.DataFrame):
         for col in self.syn_order:

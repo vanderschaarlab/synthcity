@@ -54,7 +54,7 @@ class Syn_SeqPlugin(Plugin):
     @staticmethod
     def hyperparameter_space(**kwargs: Any) -> List[Distribution]:
         # Provide any hyperparameter distributions you want to tune
-        return []
+        return
 
     @validate_arguments(config=dict(arbitrary_types_allowed=True))
     def __init__(
@@ -99,7 +99,34 @@ class Syn_SeqPlugin(Plugin):
     # ---------------------------------------------------------------------
     # 1) Fit the aggregator
     # ---------------------------------------------------------------------
-    def _fit(self, X: DataLoader, *args: Any, **kwargs: Any) -> "Syn_SeqPlugin":
+
+    def fit(self, X: Union[DataLoader, pd.DataFrame], *args: Any, **kwargs: Any) -> Any:
+
+        if isinstance(X, (pd.DataFrame)):
+            ValueError("No data loader")
+
+        enable_reproducible_results(self.random_state)
+
+        self._schema = Schema(
+            data=X,
+            sampling_strategy=self.sampling_strategy,
+            random_state=self.random_state,
+        )
+
+        X_encoded, self._data_encoders = X.encode()
+        
+        self._training_schema = Schema(
+            data=X_encoded,
+            sampling_strategy=self.sampling_strategy,
+            random_state=self.random_state,
+        )
+
+        output = self._fit(X_encoded, *args, **kwargs)
+        self.fitted = True
+
+        return output
+
+    def _fit(self, X_encoded: DataLoader, *args: Any, **kwargs: Any) -> "Syn_SeqPlugin":
         """
         Internal method for fitting the aggregator to the data
         """
@@ -110,7 +137,7 @@ class Syn_SeqPlugin(Plugin):
             sampling_patience=self.sampling_patience,
         )
         # Fit aggregator
-        self.model.fit(X, *args, **kwargs)
+        self.model.fit(X_encoded, *args, **kwargs)
         return self
 
     # ---------------------------------------------------------------------

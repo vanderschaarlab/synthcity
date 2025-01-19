@@ -1814,17 +1814,24 @@ class Syn_SeqDataLoader(DataLoader):
         self,
         data: pd.DataFrame,
         user_custom: Optional[Dict[str, Any]] = None,
+        sensitive_features: List[str] = [],
+        target_column: Optional[str] = None,
         random_state: int = 0,
         train_size: float = 0.8,
         max_categories: int = 20,
         verbose: bool = True,
         **kwargs: Any,
     ):
-        # 1) raw_df 보관
-        self.raw_df = data.copy()
-
+        super().__init__(
+            data_type="syn_seq",
+            data=data,
+            random_state=random_state,
+            train_size=train_size,
+            **kwargs
+        )
         # 2) user_custom 파싱
         syn_order: Optional[List[str]] = None
+        method: Dict[str, List[Any]] = {}
         columns_special_values: Dict[str, List[Any]] = {}
         col_type: Dict[str, str] = {}
         variable_selection: Optional[Dict[str, List[str]]] = None  # dict
@@ -1832,17 +1839,17 @@ class Syn_SeqDataLoader(DataLoader):
         if user_custom:
             if "syn_order" in user_custom:
                 syn_order = user_custom["syn_order"]
+            if "method" in user_custom:
+                method = user_custom["method"]
             if "special_value" in user_custom:
                 columns_special_values = user_custom["special_value"]
             if "col_type" in user_custom:
                 col_type = user_custom["col_type"]
-            if "max_categories" in user_custom:
-                max_categories = user_custom["max_categories"]
             if "variable_selection" in user_custom:
                 variable_selection = user_custom["variable_selection"]  # dict
 
         if syn_order is None:
-            syn_order = list(self.raw_df.columns)
+            syn_order = list(self.data.columns)
             if verbose:
                 print("[WARN] user did not specify 'syn_order'; using raw_df.columns order.")
 
@@ -1852,28 +1859,17 @@ class Syn_SeqDataLoader(DataLoader):
 
         # 3) encoder 생성
         self._encoder = Syn_SeqEncoder(
-            columns_special_values=columns_special_values,
             syn_order=syn_order,
+            method=method,
             max_categories=max_categories,
+            columns_special_values=columns_special_values,
             col_type=col_type,
+            variable_selection = variable_selection
         )
-
-        # 만약 variable_selection dict이 있다면 미리 세팅(=> fit 시점에 그대로 사용)
-        if variable_selection is not None:
-            self._encoder.variable_selection_ = variable_selection
 
         # 4) fit + transform
-        self._encoder.fit(self.raw_df)
-        splitted_df = self._encoder.transform(self.raw_df)
+        self._encoder.fit(self.data)
 
-        # 5) 부모 DataLoader init => splitted_df
-        super().__init__(
-            data_type="syn_seq",
-            data=splitted_df,
-            random_state=random_state,
-            train_size=train_size,
-            **kwargs
-        )
 
         if verbose:
             enc_info = self._encoder.get_info()
