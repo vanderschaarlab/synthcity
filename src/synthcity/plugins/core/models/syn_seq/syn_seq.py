@@ -4,7 +4,7 @@ from typing import Any, Dict, List, Optional
 import pandas as pd
 import numpy as np
 
-# method calls
+# from .methods import ... => You must ensure the below imports point to your actual method files
 from synthcity.plugins.core.models.syn_seq.methods import (
     syn_cart, generate_cart,
     syn_ctree, generate_ctree,
@@ -38,18 +38,15 @@ def check_rules_violation(
     rules_dict: Dict[str, List[Any]]
 ) -> pd.Index:
     """
-    A function that checks if `target_col` has rules in rules_dict => re-check rows that violate.
-      - rules_dict expects something like:
-        rules_dict = {
+    Checks if `target_col` has rules in rules_dict => returns the row index that fails.
+    rules_dict example:
+        {
           "target": [
              ("bmi", ">", 0.15),
              ("target", ">", 0)
           ],
-          "bp": [
-             ("bp", "=", 0)
-          ]
+          ...
         }
-    Return the row index that fails the rules for `target_col`.
     """
     if target_col not in rules_dict:
         return pd.Index([])
@@ -74,23 +71,20 @@ def check_rules_violation(
         elif operator == "<=":
             local_mask = (df[col_feat] <= val) | df[col_feat].isna()
         else:
-            # could expand for "!=" or "in", etc.
             local_mask = pd.Series(True, index=df.index)
 
         mask_valid &= local_mask
 
-    # anything that is NOT valid => violation
     violation_idx = df.index[~mask_valid]
     return violation_idx
 
 
 class Syn_Seq:
     """
-    A sequential-synthesis aggregator for the syn_seq plugin.
+    A simple sequential-synthesis aggregator:
 
-      - .fit(...) => column-by-column model building
-      - .generate(...) => col-by-col generation
-      - if rules => attempt re-generation for rows that violate them
+      - .fit(dataloader) => for each col in order => builds model using chosen method
+      - .generate(nrows, rules=...) => col-by-col generation; if rules => re-generate violation rows
     """
 
     def __init__(
@@ -109,46 +103,65 @@ class Syn_Seq:
         self._method_map: Dict[str, str] = {}
         self._varsel: Dict[str, List[str]] = {}
 
-        self._first_col = None  # store data for the first col
+        self._first_col_name: Optional[str] = None
+        self._first_col_data: Optional[np.ndarray] = None
 
     def fit(self, loader: Any, *args, **kwargs) -> "Syn_Seq":
         """
-        loader => data + info. We read syn_order, method, variable_selection, etc.
+        loader => data + info (including syn_order, method, variable_selection).
+        We'll read from loader.info() the 'syn_order', 'method', 'variable_selection' etc.
         """
-        info = loader.info()
+        info = loader.info()  # expecting syn_order, col_map, variable_selection, ...
         training_data = loader.dataframe().copy()
         if training_data.empty:
             raise ValueError("No data after encoding => cannot train on empty DataFrame.")
 
         self._syn_order = info["syn_order"]
-        self._method_map = info["method"]
-        self._varsel = info["variable_selection"]
+        # build method map => col => method
+        # store variable_selection => col => [predictors]
+        col_map = info.get("col_map", {})
+        self._method_map = {}
+        for col in self._syn_order:
+            m = "cart"
+            if col in col_map and "method" in col_map[col]:
+                m = col_map[col]["method"]
+            self._method_map[col] = m
+
+        self._varsel = info.get("variable_selection", {})
 
         print("[INFO] model fitting")
-        print("Fitting order =>", self._syn_order)
+
+        # handle first column data
+        self._first_col_name = self._syn_order[0]
+        self._first_col_data = training_data[self._first_col_name].values.copy()
 
         for i, col in enumerate(self._syn_order):
+            chosen_m = self._method_map[col]
             if i == 0:
-                # first col => random or swr. We'll just do "swr"
-                chosen_m = "swr"
-                self._first_col = training_data[col].values.copy()
+                # no actual model for the first col => we rely on sampling from original
                 print(f"Fitting first col '{col}' with method='{chosen_m}' ... Done!")
                 continue
 
-            chosen_m = self._method_map[col]
-            preds_list = self._varsel[col]
+            # build model
+            preds_list = self._varsel.get(col, self._syn_order[:i])
             y = training_data[col].values
-            X = training_data[preds_list].values
+            Xpred = training_data[preds_list].values if preds_list else None
 
             print(f"Fitting '{col}' with method='{chosen_m}' ... ", end="", flush=True)
-            self._col_models[col] = self._fit_col(col, y, X, chosen_m)
+            self._col_models[col] = self._fit_col(col, y, Xpred, chosen_m)
             print("Done!")
 
         self._model_trained = True
         return self
 
-    def _fit_col(self, colname: str, y: np.ndarray, X: np.ndarray, method_name: str) -> Dict[str, Any]:
+    def _fit_col(self, colname: str, y: np.ndarray, X: Optional[np.ndarray], method_name: str) -> Dict[str, Any]:
+        if method_name not in METHOD_MAP:
+            # fallback
+            method_name = "cart"
         fit_func, _ = METHOD_MAP[method_name]
+        if X is None or X.shape[1] == 0:
+            # For a column with zero predictors, we can pass X of shape (n,0) or do fallback
+            X = np.zeros((len(y), 0))
         model = fit_func(y, X, random_state=self.random_state)
         return {
             "name": method_name,
@@ -161,40 +174,41 @@ class Syn_Seq:
         rules: Optional[Dict[str, List[Any]]] = None,
         max_iter_rules: int = 10
     ) -> pd.DataFrame:
-        """
-        Generate 'nrows' new samples, col-by-col. If 'rules' => re-generate violating rows up to max_iter_rules times.
-        """
         if not self._model_trained:
             raise RuntimeError("Must fit(...) aggregator before generate().")
 
         gen_df = pd.DataFrame(index=range(nrows))
 
-        # The first column is just sampling from the original distribution
-        first_col_name = self._syn_order[0]
-        gen_df[first_col_name] = np.random.choice(self._first_col, size=nrows, replace=True)
+        # 1) first col => sample from original distribution
+        first_col = self._first_col_name
+        if not isinstance(self._first_col_data, np.ndarray):
+            raise RuntimeError("No first col data stored.")
+        gen_df[first_col] = np.random.choice(self._first_col_data, size=nrows, replace=True)
 
-        # for the other columns
-        for col in self._syn_order[1:]:
+        # 2) for each subsequent col
+        for i, col in enumerate(self._syn_order):
+            if i == 0:
+                continue
             chosen_m = self._method_map[col]
-            preds_list = self._varsel[col]
+            preds_list = self._varsel.get(col, self._syn_order[:i])
+            Xsyn = gen_df[preds_list].values if preds_list else np.zeros((nrows, 0))
 
-            Xsyn = gen_df[preds_list].values
             ysyn = self._generate_col(col, chosen_m, Xsyn)
             gen_df[col] = ysyn
 
+            # re-check rules
             if rules and col in rules:
-                # re-check violation
                 tries = 0
                 while True:
                     viol_idx = check_rules_violation(gen_df, col, rules)
                     if len(viol_idx) == 0:
                         break
                     if tries >= max_iter_rules:
-                        # set them to NaN or keep them as is
+                        # set them to NaN
                         gen_df.loc[viol_idx, col] = np.nan
                         print(f"[WARN] {col}: could not satisfy rules after {max_iter_rules} tries => set them to NaN.")
                         break
-                    # re-generate only for those violation rows
+                    # re-generate only for violation rows
                     Xsub = gen_df.loc[viol_idx, preds_list].values
                     ysub = self._generate_col(col, chosen_m, Xsub)
                     gen_df.loc[viol_idx, col] = ysub
@@ -206,5 +220,6 @@ class Syn_Seq:
 
     def _generate_col(self, colname: str, method_name: str, Xsyn: np.ndarray) -> np.ndarray:
         gen_func = METHOD_MAP[method_name][1]
-        fitted_model = self._col_models[colname]["fitted_model"]
+        model_info = self._col_models[colname]
+        fitted_model = model_info["fitted_model"]
         return gen_func(fitted_model, Xsyn)
