@@ -1,4 +1,4 @@
-# plugin_syn_seq.py
+# File: plugin_syn_seq.py
 
 from typing import Any, Dict, List, Optional, Union
 import pandas as pd
@@ -80,7 +80,7 @@ class Syn_SeqPlugin(Plugin):
         enable_reproducible_results(self.random_state)
         self._data_info = X.info()
 
-        # Build schema for the *original* data. 
+        # Build schema for the *original* data 
         self._schema = Schema(
             data=X,
             sampling_strategy=self.sampling_strategy,
@@ -118,8 +118,7 @@ class Syn_SeqPlugin(Plugin):
         """
         Build new domain using feature_params & constraint_to_distribution.
 
-        For each column, we gather small constraints, 
-        then call constraint_to_distribution(...) to get the correct Distribution.
+        For each column, gather constraints => turn into Distribution objects.
         """
         enc_info = X_encoded.info()
 
@@ -150,9 +149,8 @@ class Syn_SeqPlugin(Plugin):
             else:
                 col_rules.append((col, "dtype", "float"))
 
-            # Next, build a local Constraints for this single column
+            # Build a local Constraints for this single column
             single_constraints = Constraints(rules=col_rules)
-
             # Then transform into a Distribution
             dist = constraint_to_distribution(single_constraints, col)
 
@@ -160,7 +158,6 @@ class Syn_SeqPlugin(Plugin):
 
         # Now build new Schema with that domain
         new_schema = Schema(domain=domain)
-        # Copy over sampling_strategy, random_state, etc from base_schema
         new_schema.sampling_strategy = base_schema.sampling_strategy
         new_schema.random_state = base_schema.random_state
 
@@ -175,7 +172,7 @@ class Syn_SeqPlugin(Plugin):
         random_state: Optional[int] = None,
         **kwargs: Any,
     ) -> DataLoader:
-        """Public generation method, applying constraints & decoding back."""
+        """Public generation method, applying constraints/rules & decoding back."""
         if not self.fitted:
             raise RuntimeError("Must .fit() plugin before calling .generate()")
         if self._schema is None:
@@ -207,17 +204,16 @@ class Syn_SeqPlugin(Plugin):
         # decode from the encoded data
         data_syn = data_syn.decode(self._training_data_info)
 
-        # final check if strict
+        # final constraints check
         final_constraints = self.schema().as_constraints()
         if constraints is not None:
             final_constraints = final_constraints.extend(constraints)
-        if not data_syn.satisfies(final_constraints) and self.strict:
-            raise RuntimeError(
-                f"Plugin {self.name()} failed to satisfy constraints in strict mode."
-            )
 
-        if self.strict:
-            data_syn = data_syn.match(final_constraints)
+        # Instead of raising an error, match any leftover to meet constraints
+        if not data_syn.satisfies(final_constraints):
+            if self.strict:
+                # in strict mode, we keep only those rows that match
+                data_syn = data_syn.match(final_constraints)
 
         return data_syn
 
@@ -234,9 +230,10 @@ class Syn_SeqPlugin(Plugin):
 
         # generate column by column
         df_syn = self.model.generate_col(count, rules=rules, max_iter_rules=10)
-        # adapt the dtypes if needed
+        # adapt the dtypes
         df_syn = syn_schema.adapt_dtypes(df_syn)
 
         return create_from_info(df_syn, self._data_info)
+
 
 plugin = Syn_SeqPlugin

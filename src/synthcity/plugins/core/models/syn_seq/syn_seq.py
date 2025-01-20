@@ -24,8 +24,15 @@ from synthcity.plugins.core.models.syn_seq.methods import (
 
 # ------------------------------------------------------------------
 # We define a helper function that checks whether a row violates a set of rules.
-# e.g. rules = { "target": [("bmi", ">", 0.15), ("target", ">", 0)] }
-# If any rule is violated, that row must be regenerated.
+# e.g. rules = {
+#    "target": [
+#       ("bmi", ">", 0.15),
+#       ("target", ">", 0)
+#    ]
+# }
+# Each tuple => (col_feat, operator, val).
+# We interpret them as conditions that must ALL be satisfied for that row.
+# If any rule is violated, that row must be regenerated, or set to NaN if we cannot fix.
 # ------------------------------------------------------------------
 
 def check_rules_violation(
@@ -51,27 +58,30 @@ def check_rules_violation(
             # skip if that feature doesn't exist in df
             continue
 
+        col_data = df[col_feat]
+
         if operator in ["=", "=="]:
-            cond = (df[col_feat] == val) | df[col_feat].isna()
-        elif operator == ">":
-            cond = (df[col_feat] > val) | df[col_feat].isna()
-        elif operator == ">=":
-            cond = (df[col_feat] >= val) | df[col_feat].isna()
-        elif operator == "<":
-            cond = (df[col_feat] < val) | df[col_feat].isna()
-        elif operator == "<=":
-            cond = (df[col_feat] <= val) | df[col_feat].isna()
+            cond = (col_data == val) | col_data.isna()
+        elif operator in [">"]:
+            cond = (col_data > val) | col_data.isna()
+        elif operator in [">="]:
+            cond = (col_data >= val) | col_data.isna()
+        elif operator in ["<"]:
+            cond = (col_data < val) | col_data.isna()
+        elif operator in ["<="]:
+            cond = (col_data <= val) | col_data.isna()
         else:
             # unrecognized operator => skip
             cond = pd.Series(True, index=df.index)
 
         mask_valid &= cond
 
-    # Return indices that fail (i.e. not valid)
+    # Return indices that fail (i.e. are NOT valid)
     return df.index[~mask_valid]
 
+
 # ------------------------------------------------------------------
-# Map method_name => (syn_func, generate_func) from your submodule,
+# Map method_name => (syn_func, generate_func) from submodule
 # so we can dynamically choose the correct approach per column.
 # ------------------------------------------------------------------
 
@@ -91,13 +101,13 @@ METHOD_MAP = {
 
 class Syn_Seq:
     """
-    Column-by-column sequential regression aggregator.
+    Column-by-column sequential aggregator.
 
-    On .fit_col(...), we parse relevant order/method/varsel from the DataLoader info
+    On .fit_col(...), we parse info from the DataLoader (syn_order, method, varsel, etc.)
     and train each column in sequence.
 
-    On .generate_col(...), we sample from the aggregator column by column, optionally
-    applying user rules or constraints.
+    On .generate_col(...), we sample from the aggregator column by column,
+    optionally applying user rules or constraints.
     """
 
     def __init__(
@@ -131,8 +141,8 @@ class Syn_Seq:
 
         Steps:
           - read info: syn_order, method, variable_selection
-          - store the distribution of the first column
-          - for each subsequent column, train with the selected method
+          - store distribution of the first column
+          - for each subsequent column, train with the chosen method
         """
         info_dict = loader.info()
         training_data = loader.dataframe().copy()
@@ -143,7 +153,7 @@ class Syn_Seq:
         self._method_map = info_dict.get("method", {})
         self._varsel = info_dict.get("variable_selection", {})
 
-        # Force columns ending with "_cat" => method='cart'
+        # Force columns ending with "_cat" => method='cart' if not set
         # also replicate varsel if needed
         for col in self._syn_order:
             if col.endswith("_cat"):
@@ -205,7 +215,7 @@ class Syn_Seq:
         Generate `nrows` rows, column by column.
 
         If `rules` is given, after generating each column,
-        we check for rows that fail the rule => re-generate up to max_iter_rules attempts.
+        we check for rows that fail => re-generate them up to max_iter_rules attempts.
         """
         if not self._model_trained:
             raise RuntimeError("Syn_Seq aggregator not yet fitted")
