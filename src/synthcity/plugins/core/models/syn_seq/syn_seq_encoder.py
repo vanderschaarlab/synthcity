@@ -1,5 +1,3 @@
-# File: syn_seq_encoder.py
-
 from typing import Optional, Dict, List, Any
 import pandas as pd
 import numpy as np
@@ -7,108 +5,109 @@ from sklearn.base import TransformerMixin, BaseEstimator
 
 class Syn_SeqEncoder(TransformerMixin, BaseEstimator):
     """
-    Handles column-by-column encoding logic for syn_seq plugin:
-      - Maintains col_map with { original_dtype, converted_type, method } for each column
-      - Splits numeric columns with user-defined or auto-detected special values (aka "categorization").
-      - Maintains user-specified or auto variable_selection_ logic (predictor sets).
-      - Maintains assigned method per column, defaulting first col => "swr", others => "cart" unless user overrides.
-      - For date columns, does day-offset numeric transform => converted_type="numeric".
-      - get_info() can display final col_map, variable_selection, date_mins, etc.
+    syn_seq용 column-by-column 인코더.
+      - fit: 전처리 준비 (col_map, variable_selection 설정 등)
+      - transform: 실제 변환 (date->offset, numeric->split, dtype 적용, etc.)
+      - get_info: 고정된 키 이름으로 딕트 반환
+        => "syn_order", "original_dtype", "converted_type", "method", 
+           "special_value"(dict형), "date_mins", "variable_selection"
     """
 
     def __init__(
         self,
-        columns_special_values: Optional[Dict[str, List]] = None,
+        special_value: Optional[Dict[str, List]] = None,  # 기존 columns_special_values => special_value 로 네이밍 변경
         syn_order: Optional[List[str]] = None,
         method: Optional[Dict[str, str]] = None,
         max_categories: int = 20,
         col_type: Optional[Dict[str, str]] = None,
         variable_selection: Optional[Dict[str, List]] = None,
         default_method: str = "cart",
-    ) -> None:
+    ):
         """
         Args:
-            columns_special_values: e.g. {"bp":[-0.04, -0.01]}
-            syn_order: columns order for sequential modeling
-            method: user-specified method overrides, e.g. {"bp": "norm"}
-            max_categories: threshold for deciding category vs numeric if not user-specified
-            col_type: forced type from user, e.g. { "age":"category", "some_date":"date" }
-            variable_selection: dict => each column => list of col names used as predictor
-            default_method: default method for columns (besides the first one => "swr")
+            special_value: 예) {"bp":[-0.04, -0.01]} + auto로 감지된 freq>0.9 값도 합쳐 저장
+            syn_order: 순차적 모델링 순서
+            method: 유저 오버라이드 {"bp":"norm", ...}
+            max_categories: 범주 vs 수치 구분 임계값
+            col_type: {"age":"category","some_date":"date"} 등 명시
+            variable_selection: { col: [predictors...] }
+            default_method: 첫 컬럼 제외 기본값 "cart" (첫 컬럼은 없으면 "swr")
         """
         self.syn_order = syn_order or []
         self.method = method or {}
         self.max_categories = max_categories
-        self.columns_special_values = columns_special_values or {}
         self.col_type = col_type or {}
         self.variable_selection_ = variable_selection or {}
         self.default_method = default_method
 
+        # special_value: col -> list of special vals
+        self.special_value: Dict[str, List] = special_value or {}
+
+        # col_map: {col: {"original_dtype":"float64","converted_type":"numeric","method":"cart"}, ...}
         self.col_map: Dict[str, Dict[str, Any]] = {}
         self.date_mins: Dict[str, pd.Timestamp] = {}
-        self.imbalanced_or_special_cols: List[str] = []  # track columns w/ special vals
+
         self._is_fit = False
 
     def fit(self, X: pd.DataFrame) -> "Syn_SeqEncoder":
         X = X.copy()
-        # Step 1) ensure syn_order covers only existing columns
+        # 1) syn_order 정리
         self._detect_syn_order(X)
-        # Step 2) build col_map with preliminary type detection
+        # 2) col_map 초기화
         self._init_col_map(X)
-        # Step 3) detect + unify special values, track if col is "imbalanced"
-        self._detect_special_values_and_imbalance(X)
-        # Step 4) store date minimum for offset logic
+        # 3) special value 감지(유저+freq>0.9) → self.special_value에 통합
+        self._detect_special_values(X)
+        # 4) date min 기록
         self._store_date_min(X)
-        # Step 5) detect or fallback to method for each column
+        # 5) method 할당
         self._assign_method_to_cols()
-        # Step 6) build or fallback variable selection
+        # 6) variable_selection 세팅(유저 없으면 기본)
         self._assign_variable_selection()
+
         self._is_fit = True
         return self
 
     def transform(self, X: pd.DataFrame) -> pd.DataFrame:
         if not self._is_fit:
-            raise RuntimeError("Encoder not fit yet. Call .fit(...) first.")
+            raise RuntimeError("Must fit() first.")
+
         X = X.copy()
         X = self._reorder_columns(X)
         X = self._convert_date_to_offset(X)
-        # Split numeric columns (with special values) into col + col_cat
-        X = self._split_numeric_cols_in_front(X)
-        # Convert final dtype
+        X = self._split_numeric_cols_in_front(X)  # special_value에 맞춰 _cat 생성
         X = self._apply_converted_dtype(X)
-        # Possibly update variable_selection_ to reflect new cat columns
         self._update_varsel_dict_after_split(X)
         return X
 
     def inverse_transform(self, X: pd.DataFrame) -> pd.DataFrame:
         X = X.copy()
-        # (1) offset -> date
+        # date offset → date 복원
         X = self._convert_offset_to_date(X)
-        # (2) restore original dtype
+        # original dtype 복원
         for col in X.columns:
             if col in self.col_map:
-                orig_dt = self.col_map[col].get("original_dtype")
-                if orig_dt:
+                orig = self.col_map[col].get("original_dtype")
+                if orig:
                     try:
-                        X[col] = X[col].astype(orig_dt)
+                        X[col] = X[col].astype(orig)
                     except:
                         pass
         return X
 
-    def _detect_syn_order(self, X: pd.DataFrame) -> None:
+    # ---------------------- (fit) helpers ----------------------
+    def _detect_syn_order(self, X: pd.DataFrame):
         if not self.syn_order:
             self.syn_order = list(X.columns)
         else:
-            # Keep only columns that exist in X
             self.syn_order = [c for c in self.syn_order if c in X.columns]
 
-    def _init_col_map(self, X: pd.DataFrame) -> None:
+    def _init_col_map(self, X: pd.DataFrame):
         self.col_map.clear()
         for col in self.syn_order:
             if col not in X.columns:
                 continue
             orig_dt = str(X[col].dtype)
-            # user override
+
             declared = self.col_type.get(col, "").lower()
             if declared == "date":
                 conv_type = "numeric"
@@ -117,7 +116,7 @@ class Syn_SeqEncoder(TransformerMixin, BaseEstimator):
             elif declared == "category":
                 conv_type = "category"
             else:
-                # fallback detection
+                # auto
                 if pd.api.types.is_datetime64_any_dtype(X[col]):
                     conv_type = "numeric"
                     self.col_type[col] = "date"
@@ -127,61 +126,62 @@ class Syn_SeqEncoder(TransformerMixin, BaseEstimator):
                         conv_type = "category"
                     else:
                         conv_type = "numeric"
+
             self.col_map[col] = {
                 "original_dtype": orig_dt,
                 "converted_type": conv_type,
-                "method": None,  # assigned later
+                "method": None
             }
 
-    def _detect_special_values_and_imbalance(self, X: pd.DataFrame) -> None:
-        # unify user-specified with auto-detected big-ones
+    def _detect_special_values(self, X: pd.DataFrame):
+        """
+        fit 시점에서 user + auto(freq>0.9) special values 합치기
+        => self.special_value[col] = [... all special vals ...]
+        """
         for col in self.syn_order:
             if col not in X.columns:
                 continue
             info = self.col_map[col]
             if info["converted_type"] != "numeric":
                 continue
-            # user special values
-            user_vals = self.columns_special_values.get(col, [])
-            # auto detection if e.g. single value above 0.9 freq
-            freq = X[col].value_counts(dropna=False, normalize=True)
-            big_ones = freq[freq > 0.9].index.tolist()  # threshold
-            final_sv = sorted(set(user_vals).union(set(big_ones)))
-            if final_sv:
-                self.columns_special_values[col] = final_sv
-                self.imbalanced_or_special_cols.append(col)
 
-    def _store_date_min(self, X: pd.DataFrame) -> None:
+            # 기존에 user가 준 값
+            user_vals = self.special_value.get(col, [])
+
+            # auto: freq>0.9
+            freq = X[col].value_counts(dropna=False, normalize=True)
+            big_ones = freq[freq > 0.9].index.tolist()
+
+            merged = sorted(set(user_vals).union(set(big_ones)))
+            if merged:
+                self.special_value[col] = merged
+            else:
+                # 만약 아무도 없으면 굳이 빈 list로 남김
+                if col in self.special_value:
+                    # user가 줬는데 empty? => 그대로 둘 수도
+                    pass
+
+    def _store_date_min(self, X: pd.DataFrame):
         for col in self.syn_order:
             if self.col_type.get(col) == "date":
-                dt_series = pd.to_datetime(X[col], errors="coerce")
-                self.date_mins[col] = dt_series.min()
+                arr = pd.to_datetime(X[col], errors="coerce")
+                self.date_mins[col] = arr.min()
 
-    def _assign_method_to_cols(self) -> None:
-        """
-        For each col in syn_order:
-          - if index == 0 => method is "swr" unless user override
-          - else => user method override if any, else default_method
-        """
+    def _assign_method_to_cols(self):
         for i, col in enumerate(self.syn_order):
-            chosen_method = None
-            if col in self.method:  # user override
-                chosen_method = self.method[col]
+            user_m = self.method.get(col)
+            if i == 0:
+                chosen = user_m if user_m else "swr"
             else:
-                if i == 0:
-                    # first col => fallback "swr" if not specified
-                    chosen_method = "swr"
-                else:
-                    chosen_method = self.default_method
-            if col in self.col_map:
-                self.col_map[col]["method"] = chosen_method
+                chosen = user_m if user_m else self.default_method
+            self.col_map[col]["method"] = chosen
 
-    def _assign_variable_selection(self) -> None:
-        # fill for columns missing in user variable_selection => previous columns
+    def _assign_variable_selection(self):
         for i, col in enumerate(self.syn_order):
             if col not in self.variable_selection_:
                 self.variable_selection_[col] = self.syn_order[:i]
 
+    # ---------------------- (transform) helpers ----------------------
     def _reorder_columns(self, X: pd.DataFrame) -> pd.DataFrame:
         keep = [c for c in self.syn_order if c in X.columns]
         return X[keep]
@@ -199,34 +199,30 @@ class Syn_SeqEncoder(TransformerMixin, BaseEstimator):
 
     def _split_numeric_cols_in_front(self, X: pd.DataFrame) -> pd.DataFrame:
         """
-        For each numeric col with special_values, create a col_cat with those special or NaNs,
-        then set original col to NaN in those places.
-        Insert col_cat right before the original col in syn_order.
+        special_value[col] 에 값이 있으면 => col_cat 생성
         """
-        original_order = list(self.syn_order)  # copy
+        original_order = list(self.syn_order)
         for col in original_order:
             if col not in X.columns:
                 continue
             info = self.col_map.get(col, {})
-            if info.get("converted_type") != "numeric":
+            if info["converted_type"] != "numeric":
                 continue
-            specials = self.columns_special_values.get(col, [])
+            specials = self.special_value.get(col, [])
             if not specials:
                 continue
 
             cat_col = col + "_cat"
-            # build cat col with special or None => label them with e.g. { -9999 => NA special, or the actual special val code? }
+
             def cat_mapper(v):
                 if pd.isna(v):
                     return -9999
                 if v in specials:
                     return v
-                return -777  # for normal values
+                return -777
 
-            X[cat_col] = X[col].apply(cat_mapper)
-            X[cat_col] = X[cat_col].astype("category")
+            X[cat_col] = X[col].apply(cat_mapper).astype("category")
 
-            # now set original col to NaN where it's special
             def numeric_mapper(v):
                 if pd.isna(v):
                     return np.nan
@@ -236,22 +232,15 @@ class Syn_SeqEncoder(TransformerMixin, BaseEstimator):
 
             X[col] = X[col].apply(numeric_mapper)
 
-            # insert cat_col into syn_order
             if cat_col not in self.syn_order:
                 idx = self.syn_order.index(col)
                 self.syn_order.insert(idx, cat_col)
 
-            # col_map entry for cat_col
             self.col_map[cat_col] = {
                 "original_dtype": None,
                 "converted_type": "category",
-                "method": None,  # assigned later
+                "method": self.col_map[col]["method"]
             }
-            # Now fix the method for cat_col => the same as the base col or "cart"?
-            # By default, let's do same as base col, or fallback "cart"
-            base_method = self.col_map[col].get("method", "cart")
-            self.col_map[cat_col]["method"] = base_method
-
         return X
 
     def _apply_converted_dtype(self, X: pd.DataFrame) -> pd.DataFrame:
@@ -259,7 +248,7 @@ class Syn_SeqEncoder(TransformerMixin, BaseEstimator):
             if col not in X.columns:
                 continue
             cinfo = self.col_map[col]
-            ctype = cinfo.get("converted_type", "category")
+            ctype = cinfo["converted_type"]
             if ctype == "numeric":
                 X[col] = pd.to_numeric(X[col], errors="coerce")
             else:
@@ -267,7 +256,6 @@ class Syn_SeqEncoder(TransformerMixin, BaseEstimator):
         return X
 
     def _convert_offset_to_date(self, X: pd.DataFrame) -> pd.DataFrame:
-        # revert numeric offsets to date if col_type = date
         for col in self.syn_order:
             if self.col_type.get(col) == "date" and col in X.columns:
                 offset = pd.to_numeric(X[col], errors="coerce")
@@ -277,7 +265,6 @@ class Syn_SeqEncoder(TransformerMixin, BaseEstimator):
         return X
 
     def _update_varsel_dict_after_split(self, X: pd.DataFrame) -> None:
-        # If splitting created col_cat => we want them also in varsel if base col was
         new_splits = {}
         for col in self.syn_order:
             if col.endswith("_cat"):
@@ -285,30 +272,41 @@ class Syn_SeqEncoder(TransformerMixin, BaseEstimator):
                 if base in self.col_map:
                     new_splits[base] = col
 
-        # for columns newly formed that aren't in variable_selection_, fill default
+        # 새 col_cat이 아직 varsel에 없으면 기본 predictor
         for col in X.columns:
             if col not in self.variable_selection_ and col in self.syn_order:
                 idx = self.syn_order.index(col)
                 self.variable_selection_[col] = self.syn_order[:idx]
 
-        # if base col was in varsel => cat col also included
-        for tgt_col, pred_list in self.variable_selection_.items():
-            updated = set(pred_list)
-            for base_col, cat_col in new_splits.items():
-                if base_col in updated:
-                    updated.add(cat_col)
+        # base_col이 predictor인 곳 => cat_col도 추가
+        for tgt_col, preds in self.variable_selection_.items():
+            updated = set(preds)
+            for bcol, ccol in new_splits.items():
+                if bcol in updated:
+                    updated.add(ccol)
             self.variable_selection_[tgt_col] = list(updated)
 
+    # ----------------------
     def get_info(self) -> Dict[str, Any]:
         """
-        Returns a dictionary summarizing the encoder config.
-        For printing, you can parse the dictionary or transform to a nice layout.
+        고정된 키 이름들로 반환
+        special_value => {col: [ ... ]}
         """
+        orig_dtype_map = {}
+        conv_type_map = {}
+        method_map = {}
+        for c, info in self.col_map.items():
+            orig_dtype_map[c] = info.get("original_dtype")
+            conv_type_map[c] = info.get("converted_type")
+            method_map[c] = info.get("method")
+
         return {
             "syn_order": self.syn_order,
-            "col_map": self.col_map,
-            "variable_selection": self.variable_selection_,
-            "columns_special_values": self.columns_special_values,
+            "original_dtype": orig_dtype_map,
+            "converted_type": conv_type_map,
+            "method": method_map,
+            # 사용자 + auto합쳐진 special values
+            "special_value": self.special_value,  # {col: [ ... ]}
             "date_mins": self.date_mins,
-            "imbalanced_or_special_cols": list(set(self.imbalanced_or_special_cols)),
+            "variable_selection": self.variable_selection_,
         }
