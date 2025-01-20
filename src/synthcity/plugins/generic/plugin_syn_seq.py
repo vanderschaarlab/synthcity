@@ -1,34 +1,35 @@
-# File: plugin_syn_seq.py
+# plugin_syn_seq.py
 
-from pathlib import Path
 from typing import Any, Dict, List, Optional, Union
-
-import numpy as np
 import pandas as pd
+
 from pydantic import validate_arguments
 
-# synthcity absolute
 from synthcity.plugins.core.plugin import Plugin
-from synthcity.plugins.core.dataloader import DataLoader, create_from_info
+from synthcity.plugins.core.dataloader import (
+    DataLoader,
+    Syn_SeqDataLoader,
+    create_from_info,
+)
 from synthcity.plugins.core.constraints import Constraints
+from synthcity.plugins.core.distribution import constraint_to_distribution
 from synthcity.plugins.core.schema import Schema
-from synthcity.plugins.core.models.syn_seq.syn_seq import Syn_Seq
 from synthcity.utils.reproducibility import enable_reproducible_results
+
+# aggregator from syn_seq.py
+from synthcity.plugins.core.models.syn_seq.syn_seq import Syn_Seq
 
 
 class Syn_SeqPlugin(Plugin):
     """
-    The main plugin for the 'syn_seq' project. It overrides the parent's logic for:
-      - fit(...) : to define our own sequence-based approach
-      - generate(...) : to do column-by-column generation with optional 'rules'.
+    A plugin wrapping the 'Syn_Seq' aggregator in the synthcity Plugin interface.
 
-    The flow is:
-      1. We build an original schema from the raw loader (unencoded).
-      2. We explicitly call X.encode() => giving us `X_encoded` for training.
-      3. We build a "training schema" from that encoded data.
-      4. We pass X_encoded to our aggregator `Syn_Seq` for column-by-column fitting.
-      5. For generation, we skip parent's `_generate()`, call aggregator's `.generate()`,
-         decode back to original format, and optionally apply constraints if `strict=True`.
+    Steps:
+      1) In .fit(), if the user passes a DataFrame, we wrap it in Syn_SeqDataLoader, then call .encode().
+      2) We build or refine the domain in `_domain_rebuild`, using the original vs. converted dtype info, 
+         turning them into constraints, then into distributions.
+      3) The aggregator trains column-by-column on the encoded data.
+      4) For .generate(), we re-check constraints (including user constraints) and decode back to the original format.
     """
 
     @staticmethod
@@ -37,143 +38,205 @@ class Syn_SeqPlugin(Plugin):
 
     @staticmethod
     def type() -> str:
-        return "syn_seq"
+        return "generic"
 
     @staticmethod
     def hyperparameter_space(**kwargs: Any) -> List:
-        # Provide any hyperparameter distributions if you want to tune them in AutoML.
         return []
 
     @validate_arguments(config=dict(arbitrary_types_allowed=True))
     def __init__(
         self,
-        random_state: int = 0,
         sampling_patience: int = 100,
         strict: bool = True,
-        workspace: Path = Path("workspace"),
+        random_state: int = 0,
         compress_dataset: bool = False,
         sampling_strategy: str = "marginal",
         **kwargs: Any
     ) -> None:
-        """
-        Args:
-            random_state: for reproducibility
-            sampling_patience: maximum tries for re-generating rule-violating rows
-            strict: whether to forcibly drop or keep rows that fail constraints
-            workspace: path for caching (not used in this plugin specifically)
-            compress_dataset: if True, drop redundant features before training
-            sampling_strategy: "marginal" or "uniform" for how the schema is built
-        """
         super().__init__(
             random_state=random_state,
             sampling_patience=sampling_patience,
             strict=strict,
-            workspace=workspace,
             compress_dataset=compress_dataset,
             sampling_strategy=sampling_strategy,
         )
 
-        self.model: Optional[Syn_Seq] = None
         self._schema: Optional[Schema] = None
         self._training_schema: Optional[Schema] = None
-        self._data_encoders: Optional[Dict] = None  # store from X.encode()
-        self.fitted = False
+        self._data_info: Optional[Dict] = None
+        self._training_data_info: Optional[Dict] = None
+        self.model: Optional[Syn_Seq] = None
 
     @validate_arguments(config=dict(arbitrary_types_allowed=True))
-    def fit(self, X: Union[DataLoader, pd.DataFrame], *args: Any, **kwargs: Any) -> "Syn_SeqPlugin":
-        """
-        Overridden fit: 
-          - We create _schema from the unencoded loader
-          - We do X.encode() => X_encoded
-          - We create _training_schema from the encoded data
-          - We pass X_encoded to aggregator Syn_Seq(...).fit(...)
-        """
-        enable_reproducible_results(self.random_state)
-
+    def fit(self, X: Union[DataLoader, pd.DataFrame], *args: Any, **kwargs: Any) -> Any:
+        # If plain DataFrame, wrap in Syn_SeqDataLoader
         if isinstance(X, pd.DataFrame):
-            raise ValueError("syn_seq plugin requires a DataLoader, not a raw DataFrame")
+            X = Syn_SeqDataLoader(X)
 
-        # 1) Original schema from the unencoded loader
+        if "cond" in kwargs and kwargs["cond"] is not None:
+            self.expecting_conditional = True
+
+        enable_reproducible_results(self.random_state)
+        self._data_info = X.info()
+
+        # Build schema for the *original* data. 
         self._schema = Schema(
             data=X,
             sampling_strategy=self.sampling_strategy,
             random_state=self.random_state,
         )
 
-        # 2) Encode => X_encoded
-        X_encoded, self._data_encoders = X.encode()
+        # Encode the data if needed
+        X_encoded, self._training_data_info = X.encode()
 
-        # 3) Build training schema from X_encoded
-        self._training_schema = Schema(
+        # Build an initial schema from the *encoded* data
+        base_schema = Schema(
             data=X_encoded,
             sampling_strategy=self.sampling_strategy,
             random_state=self.random_state,
         )
 
-        # 4) aggregator
+        # Rebuild domain from original vs. converted dtype logic
+        self._training_schema = self._domain_rebuild(X_encoded, base_schema)
+
+        # aggregator training
+        output = self._fit(X_encoded, *args, **kwargs)
+        self.fitted = True
+        return output
+
+    def _fit(self, X: DataLoader, *args: Any, **kwargs: Any) -> "Syn_SeqPlugin":
         self.model = Syn_Seq(
             random_state=self.random_state,
             strict=self.strict,
             sampling_patience=self.sampling_patience,
         )
-        self.model.fit(X_encoded, *args, **kwargs)
-
-        self.fitted = True
+        self.model.fit_col(X, *args, **kwargs)
         return self
 
-    def _generate(self, count: int, *args: Any, **kwargs: Any) -> DataLoader:
+    def _domain_rebuild(self, X_encoded: DataLoader, base_schema: Schema) -> Schema:
         """
-        We do not use the parent's `_generate()` approach, so we override it with an error or pass.
+        Build new domain using feature_params & constraint_to_distribution.
+
+        For each column, we gather small constraints, 
+        then call constraint_to_distribution(...) to get the correct Distribution.
         """
-        raise NotImplementedError(
-            "Syn_SeqPlugin doesn't use `_generate()`; see .generate() override instead."
-        )
+        enc_info = X_encoded.info()
+
+        syn_order = enc_info.get("syn_order", [])
+        orig_map = enc_info.get("original_dtype", {})
+        conv_map = enc_info.get("converted_type", {})
+
+        domain: Dict[str, Any] = {}
+
+        # For each column in syn_order, figure out the dtype constraints
+        for col in syn_order:
+            # We'll gather rules in a local list
+            col_rules = []
+
+            original_dt = orig_map.get(col, "").lower()
+            converted_dt = conv_map.get(col, "").lower()
+
+            # Example logic:
+            if col.endswith("_cat"):
+                # definitely treat as category
+                col_rules.append((col, "dtype", "category"))
+            elif ("int" in original_dt or "float" in original_dt) and ("category" in converted_dt):
+                col_rules.append((col, "dtype", "category"))
+            elif ("object" in original_dt or "category" in original_dt) and ("numeric" in converted_dt):
+                col_rules.append((col, "dtype", "float"))
+            elif "date" in original_dt:
+                col_rules.append((col, "dtype", "int"))
+            else:
+                col_rules.append((col, "dtype", "float"))
+
+            # Next, build a local Constraints for this single column
+            single_constraints = Constraints(rules=col_rules)
+
+            # Then transform into a Distribution
+            dist = constraint_to_distribution(single_constraints, col)
+
+            domain[col] = dist
+
+        # Now build new Schema with that domain
+        new_schema = Schema(domain=domain)
+        # Copy over sampling_strategy, random_state, etc from base_schema
+        new_schema.sampling_strategy = base_schema.sampling_strategy
+        new_schema.random_state = base_schema.random_state
+
+        return new_schema
 
     @validate_arguments(config=dict(arbitrary_types_allowed=True))
     def generate(
         self,
         count: Optional[int] = None,
         constraints: Optional[Constraints] = None,
+        rules: Optional[Dict[str, List[tuple]]] = None,
         random_state: Optional[int] = None,
         **kwargs: Any,
     ) -> DataLoader:
-        """
-        Overridden generate: 
-          - Bypass parent's domain constraints => rely on aggregator's column-by-column generation
-            plus optional 'rules' re-generation
-          - Then decode back to original format
-          - If strict => match() final constraints
-        """
+        """Public generation method, applying constraints & decoding back."""
         if not self.fitted:
-            raise RuntimeError("Must call .fit(...) first on syn_seq plugin")
-
-        if count is None:
-            # default: same length as training
-            if self._schema is not None:
-                count = self._schema.domain[self._schema.features()[0]].data.shape[0]
-            else:
-                raise ValueError("Cannot infer default count. Please specify nrows.")
+            raise RuntimeError("Must .fit() plugin before calling .generate()")
+        if self._schema is None:
+            raise RuntimeError("No schema found. Fit the model first.")
 
         if random_state is not None:
-            np.random.seed(random_state)
+            enable_reproducible_results(random_state)
 
-        # user-supplied rules dict
-        rules = kwargs.pop("rules", None)
+        if count is None:
+            count = self._data_info["len"]
 
-        # aggregator generate => "encoded" DataFrame
-        raw_df = self.model.generate(nrows=count, rules=rules)
+        has_gen_cond = ("cond" in kwargs) and (kwargs["cond"] is not None)
+        if has_gen_cond and not self.expecting_conditional:
+            raise RuntimeError(
+                "Got inference conditional, but aggregator wasn't trained with a conditional"
+            )
 
-        # create a new DataLoader with the same "training_schema" info
-        X_syn = create_from_info(raw_df, self._training_schema.info())
+        # Combine constraints from training schema with user constraints
+        gen_constraints = self.training_schema().as_constraints()
+        if constraints is not None:
+            gen_constraints = gen_constraints.extend(constraints)
 
-        # decode => revert cat-splitting, special values, etc.
-        if X_syn.is_tabular() and self._data_encoders is not None:
-            X_syn = X_syn.decode(self._data_encoders)
+        # Build a schema from these constraints
+        syn_schema = Schema.from_constraints(gen_constraints)
 
-        # final constraints if strict
-        if constraints is not None and self.strict:
-            X_syn = X_syn.match(constraints)
+        # aggregator call
+        data_syn = self._generate(count, syn_schema, rules=rules)
 
-        return X_syn
+        # decode from the encoded data
+        data_syn = data_syn.decode(self._training_data_info)
+
+        # final check if strict
+        final_constraints = self.schema().as_constraints()
+        if constraints is not None:
+            final_constraints = final_constraints.extend(constraints)
+        if not data_syn.satisfies(final_constraints) and self.strict:
+            raise RuntimeError(
+                f"Plugin {self.name()} failed to satisfy constraints in strict mode."
+            )
+
+        if self.strict:
+            data_syn = data_syn.match(final_constraints)
+
+        return data_syn
+
+    def _generate(
+        self,
+        count: int,
+        syn_schema: Schema,
+        rules: Optional[Dict[str, List[tuple]]] = None,
+        **kwargs: Any,
+    ) -> DataLoader:
+        """Internal aggregator generation logic."""
+        if not self.model:
+            raise RuntimeError("Aggregator not found for syn_seq plugin")
+
+        # generate column by column
+        df_syn = self.model.generate_col(count, rules=rules, max_iter_rules=10)
+        # adapt the dtypes if needed
+        df_syn = syn_schema.adapt_dtypes(df_syn)
+
+        return create_from_info(df_syn, self._data_info)
 
 plugin = Syn_SeqPlugin

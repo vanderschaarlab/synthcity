@@ -15,6 +15,10 @@ FILE_PATHS = [
     "src/synthcity/plugins/core/models/syn_seq/syn_seq_rules.py",
     "src/synthcity/plugins/core/dataloader.py",
     "src/synthcity/plugins/generic/plugin_syn_seq.py",
+    "src/synthcity/plugins/generic/plugin_ctgan.py",
+    "src/synthcity/plugins/core/models/gan.py",
+    "src/synthcity/plugins/core/models/tabular_gan.py",
+    "src/synthcity/plugins/core/models/tabular_encoder.py",
     "src/synthcity/plugins/core/constraints.py",
     "src/synthcity/plugins/core/dataset.py",
     "src/synthcity/plugins/core/distribution.py",
@@ -24,7 +28,9 @@ FILE_PATHS = [
     "src/synthcity/plugins/core/models/syn_seq/methods/__init__.py",
     "src/synthcity/logger.py",
     "src/synthcity/benchmark/__init__.py",
-    "src/synthcity/metrics/eval.py"
+    "src/synthcity/metrics/eval.py",
+    "src/synthcity/plugins/__init__.py",
+    "src/synthcity/plugins/generic/__init__.py"
 ]
 
 # 2) Specify the output file name here.

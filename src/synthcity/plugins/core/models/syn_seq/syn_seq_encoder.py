@@ -237,7 +237,7 @@ class Syn_SeqEncoder(TransformerMixin, BaseEstimator):
                 self.syn_order.insert(idx, cat_col)
 
             self.col_map[cat_col] = {
-                "original_dtype": None,
+                "original_dtype": "category",
                 "converted_type": "category",
                 "method": self.col_map[col]["method"]
             }

@@ -238,7 +238,7 @@ class Syn_SeqEncoder(TransformerMixin, BaseEstimator):
                 self.syn_order.insert(idx, cat_col)
 
             self.col_map[cat_col] = {
-                "original_dtype": None,
+                "original_dtype": "category",
                 "converted_type": "category",
                 "method": self.col_map[col]["method"]
             }
@@ -340,11 +340,15 @@ src/synthcity/plugins/core/models/syn_seq/rf.py
 src/synthcity/plugins/core/models/syn_seq/syn_seq.py
 # File: syn_seq.py
 
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, Tuple
 import numpy as np
 import pandas as pd
 
-# method calls
+from synthcity.logger import info, warning
+from synthcity.plugins.core.dataloader import DataLoader
+from synthcity.plugins.core.schema import Schema
+
+# The column-fitting and column-generating methods from your submodule
 from synthcity.plugins.core.models.syn_seq.methods import (
     syn_cart, generate_cart,
     syn_ctree, generate_ctree,
@@ -355,8 +359,61 @@ from synthcity.plugins.core.models.syn_seq.methods import (
     syn_rf, generate_rf,
     syn_lognorm, generate_lognorm,
     syn_random, generate_random,
-    syn_swr, generate_swr
+    syn_swr, generate_swr,
 )
+
+# ------------------------------------------------------------------
+# We define a helper function that checks whether a row violates a set of rules.
+# e.g. rules = { "target": [("bmi", ">", 0.15), ("target", ">", 0)] }
+# If any rule is violated, that row must be regenerated.
+# ------------------------------------------------------------------
+
+def check_rules_violation(
+    df: pd.DataFrame,
+    target_col: str,
+    rules_dict: Dict[str, List[Tuple[str, str, Any]]]
+) -> pd.Index:
+    """
+    For the current 'target_col', check if it has any rules from rules_dict.
+    If rules_dict[target_col] = [("some_col","=",val), ("other_col", ">", val2), ...],
+    we interpret them as conditions that must ALL be satisfied.
+
+    We return the row-indices that FAIL these conditions.
+    """
+    if target_col not in rules_dict:
+        return pd.Index([])  # no rules => no violation
+
+    sub_rules = rules_dict[target_col]
+    mask_valid = pd.Series(True, index=df.index)
+
+    for (col_feat, operator, val) in sub_rules:
+        if col_feat not in df.columns:
+            # skip if that feature doesn't exist in df
+            continue
+
+        if operator in ["=", "=="]:
+            cond = (df[col_feat] == val) | df[col_feat].isna()
+        elif operator == ">":
+            cond = (df[col_feat] > val) | df[col_feat].isna()
+        elif operator == ">=":
+            cond = (df[col_feat] >= val) | df[col_feat].isna()
+        elif operator == "<":
+            cond = (df[col_feat] < val) | df[col_feat].isna()
+        elif operator == "<=":
+            cond = (df[col_feat] <= val) | df[col_feat].isna()
+        else:
+            # unrecognized operator => skip
+            cond = pd.Series(True, index=df.index)
+
+        mask_valid &= cond
+
+    # Return indices that fail (i.e. not valid)
+    return df.index[~mask_valid]
+
+# ------------------------------------------------------------------
+# Map method_name => (syn_func, generate_func) from your submodule,
+# so we can dynamically choose the correct approach per column.
+# ------------------------------------------------------------------
 
 METHOD_MAP = {
     "cart": (syn_cart, generate_cart),
@@ -372,146 +429,105 @@ METHOD_MAP = {
 }
 
 
-def check_rules_violation(
-    df: pd.DataFrame,
-    target_col: str,
-    rules_dict: Dict[str, List[Any]]
-) -> pd.Index:
-    """
-    Checks if `target_col` has rules in rules_dict => re-check rows that violate them.
-    Return the row index that fails the rules for `target_col`.
-    Each rule is a 3-tuple, e.g. ("bmi", ">", 0.15). 
-    The row is considered valid if it meets *all* the rules or is NA in that column.
-    """
-    if target_col not in rules_dict:
-        return pd.Index([])
-
-    sub_rules = rules_dict[target_col]
-    mask_valid = pd.Series(True, index=df.index)
-
-    for (col_feat, operator, val) in sub_rules:
-        if col_feat not in df.columns:
-            # skip if col doesn't exist
-            continue
-
-        if operator in ["=", "=="]:
-            cond = (df[col_feat] == val) | df[col_feat].isna()
-        elif operator == ">":
-            cond = (df[col_feat] > val) | df[col_feat].isna()
-        elif operator == ">=":
-            cond = (df[col_feat] >= val) | df[col_feat].isna()
-        elif operator == "<":
-            cond = (df[col_feat] < val) | df[col_feat].isna()
-        elif operator == "<=":
-            cond = (df[col_feat] <= val) | df[col_feat].isna()
-        else:
-            # unrecognized => skip
-            cond = pd.Series(True, index=df.index)
-
-        mask_valid &= cond
-
-    return df.index[~mask_valid]
-
-
 class Syn_Seq:
     """
-    A sequential-synthesis aggregator for the syn_seq plugin.
+    Column-by-column sequential regression aggregator.
 
-    Steps:
-      - .fit(...) => builds column-by-column synthetic models in the order from X_encoded
-      - .generate(...) => generates samples col-by-col with optional rules re-generation
+    On .fit_col(...), we parse relevant order/method/varsel from the DataLoader info
+    and train each column in sequence.
 
-    Key extra:
-      - For columns that end with "_cat", we force method="cart"
-      - For "cat" columns, if there's a base col (like "bp" -> "bp_cat"), 
-        we copy the same variable_selection from base. 
+    On .generate_col(...), we sample from the aggregator column by column, optionally
+    applying user rules or constraints.
     """
 
     def __init__(
         self,
         random_state: int = 0,
         strict: bool = True,
-        sampling_patience: int = 100,
+        sampling_patience: int = 100
     ):
         """
         Args:
-            random_state: Reproducibility
-            strict: Whether we forcibly re-generate or allow rule violations
-            sampling_patience: max iteration for re-generation
+            random_state: random seed
+            strict: if True, we do re-check constraints (or user rules)
+            sampling_patience: max tries for re-generation (not used here but could be).
         """
         self.random_state = random_state
         self.strict = strict
         self.sampling_patience = sampling_patience
 
         self._model_trained = False
-
         self._syn_order: List[str] = []
         self._method_map: Dict[str, str] = {}
         self._varsel: Dict[str, List[str]] = {}
         self._col_models: Dict[str, Dict[str, Any]] = {}
 
+        # For the first column, we store real distribution
         self._first_col_data: Optional[np.ndarray] = None
 
-    def fit(self, loader: Any, *args, **kwargs) -> "Syn_Seq":
+    def fit_col(self, loader: DataLoader, *args, **kwargs) -> "Syn_Seq":
         """
-        Fit sequential column models. 
-        - Force method="cart" for columns ending with "_cat"
-        - Copy variable_selection from base col if col ends with "_cat"
+        Fit column-by-column from the "encoded" DataLoader.
+
+        Steps:
+          - read info: syn_order, method, variable_selection
+          - store the distribution of the first column
+          - for each subsequent column, train with the selected method
         """
-        info = loader.info()
+        info_dict = loader.info()
         training_data = loader.dataframe().copy()
         if training_data.empty:
-            raise ValueError("No data found => cannot train a Syn_Seq model.")
+            raise ValueError("No data => cannot fit Syn_Seq aggregator")
 
-        syn_order = info.get("syn_order", list(training_data.columns))
-        method_dict = info.get("method", {})
-        varsel_dict = info.get("variable_selection", {})
+        self._syn_order = info_dict.get("syn_order", list(training_data.columns))
+        self._method_map = info_dict.get("method", {})
+        self._varsel = info_dict.get("variable_selection", {})
 
-        # Force cat columns => "cart" & share varsel
-        for col in syn_order:
+        # Force columns ending with "_cat" => method='cart'
+        # also replicate varsel if needed
+        for col in self._syn_order:
             if col.endswith("_cat"):
-                method_dict[col] = "cart"
-
+                self._method_map[col] = "cart"
                 base_col = col[:-4]
-                if base_col in varsel_dict:
-                    varsel_dict[col] = varsel_dict[base_col]
+                if base_col in self._varsel:
+                    self._varsel[col] = self._varsel[base_col]
                 else:
-                    # fallback => prior columns
-                    idx = syn_order.index(col)
-                    varsel_dict[col] = syn_order[:idx]
+                    idx = self._syn_order.index(col)
+                    self._varsel[col] = self._syn_order[:idx]
 
-        self._syn_order = syn_order
-        self._method_map = method_dict
-        self._varsel = varsel_dict
+        info("[INFO] Syn_Seq aggregator: fitting columns...")
 
-        print("[INFO] model fitting")
-
-        # The first col => store distribution
+        # 1) First col => store real distribution
         first_col = self._syn_order[0]
         self._first_col_data = training_data[first_col].dropna().values
-        print(f"Fitting first col '{first_col}' with method='swr' ... Done!")
+        info(f"Fitting '{first_col}' => stored distribution from real data. Done.")
 
-        # Fit the rest
+        # 2) Fit each subsequent column
+        np.random.seed(self.random_state)
         for i, col in enumerate(self._syn_order[1:], start=1):
-            chosen_method = self._method_map.get(col, "cart")
-            pred_list = self._varsel.get(col, self._syn_order[:i])
+            method_name = self._method_map.get(col, "cart")
+            preds_list = self._varsel.get(col, self._syn_order[:i])
 
+            # Y is the column data, X are the preceding columns
             y = training_data[col].values
-            X = training_data[pred_list].values
+            X = training_data[preds_list].values
 
-            # drop NaN rows
+            # drop rows with NaN in y
             mask = ~pd.isna(y)
-            y_ = y[mask]
             X_ = X[mask]
+            y_ = y[mask]
 
-            print(f"Fitting '{col}' with method='{chosen_method}' ... ", end="", flush=True)
-            self._col_models[col] = self._fit_col(col, y_, X_, chosen_method)
-            print("Done!")
+            info(f"Fitting '{col}' with '{method_name}' ... ", end="", flush=True)
+            self._col_models[col] = self._fit_single_col(method_name, X_, y_)
+            info("Done!")
 
         self._model_trained = True
         return self
 
-    def _fit_col(self, colname: str, y: np.ndarray, X: np.ndarray, method_name: str) -> Dict[str, Any]:
+    def _fit_single_col(self, method_name: str, X: np.ndarray, y: np.ndarray) -> Dict[str, Any]:
+        """
+        Trains the chosen method for one column
+        """
         fit_func, _ = METHOD_MAP[method_name]
         model = fit_func(y, X, random_state=self.random_state)
         return {
@@ -519,77 +535,81 @@ class Syn_Seq:
             "fitted_model": model,
         }
 
-    def generate(
+    def generate_col(
         self,
         nrows: int,
-        rules: Optional[Dict[str, List[Any]]] = None,
+        rules: Optional[Dict[str, List[Tuple[str, str, Any]]]] = None,
         max_iter_rules: int = 10
     ) -> pd.DataFrame:
         """
-        Column-by-column generation. 
-        If rules => re-generate violating rows up to max_iter_rules times.
-        Return a DataFrame with the same columns as _syn_order, in "encoded" form.
+        Generate `nrows` rows, column by column.
+
+        If `rules` is given, after generating each column,
+        we check for rows that fail the rule => re-generate up to max_iter_rules attempts.
         """
         if not self._model_trained:
-            raise RuntimeError("Must fit(...) aggregator before generate().")
+            raise RuntimeError("Syn_Seq aggregator not yet fitted")
 
         if nrows <= 0:
             return pd.DataFrame(columns=self._syn_order)
 
+        np.random.seed(self.random_state)
         gen_df = pd.DataFrame(index=range(nrows))
 
-        # first col => sample from real distribution
-        first_col_name = self._syn_order[0]
-        np.random.seed(self.random_state)
+        # 1) Generate the first col from real distribution
+        first_col = self._syn_order[0]
         if self._first_col_data is not None and len(self._first_col_data) > 0:
-            gen_df[first_col_name] = np.random.choice(
-                self._first_col_data,
-                size=nrows,
-                replace=True
-            )
+            gen_df[first_col] = np.random.choice(self._first_col_data, size=nrows, replace=True)
         else:
-            gen_df[first_col_name] = 0
+            gen_df[first_col] = 0
+        info(f"Generating '{first_col}' => done.")
 
-        # other columns
+        # 2) For each subsequent col, generate from fitted model
         for col in self._syn_order[1:]:
-            chosen_method = self._method_map.get(col, "cart")
+            method_name = self._method_map.get(col, "cart")
             idx = self._syn_order.index(col)
-            pred_list = self._varsel.get(col, self._syn_order[:idx])
+            preds_list = self._varsel.get(col, self._syn_order[:idx])
 
-            Xsyn = gen_df[pred_list].values
-            ysyn = self._generate_col(col, chosen_method, Xsyn)
+            # Xsyn are the preceding columns
+            Xsyn = gen_df[preds_list].values
+            ysyn = self._generate_single_col(method_name, Xsyn, col)
             gen_df[col] = ysyn
 
-            # rules => re-generation
+            # If user rules => re-generate any violating rows
             if rules and col in rules:
                 tries = 0
                 while True:
                     viol_idx = check_rules_violation(gen_df, col, rules)
-                    if len(viol_idx) == 0:
+                    if viol_idx.empty:
                         break
                     if tries >= max_iter_rules:
+                        warning(
+                            f"[WARN] {col}: cannot satisfy rules after {max_iter_rules} tries => set them to NaN"
+                        )
                         gen_df.loc[viol_idx, col] = np.nan
-                        print(f"[WARN] {col}: could not satisfy rules after {max_iter_rules} tries => set them to NaN.")
                         break
-                    # re-generate for those rows
-                    Xsub = gen_df.loc[viol_idx, pred_list].values
-                    ysub = self._generate_col(col, chosen_method, Xsub)
+                    # re-generate only the violating subset
+                    Xsub = gen_df.loc[viol_idx, preds_list].values
+                    ysub = self._generate_single_col(method_name, Xsub, col)
                     gen_df.loc[viol_idx, col] = ysub
                     tries += 1
 
-            print(f"Generating '{col}' ... Done!")
+            info(f"Generating '{col}' => done.")
 
         return gen_df
 
-    def _generate_col(self, colname: str, method_name: str, Xsyn: np.ndarray) -> np.ndarray:
-        if colname not in self._col_models:
-            # fallback => sample from first col distribution
+    def _generate_single_col(self, method_name: str, Xsyn: np.ndarray, col: str) -> np.ndarray:
+        """
+        Use the fitted model for col, or fallback to first-col distribution if not found
+        """
+        if col not in self._col_models:
+            # fallback => first col distribution
             if self._first_col_data is not None and len(self._first_col_data) > 0:
                 return np.random.choice(self._first_col_data, size=len(Xsyn), replace=True)
             else:
                 return np.zeros(len(Xsyn))
 
-        fit_info = self._col_models[colname]
+        fit_info = self._col_models[col]
         gen_func = METHOD_MAP[fit_info["name"]][1]
         return gen_func(fit_info["fitted_model"], Xsyn)
 
@@ -2682,41 +2702,38 @@ def create_from_info(
         raise RuntimeError(f"invalid datatype {info}")
 
 src/synthcity/plugins/generic/plugin_syn_seq.py
-# File: plugin_syn_seq.py
+# plugin_syn_seq.py
 
-from pathlib import Path
 from typing import Any, Dict, List, Optional, Union
-
-import numpy as np
 import pandas as pd
+
 from pydantic import validate_arguments
 
-# synthcity absolute
 from synthcity.plugins.core.plugin import Plugin
-from synthcity.plugins.core.dataloader import DataLoader
+from synthcity.plugins.core.dataloader import (
+    DataLoader,
+    Syn_SeqDataLoader,
+    create_from_info,
+)
 from synthcity.plugins.core.constraints import Constraints
+from synthcity.plugins.core.distribution import constraint_to_distribution
 from synthcity.plugins.core.schema import Schema
-from synthcity.plugins.core.models.syn_seq.syn_seq import Syn_Seq
 from synthcity.utils.reproducibility import enable_reproducible_results
+
+# aggregator from syn_seq.py
+from synthcity.plugins.core.models.syn_seq.syn_seq import Syn_Seq
 
 
 class Syn_SeqPlugin(Plugin):
     """
-    A plugin that does **not** rely on the base class's `fit(...)` logic;
-    instead, it re‐implements the step‐by‐step approach:
+    A plugin wrapping the 'Syn_Seq' aggregator in the synthcity Plugin interface.
 
-      1. Build `self._schema` from the unencoded data.
-      2. Encode the data => `X_encoded`
-      3. Build `self._training_schema` from the encoded data.
-      4. Call aggregator's `.fit(X_encoded)`.
-    
-    Also overrides `.generate()` to bypass the parent's `_generate(...)` method,
-    in order to do column-by-column sequential generation with potential rules.
-
-    Key points:
-      - `_schema` => original data
-      - `_training_schema` => encoded data (with potential *_cat columns)
-      - We store aggregator in `self.model`.
+    Steps:
+      1) In .fit(), if the user passes a DataFrame, we wrap it in Syn_SeqDataLoader, then call .encode().
+      2) We build or refine the domain in `_domain_rebuild`, using the original vs. converted dtype info, 
+         turning them into constraints, then into distributions.
+      3) The aggregator trains column-by-column on the encoded data.
+      4) For .generate(), we re-check constraints (including user constraints) and decode back to the original format.
     """
 
     @staticmethod
@@ -2725,153 +2742,2317 @@ class Syn_SeqPlugin(Plugin):
 
     @staticmethod
     def type() -> str:
-        return "syn_seq"
+        return "generic"
 
     @staticmethod
     def hyperparameter_space(**kwargs: Any) -> List:
-        # Provide distributions if you want them tunable (if any). 
         return []
 
     @validate_arguments(config=dict(arbitrary_types_allowed=True))
     def __init__(
         self,
-        random_state: int = 0,
         sampling_patience: int = 100,
         strict: bool = True,
-        workspace: Path = Path("workspace"),
+        random_state: int = 0,
         compress_dataset: bool = False,
         sampling_strategy: str = "marginal",
         **kwargs: Any
     ) -> None:
-        """
-        Args:
-            random_state: for reproducibility
-            sampling_patience: max tries for rule-violating rows
-            strict: whether to drop or keep rows that fail constraints
-            workspace: path for caching (unused here, but required by Plugin interface)
-            compress_dataset: if True, drop redundant features before training
-            sampling_strategy: "marginal" or "uniform" for the schema domain
-        """
         super().__init__(
             random_state=random_state,
             sampling_patience=sampling_patience,
             strict=strict,
-            workspace=workspace,
             compress_dataset=compress_dataset,
             sampling_strategy=sampling_strategy,
         )
 
-        self.model: Optional[Syn_Seq] = None
         self._schema: Optional[Schema] = None
         self._training_schema: Optional[Schema] = None
-        self._data_encoders: Optional[Dict] = None
-        self.fitted = False  # will set to True after training
+        self._data_info: Optional[Dict] = None
+        self._training_data_info: Optional[Dict] = None
+        self.model: Optional[Syn_Seq] = None
 
     @validate_arguments(config=dict(arbitrary_types_allowed=True))
-    def fit(self, X: Union[DataLoader, pd.DataFrame], *args: Any, **kwargs: Any) -> "Syn_SeqPlugin":
-        """
-        Custom plugin fit: build original schema, encode X => X_encoded,
-        then build training schema from the encoded data, 
-        and call aggregator's .fit(X_encoded).
-        """
-        enable_reproducible_results(self.random_state)
-
+    def fit(self, X: Union[DataLoader, pd.DataFrame], *args: Any, **kwargs: Any) -> Any:
+        # If plain DataFrame, wrap in Syn_SeqDataLoader
         if isinstance(X, pd.DataFrame):
-            raise ValueError("Syn_SeqPlugin requires a DataLoader, not a raw DataFrame.")
+            X = Syn_SeqDataLoader(X)
 
-        # Step 1) Build original schema from unencoded data
+        if "cond" in kwargs and kwargs["cond"] is not None:
+            self.expecting_conditional = True
+
+        enable_reproducible_results(self.random_state)
+        self._data_info = X.info()
+
+        # Build schema for the *original* data. 
         self._schema = Schema(
             data=X,
             sampling_strategy=self.sampling_strategy,
             random_state=self.random_state,
         )
 
-        # Step 2) Encode X => X_encoded
-        X_encoded, self._data_encoders = X.encode()
+        # Encode the data if needed
+        X_encoded, self._training_data_info = X.encode()
 
-        # Step 3) Build a training schema from the encoded data
-        self._training_schema = Schema(
+        # Build an initial schema from the *encoded* data
+        base_schema = Schema(
             data=X_encoded,
             sampling_strategy=self.sampling_strategy,
             random_state=self.random_state,
         )
 
-        # Step 4) aggregator
+        # Rebuild domain from original vs. converted dtype logic
+        self._training_schema = self._domain_rebuild(X_encoded, base_schema)
+
+        # aggregator training
+        output = self._fit(X_encoded, *args, **kwargs)
+        self.fitted = True
+        return output
+
+    def _fit(self, X: DataLoader, *args: Any, **kwargs: Any) -> "Syn_SeqPlugin":
         self.model = Syn_Seq(
             random_state=self.random_state,
             strict=self.strict,
             sampling_patience=self.sampling_patience,
         )
-        self.model.fit(X_encoded, *args, **kwargs)
-
-        self.fitted = True
+        self.model.fit_col(X, *args, **kwargs)
         return self
 
-    def _generate(self, count: int, *args: Any, **kwargs: Any) -> DataLoader:
+    def _domain_rebuild(self, X_encoded: DataLoader, base_schema: Schema) -> Schema:
         """
-        The parent's .generate(...) normally calls this, but we won't use it because
-        we override .generate(...) entirely.
+        Build new domain using feature_params & constraint_to_distribution.
+
+        For each column, we gather small constraints, 
+        then call constraint_to_distribution(...) to get the correct Distribution.
         """
-        raise NotImplementedError("Syn_SeqPlugin bypasses `_generate()`; see generate().")
+        enc_info = X_encoded.info()
+
+        syn_order = enc_info.get("syn_order", [])
+        orig_map = enc_info.get("original_dtype", {})
+        conv_map = enc_info.get("converted_type", {})
+
+        domain: Dict[str, Any] = {}
+
+        # For each column in syn_order, figure out the dtype constraints
+        for col in syn_order:
+            # We'll gather rules in a local list
+            col_rules = []
+
+            original_dt = orig_map.get(col, "").lower()
+            converted_dt = conv_map.get(col, "").lower()
+
+            # Example logic:
+            if col.endswith("_cat"):
+                # definitely treat as category
+                col_rules.append((col, "dtype", "category"))
+            elif ("int" in original_dt or "float" in original_dt) and ("category" in converted_dt):
+                col_rules.append((col, "dtype", "category"))
+            elif ("object" in original_dt or "category" in original_dt) and ("numeric" in converted_dt):
+                col_rules.append((col, "dtype", "float"))
+            elif "date" in original_dt:
+                col_rules.append((col, "dtype", "int"))
+            else:
+                col_rules.append((col, "dtype", "float"))
+
+            # Next, build a local Constraints for this single column
+            single_constraints = Constraints(rules=col_rules)
+
+            # Then transform into a Distribution
+            dist = constraint_to_distribution(single_constraints, col)
+
+            domain[col] = dist
+
+        # Now build new Schema with that domain
+        new_schema = Schema(domain=domain)
+        # Copy over sampling_strategy, random_state, etc from base_schema
+        new_schema.sampling_strategy = base_schema.sampling_strategy
+        new_schema.random_state = base_schema.random_state
+
+        return new_schema
 
     @validate_arguments(config=dict(arbitrary_types_allowed=True))
     def generate(
         self,
         count: Optional[int] = None,
         constraints: Optional[Constraints] = None,
+        rules: Optional[Dict[str, List[tuple]]] = None,
         random_state: Optional[int] = None,
         **kwargs: Any,
     ) -> DataLoader:
-        """
-        Bypass parent's domain constraints => we rely on aggregator's column-by-column
-        generation plus user-supplied `rules`.
-
-        After aggregator generation, we decode back to original dtype 
-        (restoring special_value, merging *_cat columns, etc.) 
-        Then apply constraints if strict is True. 
-        """
+        """Public generation method, applying constraints & decoding back."""
         if not self.fitted:
-            raise RuntimeError("Must fit the Syn_SeqPlugin before calling generate().")
-
-        if count is None:
-            # fallback: same length as the original training data
-            if self._schema is not None:
-                count = self._schema.domain[list(self._schema.domain.keys())[0]].data.shape[0]
-            else:
-                raise ValueError("Cannot determine count. Provide count explicitly.")
+            raise RuntimeError("Must .fit() plugin before calling .generate()")
+        if self._schema is None:
+            raise RuntimeError("No schema found. Fit the model first.")
 
         if random_state is not None:
-            np.random.seed(random_state)
+            enable_reproducible_results(random_state)
 
-        # Extract user rules from kwargs
-        rules = kwargs.pop("rules", None)
+        if count is None:
+            count = self._data_info["len"]
 
-        # aggregator
-        raw_df = self.model.generate(nrows=count, rules=rules)
+        has_gen_cond = ("cond" in kwargs) and (kwargs["cond"] is not None)
+        if has_gen_cond and not self.expecting_conditional:
+            raise RuntimeError(
+                "Got inference conditional, but aggregator wasn't trained with a conditional"
+            )
 
-        # Convert raw DataFrame => DataLoader with the training schema info
-        # (the training_schema or original schema might share the same columns 
-        #  but we want the shape that matches the original encoded dataset)
-        # 
-        # Usually we do create_from_info(raw_df, self._training_schema.info()) 
-        # or self._schema.info(). But we can use _training_schema since it 
-        # definitely has the encoded structure. 
-        from synthcity.plugins.core.dataloader import create_from_info
-        X_syn = create_from_info(raw_df, self._training_schema.info())
+        # Combine constraints from training schema with user constraints
+        gen_constraints = self.training_schema().as_constraints()
+        if constraints is not None:
+            gen_constraints = gen_constraints.extend(constraints)
 
-        # decode => restore original columns/dtypes
-        if X_syn.is_tabular() and self._data_encoders is not None:
-            X_syn = X_syn.decode(self._data_encoders)
+        # Build a schema from these constraints
+        syn_schema = Schema.from_constraints(gen_constraints)
 
-        # Optionally apply constraints if strict
-        if constraints is not None and self.strict:
-            X_syn = X_syn.match(constraints)
+        # aggregator call
+        data_syn = self._generate(count, syn_schema, rules=rules)
 
-        return X_syn
+        # decode from the encoded data
+        data_syn = data_syn.decode(self._training_data_info)
 
+        # final check if strict
+        final_constraints = self.schema().as_constraints()
+        if constraints is not None:
+            final_constraints = final_constraints.extend(constraints)
+        if not data_syn.satisfies(final_constraints) and self.strict:
+            raise RuntimeError(
+                f"Plugin {self.name()} failed to satisfy constraints in strict mode."
+            )
 
-# Required by the plugin loader
+        if self.strict:
+            data_syn = data_syn.match(final_constraints)
+
+        return data_syn
+
+    def _generate(
+        self,
+        count: int,
+        syn_schema: Schema,
+        rules: Optional[Dict[str, List[tuple]]] = None,
+        **kwargs: Any,
+    ) -> DataLoader:
+        """Internal aggregator generation logic."""
+        if not self.model:
+            raise RuntimeError("Aggregator not found for syn_seq plugin")
+
+        # generate column by column
+        df_syn = self.model.generate_col(count, rules=rules, max_iter_rules=10)
+        # adapt the dtypes if needed
+        df_syn = syn_schema.adapt_dtypes(df_syn)
+
+        return create_from_info(df_syn, self._data_info)
+
 plugin = Syn_SeqPlugin
+
+
+src/synthcity/plugins/generic/plugin_ctgan.py
+"""
+Reference: "Modeling Tabular Data using Conditional GAN", Xu, Lei et al.
+"""
+
+# stdlib
+from pathlib import Path
+from typing import Any, List, Optional, Union
+
+# third party
+import numpy as np
+import pandas as pd
+
+# Necessary packages
+from pydantic import validate_arguments
+from torch.utils.data import sampler
+
+# synthcity absolute
+from synthcity.metrics.weighted_metrics import WeightedMetrics
+from synthcity.plugins.core.dataloader import DataLoader
+from synthcity.plugins.core.distribution import (
+    CategoricalDistribution,
+    Distribution,
+    FloatDistribution,
+    IntegerDistribution,
+)
+from synthcity.plugins.core.models.tabular_gan import TabularGAN
+from synthcity.plugins.core.plugin import Plugin
+from synthcity.plugins.core.schema import Schema
+from synthcity.utils.constants import DEVICE
+
+
+class CTGANPlugin(Plugin):
+    """
+    .. inheritance-diagram:: synthcity.plugins.generic.plugin_ctgan.CTGANPlugin
+        :parts: 1
+
+
+    Conditional Tabular GAN implementation.
+
+    Args:
+        generator_n_layers_hidden: int
+            Number of hidden layers in the generator
+        generator_n_units_hidden: int
+            Number of hidden units in each layer of the Generator
+        generator_nonlin: string, default 'leaky_relu'
+            Nonlinearity to use in the generator. Can be 'elu', 'relu', 'selu' or 'leaky_relu'.
+        n_iter: int
+            Maximum number of iterations in the Generator.
+        generator_dropout: float
+            Dropout value. If 0, the dropout is not used.
+        discriminator_n_layers_hidden: int
+            Number of hidden layers in the discriminator
+        discriminator_n_units_hidden: int
+            Number of hidden units in each layer of the discriminator
+        discriminator_nonlin: string, default 'leaky_relu'
+            Nonlinearity to use in the discriminator. Can be 'elu', 'relu', 'selu' or 'leaky_relu'.
+        discriminator_n_iter: int
+            Maximum number of iterations in the discriminator.
+        discriminator_dropout: float
+            Dropout value for the discriminator. If 0, the dropout is not used.
+        lr: float
+            learning rate for optimizer.
+        weight_decay: float
+            l2 (ridge) penalty for the weights.
+        batch_size: int
+            Batch size
+        random_state: int
+            random seed to use
+        clipping_value: int, default 0
+            Gradients clipping value. Zero disables the feature
+        encoder_max_clusters: int
+            The max number of clusters to create for continuous columns when encoding
+        adjust_inference_sampling: bool
+            Adjust the marginal probabilities in the synthetic data to closer match the training set. Active only with the ConditionalSampler
+        # early stopping
+        n_iter_print: int
+            Number of iterations after which to print updates and check the validation loss.
+        n_iter_min: int
+            Minimum number of iterations to go through before starting early stopping
+        patience: int
+            Max number of iterations without any improvement before early stopping is trigged.
+        patience_metric: Optional[WeightedMetrics]
+            If not None, the metric is used for evaluation the criterion for early stopping.
+        # Core Plugin arguments
+        workspace: Path.
+            Optional Path for caching intermediary results.
+        compress_dataset: bool. Default = False.
+            Drop redundant features before training the generator.
+        sampling_patience: int.
+            Max inference iterations to wait for the generated data to match the training schema.
+    Example:
+        >>> from sklearn.datasets import load_iris
+        >>> from synthcity.plugins import Plugins
+        >>>
+        >>> X, y = load_iris(as_frame = True, return_X_y = True)
+        >>> X["target"] = y
+        >>>
+        >>> plugin = Plugins().get("ctgan", n_iter = 100)
+        >>> plugin.fit(X)
+        >>>
+        >>> plugin.generate(50)
+
+    """
+
+    @validate_arguments(config=dict(arbitrary_types_allowed=True))
+    def __init__(
+        self,
+        n_iter: int = 2000,
+        generator_n_layers_hidden: int = 2,
+        generator_n_units_hidden: int = 500,
+        generator_nonlin: str = "relu",
+        generator_dropout: float = 0.1,
+        generator_opt_betas: tuple = (0.5, 0.999),
+        discriminator_n_layers_hidden: int = 2,
+        discriminator_n_units_hidden: int = 500,
+        discriminator_nonlin: str = "leaky_relu",
+        discriminator_n_iter: int = 1,
+        discriminator_dropout: float = 0.1,
+        discriminator_opt_betas: tuple = (0.5, 0.999),
+        lr: float = 1e-3,
+        weight_decay: float = 1e-3,
+        batch_size: int = 200,
+        random_state: int = 0,
+        clipping_value: int = 1,
+        lambda_gradient_penalty: float = 10,
+        encoder_max_clusters: int = 10,
+        encoder: Any = None,
+        dataloader_sampler: Optional[sampler.Sampler] = None,
+        device: Any = DEVICE,
+        patience: int = 5,
+        patience_metric: Optional[WeightedMetrics] = None,
+        n_iter_print: int = 50,
+        n_iter_min: int = 100,
+        adjust_inference_sampling: bool = False,
+        # core plugin arguments
+        workspace: Path = Path("workspace"),
+        compress_dataset: bool = False,
+        sampling_patience: int = 500,
+        **kwargs: Any
+    ) -> None:
+        super().__init__(
+            device=device,
+            random_state=random_state,
+            sampling_patience=sampling_patience,
+            workspace=workspace,
+            compress_dataset=compress_dataset,
+            **kwargs
+        )
+        if patience_metric is None:
+            patience_metric = WeightedMetrics(
+                metrics=[("detection", "detection_mlp")],
+                weights=[1],
+                workspace=workspace,
+            )
+        self.generator_n_layers_hidden = generator_n_layers_hidden
+        self.generator_n_units_hidden = generator_n_units_hidden
+        self.generator_nonlin = generator_nonlin
+        self.n_iter = n_iter
+        self.generator_dropout = generator_dropout
+        self.generator_opt_betas = generator_opt_betas
+        self.discriminator_n_layers_hidden = discriminator_n_layers_hidden
+        self.discriminator_n_units_hidden = discriminator_n_units_hidden
+        self.discriminator_nonlin = discriminator_nonlin
+        self.discriminator_n_iter = discriminator_n_iter
+        self.discriminator_dropout = discriminator_dropout
+        self.discriminator_opt_betas = discriminator_opt_betas
+
+        self.lr = lr
+        self.weight_decay = weight_decay
+        self.batch_size = batch_size
+        self.random_state = random_state
+        self.clipping_value = clipping_value
+        self.lambda_gradient_penalty = lambda_gradient_penalty
+
+        self.encoder_max_clusters = encoder_max_clusters
+        self.encoder = encoder
+        self.dataloader_sampler = dataloader_sampler
+
+        self.device = device
+        self.patience = patience
+        self.patience_metric = patience_metric
+        self.n_iter_min = n_iter_min
+        self.n_iter_print = n_iter_print
+        self.adjust_inference_sampling = adjust_inference_sampling
+
+    @staticmethod
+    def name() -> str:
+        return "ctgan"
+
+    @staticmethod
+    def type() -> str:
+        return "generic"
+
+    @staticmethod
+    def hyperparameter_space(**kwargs: Any) -> List[Distribution]:
+        return [
+            IntegerDistribution(name="generator_n_layers_hidden", low=1, high=4),
+            IntegerDistribution(
+                name="generator_n_units_hidden", low=50, high=150, step=50
+            ),
+            CategoricalDistribution(
+                name="generator_nonlin", choices=["relu", "leaky_relu", "tanh", "elu"]
+            ),
+            IntegerDistribution(name="n_iter", low=100, high=1000, step=100),
+            FloatDistribution(name="generator_dropout", low=0, high=0.2),
+            IntegerDistribution(name="discriminator_n_layers_hidden", low=1, high=4),
+            IntegerDistribution(
+                name="discriminator_n_units_hidden", low=50, high=150, step=50
+            ),
+            CategoricalDistribution(
+                name="discriminator_nonlin",
+                choices=["relu", "leaky_relu", "tanh", "elu"],
+            ),
+            IntegerDistribution(name="discriminator_n_iter", low=1, high=5),
+            FloatDistribution(name="discriminator_dropout", low=0, high=0.2),
+            CategoricalDistribution(name="lr", choices=[1e-3, 2e-4, 1e-4]),
+            CategoricalDistribution(name="weight_decay", choices=[1e-3, 1e-4]),
+            CategoricalDistribution(name="batch_size", choices=[100, 200, 500]),
+            IntegerDistribution(name="encoder_max_clusters", low=2, high=20),
+        ]
+
+    def _prepare_cond(
+        self, cond: Optional[Union[pd.DataFrame, pd.Series, np.ndarray, list]]
+    ) -> Optional[np.ndarray]:
+        if cond is None:
+            return None
+
+        cond = np.asarray(cond)
+        if len(cond.shape) == 1:
+            cond = cond.reshape(-1, 1)
+
+        return cond
+
+    def _fit(self, X: DataLoader, *args: Any, **kwargs: Any) -> "CTGANPlugin":
+        cond: Optional[Union[pd.DataFrame, pd.Series]] = None
+        if "cond" in kwargs:
+            cond = self._prepare_cond(kwargs["cond"])
+
+        self.model = TabularGAN(
+            X.dataframe(),
+            cond=cond,
+            n_units_latent=self.generator_n_units_hidden,
+            batch_size=self.batch_size,
+            generator_n_layers_hidden=self.generator_n_layers_hidden,
+            generator_n_units_hidden=self.generator_n_units_hidden,
+            generator_nonlin=self.generator_nonlin,
+            generator_nonlin_out_discrete="softmax",
+            generator_nonlin_out_continuous="none",
+            generator_lr=self.lr,
+            generator_residual=True,
+            generator_n_iter=self.n_iter,
+            generator_batch_norm=False,
+            generator_dropout=0,
+            generator_weight_decay=self.weight_decay,
+            generator_opt_betas=self.generator_opt_betas,
+            generator_extra_penalties=[],
+            discriminator_n_units_hidden=self.discriminator_n_units_hidden,
+            discriminator_n_layers_hidden=self.discriminator_n_layers_hidden,
+            discriminator_n_iter=self.discriminator_n_iter,
+            discriminator_nonlin=self.discriminator_nonlin,
+            discriminator_batch_norm=False,
+            discriminator_dropout=self.discriminator_dropout,
+            discriminator_lr=self.lr,
+            discriminator_weight_decay=self.weight_decay,
+            discriminator_opt_betas=self.discriminator_opt_betas,
+            encoder=self.encoder,
+            clipping_value=self.clipping_value,
+            lambda_gradient_penalty=self.lambda_gradient_penalty,
+            encoder_max_clusters=self.encoder_max_clusters,
+            dataloader_sampler=self.dataloader_sampler,
+            device=self.device,
+            patience=self.patience,
+            patience_metric=self.patience_metric,
+            n_iter_min=self.n_iter_min,
+            n_iter_print=self.n_iter_print,
+            adjust_inference_sampling=self.adjust_inference_sampling,
+        )
+        self.model.fit(X.dataframe(), cond=cond)
+
+        return self
+
+    def _generate(self, count: int, syn_schema: Schema, **kwargs: Any) -> DataLoader:
+        cond: Optional[Union[pd.DataFrame, pd.Series]] = None
+        if "cond" in kwargs:
+            cond = self._prepare_cond(kwargs["cond"])
+
+        return self._safe_generate(self.model.generate, count, syn_schema, cond=cond)
+
+
+plugin = CTGANPlugin
+
+
+src/synthcity/plugins/core/models/gan.py
+# stdlib
+from typing import Any, Callable, List, Optional, Tuple
+
+# third party
+import numpy as np
+import pandas as pd
+import torch
+from opacus import PrivacyEngine
+from pydantic import validate_arguments
+from torch import nn
+from torch.utils.data import DataLoader, TensorDataset, sampler
+from tqdm import tqdm
+
+# synthcity absolute
+import synthcity.logger as log
+from synthcity.metrics.weighted_metrics import WeightedMetrics
+from synthcity.utils.constants import DEVICE
+from synthcity.utils.reproducibility import clear_cache, enable_reproducible_results
+
+# synthcity relative
+from .mlp import MLP
+
+
+class GAN(nn.Module):
+    """
+    .. inheritance-diagram:: synthcity.plugins.core.models.gan.GAN
+        :parts: 1
+
+    Basic GAN implementation.
+
+    Args:
+        n_features: int
+            Number of features
+        n_units_latent: int
+            Number of latent units
+        n_units_conditional: int
+            Number of conditional units
+        generator_n_layers_hidden: int
+            Number of hidden layers in the generator
+        generator_n_units_hidden: int
+            Number of hidden units in each layer of the Generator
+        generator_nonlin: string, default 'elu'
+            Nonlinearity to use in the generator. Can be 'elu', 'relu', 'selu' or 'leaky_relu'.
+        generator_n_iter: int
+            Maximum number of iterations in the Generator.
+        generator_batch_norm: bool
+            Enable/disable batch norm for the generator
+        generator_dropout: float
+            Dropout value. If 0, the dropout is not used.
+        generator_residual: bool
+            Use residuals for the generator
+        generator_nonlin_out: Optional[List[Tuple[str, int]]]
+            List of activations. Useful with the TabularEncoder
+        generator_lr: float = 2e-4
+            Generator learning rate, used by the Adam optimizer
+        generator_weight_decay: float = 1e-3
+            Generator weight decay, used by the Adam optimizer
+        generator_opt_betas: tuple = (0.9, 0.999)
+            Generator initial decay rates, used by the Adam Optimizer
+        generator_extra_penalties: list
+            Additional penalties for the generator. Values: "identifiability_penalty"
+        generator_extra_penalty_cbks: List[Callable]
+            Additional loss callabacks for the generator. Used by the TabularGAN for the conditional loss
+        discriminator_n_layers_hidden: int
+            Number of hidden layers in the discriminator
+        discriminator_n_units_hidden: int
+            Number of hidden units in each layer of the discriminator
+        discriminator_nonlin: string, default 'relu'
+            Nonlinearity to use in the discriminator. Can be 'elu', 'relu', 'selu' or 'leaky_relu'.
+        discriminator_n_iter: int
+            Maximum number of iterations in the discriminator.
+        discriminator_batch_norm: bool
+            Enable/disable batch norm for the discriminator
+        discriminator_dropout: float
+            Dropout value for the discriminator. If 0, the dropout is not used.
+        discriminator_lr: float
+            Discriminator learning rate, used by the Adam optimizer
+        discriminator_weight_decay: float
+            Discriminator weight decay, used by the Adam optimizer
+        discriminator_opt_betas: tuple
+            Initial weight decays for the Adam optimizer
+        batch_size: int
+            Batch size
+        random_state: int
+            random_state used
+        clipping_value: int, default 0
+            Gradients clipping value. Zero disables the feature
+        lambda_gradient_penalty: float = 10
+            Weight for the gradient penalty
+        lambda_identifiability_penalty: float = 0.1
+            Weight for the identifiability penalty, if enabled
+        dataloader_sampler: Optional[sampler.Sampler]
+            Optional sampler for the dataloader, useful for conditional sampling
+        device: Any = DEVICE
+            CUDA/CPU
+        # early stopping
+        n_iter_print: int
+            Number of iterations after which to print updates and check the validation loss.
+        n_iter_min: int
+            Minimum number of iterations to go through before starting early stopping
+        patience: int
+            Max number of iterations without any improvement before early stopping is trigged.
+        patience_metric: Optional[WeightedMetrics]
+            If not None, the metric is used for evaluation the criterion for early stopping.
+        # privacy settings
+        dp_enabled: bool
+            Train the discriminator with Differential Privacy guarantees
+        dp_delta: Optional[float]
+            Optional DP delta: the probability of information accidentally being leaked. Usually 1 / len(dataset)
+        dp_epsilon: float = 3
+            DP epsilon: privacy budget, which is a measure of the amount of privacy that is preserved by a given algorithm. Epsilon is a number that represents the maximum amount of information that an adversary can learn about an individual from the output of a differentially private algorithm. The smaller the value of epsilon, the more private the algorithm is. For example, an algorithm with an epsilon of 0.1 preserves more privacy than an algorithm with an epsilon of 1.0.
+        dp_max_grad_norm: float
+            max grad norm used for gradient clipping
+        dp_secure_mode: bool = False,
+             if True uses noise generation approach robust to floating point arithmetic attacks.
+    """
+
+    @validate_arguments(config=dict(arbitrary_types_allowed=True))
+    def __init__(
+        self,
+        n_features: int,
+        n_units_latent: int,
+        n_units_conditional: int = 0,
+        # generator
+        generator_n_layers_hidden: int = 2,
+        generator_n_units_hidden: int = 250,
+        generator_nonlin: str = "leaky_relu",
+        generator_nonlin_out: Optional[List[Tuple[str, int]]] = None,
+        generator_n_iter: int = 500,
+        generator_batch_norm: bool = False,
+        generator_dropout: float = 0,
+        generator_lr: float = 2e-4,
+        generator_weight_decay: float = 1e-3,
+        generator_residual: bool = True,
+        generator_opt_betas: tuple = (0.9, 0.999),
+        generator_extra_penalties: list = [],  # "identifiability_penalty"
+        generator_extra_penalty_cbks: List[Callable] = [],
+        # discriminator
+        discriminator_n_layers_hidden: int = 3,
+        discriminator_n_units_hidden: int = 300,
+        discriminator_nonlin: str = "leaky_relu",
+        discriminator_n_iter: int = 1,
+        discriminator_batch_norm: bool = False,
+        discriminator_dropout: float = 0.1,
+        discriminator_lr: float = 2e-4,
+        discriminator_weight_decay: float = 1e-3,
+        discriminator_opt_betas: tuple = (0.9, 0.999),
+        # training
+        batch_size: int = 64,
+        random_state: int = 0,
+        clipping_value: int = 0,
+        lambda_gradient_penalty: float = 10,
+        lambda_identifiability_penalty: float = 0.1,
+        dataloader_sampler: Optional[sampler.Sampler] = None,
+        device: Any = DEVICE,
+        n_iter_min: int = 100,
+        n_iter_print: int = 10,
+        patience: int = 20,
+        patience_metric: Optional[WeightedMetrics] = None,
+        # privacy settings
+        dp_enabled: bool = False,
+        dp_delta: Optional[float] = None,
+        dp_epsilon: float = 3,
+        dp_max_grad_norm: float = 2,
+        dp_secure_mode: bool = False,
+    ) -> None:
+        super(GAN, self).__init__()
+
+        extra_penalty_list = ["identifiability_penalty"]
+        for penalty in generator_extra_penalties:
+            if penalty not in extra_penalty_list:
+                raise ValueError(f"Unsupported generator penalty {penalty}")
+
+        log.info(f"Training GAN on device {device}. features = {n_features}")
+        self.device = device
+        self.generator_extra_penalties = generator_extra_penalties
+        self.generator_extra_penalty_cbks = generator_extra_penalty_cbks
+        self.generator_nonlin_out = generator_nonlin_out
+
+        self.n_features = n_features
+        self.n_units_latent = n_units_latent
+        self.n_units_conditional = n_units_conditional
+
+        self.generator = MLP(
+            task_type="regression",
+            n_units_in=n_units_latent + n_units_conditional,
+            n_units_out=n_features,
+            n_layers_hidden=generator_n_layers_hidden,
+            n_units_hidden=generator_n_units_hidden,
+            nonlin=generator_nonlin,
+            nonlin_out=generator_nonlin_out,
+            batch_norm=generator_batch_norm,
+            dropout=generator_dropout,
+            random_state=random_state,
+            lr=generator_lr,
+            residual=generator_residual,
+            opt_betas=generator_opt_betas,
+            device=device,
+        ).to(self.device)
+
+        self.discriminator = MLP(
+            task_type="regression",
+            n_units_in=n_features + n_units_conditional,
+            n_units_out=1,
+            n_layers_hidden=discriminator_n_layers_hidden,
+            n_units_hidden=discriminator_n_units_hidden,
+            nonlin=discriminator_nonlin,
+            nonlin_out=[("none", 1)],
+            batch_norm=discriminator_batch_norm,
+            dropout=discriminator_dropout,
+            random_state=random_state,
+            lr=discriminator_lr,
+            opt_betas=discriminator_opt_betas,
+            device=device,
+        ).to(self.device)
+
+        # training
+        self.generator_n_iter = generator_n_iter
+        self.discriminator_n_iter = discriminator_n_iter
+        self.n_iter_print = n_iter_print
+        self.n_iter_min = n_iter_min
+        self.patience = patience
+        self.patience_metric = patience_metric
+        self.batch_size = batch_size
+        self.clipping_value = clipping_value
+
+        self.lambda_gradient_penalty = lambda_gradient_penalty
+        self.lambda_identifiability_penalty = lambda_identifiability_penalty
+
+        self.random_state = random_state
+        enable_reproducible_results(random_state)
+
+        def gen_fake_labels(X: torch.Tensor) -> torch.Tensor:
+            return torch.zeros((len(X),), device=self.device)
+
+        def gen_true_labels(X: torch.Tensor) -> torch.Tensor:
+            return torch.ones((len(X),), device=self.device)
+
+        self.fake_labels_generator = gen_fake_labels
+        self.true_labels_generator = gen_true_labels
+        self.dataloader_sampler = dataloader_sampler
+
+        # privacy
+        self.dp_enabled = dp_enabled
+        self.dp_delta = dp_delta
+        self.dp_epsilon = dp_epsilon
+        self.dp_max_grad_norm = dp_max_grad_norm
+        self.dp_secure_mode = dp_secure_mode
+
+    def fit(
+        self,
+        X: np.ndarray,
+        cond: Optional[np.ndarray] = None,
+        fake_labels_generator: Optional[Callable] = None,
+        true_labels_generator: Optional[Callable] = None,
+    ) -> "GAN":
+        clear_cache()
+
+        Xt = self._check_tensor(X)
+        condt: Optional[torch.Tensor] = None
+
+        if self.n_units_conditional > 0:
+            if cond is None:
+                raise ValueError("Expecting valid conditional for training")
+            if len(cond.shape) == 1:
+                cond = cond.reshape(-1, 1)
+            if cond.shape[1] != self.n_units_conditional:
+                raise ValueError(
+                    f"Expecting conditional with n_units = {self.n_units_conditional}, got {cond.shape}"
+                )
+            if cond.shape[0] != X.shape[0]:
+                raise ValueError(
+                    "Expecting conditional with the same length as the dataset"
+                )
+
+            condt = self._check_tensor(cond)
+
+        self._train(
+            Xt,
+            condt,
+            fake_labels_generator=fake_labels_generator,
+            true_labels_generator=true_labels_generator,
+        )
+
+        return self
+
+    def generate(self, count: int, cond: Optional[np.ndarray] = None) -> np.ndarray:
+        clear_cache()
+        self.generator.eval()
+
+        condt: Optional[torch.Tensor] = None
+        if cond is not None:
+            condt = self._check_tensor(cond)
+        with torch.no_grad():
+            return self(count, condt).detach().cpu().numpy()
+
+    @validate_arguments(config=dict(arbitrary_types_allowed=True))
+    def forward(
+        self,
+        count: int,
+        cond: Optional[torch.Tensor] = None,
+    ) -> torch.Tensor:
+        if cond is None and self.n_units_conditional > 0:
+            # sample from the original conditional
+            if self._original_cond is None:
+                raise ValueError("Invalid original conditional. Provide a valid value.")
+            cond_idxs = torch.randint(len(self._original_cond), (count,))
+            cond = self._original_cond[cond_idxs]
+
+        if cond is not None and len(cond.shape) == 1:
+            cond = cond.reshape(-1, 1)
+
+        if cond is not None and len(cond) != count:
+            raise ValueError("cond length must match count")
+
+        fixed_noise = torch.randn(count, self.n_units_latent, device=self.device)
+        fixed_noise = self._append_optional_cond(fixed_noise, cond)
+
+        return self.generator(fixed_noise)
+
+    def dataloader(
+        self, X: torch.Tensor, cond: Optional[torch.Tensor] = None
+    ) -> DataLoader:
+        if cond is None:
+            dataset = TensorDataset(X)
+        else:
+            dataset = TensorDataset(X, cond)
+        return DataLoader(
+            dataset,
+            batch_size=self.batch_size,
+            sampler=self.dataloader_sampler,
+            pin_memory=False,
+        )
+
+    def _train_epoch_generator(
+        self,
+        X: torch.Tensor,
+        cond: Optional[torch.Tensor],
+        fake_labels_generator: Callable,
+        true_labels_generator: Callable,
+    ) -> float:
+        # Update the G network
+        self.generator.train()
+        self.generator.optimizer.zero_grad()
+
+        real_X_raw = X.to(self.device)
+        real_X = self._append_optional_cond(real_X_raw, cond)
+        batch_size = len(real_X)
+
+        noise = torch.randn(batch_size, self.n_units_latent, device=self.device)
+        noise = self._append_optional_cond(noise, cond)
+
+        fake_raw = self.generator(noise)
+        fake = self._append_optional_cond(fake_raw, cond)
+
+        output = self.discriminator(fake).squeeze().float()
+        # Calculate G's loss based on this output
+        errG = -torch.mean(output)
+        for extra_loss in self.generator_extra_penalty_cbks:
+            errG += extra_loss(
+                real_X_raw,
+                fake_raw,
+                cond=cond,
+            )
+
+        errG += self._extra_penalties(
+            self.generator_extra_penalties,
+            real_samples=real_X,
+            fake_samples=fake,
+            batch_size=batch_size,
+        )
+
+        # Calculate gradients for G
+        errG.backward()
+
+        # Update G
+        if self.clipping_value > 0:
+            torch.nn.utils.clip_grad_norm_(
+                self.generator.parameters(), self.clipping_value
+            )
+        self.generator.optimizer.step()
+
+        if torch.isnan(errG):
+            raise RuntimeError("NaNs detected in the generator loss")
+
+        # Return loss
+        return errG.item()
+
+    def _train_epoch_discriminator(
+        self,
+        X: torch.Tensor,
+        cond: Optional[torch.Tensor],
+        fake_labels_generator: Callable,
+        true_labels_generator: Callable,
+    ) -> float:
+        # Update the D network
+        self.discriminator.train()
+
+        errors = []
+
+        batch_size = min(self.batch_size, len(X))
+
+        for epoch in range(self.discriminator_n_iter):
+            # Train with all-real batch
+            real_X = X.to(self.device)
+            real_X = self._append_optional_cond(real_X, cond)
+
+            real_labels = true_labels_generator(X).to(self.device).squeeze()
+            real_output = self.discriminator(real_X).squeeze().float()
+
+            # Train with all-fake batch
+            noise = torch.randn(batch_size, self.n_units_latent, device=self.device)
+            noise = self._append_optional_cond(noise, cond)
+
+            fake_raw = self.generator(noise)
+            fake = self._append_optional_cond(fake_raw, cond)
+
+            fake_labels = (
+                fake_labels_generator(fake_raw).to(self.device).squeeze().float()
+            )
+            fake_output = self.discriminator(fake.detach()).squeeze()
+
+            # Compute errors. Some fake inputs might be marked as real for privacy guarantees.
+
+            real_real_output = real_output[(real_labels * real_output) != 0]
+            real_fake_output = fake_output[(fake_labels * fake_output) != 0]
+            errD_real = torch.mean(torch.concat((real_real_output, real_fake_output)))
+
+            fake_real_output = real_output[((1 - real_labels) * real_output) != 0]
+            fake_fake_output = fake_output[((1 - fake_labels) * fake_output) != 0]
+            errD_fake = torch.mean(torch.concat((fake_real_output, fake_fake_output)))
+
+            penalty = self._loss_gradient_penalty(
+                real_samples=real_X,
+                fake_samples=fake,
+                batch_size=batch_size,
+            )
+            errD = -errD_real + errD_fake
+
+            self.discriminator.optimizer.zero_grad()
+            if self.dp_enabled:
+                # Adversarial loss
+                # 1. split fwd-bkwd on fake and real images into two explicit blocks.
+                # 2. no need to compute per_sample_gardients on fake data, disable hooks.
+                # 3. re-enable hooks to obtain per_sample_gardients for real data.
+                # fake fwd-bkwd
+                self.discriminator.disable_hooks()
+                penalty.backward(retain_graph=True)
+                errD_fake.backward(retain_graph=True)
+
+                self.discriminator.enable_hooks()
+                errD_real.backward()  # HACK: calling bkwd without zero_grad() accumulates param gradients
+            else:
+                penalty.backward(retain_graph=True)
+                errD.backward()
+
+            # Update D
+            if self.clipping_value > 0:
+                torch.nn.utils.clip_grad_norm_(
+                    self.discriminator.parameters(), self.clipping_value
+                )
+            self.discriminator.optimizer.step()
+
+            errors.append(errD.item())
+
+        if np.isnan(np.mean(errors)):
+            raise RuntimeError("NaNs detected in the discriminator loss")
+
+        return np.mean(errors)
+
+    def _train_epoch(
+        self,
+        loader: DataLoader,
+        fake_labels_generator: Optional[Callable] = None,
+        true_labels_generator: Optional[Callable] = None,
+    ) -> Tuple[float, float]:
+        if fake_labels_generator is None:
+            fake_labels_generator = self.fake_labels_generator
+        if true_labels_generator is None:
+            true_labels_generator = self.true_labels_generator
+
+        G_losses = []
+        D_losses = []
+
+        for i, data in enumerate(loader):
+            cond: Optional[torch.Tensor] = None
+            if self.n_units_conditional > 0:
+                X, cond = data
+            else:
+                X = data[0]
+
+            D_losses.append(
+                self._train_epoch_discriminator(
+                    X,
+                    cond,
+                    fake_labels_generator=fake_labels_generator,
+                    true_labels_generator=true_labels_generator,
+                )
+            )
+            G_losses.append(
+                self._train_epoch_generator(
+                    X,
+                    cond,
+                    fake_labels_generator=fake_labels_generator,
+                    true_labels_generator=true_labels_generator,
+                )
+            )
+
+        return np.mean(G_losses), np.mean(D_losses)
+
+    def _init_patience_score(self) -> float:
+        if self.patience_metric is None:
+            return 0
+
+        if self.patience_metric.direction() == "minimize":
+            return np.inf
+        else:
+            return -np.inf
+
+    def _evaluate_patience_metric(
+        self,
+        X: torch.Tensor,
+        cond: Optional[torch.Tensor],
+        prev_score: float,
+        patience: int,
+    ) -> Tuple[float, int, bool]:
+        save = False
+        if self.patience_metric is None:
+            return prev_score, patience, save
+
+        X_syn = self.generate(len(X), cond)
+        new_score = self.patience_metric.evaluate(
+            pd.DataFrame(X.detach().cpu().numpy()),
+            pd.DataFrame(X_syn),
+        )
+        score = prev_score
+        if self.patience_metric.direction() == "minimize":
+            if new_score >= prev_score:
+                patience += 1
+            else:
+                patience = 0
+                score = new_score
+                save = True
+        else:
+            if new_score <= prev_score:
+                patience += 1
+            else:
+                patience = 0
+                score = new_score
+                save = True
+
+        return score, patience, save
+
+    def _train_test_split(self, X: torch.Tensor, cond: Optional[torch.Tensor]) -> Tuple:
+        if self.patience_metric is None:
+            return X, None, cond, None
+
+        if self.dataloader_sampler is not None:
+            train_idx, test_idx = self.dataloader_sampler.train_test()
+        else:
+            total = np.arange(0, len(X))
+            np.random.shuffle(total)
+            split = int(len(total) * 0.8)
+            train_idx, test_idx = total[:split], total[split:]
+
+        X_train, X_val = X[train_idx], X[test_idx]
+        cond_train, cond_test = None, None
+        if cond is not None:
+            cond_train, cond_test = cond[train_idx], cond[test_idx]
+
+        return X_train, X_val, cond_train, cond_test
+
+    def _train(
+        self,
+        X: torch.Tensor,
+        cond: Optional[torch.Tensor] = None,
+        fake_labels_generator: Optional[Callable] = None,
+        true_labels_generator: Optional[Callable] = None,
+    ) -> "GAN":
+        self._original_cond = cond
+
+        X = self._check_tensor(X).float()
+        X, X_val, cond, cond_val = self._train_test_split(X, cond)
+
+        # Load Dataset
+        loader = self.dataloader(X, cond)
+
+        # Privacy
+        if self.dp_enabled:
+            if self.dp_delta is None:
+                self.dp_delta = 1 / len(X)
+
+            privacy_engine = PrivacyEngine(secure_mode=self.dp_secure_mode)
+
+            (
+                self.discriminator,
+                self.discriminator.optimizer,
+                loader,
+            ) = privacy_engine.make_private_with_epsilon(
+                module=self.discriminator,
+                optimizer=self.discriminator.optimizer,
+                data_loader=loader,
+                epochs=self.generator_n_iter,
+                target_epsilon=self.dp_epsilon,
+                target_delta=self.dp_delta,
+                max_grad_norm=self.dp_max_grad_norm,
+                poisson_sampling=False,
+            )
+
+        # Train loop
+        patience_score = self._init_patience_score()
+        patience = 0
+        best_state_dict = None
+
+        for i in tqdm(range(self.generator_n_iter)):
+            g_loss, d_loss = self._train_epoch(
+                loader,
+                fake_labels_generator=fake_labels_generator,
+                true_labels_generator=true_labels_generator,
+            )
+            # Check how the generator is doing by saving G's output on fixed_noise
+            if (i + 1) % self.n_iter_print == 0:
+                log.debug(
+                    f"[{i}/{self.generator_n_iter}]\tLoss_D: {d_loss}\tLoss_G: {g_loss} Patience score: {patience_score} Patience : {patience}"
+                )
+                if self.dp_enabled:
+                    log.debug(
+                        f"[{i}/{self.generator_n_iter}] Privacy budget: epsilon = {privacy_engine.get_epsilon(self.dp_delta)} delta = {self.dp_delta}"
+                    )
+
+                if self.patience_metric is not None:
+                    patience_score, patience, save = self._evaluate_patience_metric(
+                        X_val, cond_val, patience_score, patience
+                    )
+                    if save:
+                        best_state_dict = self.state_dict()
+
+                    if patience >= self.patience and i >= self.n_iter_min:
+                        log.debug(f"[{i}/{self.generator_n_iter}] Early stopping")
+                        break
+
+        if best_state_dict is not None:
+            self.load_state_dict(best_state_dict)
+
+        return self
+
+    def _check_tensor(self, X: torch.Tensor) -> torch.Tensor:
+        if isinstance(X, torch.Tensor):
+            return X.to(self.device)
+        else:
+            return torch.from_numpy(np.asarray(X)).to(self.device)
+
+    def _extra_penalties(
+        self,
+        penalties: list,
+        real_samples: torch.tensor,
+        fake_samples: torch.Tensor,
+        batch_size: int,
+    ) -> torch.Tensor:
+        """Calculates additional penalties for the training"""
+        err: torch.Tensor = 0
+        for penalty in penalties:
+            if penalty == "identifiability_penalty":
+                err += self._loss_identifiability_penalty(
+                    real_samples=real_samples,
+                    fake_samples=fake_samples,
+                )
+            else:
+                raise RuntimeError(f"unknown penalty {penalty}")
+        return err
+
+    def _loss_gradient_penalty(
+        self,
+        real_samples: torch.tensor,
+        fake_samples: torch.Tensor,
+        batch_size: int,
+    ) -> torch.Tensor:
+        """Calculates the gradient penalty loss for WGAN GP"""
+        # Random weight term for interpolation between real and fake samples
+        alpha = torch.rand([batch_size, 1]).to(self.device)
+        # Get random interpolation between real and fake samples
+        interpolated = (
+            alpha * real_samples + ((1 - alpha) * fake_samples)
+        ).requires_grad_(True)
+        d_interpolated = self.discriminator(interpolated).squeeze(-1)
+        labels = torch.ones((len(interpolated),), device=self.device)
+
+        # Get gradient w.r.t. interpolates
+        gradients = torch.autograd.grad(
+            outputs=d_interpolated,
+            inputs=interpolated,
+            grad_outputs=labels,
+            create_graph=True,
+            retain_graph=True,
+            only_inputs=True,
+            allow_unused=True,
+        )[0]
+        gradients = gradients.view(gradients.size(0), -1)
+        gradient_penalty = ((gradients.norm(2, dim=-1) - 1) ** 2).mean()
+        return self.lambda_gradient_penalty * gradient_penalty
+
+    def _loss_identifiability_penalty(
+        self,
+        real_samples: torch.tensor,
+        fake_samples: torch.Tensor,
+    ) -> torch.Tensor:
+        """Calculates the identifiability penalty. Section C in the paper"""
+        return (
+            -self.lambda_identifiability_penalty
+            * (real_samples - fake_samples).square().sum(dim=-1).sqrt().mean()
+        )
+
+    def _append_optional_cond(
+        self, X: torch.Tensor, cond: Optional[torch.Tensor]
+    ) -> torch.Tensor:
+        if cond is None:
+            return X
+
+        return torch.cat([X, cond], dim=1)
+
+
+src/synthcity/plugins/core/models/tabular_gan.py
+# stdlib
+from typing import Any, Callable, Optional, Union
+
+# third party
+import numpy as np
+import pandas as pd
+import torch
+from pydantic import validate_arguments
+from scipy.optimize import minimize
+from scipy.special import logsumexp
+from sklearn.preprocessing import OneHotEncoder
+
+# synthcity absolute
+from synthcity.metrics.weighted_metrics import WeightedMetrics
+from synthcity.utils.constants import DEVICE
+from synthcity.utils.samplers import BaseSampler, ConditionalDatasetSampler
+
+# synthcity relative
+from .gan import GAN
+from .tabular_encoder import TabularEncoder
+
+
+class TabularGAN(torch.nn.Module):
+    """
+    .. inheritance-diagram:: synthcity.plugins.core.models.tabular_gan.TabularGAN
+        :parts: 1
+
+
+    GAN for tabular data.
+
+    This class combines GAN and tabular encoder to form a generative model for tabular data.
+
+    Args:
+        X: pd.DataFrame
+            Reference dataset, used for training the tabular encoder
+        n_units_latent: int
+            Number of latent units
+        cond: Optional
+            Optional conditional
+        generator_n_layers_hidden: int
+            Number of hidden layers in the generator
+        generator_n_units_hidden: int
+            Number of hidden units in each layer of the Generator
+        generator_nonlin: string, default 'elu'
+            Nonlinearity to use in the generator. Can be 'elu', 'relu', 'selu' or 'leaky_relu'.
+        generator_n_iter: int
+            Maximum number of iterations in the Generator.
+        generator_batch_norm: bool
+            Enable/disable batch norm for the generator
+        generator_dropout: float
+            Dropout value. If 0, the dropout is not used.
+        generator_residual: bool
+            Use residuals for the generator
+        generator_nonlin_out: Optional[List[Tuple[str, int]]]
+            List of activations. Useful with the TabularEncoder
+        generator_lr: float = 2e-4
+            Generator learning rate, used by the Adam optimizer
+        generator_weight_decay: float = 1e-3
+            Generator weight decay, used by the Adam optimizer
+        generator_opt_betas: tuple = (0.9, 0.999)
+            Generator initial decay rates, used by the Adam Optimizer
+        generator_extra_penalties: list
+            Additional penalties for the generator. Values: "identifiability_penalty"
+        generator_extra_penalty_cbks: List[Callable]
+            Additional loss callabacks for the generator. Used by the TabularGAN for the conditional loss
+        discriminator_n_layers_hidden: int
+            Number of hidden layers in the discriminator
+        discriminator_n_units_hidden: int
+            Number of hidden units in each layer of the discriminator
+        discriminator_nonlin: string, default 'relu'
+            Nonlinearity to use in the discriminator. Can be 'elu', 'relu', 'selu' or 'leaky_relu'.
+        discriminator_n_iter: int
+            Maximum number of iterations in the discriminator.
+        discriminator_batch_norm: bool
+            Enable/disable batch norm for the discriminator
+        discriminator_dropout: float
+            Dropout value for the discriminator. If 0, the dropout is not used.
+        discriminator_lr: float
+            Discriminator learning rate, used by the Adam optimizer
+        discriminator_weight_decay: float
+            Discriminator weight decay, used by the Adam optimizer
+        discriminator_opt_betas: tuple
+            Initial weight decays for the Adam optimizer
+        batch_size: int
+            Batch size
+        n_iter_print: int
+            Number of iterations after which to print updates and check the validation loss.
+        random_state: int
+            random_state used
+        n_iter_min: int
+            Minimum number of iterations to go through before starting early stopping
+        clipping_value: int, default 0
+            Gradients clipping value. Zero disables the feature
+        lambda_gradient_penalty: float = 10
+            Weight for the gradient penalty
+        lambda_identifiability_penalty: float = 0.1
+            Weight for the identifiability penalty, if enabled
+        dataloader_sampler: Optional[sampler.Sampler]
+            Optional sampler for the dataloader, useful for conditional sampling
+        device: Any = DEVICE
+            CUDA/CPU
+        adjust_inference_sampling: bool
+            Adjust the marginal probabilities in the synthetic data to closer match the training set. Active only with the ConditionalSampler
+        # privacy settings
+        dp_enabled: bool
+            Train the discriminator with Differential Privacy guarantees
+        dp_delta: Optional[float]
+            Optional DP delta: the probability of information accidentally being leaked. Usually 1 / len(dataset)
+        dp_epsilon: float = 3
+            DP epsilon: privacy budget, which is a measure of the amount of privacy that is preserved by a given algorithm. Epsilon is a number that represents the maximum amount of information that an adversary can learn about an individual from the output of a differentially private algorithm. The smaller the value of epsilon, the more private the algorithm is. For example, an algorithm with an epsilon of 0.1 preserves more privacy than an algorithm with an epsilon of 1.0.
+        dp_max_grad_norm: float
+            max grad norm used for gradient clipping
+        dp_secure_mode: bool = False,
+             if True uses noise generation approach robust to floating point arithmetic attacks.
+
+        encoder_max_clusters: int
+            The max number of clusters to create for continuous columns when encoding
+        encoder:
+            Pre-trained tabular encoder. If None, a new encoder is trained.
+        encoder_whitelist:
+            Ignore columns from encoding
+    """
+
+    @validate_arguments(config=dict(arbitrary_types_allowed=True))
+    def __init__(
+        self,
+        X: pd.DataFrame,
+        n_units_latent: int,
+        cond: Optional[Union[pd.DataFrame, pd.Series, np.ndarray]] = None,
+        generator_n_layers_hidden: int = 2,
+        generator_n_units_hidden: int = 150,
+        generator_nonlin: str = "leaky_relu",
+        generator_nonlin_out_discrete: str = "softmax",
+        generator_nonlin_out_continuous: str = "none",
+        generator_n_iter: int = 1000,
+        generator_batch_norm: bool = False,
+        generator_dropout: float = 0.01,
+        generator_lr: float = 1e-3,
+        generator_weight_decay: float = 1e-3,
+        generator_opt_betas: tuple = (0.9, 0.999),
+        generator_residual: bool = True,
+        generator_extra_penalties: list = [],  # "identifiability_penalty"
+        discriminator_n_layers_hidden: int = 3,
+        discriminator_n_units_hidden: int = 300,
+        discriminator_nonlin: str = "leaky_relu",
+        discriminator_n_iter: int = 1,
+        discriminator_batch_norm: bool = False,
+        discriminator_dropout: float = 0.1,
+        discriminator_lr: float = 1e-3,
+        discriminator_weight_decay: float = 1e-3,
+        discriminator_opt_betas: tuple = (0.9, 0.999),
+        batch_size: int = 64,
+        random_state: int = 0,
+        clipping_value: int = 0,
+        lambda_gradient_penalty: float = 10,
+        lambda_identifiability_penalty: float = 0.1,
+        encoder_max_clusters: int = 20,
+        encoder: Any = None,
+        encoder_whitelist: list = [],
+        dataloader_sampler: Optional[BaseSampler] = None,
+        device: Any = DEVICE,
+        patience: int = 10,
+        patience_metric: Optional[WeightedMetrics] = None,
+        n_iter_print: int = 50,
+        n_iter_min: int = 100,
+        adjust_inference_sampling: bool = False,
+        # privacy settings
+        dp_enabled: bool = False,
+        dp_epsilon: float = 3,
+        dp_delta: Optional[float] = None,
+        dp_max_grad_norm: float = 2,
+        dp_secure_mode: bool = False,
+    ) -> None:
+        super(TabularGAN, self).__init__()
+        self.columns = X.columns
+        self.batch_size = batch_size
+        self.sample_prob: Optional[np.ndarray] = None
+        self._adjust_inference_sampling = adjust_inference_sampling
+        n_units_conditional = 0
+
+        if encoder is not None:
+            self.encoder = encoder
+        else:
+            self.encoder = TabularEncoder(
+                max_clusters=encoder_max_clusters, whitelist=encoder_whitelist
+            ).fit(X)
+
+        self.cond_encoder: Optional[OneHotEncoder] = None
+        if cond is not None:
+            cond = np.asarray(cond)
+            if len(cond.shape) == 1:
+                cond = cond.reshape(-1, 1)
+
+            self.cond_encoder = OneHotEncoder(handle_unknown="ignore").fit(cond)
+            cond = self.cond_encoder.transform(cond).toarray()
+
+            n_units_conditional = cond.shape[-1]
+
+        self.predefined_conditional = cond is not None
+
+        if (
+            dataloader_sampler is None and not self.predefined_conditional
+        ):  # don't mix conditionals
+            dataloader_sampler = ConditionalDatasetSampler(
+                self.encoder.transform(X),
+                self.encoder.layout(),
+            )
+            n_units_conditional = dataloader_sampler.conditional_dimension()
+
+        self.dataloader_sampler = dataloader_sampler
+
+        def _generator_cond_loss(
+            real_samples: torch.tensor,
+            fake_samples: torch.Tensor,
+            cond: Optional[torch.Tensor],
+        ) -> torch.Tensor:
+            if cond is None or self.predefined_conditional:
+                return 0
+
+            losses = []
+
+            idx = 0
+            cond_idx = 0
+
+            for item in self.encoder.layout():
+                length = item.output_dimensions
+
+                if item.feature_type != "discrete":
+                    idx += length
+                    continue
+
+                # create activate feature mask
+                mask = cond[:, cond_idx : cond_idx + length].sum(axis=1).bool()
+
+                if mask.sum() == 0:
+                    idx += length
+                    continue
+
+                if not (fake_samples[mask, idx : idx + length] >= 0).all():
+                    raise RuntimeError(
+                        f"Invalid samples after softmax = {fake_samples[mask, idx : idx + length]}"
+                    )
+                # fake_samples are after the Softmax activation
+                # we filter active features in the mask
+                item_loss = torch.nn.NLLLoss()(
+                    torch.log(fake_samples[mask, idx : idx + length] + 1e-8),
+                    torch.argmax(real_samples[mask, idx : idx + length], dim=1),
+                )
+                losses.append(item_loss)
+
+                cond_idx += length
+                idx += length
+
+            if idx != real_samples.shape[1]:
+                raise ValueError(
+                    f"Invalid offset idx = {idx}; real_samples.shape = {real_samples.shape}"
+                )
+
+            if len(losses) == 0:
+                return 0
+
+            loss = torch.stack(losses, dim=-1)
+
+            return loss.sum() / len(real_samples)
+
+        self.model = GAN(
+            self.encoder.n_features(),
+            n_units_latent=n_units_latent,
+            n_units_conditional=n_units_conditional,
+            batch_size=batch_size,
+            generator_n_layers_hidden=generator_n_layers_hidden,
+            generator_n_units_hidden=generator_n_units_hidden,
+            generator_nonlin=generator_nonlin,
+            generator_nonlin_out=self.encoder.activation_layout(
+                discrete_activation=generator_nonlin_out_discrete,
+                continuous_activation=generator_nonlin_out_continuous,
+            ),
+            generator_n_iter=generator_n_iter,
+            generator_batch_norm=generator_batch_norm,
+            generator_dropout=generator_dropout,
+            generator_lr=generator_lr,
+            generator_residual=generator_residual,
+            generator_weight_decay=generator_weight_decay,
+            generator_opt_betas=generator_opt_betas,
+            generator_extra_penalties=generator_extra_penalties,
+            generator_extra_penalty_cbks=[_generator_cond_loss],
+            discriminator_n_units_hidden=discriminator_n_units_hidden,
+            discriminator_n_layers_hidden=discriminator_n_layers_hidden,
+            discriminator_n_iter=discriminator_n_iter,
+            discriminator_nonlin=discriminator_nonlin,
+            discriminator_batch_norm=discriminator_batch_norm,
+            discriminator_dropout=discriminator_dropout,
+            discriminator_lr=discriminator_lr,
+            discriminator_weight_decay=discriminator_weight_decay,
+            discriminator_opt_betas=discriminator_opt_betas,
+            lambda_gradient_penalty=lambda_gradient_penalty,
+            lambda_identifiability_penalty=lambda_identifiability_penalty,
+            clipping_value=clipping_value,
+            n_iter_print=n_iter_print,
+            random_state=random_state,
+            # early stopping
+            n_iter_min=n_iter_min,
+            dataloader_sampler=dataloader_sampler,
+            device=device,
+            patience=patience,
+            patience_metric=patience_metric,
+            # privacy
+            dp_enabled=dp_enabled,
+            dp_epsilon=dp_epsilon,
+            dp_delta=dp_delta,
+            dp_max_grad_norm=dp_max_grad_norm,
+            dp_secure_mode=dp_secure_mode,
+        )
+
+    @validate_arguments(config=dict(arbitrary_types_allowed=True))
+    def encode(self, X: pd.DataFrame) -> pd.DataFrame:
+        return self.encoder.transform(X)
+
+    @validate_arguments(config=dict(arbitrary_types_allowed=True))
+    def decode(self, X: pd.DataFrame) -> pd.DataFrame:
+        return self.encoder.inverse_transform(X)
+
+    def get_encoder(self) -> TabularEncoder:
+        return self.encoder
+
+    @validate_arguments(config=dict(arbitrary_types_allowed=True))
+    def fit(
+        self,
+        X: pd.DataFrame,
+        cond: Optional[Union[pd.DataFrame, pd.Series, np.ndarray]] = None,
+        fake_labels_generator: Optional[Callable] = None,
+        true_labels_generator: Optional[Callable] = None,
+        encoded: bool = False,
+    ) -> Any:
+        # preprocessing
+        if encoded:
+            X_enc = X
+        else:
+            X_enc = self.encode(X)
+
+        if cond is not None and self.cond_encoder is not None:
+            cond = np.asarray(cond)
+            if len(cond.shape) == 1:
+                cond = cond.reshape(-1, 1)
+
+            cond = self.cond_encoder.transform(cond).toarray()
+
+        if not self.predefined_conditional and self.dataloader_sampler is not None:
+            cond = self.dataloader_sampler.get_dataset_conditionals()
+
+        if cond is not None:
+            if len(cond) != len(X_enc):
+                raise ValueError(
+                    f"Invalid conditional shape. {cond.shape} expected {len(X_enc)}"
+                )
+
+        # training
+        self.model.fit(
+            np.asarray(X_enc),
+            np.asarray(cond),
+            fake_labels_generator=fake_labels_generator,
+            true_labels_generator=true_labels_generator,
+        )
+
+        # post processing
+        self.adjust_inference_sampling(self._adjust_inference_sampling)
+
+        return self
+
+    def adjust_inference_sampling(self, enabled: bool) -> None:
+        if self.predefined_conditional or self.dataloader_sampler is None:
+            return
+
+        self._adjust_inference_sampling = enabled
+
+        if enabled:
+            real_prob = self.dataloader_sampler.conditional_probs()
+            sample_prob = self._extract_sample_prob()
+
+            self.sample_prob = self._find_sample_p(real_prob, sample_prob)
+        else:
+            self.sample_prob = None
+
+    @validate_arguments(config=dict(arbitrary_types_allowed=True))
+    def generate(
+        self,
+        count: int,
+        cond: Optional[Union[pd.DataFrame, pd.Series, np.ndarray]] = None,
+    ) -> pd.DataFrame:
+        samples = self(count, cond)
+        return self.decode(pd.DataFrame(samples))
+
+    def forward(
+        self, count: int, cond: Optional[Union[pd.DataFrame, np.ndarray]] = None
+    ) -> torch.Tensor:
+        if cond is not None and self.cond_encoder is not None:
+            cond = np.asarray(cond)
+            if len(cond.shape) == 1:
+                cond = cond.reshape(-1, 1)
+
+            cond = self.cond_encoder.transform(cond).toarray()
+
+        if not self.predefined_conditional and self.dataloader_sampler is not None:
+            cond = self.dataloader_sampler.sample_conditional(count, p=self.sample_prob)
+
+        return self.model.generate(count, cond=cond)
+
+    def _extract_sample_prob(self) -> Optional[np.ndarray]:
+        if self.predefined_conditional or self.dataloader_sampler is None:
+            return None
+
+        if self.dataloader_sampler.conditional_dimension() == 0:
+            return None
+
+        prob_list = list()
+        batch_size = 10000
+
+        for c in range(self.dataloader_sampler.conditional_dimension()):
+            cond = self.dataloader_sampler.sample_conditional_for_class(batch_size, c)
+            if cond is None:
+                continue
+
+            data_cond = self.model.generate(batch_size, cond=cond)
+
+            syn_dataloader_sampler = ConditionalDatasetSampler(
+                pd.DataFrame(data_cond),
+                self.encoder.layout(),
+            )
+
+            prob = syn_dataloader_sampler.conditional_probs()
+            prob_list.append(prob)
+
+        prob_mat = np.stack(prob_list, axis=-1)
+
+        return prob_mat
+
+    def _find_sample_p(
+        self, prob_real: Optional[np.ndarray], prob_mat: Optional[np.ndarray]
+    ) -> Optional[np.ndarray]:
+        if prob_real is None or prob_mat is None:
+            return None
+
+        def kl(
+            alpha: np.ndarray, prob_real: np.ndarray, prob_mat: np.ndarray
+        ) -> np.ndarray:
+            # alpha: _n_categories
+
+            # f1: same as prob_real
+            alpha_tensor = alpha[None, None, :]
+            f1 = logsumexp(alpha_tensor, axis=-1, b=prob_mat)
+            f2 = logsumexp(alpha)
+            ce = -np.sum(prob_real * f1, axis=1) + f2
+            return np.mean(ce)
+
+        try:
+            res = minimize(kl, np.ones(prob_mat.shape[-1]), (prob_real, prob_mat))
+        except Exception:
+            return np.ones(prob_mat.shape[-1]) / prob_mat.shape[-1]
+
+        return np.exp(res.x) / np.sum(np.exp(res.x))
+
+
+src/synthcity/plugins/core/models/tabular_encoder.py
+"""TabularEncoder module.
+"""
+
+# stdlib
+from typing import Any, List, Optional, Sequence, Tuple, Union
+
+# third party
+import numpy as np
+import pandas as pd
+from pydantic import BaseModel, field_validator, validate_arguments
+from sklearn.base import BaseEstimator, TransformerMixin
+from sklearn.preprocessing import MinMaxScaler
+
+# synthcity absolute
+import synthcity.logger as log
+from synthcity.utils.dataframe import discrete_columns as find_cat_cols
+from synthcity.utils.serialization import dataframe_hash
+
+# synthcity relative
+from .factory import get_feature_encoder
+
+
+class FeatureInfo(BaseModel):
+    name: str
+    feature_type: str
+    transform: Any = None
+    output_dimensions: int
+    transformed_features: List[str]
+    trans_feature_types: List[str]
+
+    @field_validator("feature_type")
+    @classmethod
+    def _feature_type_validator(cls: Any, v: str) -> str:
+        if v not in ["discrete", "continuous"]:
+            raise ValueError(f"Invalid feature type {v}")
+        return v
+
+    @field_validator("transform")
+    @classmethod
+    def _transform_validator(cls: Any, v: Any) -> Any:
+        if not (
+            hasattr(v, "fit")
+            and hasattr(v, "transform")
+            and hasattr(v, "inverse_transform")
+        ):
+            raise ValueError(f"Invalid transform {v}")
+        return v
+
+    @field_validator("output_dimensions")
+    @classmethod
+    def _output_dimensions_validator(cls: Any, v: int) -> int:
+        if v <= 0:
+            raise ValueError(f"Invalid output_dimensions {v}")
+        return v
+
+
+class TabularEncoder(TransformerMixin, BaseEstimator):
+    """Tabular encoder.
+
+    Model continuous columns with a BayesianGMM and normalized to a scalar [0, 1] and a vector.
+    Discrete columns are encoded using a scikit-learn OneHotEncoder.
+    """
+
+    categorical_encoder: Union[str, type] = "onehot"
+    continuous_encoder: Union[str, type] = "bayesian_gmm"
+    cat_encoder_params: dict = dict(handle_unknown="ignore", sparse_output=False)
+    cont_encoder_params: dict = dict(n_components=10)
+
+    @validate_arguments(config=dict(arbitrary_types_allowed=True))
+    def __init__(
+        self,
+        *,
+        whitelist: tuple = (),
+        max_clusters: int = 10,
+        categorical_limit: int = 10,
+        categorical_encoder: Optional[Union[str, type]] = None,
+        continuous_encoder: Optional[Union[str, type]] = None,
+        cat_encoder_params: Optional[dict] = None,
+        cont_encoder_params: Optional[dict] = None,
+    ) -> None:
+        """Create a data transformer.
+
+        Args:
+            whitelist (tuple):
+                Columns that will not be transformed.
+        """
+        self.whitelist = whitelist
+        self.categorical_limit = categorical_limit
+        self.max_clusters = max_clusters
+        if categorical_encoder is not None:
+            self.categorical_encoder = categorical_encoder
+        if continuous_encoder is not None:
+            self.continuous_encoder = continuous_encoder
+        if cat_encoder_params is not None:
+            self.cat_encoder_params = cat_encoder_params
+        else:
+            self.cat_encoder_params = self.cat_encoder_params.copy()
+        if cont_encoder_params is not None:
+            self.cont_encoder_params = cont_encoder_params
+        else:
+            self.cont_encoder_params = self.cont_encoder_params.copy()
+        if self.continuous_encoder == "bayesian_gmm":
+            self.cont_encoder_params["n_components"] = max_clusters
+
+    @validate_arguments(config=dict(arbitrary_types_allowed=True))
+    def _fit_feature(self, feature: pd.Series, feature_type: str) -> FeatureInfo:
+        """Fit the feature encoder on a column.
+
+        Args:
+            feature (pd.Series):
+                A column of a dataframe.
+            feature_type (str):
+                Type of the feature ('discrete' or 'continuous').
+
+        Returns:
+            FeatureInfo:
+                Information of the fitted feature encoder.
+        """
+        if feature_type == "discrete":
+            encoder = get_feature_encoder(
+                self.categorical_encoder, self.cat_encoder_params
+            )
+        else:
+            encoder = get_feature_encoder(
+                self.continuous_encoder, self.cont_encoder_params
+            )
+
+        encoder.fit(feature)
+
+        return FeatureInfo(
+            name=feature.name,
+            feature_type=feature_type,
+            transform=encoder,
+            output_dimensions=encoder.n_features_out,
+            transformed_features=encoder.feature_names_out,
+            trans_feature_types=encoder.feature_types_out,
+        )
+
+    @validate_arguments(config=dict(arbitrary_types_allowed=True))
+    def fit(
+        self, raw_data: pd.DataFrame, discrete_columns: Optional[List] = None
+    ) -> Any:
+        """Fit the ``TabularEncoder``.
+
+        This step also counts the #columns in matrix data and span information.
+        """
+        if discrete_columns is None:
+            discrete_columns = find_cat_cols(raw_data, self.categorical_limit)
+
+        self.output_dimensions = 0
+
+        self._column_raw_dtypes = raw_data.infer_objects().dtypes
+        self._column_transform_info_list: Sequence[FeatureInfo] = []
+
+        for name in raw_data.columns:
+            if name in self.whitelist:
+                continue
+            column_hash = dataframe_hash(raw_data[[name]])
+            log.info(f"Encoding {name} {column_hash}")
+            ftype = "discrete" if name in discrete_columns else "continuous"
+            column_transform_info = self._fit_feature(raw_data[name], ftype)
+
+            self.output_dimensions += column_transform_info.output_dimensions
+            self._column_transform_info_list.append(column_transform_info)
+
+        return self
+
+    def _transform_feature(
+        self, column_transform_info: FeatureInfo, feature: pd.Series
+    ) -> pd.DataFrame:
+        encoder = column_transform_info.transform
+        return pd.DataFrame(
+            encoder.transform(feature).values,
+            columns=column_transform_info.transformed_features,
+        )
+
+    @validate_arguments(config=dict(arbitrary_types_allowed=True))
+    def transform(self, raw_data: pd.DataFrame) -> pd.DataFrame:
+        """Take raw data and output a matrix data."""
+        if len(self._column_transform_info_list) == 0:
+            return pd.DataFrame(np.zeros((len(raw_data), 0)))
+
+        column_data_list = []
+        for name in self.whitelist:
+            if name not in raw_data.columns:
+                continue
+            feature = raw_data[name]
+            column_data_list.append(feature)
+
+        for column_transform_info in self._column_transform_info_list:
+            feature = raw_data[column_transform_info.name]
+            column_data_list.append(
+                self._transform_feature(column_transform_info, feature)
+            )
+
+        result = pd.concat(column_data_list, axis=1)
+        result.index = raw_data.index
+
+        return result
+
+    @validate_arguments(config=dict(arbitrary_types_allowed=True))
+    def _inverse_transform_feature(
+        self,
+        column_transform_info: FeatureInfo,
+        column_data: pd.DataFrame,
+    ) -> pd.Series:
+        encoder = column_transform_info.transform
+        return encoder.inverse_transform(column_data)
+
+    @validate_arguments(config=dict(arbitrary_types_allowed=True))
+    def inverse_transform(self, data: pd.DataFrame) -> pd.DataFrame:
+        """Take matrix data and output raw data.
+
+        Output uses the same type as input to the transform function.
+        """
+        if len(self._column_transform_info_list) == 0:
+            return pd.DataFrame(np.zeros((len(data), 0)))
+
+        st = 0
+        names = []
+        feature_types = []
+        recovered_feature_list = []
+
+        for name in self.whitelist:
+            if name not in data.columns:
+                continue
+            names.append(name)
+            feature_types.append(self._column_raw_dtypes)
+            recovered_feature_list.append(data[name])
+
+        for column_transform_info in self._column_transform_info_list:
+            dim = column_transform_info.output_dimensions
+            column_data = data.iloc[:, list(range(st, st + dim))]
+            recovered_feature = self._inverse_transform_feature(
+                column_transform_info, column_data
+            )
+            recovered_feature_list.append(recovered_feature)
+            names.append(column_transform_info.name)
+            st += dim
+
+        recovered_data = np.column_stack(recovered_feature_list)
+        recovered_data = pd.DataFrame(
+            recovered_data, columns=names, index=data.index
+        ).astype(self._column_raw_dtypes.filter(names))
+        return recovered_data
+
+    def layout(self) -> Sequence[FeatureInfo]:
+        """Get the layout of the encoded dataset.
+
+        Returns a list of tuple, describing each column as:
+            - continuous, and with length 1 + number of GMM clusters.
+            - discrete, and with length <N>, the length of the one-hot encoding.
+        """
+        return self._column_transform_info_list
+
+    def n_features(self) -> int:
+        return np.sum(
+            column_transform_info.output_dimensions
+            for column_transform_info in self._column_transform_info_list
+        )
+
+    def get_column_info(self, name: str) -> FeatureInfo:
+        for column_transform_info in self._column_transform_info_list:
+            if column_transform_info.name == name:
+                return column_transform_info
+
+        raise RuntimeError(f"Unknown column {name}")
+
+    @validate_arguments(config=dict(arbitrary_types_allowed=True))
+    def activation_layout(
+        self, discrete_activation: str, continuous_activation: str
+    ) -> Sequence[Tuple[str, int]]:
+        """Get the layout of the activations.
+
+        Returns a list of tuple, describing each column as:
+            - continuous, and with length 1 + number of GMM clusters.
+            - discrete, and with length <N>, the length of the one-hot encoding.
+        """
+        out = []
+        acts = dict(discrete=discrete_activation, continuous=continuous_activation)
+        for column_transform_info in self._column_transform_info_list:
+            ct = column_transform_info.trans_feature_types[0]
+            d = 0
+            for t in column_transform_info.trans_feature_types:
+                if t != ct:
+                    out.append((acts[ct], d))
+                    ct = t
+                    d = 0
+                d += 1
+            out.append((acts[ct], d))
+        return out
+
+
+class BinEncoder(TabularEncoder):
+    """Binary encoder (for SurvivalGAN).
+
+    Model continuous columns with a BayesianGMM and normalized to a scalar [0, 1] and a vector.
+    Discrete columns are encoded using a scikit-learn OneHotEncoder.
+    """
+
+    continuous_encoder = "bayesian_gmm"
+    cont_encoder_params = dict(n_components=2)
+    categorical_encoder = "passthrough"  # "onehot"
+    cat_encoder_params = dict()  # dict(handle_unknown="ignore", sparse=False)
+
+    def _transform_feature(
+        self, column_transform_info: FeatureInfo, feature: pd.Series
+    ) -> pd.DataFrame:
+        if column_transform_info.feature_type == "discrete":
+            return super()._transform_feature(column_transform_info, feature)
+        bgm = column_transform_info.transform
+        out = bgm.transform(feature)
+        return pd.DataFrame(
+            out.values[:, 1:].argmax(axis=1), columns=[bgm.feature_name_in]
+        )
+
+    def _inverse_transform_feature(
+        self, column_transform_info: FeatureInfo, column_data: pd.DataFrame
+    ) -> pd.Series:
+        if column_transform_info == "discrete":
+            return super()._inverse_transform_feature(
+                column_transform_info, column_data
+            )
+        bgm = column_transform_info.transform
+        components = column_data.values.reshape(-1)
+        features = bgm.means[components]
+        return pd.Series(features, name=bgm.feature_name_in)
+
+
+class TimeSeriesTabularEncoder(TransformerMixin, BaseEstimator):
+    """TimeSeries Tabular encoder.
+
+    Model continuous columns with a BayesianGMM and normalized to a scalar [0, 1] and a vector.
+    Discrete columns are encoded using a scikit-learn OneHotEncoder.
+    """
+
+    @validate_arguments(config=dict(arbitrary_types_allowed=True))
+    def __init__(
+        self,
+        max_clusters: int = 10,
+        categorical_limit: int = 10,
+        whitelist: list = [],
+    ) -> None:
+        self.max_clusters = max_clusters
+        self.categorical_limit = categorical_limit
+        self.whitelist = whitelist
+
+    def fit_temporal(
+        self,
+        temporal_data: List[pd.DataFrame],
+        observation_times: List,
+        discrete_columns: Optional[List] = None,
+    ) -> "TimeSeriesTabularEncoder":
+        # Temporal
+        self.temporal_encoder = TabularEncoder(
+            max_clusters=self.max_clusters,
+            categorical_limit=self.categorical_limit,
+            whitelist=self.whitelist,
+        )
+        temporal_features = temporal_data[0].columns
+
+        temporal_arr = np.asarray(temporal_data)
+        temporal_arr = np.swapaxes(temporal_arr, -1, 0).reshape(
+            len(temporal_features), -1
+        )
+        temporal_df = pd.DataFrame(temporal_arr.T, columns=temporal_features)
+
+        self.temporal_encoder.fit(temporal_df)
+
+        # Temporal horizons
+        self.observation_times_encoder = MinMaxScaler().fit(
+            np.asarray(observation_times).reshape(-1, 1)
+        )
+
+        return self
+
+    def fit(
+        self,
+        static_data: pd.DataFrame,
+        temporal_data: List[pd.DataFrame],
+        observation_times: List,
+        discrete_columns: Optional[List] = None,
+    ) -> "TimeSeriesTabularEncoder":
+        # Static
+        self.static_encoder = TabularEncoder(
+            max_clusters=self.max_clusters,
+            categorical_limit=self.categorical_limit,
+            whitelist=self.whitelist,
+        )
+        self.static_encoder.fit(static_data, discrete_columns=discrete_columns)
+
+        # Temporal
+        self.fit_temporal(
+            temporal_data, observation_times, discrete_columns=discrete_columns
+        )
+
+        return self
+
+    @validate_arguments(config=dict(arbitrary_types_allowed=True))
+    def transform_observation_times(
+        self,
+        observation_times: List,
+    ) -> List:
+        horizons_encoded = (
+            self.observation_times_encoder.transform(
+                np.asarray(observation_times).reshape(-1, 1)
+            )
+            .reshape(len(observation_times), -1)
+            .tolist()
+        )
+        return horizons_encoded
+
+    @validate_arguments(config=dict(arbitrary_types_allowed=True))
+    def transform_temporal(
+        self,
+        temporal_data: List[pd.DataFrame],
+        observation_times: List,
+    ) -> Tuple[pd.DataFrame, List]:
+        temporal_encoded = []
+        for item in temporal_data:
+            temporal_encoded.append(self.temporal_encoder.transform(item))
+
+        horizons_encoded = self.transform_observation_times(observation_times)
+
+        return temporal_encoded, horizons_encoded
+
+    @validate_arguments(config=dict(arbitrary_types_allowed=True))
+    def transform_static(
+        self,
+        static_data: pd.DataFrame,
+    ) -> pd.DataFrame:
+        static_encoded = self.static_encoder.transform(static_data)
+
+        return static_encoded
+
+    @validate_arguments(config=dict(arbitrary_types_allowed=True))
+    def transform(
+        self,
+        static_data: pd.DataFrame,
+        temporal_data: List[pd.DataFrame],
+        observation_times: List,
+    ) -> Tuple[pd.DataFrame, pd.DataFrame, List]:
+        static_encoded = self.transform_static(static_data)
+
+        temporal_encoded, horizons_encoded = self.transform_temporal(
+            temporal_data, observation_times
+        )
+
+        return static_encoded, temporal_encoded, horizons_encoded
+
+    @validate_arguments(config=dict(arbitrary_types_allowed=True))
+    def fit_transform_temporal(
+        self,
+        temporal_data: List[pd.DataFrame],
+        observation_times: List,
+    ) -> Tuple[pd.DataFrame, List]:
+        return self.fit_temporal(temporal_data, observation_times).transform_temporal(
+            temporal_data, observation_times
+        )
+
+    @validate_arguments(config=dict(arbitrary_types_allowed=True))
+    def fit_transform(
+        self,
+        static_data: pd.DataFrame,
+        temporal_data: List[pd.DataFrame],
+        observation_times: List,
+    ) -> Tuple[pd.DataFrame, pd.DataFrame, List]:
+        return self.fit(static_data, temporal_data, observation_times).transform(
+            static_data, temporal_data, observation_times
+        )
+
+    @validate_arguments(config=dict(arbitrary_types_allowed=True))
+    def inverse_transform_observation_times(
+        self,
+        observation_times: List,
+    ) -> pd.DataFrame:
+        horizons_decoded = (
+            self.observation_times_encoder.inverse_transform(
+                np.asarray(observation_times).reshape(-1, 1)
+            )
+            .reshape(len(observation_times), -1)
+            .tolist()
+        )
+        return horizons_decoded
+
+    @validate_arguments(config=dict(arbitrary_types_allowed=True))
+    def inverse_transform_temporal(
+        self,
+        temporal_encoded: List[pd.DataFrame],
+        observation_times: List,
+    ) -> pd.DataFrame:
+        temporal_decoded = []
+        for item in temporal_encoded:
+            temporal_decoded.append(self.temporal_encoder.inverse_transform(item))
+
+        horizons_decoded = self.inverse_transform_observation_times(observation_times)
+
+        return temporal_decoded, horizons_decoded
+
+    @validate_arguments(config=dict(arbitrary_types_allowed=True))
+    def inverse_transform_static(
+        self,
+        static_encoded: pd.DataFrame,
+    ) -> pd.DataFrame:
+        static_decoded = self.static_encoder.inverse_transform(static_encoded)
+        return static_decoded
+
+    @validate_arguments(config=dict(arbitrary_types_allowed=True))
+    def inverse_transform(
+        self,
+        static_encoded: pd.DataFrame,
+        temporal_encoded: List[pd.DataFrame],
+        observation_times: List,
+    ) -> pd.DataFrame:
+        static_decoded = self.inverse_transform_static(static_encoded)
+
+        temporal_decoded, horizons_decoded = self.inverse_transform_temporal(
+            temporal_encoded, observation_times
+        )
+        return static_decoded, temporal_decoded, horizons_decoded
+
+    def layout(self) -> Tuple[List, List]:
+        return self.static_encoder.layout(), self.temporal_encoder.layout()
+
+    def n_features(self) -> Tuple:
+        return self.static_encoder.n_features(), self.temporal_encoder.n_features()
+
+    @validate_arguments(config=dict(arbitrary_types_allowed=True))
+    def activation_layout_temporal(
+        self, discrete_activation: str, continuous_activation: str
+    ) -> Any:
+        return self.temporal_encoder.activation_layout(
+            discrete_activation, continuous_activation
+        )
+
+    @validate_arguments(config=dict(arbitrary_types_allowed=True))
+    def activation_layout(
+        self, discrete_activation: str, continuous_activation: str
+    ) -> Tuple:
+        return self.static_encoder.activation_layout(
+            discrete_activation, continuous_activation
+        ), self.temporal_encoder.activation_layout(
+            discrete_activation, continuous_activation
+        )
+
+
+class TimeSeriesBinEncoder(TransformerMixin, BaseEstimator):
+    """Time series Bin encoder.
+
+    Model continuous columns with a BayesianGMM and normalized to a scalar [0, 1] and a vector.
+    Discrete columns are encoded using a scikit-learn OneHotEncoder.
+    """
+
+    @validate_arguments(config=dict(arbitrary_types_allowed=True))
+    def __init__(
+        self,
+        max_clusters: int = 10,
+        categorical_limit: int = 10,
+        continuous_encoder: str = "gmm",
+    ) -> None:
+        """Create a data transformer.
+
+        Args:
+            max_clusters (int):
+                Maximum number of Gaussian distributions in Bayesian GMM.
+        """
+        self.encoder = BinEncoder(
+            max_clusters=max_clusters,
+            categorical_limit=categorical_limit,
+            continuous_encoder=continuous_encoder,
+        )
+
+    def _prepare(
+        self,
+        static_data: pd.DataFrame,
+        temporal_data: List[pd.DataFrame],
+        observation_times: List,
+    ) -> pd.DataFrame:
+        temporal_init = np.asarray(temporal_data)[:, 0, :].squeeze()
+        temporal_init_df = pd.DataFrame(temporal_init, columns=temporal_data[0].columns)
+
+        out = pd.concat(
+            [
+                static_data.reset_index(drop=True),
+                temporal_init_df.reset_index(drop=True),
+            ],
+            axis=1,
+        )
+        out.columns = np.asarray(range(len(out.columns)))
+        out.columns = out.columns.astype(str)
+
+        return out
+
+    def fit(
+        self,
+        static_data: pd.DataFrame,
+        temporal_data: List[pd.DataFrame],
+        observation_times: List,
+        discrete_columns: Optional[List] = None,
+    ) -> "TimeSeriesBinEncoder":
+        """Fit the TimeSeriesBinEncoder"""
+
+        data = self._prepare(static_data, temporal_data, observation_times)
+
+        self.encoder.fit(data, discrete_columns=discrete_columns)
+        return self
+
+    @validate_arguments(config=dict(arbitrary_types_allowed=True))
+    def transform(
+        self,
+        static_data: pd.DataFrame,
+        temporal_data: List[pd.DataFrame],
+        observation_times: List,
+    ) -> pd.DataFrame:
+        """Take raw data and output a matrix data."""
+        data = self._prepare(static_data, temporal_data, observation_times)
+        return self.encoder.transform(data)
+
+    @validate_arguments(config=dict(arbitrary_types_allowed=True))
+    def fit_transform(
+        self,
+        static: pd.DataFrame,
+        temporal: List[pd.DataFrame],
+        observation_times: List,
+    ) -> pd.DataFrame:
+        return self.fit(static, temporal, observation_times).transform(
+            static, temporal, observation_times
+        )
 
 
 src/synthcity/plugins/core/constraints.py
@@ -6356,5 +8537,69 @@ class Metrics:
             available_metrics[metric.type()].append(metric.name())
 
         return available_metrics
+
+
+src/synthcity/plugins/__init__.py
+# stdlib
+import glob
+from os.path import basename, dirname, isfile, join
+
+# third party
+from pydantic import validate_arguments
+
+# synthcity absolute
+from synthcity.plugins.core.plugin import Plugin, PluginLoader  # noqa: F401,E402
+
+def_categories = [
+    "generic",
+    "privacy",
+    "survival_analysis",
+    "time_series",
+    "domain_adaptation",
+    "images",
+    "debug",
+    "syn_seq"
+]
+plugins = {}
+
+for cat in def_categories:
+    plugins[cat] = glob.glob(join(dirname(__file__), cat, "plugin*.py"))
+
+
+class Plugins(PluginLoader):
+    @validate_arguments
+    def __init__(self, categories: list = def_categories) -> None:
+        plugins_to_use = []
+        for cat in categories:
+            plugins_to_use.extend(plugins[cat])
+
+        super().__init__(plugins_to_use, Plugin, categories)
+
+
+__all__ = [basename(f)[:-3] for f in plugins[cat] for cat in plugins if isfile(f)] + [
+    "Plugins",
+    "Plugin",
+]
+
+
+src/synthcity/plugins/generic/__init__.py
+# stdlib
+import glob
+from os.path import basename, dirname, isfile, join
+
+# synthcity absolute
+from synthcity.plugins.core.plugin import Plugin, PluginLoader  # noqa: F401,E402
+
+plugins = glob.glob(join(dirname(__file__), "plugin*.py"))
+
+
+class GenericPlugins(PluginLoader):
+    def __init__(self) -> None:
+        super().__init__(plugins, Plugin, ["generic"])
+
+
+__all__ = [basename(f)[:-3] for f in plugins if isfile(f)] + [
+    "GenericPlugins",
+]
 
 
