@@ -1,6 +1,6 @@
 # File: plugin_syn_seq.py
 
-from typing import Any, Dict, List, Optional, Union
+from typing import Any, Dict, List, Optional, Union, Tuple
 import pandas as pd
 
 from pydantic import validate_arguments
@@ -26,7 +26,7 @@ class Syn_SeqPlugin(Plugin):
 
     Steps:
       1) In .fit(), if the user passes a DataFrame, we wrap it in Syn_SeqDataLoader, then call .encode().
-      2) We build or refine the domain in `_domain_rebuild`, using the original vs. converted dtype info, 
+      2) We build or refine the domain in `_domain_rebuild`, using the original vs. converted dtype info,
          turning them into constraints, then into distributions.
       3) The aggregator trains column-by-column on the encoded data.
       4) For .generate(), we re-check constraints (including user constraints) and decode back to the original format.
@@ -42,6 +42,7 @@ class Syn_SeqPlugin(Plugin):
 
     @staticmethod
     def hyperparameter_space(**kwargs: Any) -> List:
+        # No tunable hyperparameters for demonstration
         return []
 
     @validate_arguments(config=dict(arbitrary_types_allowed=True))
@@ -70,6 +71,10 @@ class Syn_SeqPlugin(Plugin):
 
     @validate_arguments(config=dict(arbitrary_types_allowed=True))
     def fit(self, X: Union[DataLoader, pd.DataFrame], *args: Any, **kwargs: Any) -> Any:
+        """
+        Wrap a plain DataFrame into Syn_SeqDataLoader if needed, then encode the data.
+        Build up the schema from original data vs. encoded data, and train the aggregator.
+        """
         # If plain DataFrame, wrap in Syn_SeqDataLoader
         if isinstance(X, pd.DataFrame):
             X = Syn_SeqDataLoader(X)
@@ -80,14 +85,14 @@ class Syn_SeqPlugin(Plugin):
         enable_reproducible_results(self.random_state)
         self._data_info = X.info()
 
-        # Build schema for the *original* data 
+        # Build schema for the *original* data
         self._schema = Schema(
             data=X,
             sampling_strategy=self.sampling_strategy,
             random_state=self.random_state,
         )
 
-        # Encode the data if needed
+        # Encode the data
         X_encoded, self._training_data_info = X.encode()
 
         # Build an initial schema from the *encoded* data
@@ -106,6 +111,9 @@ class Syn_SeqPlugin(Plugin):
         return output
 
     def _fit(self, X: DataLoader, *args: Any, **kwargs: Any) -> "Syn_SeqPlugin":
+        """
+        Train the aggregator column-by-column using the encoded DataLoader.
+        """
         self.model = Syn_Seq(
             random_state=self.random_state,
             strict=self.strict,
@@ -118,7 +126,8 @@ class Syn_SeqPlugin(Plugin):
         """
         Build new domain using feature_params & constraint_to_distribution.
 
-        For each column, gather constraints => turn into Distribution objects.
+        For each column in the encoded data, gather basic "dtype" constraints,
+        transform them into Distribution objects, and create a new schema.
         """
         enc_info = X_encoded.info()
 
@@ -130,13 +139,12 @@ class Syn_SeqPlugin(Plugin):
 
         # For each column in syn_order, figure out the dtype constraints
         for col in syn_order:
-            # We'll gather rules in a local list
             col_rules = []
 
             original_dt = orig_map.get(col, "").lower()
             converted_dt = conv_map.get(col, "").lower()
 
-            # Example logic:
+            # Example logic (you can adapt):
             if col.endswith("_cat"):
                 # definitely treat as category
                 col_rules.append((col, "dtype", "category"))
@@ -153,7 +161,6 @@ class Syn_SeqPlugin(Plugin):
             single_constraints = Constraints(rules=col_rules)
             # Then transform into a Distribution
             dist = constraint_to_distribution(single_constraints, col)
-
             domain[col] = dist
 
         # Now build new Schema with that domain
@@ -168,11 +175,14 @@ class Syn_SeqPlugin(Plugin):
         self,
         count: Optional[int] = None,
         constraints: Optional[Constraints] = None,
-        rules: Optional[Dict[str, List[tuple]]] = None,
+        rules: Optional[Dict[str, List[Tuple[str, str, Any]]]] = None,
         random_state: Optional[int] = None,
         **kwargs: Any,
     ) -> DataLoader:
-        """Public generation method, applying constraints/rules & decoding back."""
+        """
+        Generate synthetic data by sampling from the aggregator, applying constraints,
+        and decoding back to the original schema.
+        """
         if not self.fitted:
             raise RuntimeError("Must .fit() plugin before calling .generate()")
         if self._schema is None:
@@ -199,9 +209,9 @@ class Syn_SeqPlugin(Plugin):
         syn_schema = Schema.from_constraints(gen_constraints)
 
         # aggregator call
-        data_syn = self._generate(count, syn_schema, rules=rules)
+        data_syn = self._generate(count, syn_schema, rules=rules, **kwargs)
 
-        # decode from the encoded data
+        # decode from the encoded data back to original
         data_syn = data_syn.decode()
 
         # final constraints check
@@ -209,11 +219,9 @@ class Syn_SeqPlugin(Plugin):
         if constraints is not None:
             final_constraints = final_constraints.extend(constraints)
 
-        # Instead of raising an error, match any leftover to meet constraints
-        if not data_syn.satisfies(final_constraints):
-            if self.strict:
-                # in strict mode, we keep only those rows that match
-                data_syn = data_syn.match(final_constraints)
+        # If strict, keep only valid rows
+        if not data_syn.satisfies(final_constraints) and self.strict:
+            data_syn = data_syn.match(final_constraints)
 
         return data_syn
 
@@ -221,19 +229,72 @@ class Syn_SeqPlugin(Plugin):
         self,
         count: int,
         syn_schema: Schema,
-        rules: Optional[Dict[str, List[tuple]]] = None,
+        rules: Optional[Dict[str, List[Tuple[str, str, Any]]]] = None,
         **kwargs: Any,
     ) -> DataLoader:
-        """Internal aggregator generation logic."""
+        """
+        Internal aggregator generation logic:
+        - Possibly remap rules to reference _cat columns if they specify special values
+        - Let aggregator do column-by-column generation
+        - Force the columns' dtypes according to syn_schema
+        """
         if not self.model:
             raise RuntimeError("Aggregator not found for syn_seq plugin")
 
-        # generate column by column
+        # Remap user rules to handle special values in _cat columns
+        if rules is not None:
+            rules = self._remap_special_value_rules(rules, syn_schema)
+
+        # Generate the data
         df_syn = self.model.generate_col(count, rules=rules, max_iter_rules=10)
-        # adapt the dtypes
+        # Ensure correct dtypes
         df_syn = syn_schema.adapt_dtypes(df_syn)
 
         return create_from_info(df_syn, self._data_info)
 
+    def _remap_special_value_rules(
+        self,
+        rules_dict: Dict[str, List[Tuple[str, str, Any]]],
+        syn_schema: Schema
+    ) -> Dict[str, List[Tuple[str, str, Any]]]:
+        """
+        If user wrote rules referencing special values (like -0.04) on numeric columns,
+        we switch them to the corresponding _cat column. This is a simple version:
+        If 'val' is in 'special_value[feat_col]', rename feat_col -> feat_col_cat.
+        """
+        if not rules_dict:
+            return rules_dict
 
+        special_map = self._training_data_info.get("special_value", {})
+
+        # build a base->cat map
+        # e.g. if 'bp' => 'bp_cat' is in your domain
+        base_to_cat = {}
+        for col in syn_schema.domain:
+            if col.endswith("_cat"):
+                base_col = col[:-4]
+                base_to_cat[base_col] = col
+
+        new_rules = {}
+        for target_col, cond_list in rules_dict.items():
+            actual_target_col = target_col
+            # If target_col is known to have special values => rename
+            if target_col in special_map and target_col in base_to_cat:
+                actual_target_col = base_to_cat[target_col]
+
+            new_cond_list = []
+            for (feat_col, op, val) in cond_list:
+                new_feat = feat_col
+                # If feat_col references special values => rename
+                if feat_col in special_map and feat_col in base_to_cat:
+                    if val in special_map[feat_col]:
+                        new_feat = base_to_cat[feat_col]
+                new_cond_list.append((new_feat, op, val))
+
+            new_rules[actual_target_col] = new_cond_list
+
+        return new_rules
+
+
+# Register plugin for the library
 plugin = Syn_SeqPlugin

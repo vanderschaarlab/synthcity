@@ -1,301 +1,14 @@
 INSTRUCTION
 
-Look at the project and current codes, focusing on how "plugin_syn_seq.py" and "syn_seq.py" is constructed. I have entirely re-written two files to incorporate my needs.
-plugin_syn_seq.py includes most of the parent functions but if you need to include more functions to let it run without an error, please do so.
-Make sure "plugin_syn_seq.py" and "syn_seq.py" runs without error in following given tutorial.
-I have attached ctgan's case for your reference but framework is different so only use it as reference. Also, dataloader and Syn_SeqEncoder are fixed. You cannot change them.
-You can suggest me to create the new file or modify existing files but I want you to focusing on creating perfect 'syn_seq.py' and 'plugin_syn_seq.py'.
-Syn_Seq is part of larger library 'synthcity' but we made modifications to incorporate our sequential regression synthesis approach.
-Especially our approach synthesize columns one by one but synthcity framework synthesizes entire dataframe so schema defining had lots of error and we had to override parent plugin.
-Make sure our base model code and plugin code is well constructed.
-Make your best, finalized code for two files. "plugin_syn_seq.py" and "syn_seq.py".
+Following codes include modified version with my needs due to some debugging.
+First, we enabled encoder to return dataloader because we had to temporarily redefine loader for fitting and generation.
+Second, we added remapping of rules for special value columns because if their values are altered rule cannot be applied.
+These changes are incomplete. Please refine and finalize the code to work well in harmony with others.
+You don't have to generate the entire code, just instruct me with detail where to modify.
+Make your best code or advice so I can easily copy and paste the snippet.
 Thanks.
 
-RECENT ERROR
-
----------------------------------------------------------------------------
-RuntimeError                              Traceback (most recent call last)
-Cell In[8], line 1
-----> 1 syn_model.generate(nrows = len(X), rules = rules).dataframe()
-
-File ~/anaconda3/envs/syn_seq/lib/python3.9/site-packages/pydantic/deprecated/decorator.py:55, in validate_arguments.<locals>.validate.<locals>.wrapper_function(*args, **kwargs)
-     53 @wraps(_func)
-     54 def wrapper_function(*args: Any, **kwargs: Any) -> Any:
----> 55     return vd.call(*args, **kwargs)
-
-File ~/anaconda3/envs/syn_seq/lib/python3.9/site-packages/pydantic/deprecated/decorator.py:150, in ValidatedFunction.call(self, *args, **kwargs)
-    148 def call(self, *args: Any, **kwargs: Any) -> Any:
-    149     m = self.init_model_instance(*args, **kwargs)
---> 150     return self.execute(m)
-
-File ~/anaconda3/envs/syn_seq/lib/python3.9/site-packages/pydantic/deprecated/decorator.py:226, in ValidatedFunction.execute(self, m)
-    224     return self.raw_function(*args_, **kwargs, **var_kwargs)
-    225 else:
---> 226     return self.raw_function(**d, **var_kwargs)
-
-File ~/synthcity/src/synthcity/plugins/generic/plugin_syn_seq.py:215, in Syn_SeqPlugin.generate(self, count, constraints, rules, random_state, **kwargs)
-    213     final_constraints = final_constraints.extend(constraints)
-    214 if not data_syn.satisfies(final_constraints) and self.strict:
---> 215     raise RuntimeError(
-    216         f"Plugin {self.name()} failed to satisfy constraints in strict mode."
-    217     )
-    219 if self.strict:
-    220     data_syn = data_syn.match(final_constraints)
-
-RuntimeError: Plugin syn_seq failed to satisfy constraints in strict mode.
-
-TUTORIAL ON PLUGIN
-
-# %% [markdown]
-# # Add a new plugin
-# 
-# By default, the library will import all the files with prefix "plugin\_\*.py" from src/synthcity/plugins, and load all the classes which implement the [Plugin interface](src/synthcity/plugins/core/plugin.py).
-# 
-# Each plugin must implement the following methods:
-# - hyperparameter_space() - a static method that returns the hyperparameters that can be tuned during AutoML.
-# - type() - a static method that returns the type of the plugin. e.g., debug, generative, bayesian, etc.
-# - name() - a static method that returns the name of the plugin. e.g., ctgan, random_noisee, etc.
-# - _fit() - internal method, called by `fit` on each training set.
-# - _generate() - internal method, called by `generate`.
-
-# %%
-!pip install synthcity
-!pip uninstall -y torchaudio torchdata
-
-# %% [markdown]
-# ## Existing plugins
-
-# %%
-# synthcity absolute
-from synthcity.plugins import Plugins
-
-generators = Plugins()
-
-generators.list()
-
-# %% [markdown]
-# ## Example plugin: Generate 0-1
-
-# %%
-# stdlib
-from typing import Any, List
-
-# third party
-import numpy as np
-import pandas as pd
-
-# synthcity absolute
-from synthcity.plugins.core.dataloader import DataLoader, GenericDataLoader
-from synthcity.plugins.core.distribution import Distribution
-from synthcity.plugins.core.plugin import Plugin
-from synthcity.plugins.core.schema import Schema
-
-
-class ZeroOnePlugin(Plugin):
-    """Dummy plugin for debugging."""
-
-    def __init__(self, **kwargs: Any) -> None:
-        super().__init__(**kwargs)
-
-    @staticmethod
-    def name() -> str:
-        return "zero_one"
-
-    @staticmethod
-    def type() -> str:
-        return "debug"
-
-    @staticmethod
-    def hyperparameter_space(*args: Any, **kwargs: Any) -> List[Distribution]:
-        return []
-
-    def _fit(self, X: DataLoader, *args: Any, **kwargs: Any) -> "ZeroOnePlugin":
-        self.features_count = X.shape[1]
-        return self
-
-    def _generate(self, count: int, syn_schema: Schema, **kwargs: Any):
-        return GenericDataLoader(
-            np.random.randint(0, 2, size=(count, self.features_count))
-        )
-
-# %%
-# Add the new plugin to the collection
-
-generators.add("zero_one", ZeroOnePlugin)
-
-# %%
-# Check the new plugins list
-generators.list()
-
-# %%
-# Load reference data
-
-# third party
-from sklearn.datasets import load_breast_cancer
-
-X, y = load_breast_cancer(return_X_y=True, as_frame=True)
-
-loader = GenericDataLoader(X)
-
-loader.dataframe()
-
-# %%
-# Train the new plugin
-
-gen = generators.get("zero_one")
-
-gen.fit(loader)
-
-# %%
-# Generate some new data
-
-gen.generate(count=10)
-
-# %% [markdown]
-# ### Oops, this didn't work.
-# 
-# __The Plugin interface enforces the new generated data to:__
-#  - satistify the same constraints as the training set.
-#  - Or to satisfy the constraints provided at inference time(if provided).
-#  
-#  
-#  If the generated dataframe fails to comply, an exception will be raised.
-# 
-# Let's try again
-
-# %% [markdown]
-# ## A functional plugin: Integrate SDV CTGAN
-# 
-# In this example, we will show how to integrate the CTGAN implementation from the [SDV library](https://github.com/sdv-dev/SDV).
-# 
-# __Note__ : `synthcity` also includes a dedicated CTGAN re-implementation.
-
-# %%
-!pip install ctgan
-
-# %%
-# stdlib
-from typing import Any, List
-
-# third party
-import numpy as np
-import pandas as pd
-from ctgan import CTGAN
-
-# synthcity absolute
-from synthcity.plugins.core.dataloader import DataLoader, GenericDataLoader
-from synthcity.plugins.core.distribution import Distribution
-from synthcity.plugins.core.plugin import Plugin
-from synthcity.plugins.core.schema import Schema
-from synthcity.plugins.core.distribution import (
-    Distribution,
-    IntegerDistribution,
-)
-
-
-class sdv_ctgan_plugin(Plugin):
-    """SDV CTGAN integration in synthcity."""
-
-    def __init__(
-        self,
-        embedding_n_units: int = 128,
-        n_iter: int = 2000,
-        batch_size: int = 100,
-        cat_limit: int = 15,
-        **kwargs: Any
-    ) -> None:
-        super().__init__(**kwargs)
-        self.cat_limit = cat_limit
-        self.model = CTGAN(
-            embedding_dim=embedding_n_units,
-            batch_size=batch_size,
-            epochs=n_iter,
-            verbose=False,
-        )
-
-    @staticmethod
-    def name() -> str:
-        return "sdv_ctgan"
-
-    @staticmethod
-    def type() -> str:
-        return "debug"
-
-    @staticmethod
-    def hyperparameter_space(**kwargs: Any) -> List[Distribution]:
-        """
-        We can customize the hyperparameter space, and use it in AutoML benchmarks.
-        """
-        return [
-            IntegerDistribution(name="embedding_n_units", low=100, high=500, step=50),
-            IntegerDistribution(name="batch_size", low=100, high=300, step=50),
-            IntegerDistribution(name="n_iter", low=100, high=500, step=50),
-        ]
-
-    def _fit(self, X: DataLoader, *args: Any, **kwargs: Any) -> "sdvPlugin":
-        """We selected the discrete columns based on the count of unique values, and train the CTGAN"""
-        discrete_columns = []
-
-        for col in X.columns:
-            if len(X[col].unique()) < self.cat_limit:
-                discrete_columns.append(col)
-
-        self.model.fit(X.dataframe(), discrete_columns=discrete_columns)
-        return self
-
-    def _generate(self, count: int, syn_schema: Schema, **kwargs: Any) -> pd.DataFrame:
-        return self._safe_generate(self.model.sample, count, syn_schema)
-
-# %%
-generators.add("sdv_ctgan", sdv_ctgan_plugin)
-
-generators.list()
-
-# %%
-# Train the new plugin
-
-gen = generators.get("sdv_ctgan", n_iter=100)
-
-gen.fit(loader)
-
-# %%
-# Generate some new data
-
-gen.generate(count=10).dataframe()
-
-# %%
-# Custom generation constraints
-
-# synthcity absolute
-from synthcity.plugins.core.constraints import Constraints
-
-constraints = Constraints(rules=[("worst radius", ">", 15)])
-
-generated = gen.generate(count=10, constraints=constraints)
-
-assert (generated["worst radius"] > 15).any()
-
-generated.dataframe()
-
-# %% [markdown]
-# ## Congratulations!
-# 
-# Congratulations on completing this notebook tutorial! If you enjoyed this and would like to join the movement towards Machine learning and AI for medicine, you can do so in the following ways!
-# 
-# ### Star [Synthcity](https://github.com/vanderschaarlab/synthcity) on GitHub
-# 
-# - The easiest way to help our community is just by starring the Repos! This helps raise awareness of the tools we're building.
-# 
-# 
-# ### Checkout other projects from vanderschaarlab
-# - [HyperImpute](https://github.com/vanderschaarlab/hyperimpute)
-# - [AutoPrognosis](https://github.com/vanderschaarlab/autoprognosis)
-# 
-
-
-
-
-==============================INTRODUCTION, PROJECT STRUCTURE, LOGIC, ISSUES, EXAMPLE TEST RUN I WANT TO SEE, REFERENCE CODES.==============================
+============================================================
 
 INTRODUCTION
 I am building a plugin for synthetic data library ‘synthcity’ named ‘syn_seq’. Reason for making this plugin is due to the fact that current plugins in synthcity only covers deep learning based models. Despite the fact that deep learning based data synthesis ensure authentic and realistic data synthesis, ML based synthesis such as sequential regression also has many advantages. For instance, they have a lot less training time and they do not require GPU. Also, they tend to synthesize much similar dataset in terms of marginal distributions. Such attributes drawed attention from market and academia regarding pseudonomized dataset because it can be a way to distribute such data with less privacy concerns. On behalf of this needs, R package Synthpop has been well known method for synthesis but there has been no known python version of sequential synthesis which contained such methodology.
@@ -470,9 +183,6 @@ score = Benchmarks.evaluate(
 )
 Benchmarks.print(score)
 
-
-
-
 REFERENCE CODES
 
 src/synthcity/plugins/core/models/syn_seq/syn_seq_encoder.py
@@ -558,16 +268,25 @@ class Syn_SeqEncoder(TransformerMixin, BaseEstimator):
         return X
 
     def inverse_transform(self, X: pd.DataFrame) -> pd.DataFrame:
+        """
+        1) 날짜 offset -> date 복원
+        2) 분할된 _cat 컬럼들 다시 base 컬럼과 merge하여 special values 복원
+        3) 원본 dtype으로 캐스팅
+        """
         X = X.copy()
-        # date offset → date 복원
+        # 1) date offset -> date
         X = self._convert_offset_to_date(X)
-        # original dtype 복원
+
+        # 2) split했던 numeric cols + _cat 을 재합치는 단계
+        X = self._merge_splitted_cols(X)
+
+        # 3) 원본 dtype 복원
         for col in X.columns:
             if col in self.col_map:
-                orig = self.col_map[col].get("original_dtype")
-                if orig:
+                orig_dt = self.col_map[col].get("original_dtype")
+                if orig_dt:
                     try:
-                        X[col] = X[col].astype(orig)
+                        X[col] = X[col].astype(orig_dt)
                     except:
                         pass
         return X
@@ -764,6 +483,40 @@ class Syn_SeqEncoder(TransformerMixin, BaseEstimator):
                     updated.add(ccol)
             self.variable_selection_[tgt_col] = list(updated)
 
+    def _merge_splitted_cols(self, X: pd.DataFrame) -> pd.DataFrame:
+        """
+        transform() 시점에 numeric col + _cat 으로 분리된 컬럼들을 다시 합친다.
+        예: 'bp' -> 'bp_cat'. 만약 'bp'가 NaN이고 'bp_cat'이 special_value면
+           bp를 그 special_value로 복원. 그 외 -9999 => NaN, -777 => base에 없던 값이므로 그냥 NaN 유지 등
+        """
+        splitted_cols = [c for c in self.syn_order if c.endswith("_cat")]
+        for cat_col in splitted_cols:
+            base_col = cat_col[:-4]  # 예: 'bp_cat' -> 'bp'
+            # base_col + cat_col 모두 존재해야 merge 가능
+            if base_col not in X.columns or cat_col not in X.columns:
+                continue
+
+            # 해당 base_col의 special_value 목록
+            specials = self.special_value.get(base_col, [])
+
+            # base 컬럼과 cat 컬럼을 merge
+            for i in range(len(X)):
+                if pd.isna(X.at[i, base_col]):
+                    # base_col 이 NaN => cat_col이 special인가?
+                    cat_val = X.at[i, cat_col]
+                    if cat_val in specials:
+                        # cat_val이 special_value 중 하나 => base_col 복원
+                        X.at[i, base_col] = cat_val
+                    else:
+                        # cat_val이 -9999 => transform 시점에 NaN이었던 것 => 그대로 NaN
+                        # cat_val이 -777 => transform 시점에 “일반 numeric”이었던 것
+                        #   그러나 여기서 해당 numeric 값을 복원할 데이터가 없음 => 계속 NaN 유지
+                        pass
+            # cat 컬럼은 이제 필요 없으므로 제거
+            X.drop(columns=[cat_col], inplace=True)
+
+        return X
+
     # ----------------------
     def get_info(self) -> Dict[str, Any]:
         """
@@ -841,8 +594,15 @@ from synthcity.plugins.core.models.syn_seq.methods import (
 
 # ------------------------------------------------------------------
 # We define a helper function that checks whether a row violates a set of rules.
-# e.g. rules = { "target": [("bmi", ">", 0.15), ("target", ">", 0)] }
-# If any rule is violated, that row must be regenerated.
+# e.g. rules = {
+#    "target": [
+#       ("bmi", ">", 0.15),
+#       ("target", ">", 0)
+#    ]
+# }
+# Each tuple => (col_feat, operator, val).
+# We interpret them as conditions that must ALL be satisfied for that row.
+# If any rule is violated, that row must be regenerated, or set to NaN if we cannot fix.
 # ------------------------------------------------------------------
 
 def check_rules_violation(
@@ -868,27 +628,30 @@ def check_rules_violation(
             # skip if that feature doesn't exist in df
             continue
 
+        col_data = df[col_feat]
+
         if operator in ["=", "=="]:
-            cond = (df[col_feat] == val) | df[col_feat].isna()
-        elif operator == ">":
-            cond = (df[col_feat] > val) | df[col_feat].isna()
-        elif operator == ">=":
-            cond = (df[col_feat] >= val) | df[col_feat].isna()
-        elif operator == "<":
-            cond = (df[col_feat] < val) | df[col_feat].isna()
-        elif operator == "<=":
-            cond = (df[col_feat] <= val) | df[col_feat].isna()
+            cond = (col_data == val) | col_data.isna()
+        elif operator in [">"]:
+            cond = (col_data > val) | col_data.isna()
+        elif operator in [">="]:
+            cond = (col_data >= val) | col_data.isna()
+        elif operator in ["<"]:
+            cond = (col_data < val) | col_data.isna()
+        elif operator in ["<="]:
+            cond = (col_data <= val) | col_data.isna()
         else:
             # unrecognized operator => skip
             cond = pd.Series(True, index=df.index)
 
         mask_valid &= cond
 
-    # Return indices that fail (i.e. not valid)
+    # Return indices that fail (i.e. are NOT valid)
     return df.index[~mask_valid]
 
+
 # ------------------------------------------------------------------
-# Map method_name => (syn_func, generate_func) from your submodule,
+# Map method_name => (syn_func, generate_func) from submodule
 # so we can dynamically choose the correct approach per column.
 # ------------------------------------------------------------------
 
@@ -908,13 +671,13 @@ METHOD_MAP = {
 
 class Syn_Seq:
     """
-    Column-by-column sequential regression aggregator.
+    Column-by-column sequential aggregator.
 
-    On .fit_col(...), we parse relevant order/method/varsel from the DataLoader info
+    On .fit_col(...), we parse info from the DataLoader (syn_order, method, varsel, etc.)
     and train each column in sequence.
 
-    On .generate_col(...), we sample from the aggregator column by column, optionally
-    applying user rules or constraints.
+    On .generate_col(...), we sample from the aggregator column by column,
+    optionally applying user rules or constraints.
     """
 
     def __init__(
@@ -948,8 +711,8 @@ class Syn_Seq:
 
         Steps:
           - read info: syn_order, method, variable_selection
-          - store the distribution of the first column
-          - for each subsequent column, train with the selected method
+          - store distribution of the first column
+          - for each subsequent column, train with the chosen method
         """
         info_dict = loader.info()
         training_data = loader.dataframe().copy()
@@ -960,7 +723,7 @@ class Syn_Seq:
         self._method_map = info_dict.get("method", {})
         self._varsel = info_dict.get("variable_selection", {})
 
-        # Force columns ending with "_cat" => method='cart'
+        # Force columns ending with "_cat" => method='cart' if not set
         # also replicate varsel if needed
         for col in self._syn_order:
             if col.endswith("_cat"):
@@ -988,9 +751,13 @@ class Syn_Seq:
             # Y is the column data, X are the preceding columns
             y = training_data[col].values
             X = training_data[preds_list].values
+            
+            # Drop rows that have NaN in y
+            mask_y = ~pd.isna(y)
+            # Drop rows that have NaN in the predictors
+            mask_x = ~np.isnan(X).any(axis=1)
+            mask = mask_y & mask_x
 
-            # drop rows with NaN in y
-            mask = ~pd.isna(y)
             X_ = X[mask]
             y_ = y[mask]
 
@@ -1022,7 +789,7 @@ class Syn_Seq:
         Generate `nrows` rows, column by column.
 
         If `rules` is given, after generating each column,
-        we check for rows that fail the rule => re-generate up to max_iter_rules attempts.
+        we check for rows that fail => re-generate them up to max_iter_rules attempts.
         """
         if not self._model_trained:
             raise RuntimeError("Syn_Seq aggregator not yet fitted")
@@ -2955,22 +2722,12 @@ class Syn_SeqDataLoader(DataLoader):
             default_method="cart",
         )
 
-        # 여기서는 fit만 (transform은 나중에 encode()에서)
-        self._encoder.fit(self.data)
-
         # if verbose => fit결과 info를 출력 (transform 전 상태)
         if self.verbose:
+            # 여기서는 fit만 (transform은 나중에 encode()에서)
+            self._encoder.fit(self.data)
             self._print_init_info()
-
-    def encode(self) -> ("Syn_SeqDataLoader", dict):
-        """
-        Calls self._encoder.transform(...) => modifies self.data in place
-        Returns (self, self.info())
-        """
-        transformed = self._encoder.transform(self.data)
-        self.data = transformed
-        return self, self.info()
-
+            
     def _print_init_info(self):
         """
         fit 이후(변환 전 or 변환 후 등) encoder 정보를 콘솔에 보기 좋게 찍어준다.
@@ -2979,21 +2736,16 @@ class Syn_SeqDataLoader(DataLoader):
         enc_info = self._encoder.get_info()
 
         syn_order = enc_info["syn_order"]  # list
-        orig_dtype = enc_info["original_dtype"]  # dict {col: str}
-        conv_type = enc_info["converted_type"]   # dict {col: str}
-        method_map = enc_info["method"]          # dict {col: str}
-        special_vals = enc_info["special_value"] # dict {col: list}
-        date_mins = enc_info["date_mins"]        # dict {col: Timestamp}
-        varsel = enc_info["variable_selection"]  # dict {col: [predictors...]}
+        conv_type = enc_info["converted_type"]    # dict {col: str}
+        method_map = enc_info["method"]           # dict {col: str}
+        special_vals = enc_info["special_value"]  # dict {col: list}
+        varsel = enc_info["variable_selection"]   # dict {col: [predictors...]}
 
         print("\n[INFO] Syn_SeqEncoder summary:")
         print(f"  - syn_order: {syn_order}")
-        print("  - original_dtype =>", orig_dtype)
         print("  - converted_type =>", conv_type)
         print("  - method =>", method_map)
         print("  - special_value =>", special_vals)
-        print("  - date_mins =>", date_mins)
-
         # variable_selection을 matrix 형태로 만들기
         df_vs = self._varsel_dict_to_df(varsel, syn_order)
         print("  - variable_selection_:")
@@ -3008,8 +2760,8 @@ class Syn_SeqDataLoader(DataLoader):
         # syn_order 길이만큼의 0행렬 생성
         df_vs = pd.DataFrame(
             0, 
-            index=syn_order,  # row = target col
-            columns=syn_order # col = predictor col
+            index=syn_order,   # row = target col
+            columns=syn_order  # col = predictor col
         )
         for tgt, preds in varsel.items():
             if tgt not in df_vs.index:
@@ -3067,7 +2819,7 @@ class Syn_SeqDataLoader(DataLoader):
         user_custom = {
             "syn_order": info.get("syn_order", list(data.columns)),
             "special_value": info.get("special_value", {}),
-            "col_type": {},
+            "col_type": info.get("col_type", {}),
             "max_categories": info.get("max_categories", 20),
             "variable_selection": info.get("variable_selection", {}),
             "method": info.get("method", {}),
@@ -3120,29 +2872,41 @@ class Syn_SeqDataLoader(DataLoader):
     def get_fairness_column(self) -> Union[str, Any]:
         return None
 
-    def decode(self, encoders: Dict[str, Any]) -> "Syn_SeqDataLoader":
+    def encode(self) -> ("Syn_SeqDataLoader", dict):
         """
-        If user specifically requests decode => inverse_transform
+        Calls self._encoder.transform(...) => modifies self.data in place
+        Returns (self, self.info())
         """
-        if "syn_seq_encoder" in encoders:
-            dec_data = encoders["syn_seq_encoder"].inverse_transform(self.data)
-            return self.decorate(dec_data)
-        return self
-
-    def encode(self, encoders: Optional[Dict[str, Any]] = None) -> ("Syn_SeqDataLoader", dict):
-        """
-        We do our actual transform here (if not done yet).
-        Return self, info()
-        """
+        # 1) Transform the original data (but do not overwrite self.data)
         transformed = self._encoder.transform(self.data)
-        self.data = transformed
-        return self, self.info()
+        
+        # 2) Build a new loader object that holds the transformed DataFrame
+        new_loader = Syn_SeqDataLoader(
+            data=transformed,
+            user_custom=self.user_custom,
+            sensitive_features=self.sensitive_features,
+            target_column=self.target_column,
+            random_state=self.random_state,
+            train_size=self.train_size,
+            max_categories=self.max_categories,
+            verbose=False,  # or whatever
+        )
+        # 3) Share the same fitted encoder, so we don’t re-fit
+        new_loader._encoder = self._encoder
+
+        # 4) Return (new_loader, some_info)
+        return new_loader, new_loader.info()
+    
+    def decode(self) -> "Syn_SeqDataLoader":
+        """
+        Decode => inverse_transform
+        Make a new loader with the decoded df
+        """
+        decoded_df = self._encoder.inverse_transform(self.data)
+        new_loader = self.decorate(decoded_df)
+        return new_loader
 
     def decorate(self, data: pd.DataFrame) -> "Syn_SeqDataLoader":
-        """
-        Rebuild a new loader with same user_custom, random_state, etc. 
-        Keep the same _encoder if desired.
-        """
         new_loader = Syn_SeqDataLoader(
             data=data,
             user_custom=self.user_custom,
@@ -3153,7 +2917,7 @@ class Syn_SeqDataLoader(DataLoader):
             max_categories=self.max_categories,
             verbose=False
         )
-        # share the same encoder
+        # share the same encoder => so that no re-fit is triggered
         new_loader._encoder = self._encoder
         return new_loader
 
@@ -3179,7 +2943,7 @@ def create_from_info(
         raise RuntimeError(f"invalid datatype {info}")
 
 src/synthcity/plugins/generic/plugin_syn_seq.py
-# plugin_syn_seq.py
+# File: plugin_syn_seq.py
 
 from typing import Any, Dict, List, Optional, Union
 import pandas as pd
@@ -3261,7 +3025,7 @@ class Syn_SeqPlugin(Plugin):
         enable_reproducible_results(self.random_state)
         self._data_info = X.info()
 
-        # Build schema for the *original* data. 
+        # Build schema for the *original* data 
         self._schema = Schema(
             data=X,
             sampling_strategy=self.sampling_strategy,
@@ -3299,8 +3063,7 @@ class Syn_SeqPlugin(Plugin):
         """
         Build new domain using feature_params & constraint_to_distribution.
 
-        For each column, we gather small constraints, 
-        then call constraint_to_distribution(...) to get the correct Distribution.
+        For each column, gather constraints => turn into Distribution objects.
         """
         enc_info = X_encoded.info()
 
@@ -3331,9 +3094,8 @@ class Syn_SeqPlugin(Plugin):
             else:
                 col_rules.append((col, "dtype", "float"))
 
-            # Next, build a local Constraints for this single column
+            # Build a local Constraints for this single column
             single_constraints = Constraints(rules=col_rules)
-
             # Then transform into a Distribution
             dist = constraint_to_distribution(single_constraints, col)
 
@@ -3341,7 +3103,6 @@ class Syn_SeqPlugin(Plugin):
 
         # Now build new Schema with that domain
         new_schema = Schema(domain=domain)
-        # Copy over sampling_strategy, random_state, etc from base_schema
         new_schema.sampling_strategy = base_schema.sampling_strategy
         new_schema.random_state = base_schema.random_state
 
@@ -3356,7 +3117,7 @@ class Syn_SeqPlugin(Plugin):
         random_state: Optional[int] = None,
         **kwargs: Any,
     ) -> DataLoader:
-        """Public generation method, applying constraints & decoding back."""
+        """Public generation method, applying constraints/rules & decoding back."""
         if not self.fitted:
             raise RuntimeError("Must .fit() plugin before calling .generate()")
         if self._schema is None:
@@ -3386,19 +3147,18 @@ class Syn_SeqPlugin(Plugin):
         data_syn = self._generate(count, syn_schema, rules=rules)
 
         # decode from the encoded data
-        data_syn = data_syn.decode(self._training_data_info)
+        data_syn = data_syn.decode()
 
-        # final check if strict
+        # final constraints check
         final_constraints = self.schema().as_constraints()
         if constraints is not None:
             final_constraints = final_constraints.extend(constraints)
-        if not data_syn.satisfies(final_constraints) and self.strict:
-            raise RuntimeError(
-                f"Plugin {self.name()} failed to satisfy constraints in strict mode."
-            )
 
-        if self.strict:
-            data_syn = data_syn.match(final_constraints)
+        # Instead of raising an error, match any leftover to meet constraints
+        if not data_syn.satisfies(final_constraints):
+            if self.strict:
+                # in strict mode, we keep only those rows that match
+                data_syn = data_syn.match(final_constraints)
 
         return data_syn
 
@@ -3415,10 +3175,77 @@ class Syn_SeqPlugin(Plugin):
 
         # generate column by column
         df_syn = self.model.generate_col(count, rules=rules, max_iter_rules=10)
-        # adapt the dtypes if needed
+        # adapt the dtypes
         df_syn = syn_schema.adapt_dtypes(df_syn)
 
         return create_from_info(df_syn, self._data_info)
+    
+def _generate(
+    self,
+    count: int,
+    syn_schema: Schema,
+    rules: Optional[Dict[str, List[Tuple]]] = None,
+    **kwargs: Any,
+) -> DataLoader:
+    if rules is not None:
+        # Remap special value rules => reference the _cat column
+        rules = self._remap_special_value_rules(rules, syn_schema)
+
+    # Now hand off the (possibly updated) rules
+    df_syn = self.model.generate_col(count, rules=rules, max_iter_rules=10)
+
+    # adapt the dtypes, etc. (already in your plugin code)
+    df_syn = syn_schema.adapt_dtypes(df_syn)
+    return create_from_info(df_syn, self._data_info)
+
+
+    def _remap_special_value_rules(
+        self, 
+        rules_dict: Dict[str, List[Tuple[str, str, Any]]], 
+        syn_schema: Schema
+    ) -> Dict[str, List[Tuple[str, str, Any]]]:
+
+        # We can get the special_value map from the encoder or from syn_schema. 
+        # If you store the Syn_SeqEncoder or have a data loader info,
+        # you can read encoder_info = self._training_data_info["special_value"]
+        # Or if you only have a 'syn_schema' object, you might store it in that domain’s metadata.
+
+        new_rules = {}
+        # Suppose you have: self._training_data_info["special_value"] 
+        # or for col in self._training_data_info["special_value"]: ...
+        # We'll do a quick example if you had that dictionary:
+        special_map = self._training_data_info.get("special_value", {})
+
+        # build lookup: base_col -> cat_col
+        # The syn_seq_encoder puts 'bp_cat' right before 'bp' in syn_order, etc.
+        # So we can also parse from the "converted_type" keys or from the col_map. 
+        # Or store it in your plugin after the fit step. 
+        base_to_cat = {}
+        for col in syn_schema.domain:
+            if col.endswith("_cat"):
+                base_col = col[:-4]
+                base_to_cat[base_col] = col
+
+        for target_col, cond_list in rules_dict.items():
+            actual_target_col = target_col
+            # If target_col is numeric-with-special-values => rename target_col -> target_col+"_cat"
+            if target_col in special_map and target_col in base_to_cat:
+                actual_target_col = base_to_cat[target_col]
+
+            new_cond_list = []
+            for (feat_col, op, val) in cond_list:
+                # If feat_col references a numeric-with-special-values ...
+                if feat_col in special_map and feat_col in base_to_cat:
+                    # If val is in the known special vals => rename feat_col -> feat_col_cat
+                    if val in special_map[feat_col]:
+                        feat_col = base_to_cat[feat_col]
+                new_cond_list.append((feat_col, op, val))
+
+            new_rules[actual_target_col] = new_cond_list
+
+        return new_rules
+
+
 
 plugin = Syn_SeqPlugin
 

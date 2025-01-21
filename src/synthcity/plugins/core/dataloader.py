@@ -2026,8 +2026,23 @@ class Syn_SeqDataLoader(DataLoader):
         Returns (self, self.info())
         """
         transformed = self._encoder.transform(self.data)
-        self.data = transformed
-        return self, self.info()
+
+        # 2) Build a new loader object that holds the transformed DataFrame
+        new_loader = Syn_SeqDataLoader(
+            data=transformed,
+            user_custom=self.user_custom,
+            sensitive_features=self.sensitive_features,
+            target_column=self.target_column,
+            random_state=self.random_state,
+            train_size=self.train_size,
+            max_categories=self.max_categories,
+            verbose=False
+        )
+        # 3) Share the same fitted encoder, so we don’t re-fit
+        new_loader._encoder = self._encoder
+
+        # 4) Return (new_loader, some_info)
+        return new_loader, new_loader.info()
     
     def decode(self) -> "Syn_SeqDataLoader":
         """

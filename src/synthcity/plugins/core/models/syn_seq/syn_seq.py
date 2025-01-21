@@ -23,16 +23,15 @@ from synthcity.plugins.core.models.syn_seq.methods import (
 )
 
 # ------------------------------------------------------------------
-# We define a helper function that checks whether a row violates a set of rules.
+# Simple helper to check if a row fails user-defined rules
 # e.g. rules = {
-#    "target": [
+#   "target": [
 #       ("bmi", ">", 0.15),
 #       ("target", ">", 0)
-#    ]
+#   ]
 # }
 # Each tuple => (col_feat, operator, val).
-# We interpret them as conditions that must ALL be satisfied for that row.
-# If any rule is violated, that row must be regenerated, or set to NaN if we cannot fix.
+# If any condition is not satisfied, that row fails => to be re-generated or set to NaN.
 # ------------------------------------------------------------------
 
 def check_rules_violation(
@@ -45,7 +44,7 @@ def check_rules_violation(
     If rules_dict[target_col] = [("some_col","=",val), ("other_col", ">", val2), ...],
     we interpret them as conditions that must ALL be satisfied.
 
-    We return the row-indices that FAIL these conditions.
+    Return the row-indices that FAIL these conditions.
     """
     if target_col not in rules_dict:
         return pd.Index([])  # no rules => no violation
@@ -55,7 +54,7 @@ def check_rules_violation(
 
     for (col_feat, operator, val) in sub_rules:
         if col_feat not in df.columns:
-            # skip if that feature doesn't exist in df
+            # skip if that feature doesn't exist
             continue
 
         col_data = df[col_feat]
@@ -76,13 +75,13 @@ def check_rules_violation(
 
         mask_valid &= cond
 
-    # Return indices that fail (i.e. are NOT valid)
+    # Return indices that are NOT valid
     return df.index[~mask_valid]
 
 
 # ------------------------------------------------------------------
-# Map method_name => (syn_func, generate_func) from submodule
-# so we can dynamically choose the correct approach per column.
+# Map method_name => (syn_func, generate_func) from your submodule
+# so we can dynamically choose how each column is trained and generated.
 # ------------------------------------------------------------------
 
 METHOD_MAP = {
@@ -101,13 +100,12 @@ METHOD_MAP = {
 
 class Syn_Seq:
     """
-    Column-by-column sequential aggregator.
+    The column-by-column aggregator.
 
-    On .fit_col(...), we parse info from the DataLoader (syn_order, method, varsel, etc.)
-    and train each column in sequence.
+    On .fit_col(...), we parse info from the DataLoader (syn_order, method, variable_selection, etc.)
+    and train each column sequentially.
 
-    On .generate_col(...), we sample from the aggregator column by column,
-    optionally applying user rules or constraints.
+    On .generate_col(...), we sample in the same order, optionally re-checking user rules at each step.
     """
 
     def __init__(
@@ -119,8 +117,8 @@ class Syn_Seq:
         """
         Args:
             random_state: random seed
-            strict: if True, we do re-check constraints (or user rules)
-            sampling_patience: max tries for re-generation (not used here but could be).
+            strict: if True, re-check constraints (or user rules)
+            sampling_patience: max tries for re-generation if needed
         """
         self.random_state = random_state
         self.strict = strict
@@ -132,7 +130,7 @@ class Syn_Seq:
         self._varsel: Dict[str, List[str]] = {}
         self._col_models: Dict[str, Dict[str, Any]] = {}
 
-        # For the first column, we store real distribution
+        # For the first column, store real distribution
         self._first_col_data: Optional[np.ndarray] = None
 
     def fit_col(self, loader: DataLoader, *args, **kwargs) -> "Syn_Seq":
@@ -141,7 +139,7 @@ class Syn_Seq:
 
         Steps:
           - read info: syn_order, method, variable_selection
-          - store distribution of the first column
+          - store the distribution for the first column (to sample from real data)
           - for each subsequent column, train with the chosen method
         """
         info_dict = loader.info()
@@ -153,8 +151,8 @@ class Syn_Seq:
         self._method_map = info_dict.get("method", {})
         self._varsel = info_dict.get("variable_selection", {})
 
-        # Force columns ending with "_cat" => method='cart' if not set
-        # also replicate varsel if needed
+        # Force columns that end with "_cat" => method='cart' if not set,
+        # and replicate varsel if needed
         for col in self._syn_order:
             if col.endswith("_cat"):
                 self._method_map[col] = "cart"
@@ -167,7 +165,7 @@ class Syn_Seq:
 
         info("[INFO] Syn_Seq aggregator: fitting columns...")
 
-        # 1) First col => store real distribution
+        # 1) The "first column" => store real distribution
         first_col = self._syn_order[0]
         self._first_col_data = training_data[first_col].dropna().values
         info(f"Fitting '{first_col}' => stored distribution from real data. Done.")
@@ -178,10 +176,10 @@ class Syn_Seq:
             method_name = self._method_map.get(col, "cart")
             preds_list = self._varsel.get(col, self._syn_order[:i])
 
-            # Y is the column data, X are the preceding columns
+            # Y is the column data; X are the preceding columns
             y = training_data[col].values
             X = training_data[preds_list].values
-            
+
             # Drop rows that have NaN in y
             mask_y = ~pd.isna(y)
             # Drop rows that have NaN in the predictors
@@ -200,7 +198,7 @@ class Syn_Seq:
 
     def _fit_single_col(self, method_name: str, X: np.ndarray, y: np.ndarray) -> Dict[str, Any]:
         """
-        Trains the chosen method for one column
+        Trains the chosen method for one column, returning a dict with the fitted model info.
         """
         fit_func, _ = METHOD_MAP[method_name]
         model = fit_func(y, X, random_state=self.random_state)
@@ -216,10 +214,10 @@ class Syn_Seq:
         max_iter_rules: int = 10
     ) -> pd.DataFrame:
         """
-        Generate `nrows` rows, column by column.
+        Generate `nrows` rows column-by-column.
 
         If `rules` is given, after generating each column,
-        we check for rows that fail => re-generate them up to max_iter_rules attempts.
+        check for rows that fail => re-generate them up to max_iter_rules attempts.
         """
         if not self._model_trained:
             raise RuntimeError("Syn_Seq aggregator not yet fitted")
@@ -233,7 +231,9 @@ class Syn_Seq:
         # 1) Generate the first col from real distribution
         first_col = self._syn_order[0]
         if self._first_col_data is not None and len(self._first_col_data) > 0:
-            gen_df[first_col] = np.random.choice(self._first_col_data, size=nrows, replace=True)
+            gen_df[first_col] = np.random.choice(
+                self._first_col_data, size=nrows, replace=True
+            )
         else:
             gen_df[first_col] = 0
         info(f"Generating '{first_col}' => done.")
@@ -249,7 +249,7 @@ class Syn_Seq:
             ysyn = self._generate_single_col(method_name, Xsyn, col)
             gen_df[col] = ysyn
 
-            # If user rules => re-generate any violating rows
+            # If user rules => re-check any violating rows
             if rules and col in rules:
                 tries = 0
                 while True:
@@ -274,10 +274,10 @@ class Syn_Seq:
 
     def _generate_single_col(self, method_name: str, Xsyn: np.ndarray, col: str) -> np.ndarray:
         """
-        Use the fitted model for col, or fallback to first-col distribution if not found
+        Use the fitted model for 'col', or fallback to the distribution of the first column if not found.
         """
         if col not in self._col_models:
-            # fallback => first col distribution
+            # fallback => sample from the first col's distribution
             if self._first_col_data is not None and len(self._first_col_data) > 0:
                 return np.random.choice(self._first_col_data, size=len(Xsyn), replace=True)
             else:
