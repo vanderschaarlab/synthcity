@@ -181,9 +181,13 @@ class Syn_Seq:
             # Y is the column data, X are the preceding columns
             y = training_data[col].values
             X = training_data[preds_list].values
+            
+            # Drop rows that have NaN in y
+            mask_y = ~pd.isna(y)
+            # Drop rows that have NaN in the predictors
+            mask_x = ~np.isnan(X).any(axis=1)
+            mask = mask_y & mask_x
 
-            # drop rows with NaN in y
-            mask = ~pd.isna(y)
             X_ = X[mask]
             y_ = y[mask]
 

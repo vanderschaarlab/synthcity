@@ -1865,15 +1865,6 @@ class Syn_SeqDataLoader(DataLoader):
         if self.verbose:
             self._print_init_info()
 
-    def encode(self) -> ("Syn_SeqDataLoader", dict):
-        """
-        Calls self._encoder.transform(...) => modifies self.data in place
-        Returns (self, self.info())
-        """
-        transformed = self._encoder.transform(self.data)
-        self.data = transformed
-        return self, self.info()
-
     def _print_init_info(self):
         """
         fit 이후(변환 전 or 변환 후 등) encoder 정보를 콘솔에 보기 좋게 찍어준다.
@@ -2023,29 +2014,25 @@ class Syn_SeqDataLoader(DataLoader):
     def get_fairness_column(self) -> Union[str, Any]:
         return None
 
-    def decode(self, encoders: Dict[str, Any]) -> "Syn_SeqDataLoader":
+    def encode(self) -> ("Syn_SeqDataLoader", dict):
         """
-        If user specifically requests decode => inverse_transform
-        """
-        if "syn_seq_encoder" in encoders:
-            dec_data = encoders["syn_seq_encoder"].inverse_transform(self.data)
-            return self.decorate(dec_data)
-        return self
-
-    def encode(self, encoders: Optional[Dict[str, Any]] = None) -> ("Syn_SeqDataLoader", dict):
-        """
-        We do our actual transform here (if not done yet).
-        Return self, info()
+        Calls self._encoder.transform(...) => modifies self.data in place
+        Returns (self, self.info())
         """
         transformed = self._encoder.transform(self.data)
         self.data = transformed
         return self, self.info()
+    
+    def decode(self) -> "Syn_SeqDataLoader":
+        """
+        Decode => inverse_transform
+        Make a new loader with the decoded df
+        """
+        decoded_df = self._encoder.inverse_transform(self.data)
+        new_loader = self.decorate(decoded_df)
+        return new_loader
 
     def decorate(self, data: pd.DataFrame) -> "Syn_SeqDataLoader":
-        """
-        Rebuild a new loader with same user_custom, random_state, etc. 
-        Keep the same _encoder if desired.
-        """
         new_loader = Syn_SeqDataLoader(
             data=data,
             user_custom=self.user_custom,
@@ -2056,7 +2043,7 @@ class Syn_SeqDataLoader(DataLoader):
             max_categories=self.max_categories,
             verbose=False
         )
-        # share the same encoder
+        # share the same encoder => so that no re-fit is triggered
         new_loader._encoder = self._encoder
         return new_loader
 

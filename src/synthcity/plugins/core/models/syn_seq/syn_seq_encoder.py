@@ -80,16 +80,25 @@ class Syn_SeqEncoder(TransformerMixin, BaseEstimator):
         return X
 
     def inverse_transform(self, X: pd.DataFrame) -> pd.DataFrame:
+        """
+        1) 날짜 offset -> date 복원
+        2) 분할된 _cat 컬럼들 다시 base 컬럼과 merge하여 special values 복원
+        3) 원본 dtype으로 캐스팅
+        """
         X = X.copy()
-        # date offset → date 복원
+        # 1) date offset -> date
         X = self._convert_offset_to_date(X)
-        # original dtype 복원
+
+        # 2) split했던 numeric cols + _cat 을 재합치는 단계
+        X = self._merge_splitted_cols(X)
+
+        # 3) 원본 dtype 복원
         for col in X.columns:
             if col in self.col_map:
-                orig = self.col_map[col].get("original_dtype")
-                if orig:
+                orig_dt = self.col_map[col].get("original_dtype")
+                if orig_dt:
                     try:
-                        X[col] = X[col].astype(orig)
+                        X[col] = X[col].astype(orig_dt)
                     except:
                         pass
         return X
@@ -285,6 +294,40 @@ class Syn_SeqEncoder(TransformerMixin, BaseEstimator):
                 if bcol in updated:
                     updated.add(ccol)
             self.variable_selection_[tgt_col] = list(updated)
+
+    def _merge_splitted_cols(self, X: pd.DataFrame) -> pd.DataFrame:
+        """
+        transform() 시점에 numeric col + _cat 으로 분리된 컬럼들을 다시 합친다.
+        예: 'bp' -> 'bp_cat'. 만약 'bp'가 NaN이고 'bp_cat'이 special_value면
+           bp를 그 special_value로 복원. 그 외 -9999 => NaN, -777 => base에 없던 값이므로 그냥 NaN 유지 등
+        """
+        splitted_cols = [c for c in self.syn_order if c.endswith("_cat")]
+        for cat_col in splitted_cols:
+            base_col = cat_col[:-4]  # 예: 'bp_cat' -> 'bp'
+            # base_col + cat_col 모두 존재해야 merge 가능
+            if base_col not in X.columns or cat_col not in X.columns:
+                continue
+
+            # 해당 base_col의 special_value 목록
+            specials = self.special_value.get(base_col, [])
+
+            # base 컬럼과 cat 컬럼을 merge
+            for i in range(len(X)):
+                if pd.isna(X.at[i, base_col]):
+                    # base_col 이 NaN => cat_col이 special인가?
+                    cat_val = X.at[i, cat_col]
+                    if cat_val in specials:
+                        # cat_val이 special_value 중 하나 => base_col 복원
+                        X.at[i, base_col] = cat_val
+                    else:
+                        # cat_val이 -9999 => transform 시점에 NaN이었던 것 => 그대로 NaN
+                        # cat_val이 -777 => transform 시점에 “일반 numeric”이었던 것
+                        #   그러나 여기서 해당 numeric 값을 복원할 데이터가 없음 => 계속 NaN 유지
+                        pass
+            # cat 컬럼은 이제 필요 없으므로 제거
+            X.drop(columns=[cat_col], inplace=True)
+
+        return X
 
     # ----------------------
     def get_info(self) -> Dict[str, Any]:

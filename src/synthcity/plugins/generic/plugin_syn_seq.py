@@ -202,7 +202,7 @@ class Syn_SeqPlugin(Plugin):
         data_syn = self._generate(count, syn_schema, rules=rules)
 
         # decode from the encoded data
-        data_syn = data_syn.decode(self._training_data_info)
+        data_syn = data_syn.decode()
 
         # final constraints check
         final_constraints = self.schema().as_constraints()
