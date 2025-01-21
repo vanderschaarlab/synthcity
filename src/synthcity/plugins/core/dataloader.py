@@ -1858,13 +1858,12 @@ class Syn_SeqDataLoader(DataLoader):
             default_method="cart",
         )
 
-        # 여기서는 fit만 (transform은 나중에 encode()에서)
-        self._encoder.fit(self.data)
-
         # if verbose => fit결과 info를 출력 (transform 전 상태)
         if self.verbose:
+            # 여기서는 fit만 (transform은 나중에 encode()에서)
+            self._encoder.fit(self.data)
             self._print_init_info()
-
+            
     def _print_init_info(self):
         """
         fit 이후(변환 전 or 변환 후 등) encoder 정보를 콘솔에 보기 좋게 찍어준다.
@@ -1873,21 +1872,16 @@ class Syn_SeqDataLoader(DataLoader):
         enc_info = self._encoder.get_info()
 
         syn_order = enc_info["syn_order"]  # list
-        orig_dtype = enc_info["original_dtype"]  # dict {col: str}
-        conv_type = enc_info["converted_type"]   # dict {col: str}
-        method_map = enc_info["method"]          # dict {col: str}
-        special_vals = enc_info["special_value"] # dict {col: list}
-        date_mins = enc_info["date_mins"]        # dict {col: Timestamp}
-        varsel = enc_info["variable_selection"]  # dict {col: [predictors...]}
+        conv_type = enc_info["converted_type"]    # dict {col: str}
+        method_map = enc_info["method"]           # dict {col: str}
+        special_vals = enc_info["special_value"]  # dict {col: list}
+        varsel = enc_info["variable_selection"]   # dict {col: [predictors...]}
 
         print("\n[INFO] Syn_SeqEncoder summary:")
         print(f"  - syn_order: {syn_order}")
-        print("  - original_dtype =>", orig_dtype)
         print("  - converted_type =>", conv_type)
         print("  - method =>", method_map)
         print("  - special_value =>", special_vals)
-        print("  - date_mins =>", date_mins)
-
         # variable_selection을 matrix 형태로 만들기
         df_vs = self._varsel_dict_to_df(varsel, syn_order)
         print("  - variable_selection_:")
@@ -1902,8 +1896,8 @@ class Syn_SeqDataLoader(DataLoader):
         # syn_order 길이만큼의 0행렬 생성
         df_vs = pd.DataFrame(
             0, 
-            index=syn_order,  # row = target col
-            columns=syn_order # col = predictor col
+            index=syn_order,   # row = target col
+            columns=syn_order  # col = predictor col
         )
         for tgt, preds in varsel.items():
             if tgt not in df_vs.index:
