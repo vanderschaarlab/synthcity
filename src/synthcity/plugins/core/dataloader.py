@@ -1967,7 +1967,7 @@ class Syn_SeqDataLoader(DataLoader):
         user_custom = {
             "syn_order": info.get("syn_order", list(data.columns)),
             "special_value": info.get("special_value", {}),
-            "col_type": {},
+            "col_type": info.get("col_type", {}),
             "max_categories": info.get("max_categories", 20),
             "variable_selection": info.get("variable_selection", {}),
             "method": info.get("method", {}),
