@@ -148,8 +148,8 @@ class Syn_Seq:
         3) for each subsequent column, pick aggregator => train with that method
 
         Modification:
-        - If the column's 'converted_type' is 'category', skip the np.isnan check on X
-            to avoid TypeError for object/string dtypes.
+        - If the *target column* or *any predictor columns* have 'converted_type' == 'category',
+            skip the np.isnan(...) check on X to avoid TypeError for non-numeric dtypes.
         """
         # 1) Gather the relevant metadata
         info_dict = loader.info()
@@ -160,7 +160,7 @@ class Syn_Seq:
         self._syn_order = info_dict.get("syn_order", list(training_data.columns))
         self._method_map = info_dict.get("method", {})
         self._varsel = info_dict.get("variable_selection", {})
-        conv_type_map = info_dict.get("converted_type", {})  # <-- for checking 'category'
+        conv_type_map = info_dict.get("converted_type", {})  # check 'category' vs 'numeric'
 
         # 2) Force columns ending with "_cat" => aggregator "cart" if not set
         for col in self._syn_order:
@@ -176,9 +176,8 @@ class Syn_Seq:
 
         info("[INFO] Syn_Seq aggregator: fitting columns...")
 
-        # 3) The first column: store its distribution for direct sampling
+        # 3) For the first column, store distribution of real values (for direct sampling)
         first_col = self._syn_order[0]
-        # ignoring rows where first_col is missing
         self._first_col_data = training_data[first_col].dropna().values
         info(f"Fitting '{first_col}' => stored distribution from real data. Done.")
 
@@ -188,25 +187,27 @@ class Syn_Seq:
             method_name = self._method_map.get(col, "cart")
             preds_list = self._varsel.get(col, self._syn_order[:i])
 
-            # Y = the column's data; X = preceding columns
+            # Y = the current column's data; X = preceding columns
             y = training_data[col].values
             X = training_data[preds_list].values
 
-            # Check if this column's converted_type is "category"
+            # Determine if *this* target col or any predictor columns are category
             col_ctype = conv_type_map.get(col, "")
-
-            # For Y, we can still drop NaNs:
-
-            if col_ctype == "category":
-                # If it's a category column, skip np.isnan(...) on X entirely
+            any_pred_is_cat = any(
+                conv_type_map.get(pcol, "") == "category" for pcol in preds_list
+            )
+            # If the target or ANY predictors are categorical => skip np.isnan(X)
+            if col_ctype == "category" or any_pred_is_cat:
                 mask_x = np.ones(len(X), dtype=bool)
-                mask_y = np.ones(y, dtype=bool)
             else:
+                # Only numeric columns => can drop rows with NaN
                 mask_x = ~np.isnan(X).any(axis=1)
-                mask_y = ~pd.isna(y)
+
+            # Regardless of category or numeric, we still remove NaN rows from Y
+            mask_y = ~pd.isna(y)
 
             # Combine the masks
-            mask = mask_y & mask_x
+            mask = mask_x & mask_y
             X_ = X[mask]
             y_ = y[mask]
 
@@ -216,6 +217,7 @@ class Syn_Seq:
 
         self._model_trained = True
         return self
+
 
 
     def _fit_single_col(self, method_name: str, X: np.ndarray, y: np.ndarray) -> Dict[str, Any]:
