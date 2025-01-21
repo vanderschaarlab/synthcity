@@ -1872,19 +1872,31 @@ class Syn_SeqDataLoader(DataLoader):
         enc_info = self._encoder.get_info()
 
         syn_order = enc_info["syn_order"]  # list
-        conv_type = enc_info["converted_type"]    # dict {col: str}
-        method_map = enc_info["method"]           # dict {col: str}
-        special_vals = enc_info["special_value"]  # dict {col: list}
-        varsel = enc_info["variable_selection"]   # dict {col: [predictors...]}
+        conv_type = enc_info["converted_type"]   # dict {col: str}
+        method_map = enc_info["method"]          # dict {col: str}
+        special_vals = enc_info["special_value"] # dict {col: list}
+        varsel = enc_info["variable_selection"]  # dict {col: [predictors...]}
 
         print("\n[INFO] Syn_SeqEncoder summary:")
-        print(f"  - syn_order: {syn_order}")
-        print("  - converted_type =>", conv_type)
-        print("  - method =>", method_map)
-        print("  - special_value =>", special_vals)
-        # variable_selection을 matrix 형태로 만들기
+
+        # 1) 'col, converted_type, method' 를 화살표와 함께 세로 출력
+        print("  (column, converted_type, method)\n")
+        for i, col in enumerate(syn_order):
+            ctype = conv_type.get(col, "(unknown)")
+            m = method_map.get(col, "(unknown)")
+            line = f"{col}, {ctype}, {m}"
+            print(f"  ({line})")
+            # 마지막 컬럼이 아니면 아래에 화살표
+            if i < len(syn_order) - 1:
+                print("    --> ")
+
+        # 2) special_value
+        if special_vals:
+            print("\n  - special_value =>", special_vals)
+
+        # 3) variable_selection(matrix 형태)
         df_vs = self._varsel_dict_to_df(varsel, syn_order)
-        print("  - variable_selection_:")
+        print("\n  - variable_selection_:")
         print(df_vs)
         print("------------------------------------------------")
 
