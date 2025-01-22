@@ -2,6 +2,8 @@ from typing import Optional, Dict, List, Any
 import pandas as pd
 import numpy as np
 from sklearn.base import TransformerMixin, BaseEstimator
+from sklearn.preprocessing import LabelEncoder
+
 
 class Syn_SeqEncoder(TransformerMixin, BaseEstimator):
     """
@@ -47,6 +49,7 @@ class Syn_SeqEncoder(TransformerMixin, BaseEstimator):
         self.col_map: Dict[str, Dict[str, Any]] = {}
         self.date_mins: Dict[str, pd.Timestamp] = {}
 
+        self._label_encoders = {}
         self._is_fit = False
 
     def fit(self, X: pd.DataFrame) -> "Syn_SeqEncoder":
@@ -77,6 +80,24 @@ class Syn_SeqEncoder(TransformerMixin, BaseEstimator):
         X = self._split_numeric_cols_in_front(X)  # special_value에 맞춰 _cat 생성
         X = self._apply_converted_dtype(X)
         self._update_varsel_dict_after_split(X)
+        # 6) (중요) 'converted_type' == "category" 인 컬럼 전부 Label Encoding
+        for col in self.syn_order:
+            # col_map에 저장된 converted_type이 category인 컬럼만 대상
+            cinfo = self.col_map[col]
+            if col in X.columns and cinfo["converted_type"] == "category":
+                
+                # (a) 아직 해당 컬럼에 LabelEncoder가 없으면 여기서 fit
+                if col not in self._label_encoders:
+                    le = LabelEncoder()
+                    series_for_fit = X[col].astype(str).fillna("NAN")
+                    le.fit(series_for_fit)
+                    self._label_encoders[col] = le
+                
+                # (b) 실제 transform(문자열 -> 정수)  
+                le = self._label_encoders[col]
+                X[col] = X[col].astype(str).fillna("NAN")
+                X[col] = le.transform(X[col])
+        
         return X
 
     def inverse_transform(self, X: pd.DataFrame) -> pd.DataFrame:
@@ -86,6 +107,15 @@ class Syn_SeqEncoder(TransformerMixin, BaseEstimator):
         3) 원본 dtype으로 캐스팅
         """
         X = X.copy()
+        # 0) Label Decoding
+        #    self._label_encoders 딕셔너리에 등록된(=transform에서 인코딩했던) 컬럼만 복원
+        cat_cols = [col for col in X.columns if col in self._label_encoders]
+        for col in cat_cols:
+            le = self._label_encoders[col]
+            # transform()에서 int 코드로 바꿨으므로 astype(int) 후 decode
+            X[col] = X[col].astype(int)
+            X[col] = le.inverse_transform(X[col])
+            
         # 1) date offset -> date
         X = self._convert_offset_to_date(X)
 
@@ -296,35 +326,42 @@ class Syn_SeqEncoder(TransformerMixin, BaseEstimator):
             self.variable_selection_[tgt_col] = list(updated)
 
     def _merge_splitted_cols(self, X: pd.DataFrame) -> pd.DataFrame:
-        """
-        transform() 시점에 numeric col + _cat 으로 분리된 컬럼들을 다시 합친다.
-        예: 'bp' -> 'bp_cat'. 만약 'bp'가 NaN이고 'bp_cat'이 special_value면
-           bp를 그 special_value로 복원. 그 외 -9999 => NaN, -777 => base에 없던 값이므로 그냥 NaN 유지 등
-        """
         splitted_cols = [c for c in self.syn_order if c.endswith("_cat")]
         for cat_col in splitted_cols:
-            base_col = cat_col[:-4]  # 예: 'bp_cat' -> 'bp'
-            # base_col + cat_col 모두 존재해야 merge 가능
+            base_col = cat_col[:-4]  # 예: 'income_cat' -> 'income'
             if base_col not in X.columns or cat_col not in X.columns:
                 continue
 
             # 해당 base_col의 special_value 목록
             specials = self.special_value.get(base_col, [])
 
-            # base 컬럼과 cat 컬럼을 merge
             for i in range(len(X)):
+                # base_col이 NaN인 경우만 복원 로직
                 if pd.isna(X.at[i, base_col]):
-                    # base_col 이 NaN => cat_col이 special인가?
                     cat_val = X.at[i, cat_col]
-                    if cat_val in specials:
-                        # cat_val이 special_value 중 하나 => base_col 복원
-                        X.at[i, base_col] = cat_val
+
+                    # [수정 1] cat_val이 float/int인지, 문자열인지 구분
+                    #         만약 문자열이면 float 변환 시도
+                    parsed_val = None
+                    if isinstance(cat_val, (int, float)):
+                        # 이미 숫자
+                        parsed_val = float(cat_val)
                     else:
-                        # cat_val이 -9999 => transform 시점에 NaN이었던 것 => 그대로 NaN
-                        # cat_val이 -777 => transform 시점에 “일반 numeric”이었던 것
-                        #   그러나 여기서 해당 numeric 값을 복원할 데이터가 없음 => 계속 NaN 유지
+                        # 문자열일 경우
+                        try:
+                            parsed_val = float(cat_val)
+                        except:
+                            pass
+
+                    # [수정 2] parsed_val이 specials에 있는지 확인
+                    if parsed_val is not None and parsed_val in specials:
+                        X.at[i, base_col] = parsed_val
+                    else:
+                        # cat_val이 -9999 => NaN 유지
+                        # cat_val이 -777 => 일반 numeric
                         pass
-            # cat 컬럼은 이제 필요 없으므로 제거
+
+            # cat_col은 이제 필요 없으므로 제거
             X.drop(columns=[cat_col], inplace=True)
 
         return X
