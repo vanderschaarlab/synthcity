@@ -3,6 +3,8 @@ from typing import Optional, Dict, List, Any
 import pandas as pd
 import numpy as np
 from sklearn.base import TransformerMixin, BaseEstimator
+from sklearn.preprocessing import LabelEncoder
+
 
 class Syn_SeqEncoder(TransformerMixin, BaseEstimator):
     """
@@ -48,6 +50,7 @@ class Syn_SeqEncoder(TransformerMixin, BaseEstimator):
         self.col_map: Dict[str, Dict[str, Any]] = {}
         self.date_mins: Dict[str, pd.Timestamp] = {}
 
+        self._label_encoders = {}
         self._is_fit = False
 
     def fit(self, X: pd.DataFrame) -> "Syn_SeqEncoder":
@@ -78,6 +81,24 @@ class Syn_SeqEncoder(TransformerMixin, BaseEstimator):
         X = self._split_numeric_cols_in_front(X)  # special_value에 맞춰 _cat 생성
         X = self._apply_converted_dtype(X)
         self._update_varsel_dict_after_split(X)
+        # 6) (중요) 'converted_type' == "category" 인 컬럼 전부 Label Encoding
+        for col in self.syn_order:
+            # col_map에 저장된 converted_type이 category인 컬럼만 대상
+            cinfo = self.col_map[col]
+            if col in X.columns and cinfo["converted_type"] == "category":
+                
+                # (a) 아직 해당 컬럼에 LabelEncoder가 없으면 여기서 fit
+                if col not in self._label_encoders:
+                    le = LabelEncoder()
+                    series_for_fit = X[col].astype(str).fillna("NAN")
+                    le.fit(series_for_fit)
+                    self._label_encoders[col] = le
+                
+                # (b) 실제 transform(문자열 -> 정수)  
+                le = self._label_encoders[col]
+                X[col] = X[col].astype(str).fillna("NAN")
+                X[col] = le.transform(X[col])
+        
         return X
 
     def inverse_transform(self, X: pd.DataFrame) -> pd.DataFrame:
@@ -87,6 +108,15 @@ class Syn_SeqEncoder(TransformerMixin, BaseEstimator):
         3) 원본 dtype으로 캐스팅
         """
         X = X.copy()
+        # 0) Label Decoding
+        #    self._label_encoders 딕셔너리에 등록된(=transform에서 인코딩했던) 컬럼만 복원
+        cat_cols = [col for col in X.columns if col in self._label_encoders]
+        for col in cat_cols:
+            le = self._label_encoders[col]
+            # transform()에서 int 코드로 바꿨으므로 astype(int) 후 decode
+            X[col] = X[col].astype(int)
+            X[col] = le.inverse_transform(X[col])
+            
         # 1) date offset -> date
         X = self._convert_offset_to_date(X)
 
@@ -297,35 +327,42 @@ class Syn_SeqEncoder(TransformerMixin, BaseEstimator):
             self.variable_selection_[tgt_col] = list(updated)
 
     def _merge_splitted_cols(self, X: pd.DataFrame) -> pd.DataFrame:
-        """
-        transform() 시점에 numeric col + _cat 으로 분리된 컬럼들을 다시 합친다.
-        예: 'bp' -> 'bp_cat'. 만약 'bp'가 NaN이고 'bp_cat'이 special_value면
-           bp를 그 special_value로 복원. 그 외 -9999 => NaN, -777 => base에 없던 값이므로 그냥 NaN 유지 등
-        """
         splitted_cols = [c for c in self.syn_order if c.endswith("_cat")]
         for cat_col in splitted_cols:
-            base_col = cat_col[:-4]  # 예: 'bp_cat' -> 'bp'
-            # base_col + cat_col 모두 존재해야 merge 가능
+            base_col = cat_col[:-4]  # 예: 'income_cat' -> 'income'
             if base_col not in X.columns or cat_col not in X.columns:
                 continue
 
             # 해당 base_col의 special_value 목록
             specials = self.special_value.get(base_col, [])
 
-            # base 컬럼과 cat 컬럼을 merge
             for i in range(len(X)):
+                # base_col이 NaN인 경우만 복원 로직
                 if pd.isna(X.at[i, base_col]):
-                    # base_col 이 NaN => cat_col이 special인가?
                     cat_val = X.at[i, cat_col]
-                    if cat_val in specials:
-                        # cat_val이 special_value 중 하나 => base_col 복원
-                        X.at[i, base_col] = cat_val
+
+                    # [수정 1] cat_val이 float/int인지, 문자열인지 구분
+                    #         만약 문자열이면 float 변환 시도
+                    parsed_val = None
+                    if isinstance(cat_val, (int, float)):
+                        # 이미 숫자
+                        parsed_val = float(cat_val)
                     else:
-                        # cat_val이 -9999 => transform 시점에 NaN이었던 것 => 그대로 NaN
-                        # cat_val이 -777 => transform 시점에 “일반 numeric”이었던 것
-                        #   그러나 여기서 해당 numeric 값을 복원할 데이터가 없음 => 계속 NaN 유지
+                        # 문자열일 경우
+                        try:
+                            parsed_val = float(cat_val)
+                        except:
+                            pass
+
+                    # [수정 2] parsed_val이 specials에 있는지 확인
+                    if parsed_val is not None and parsed_val in specials:
+                        X.at[i, base_col] = parsed_val
+                    else:
+                        # cat_val이 -9999 => NaN 유지
+                        # cat_val이 -777 => 일반 numeric
                         pass
-            # cat 컬럼은 이제 필요 없으므로 제거
+
+            # cat_col은 이제 필요 없으므로 제거
             X.drop(columns=[cat_col], inplace=True)
 
         return X
@@ -465,7 +502,7 @@ def check_rules_violation(
 
 
 # ------------------------------------------------------------------
-# Map method_name => (syn_func, generate_func) 
+# Map method_name => (syn_func, generate_func)
 # so we can dynamically select how each column is trained & generated.
 # ------------------------------------------------------------------
 METHOD_MAP = {
@@ -484,15 +521,10 @@ METHOD_MAP = {
 
 class Syn_Seq:
     """
-    A column-by-column aggregator.
+    A column-by-column aggregator for sequential (imputation-like) synthesis.
 
-    On .fit_col(...):
-       - parse info from DataLoader (syn_order, method, varsel, etc.)
-       - store distribution of the first column for direct sampling
-       - train an aggregator for each subsequent column
-
-    On .generate_col(...):
-       - sample columns in the same order, optionally re-check user rules
+    Because all categorical/string columns are now label-encoded in your DataLoader/Encoder,
+    the aggregator sees them as numeric. This allows tree methods to handle them properly.
     """
 
     def __init__(
@@ -529,10 +561,6 @@ class Syn_Seq:
         1) read info: syn_order, method, variable_selection
         2) store real distribution for first column => for sampling
         3) for each subsequent column, pick aggregator => train with that method
-
-        Modification:
-        - If the *target column* or *any predictor columns* have 'converted_type' == 'category',
-            skip the np.isnan(...) check on X to avoid TypeError for non-numeric dtypes.
         """
         # 1) Gather the relevant metadata
         info_dict = loader.info()
@@ -543,7 +571,7 @@ class Syn_Seq:
         self._syn_order = info_dict.get("syn_order", list(training_data.columns))
         self._method_map = info_dict.get("method", {})
         self._varsel = info_dict.get("variable_selection", {})
-        conv_type_map = info_dict.get("converted_type", {})  # check 'category' vs 'numeric'
+        conv_type_map = info_dict.get("converted_type", {})
 
         # 2) Force columns ending with "_cat" => aggregator "cart" if not set
         for col in self._syn_order:
@@ -559,12 +587,12 @@ class Syn_Seq:
 
         info("[INFO] Syn_Seq aggregator: fitting columns...")
 
-        # 3) For the first column, store distribution of real values (for direct sampling)
+        # 3) For the first column, store real distribution of values
         first_col = self._syn_order[0]
         self._first_col_data = training_data[first_col].dropna().values
         info(f"Fitting '{first_col}' => stored distribution from real data. Done.")
 
-        # 4) Train aggregator column-by-column for subsequent columns
+        # 4) Train aggregator column-by-column
         np.random.seed(self.random_state)
         for i, col in enumerate(self._syn_order[1:], start=1):
             method_name = self._method_map.get(col, "cart")
@@ -574,38 +602,25 @@ class Syn_Seq:
             y = training_data[col].values
             X = training_data[preds_list].values
 
-            # Determine if *this* target col or any predictor columns are category
-            col_ctype = conv_type_map.get(col, "")
-            any_pred_is_cat = any(
-                conv_type_map.get(pcol, "") == "category" for pcol in preds_list
-            )
-            # If the target or ANY predictors are categorical => skip np.isnan(X)
-            if col_ctype == "category" or any_pred_is_cat:
-                mask_x = np.ones(len(X), dtype=bool)
-            else:
-                # Only numeric columns => can drop rows with NaN
-                mask_x = ~np.isnan(X).any(axis=1)
-
-            # Regardless of category or numeric, we still remove NaN rows from Y
+            # Regardless of category or numeric, everything is numeric-coded now.
+            # We simply drop any rows with np.nan in X or y.
+            mask_x = ~np.isnan(X).any(axis=1)
             mask_y = ~pd.isna(y)
-
-            # Combine the masks
             mask = mask_x & mask_y
+
             X_ = X[mask]
             y_ = y[mask]
 
-            info(f"Fitting '{col}' with '{method_name}' ... ", end="", flush=True)
+            print(f"Fitting '{col}' with '{method_name}' ... ", end="", flush=True)
             self._col_models[col] = self._fit_single_col(method_name, X_, y_)
-            info("Done!")
+            print("Done!")
 
         self._model_trained = True
         return self
 
-
-
     def _fit_single_col(self, method_name: str, X: np.ndarray, y: np.ndarray) -> Dict[str, Any]:
         """
-        Trains the chosen method for one column; returns a dict:
+        Train the chosen method for one column; return a dict:
             {
               "name": <method_name>,
               "fitted_model": <actual model object>
@@ -628,7 +643,7 @@ class Syn_Seq:
         Generate `nrows` rows, column by column.
 
         If `rules` is given, after generating each column, we check for any row that fails
-        => we re-generate it up to `max_iter_rules` times or set it to NaN if impossible.
+        => re-generate it up to `max_iter_rules` times or set it to NaN if impossible.
         """
         if not self._model_trained:
             raise RuntimeError("Syn_Seq aggregator not yet fitted")
@@ -679,7 +694,7 @@ class Syn_Seq:
                     gen_df.loc[viol_idx, col] = ysub
                     tries += 1
 
-            info(f"Generating '{col}' => done.")
+            print(f"Generating '{col}' => done.")
 
         return gen_df
 
@@ -689,7 +704,7 @@ class Syn_Seq:
         to sampling from the first column's distribution (less ideal).
         """
         if col not in self._col_models:
-            # fallback => sample from self._first_col_data
+            # fallback => sample from the first col distribution
             if self._first_col_data is not None and len(self._first_col_data) > 0:
                 return np.random.choice(self._first_col_data, size=len(Xsyn), replace=True)
             else:
