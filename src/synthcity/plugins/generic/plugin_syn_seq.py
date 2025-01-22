@@ -66,7 +66,7 @@ class Syn_SeqPlugin(Plugin):
         self._schema: Optional[Schema] = None
         self._training_schema: Optional[Schema] = None
         self._data_info: Optional[Dict] = None
-        self._training_data_info: Optional[Dict] = None
+        self._training_data_info: Optional[Dict] = {}
         self.model: Optional[Syn_Seq] = None
 
     @validate_arguments(config=dict(arbitrary_types_allowed=True))

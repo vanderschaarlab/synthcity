@@ -1,5 +1,4 @@
 # File: syn_seq.py
-
 from typing import Any, Dict, List, Optional, Tuple
 import numpy as np
 import pandas as pd
@@ -37,19 +36,20 @@ def check_rules_violation(
         rules = {
           "target": [
               ("bmi", ">", 0.15),
-              ("target", "=", 0)
+              ("target", ">", 0)
           ]
         }
 
     Each tuple => (col_feat, operator, val).
-    All conditions must be satisfied for a row to be valid. If any condition fails,
+    All conditions in the list for that col must be satisfied
+    for the row to be considered valid. If any condition fails,
     that row is considered a violation.
 
     Returns:
         pd.Index of row indices that FAIL these conditions.
     """
     if target_col not in rules_dict:
-        return pd.Index([])  # no rules => no violations for this column
+        return pd.Index([])  # no rules => no violations
 
     sub_rules = rules_dict[target_col]
     mask_valid = pd.Series(True, index=df.index)
@@ -61,18 +61,20 @@ def check_rules_violation(
 
         col_data = df[col_feat]
 
+        # We allow op in ["=", "==", "<", "<=", ">", ">="]
+        # or unrecognized => skip
         if operator in ["=", "=="]:
             cond = (col_data == val) | col_data.isna()
-        elif operator in [">"]:
+        elif operator == ">":
             cond = (col_data > val) | col_data.isna()
-        elif operator in [">="]:
+        elif operator == ">=":
             cond = (col_data >= val) | col_data.isna()
-        elif operator in ["<"]:
+        elif operator == "<":
             cond = (col_data < val) | col_data.isna()
-        elif operator in ["<="]:
+        elif operator == "<=":
             cond = (col_data <= val) | col_data.isna()
         else:
-            # unrecognized operator => skip or treat as always true
+            # unrecognized operator => treat as always True for that rule
             cond = pd.Series(True, index=df.index)
 
         mask_valid &= cond
@@ -82,7 +84,7 @@ def check_rules_violation(
 
 
 # ------------------------------------------------------------------
-# Map method_name => (syn_func, generate_func) 
+# Map method_name => (syn_func, generate_func)
 # so we can dynamically select how each column is trained & generated.
 # ------------------------------------------------------------------
 METHOD_MAP = {
@@ -101,15 +103,11 @@ METHOD_MAP = {
 
 class Syn_Seq:
     """
-    A column-by-column aggregator.
+    A column-by-column aggregator for sequential (imputation-like) synthesis.
 
-    On .fit_col(...):
-       - parse info from DataLoader (syn_order, method, varsel, etc.)
-       - store distribution of the first column for direct sampling
-       - train an aggregator for each subsequent column
-
-    On .generate_col(...):
-       - sample columns in the same order, optionally re-check user rules
+    Because all categorical/string columns are label-encoded in your DataLoader/Encoder,
+    the aggregator sees them as numeric. This allows tree methods or other numeric-based
+    methods to handle them properly.
     """
 
     def __init__(
@@ -143,13 +141,9 @@ class Syn_Seq:
         Fit column-by-column from the "encoded" DataLoader.
 
         Steps:
-        1) read info: syn_order, method, variable_selection
-        2) store real distribution for first column => for sampling
-        3) for each subsequent column, pick aggregator => train with that method
-
-        Modification:
-        - If the *target column* or *any predictor columns* have 'converted_type' == 'category',
-            skip the np.isnan(...) check on X to avoid TypeError for non-numeric dtypes.
+          1) read info: syn_order, method, variable_selection
+          2) store real distribution for first column => for sampling
+          3) for each subsequent column, pick aggregator => train with that method
         """
         # 1) Gather the relevant metadata
         info_dict = loader.info()
@@ -160,15 +154,15 @@ class Syn_Seq:
         self._syn_order = info_dict.get("syn_order", list(training_data.columns))
         self._method_map = info_dict.get("method", {})
         self._varsel = info_dict.get("variable_selection", {})
-        conv_type_map = info_dict.get("converted_type", {})  # check 'category' vs 'numeric'
+        # conv_type_map = info_dict.get("converted_type", {})  # not strictly needed here
 
         # 2) Force columns ending with "_cat" => aggregator "cart" if not set
         for col in self._syn_order:
             if col.endswith("_cat"):
                 self._method_map[col] = "cart"
                 base_col = col[:-4]
+                # replicate varsel if not already set
                 if base_col in self._varsel:
-                    # replicate varsel
                     self._varsel[col] = self._varsel[base_col]
                 else:
                     idx = self._syn_order.index(col)
@@ -176,12 +170,12 @@ class Syn_Seq:
 
         info("[INFO] Syn_Seq aggregator: fitting columns...")
 
-        # 3) For the first column, store distribution of real values (for direct sampling)
+        # 3) For the first column, store real distribution of values
         first_col = self._syn_order[0]
         self._first_col_data = training_data[first_col].dropna().values
         info(f"Fitting '{first_col}' => stored distribution from real data. Done.")
 
-        # 4) Train aggregator column-by-column for subsequent columns
+        # 4) Train aggregator column-by-column
         np.random.seed(self.random_state)
         for i, col in enumerate(self._syn_order[1:], start=1):
             method_name = self._method_map.get(col, "cart")
@@ -191,38 +185,24 @@ class Syn_Seq:
             y = training_data[col].values
             X = training_data[preds_list].values
 
-            # Determine if *this* target col or any predictor columns are category
-            col_ctype = conv_type_map.get(col, "")
-            any_pred_is_cat = any(
-                conv_type_map.get(pcol, "") == "category" for pcol in preds_list
-            )
-            # If the target or ANY predictors are categorical => skip np.isnan(X)
-            if col_ctype == "category" or any_pred_is_cat:
-                mask_x = np.ones(len(X), dtype=bool)
-            else:
-                # Only numeric columns => can drop rows with NaN
-                mask_x = ~np.isnan(X).any(axis=1)
-
-            # Regardless of category or numeric, we still remove NaN rows from Y
+            # drop any rows with np.nan in X or y.
+            mask_x = ~np.isnan(X).any(axis=1)
             mask_y = ~pd.isna(y)
-
-            # Combine the masks
             mask = mask_x & mask_y
+
             X_ = X[mask]
             y_ = y[mask]
 
-            info(f"Fitting '{col}' with '{method_name}' ... ", end="", flush=True)
+            print(f"Fitting '{col}' with '{method_name}' ... ", end="", flush=True)
             self._col_models[col] = self._fit_single_col(method_name, X_, y_)
-            info("Done!")
+            print("Done!")
 
         self._model_trained = True
         return self
 
-
-
     def _fit_single_col(self, method_name: str, X: np.ndarray, y: np.ndarray) -> Dict[str, Any]:
         """
-        Trains the chosen method for one column; returns a dict:
+        Train the chosen method for one column; return a dict:
             {
               "name": <method_name>,
               "fitted_model": <actual model object>
@@ -244,8 +224,9 @@ class Syn_Seq:
         """
         Generate `nrows` rows, column by column.
 
-        If `rules` is given, after generating each column, we check for any row that fails
-        => we re-generate it up to `max_iter_rules` times or set it to NaN if impossible.
+        If `rules` is given, after generating each column, we check
+        for any row that fails => re-generate it up to `max_iter_rules`
+        times or set it to NaN if impossible.
         """
         if not self._model_trained:
             raise RuntimeError("Syn_Seq aggregator not yet fitted")
@@ -296,17 +277,17 @@ class Syn_Seq:
                     gen_df.loc[viol_idx, col] = ysub
                     tries += 1
 
-            info(f"Generating '{col}' => done.")
+            print(f"Generating '{col}' => done.")
 
         return gen_df
 
     def _generate_single_col(self, method_name: str, Xsyn: np.ndarray, col: str) -> np.ndarray:
         """
         Use the fitted model for 'col' if available, otherwise fallback
-        to sampling from the first column's distribution (less ideal).
+        to sampling from the first column's distribution.
         """
         if col not in self._col_models:
-            # fallback => sample from self._first_col_data
+            # fallback => sample from the first-col distribution
             if self._first_col_data is not None and len(self._first_col_data) > 0:
                 return np.random.choice(self._first_col_data, size=len(Xsyn), replace=True)
             else:
