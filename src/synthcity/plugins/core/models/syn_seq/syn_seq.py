@@ -5,6 +5,7 @@ import pandas as pd
 
 from synthcity.logger import info, warning
 from synthcity.plugins.core.dataloader import DataLoader
+from synthcity.plugins.core.models.syn_seq.syn_seq_encoder import Syn_SeqEncoder
 
 # The column-fitting and column-generating methods from your submodule
 from synthcity.plugins.core.models.syn_seq.methods import (

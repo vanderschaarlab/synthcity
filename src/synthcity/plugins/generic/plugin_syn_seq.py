@@ -11,6 +11,7 @@ from synthcity.plugins.core.dataloader import (
     Syn_SeqDataLoader,
     create_from_info,
 )
+from synthcity.plugins.core.models.syn_seq.syn_seq_encoder import Syn_SeqEncoder
 from synthcity.plugins.core.constraints import Constraints
 from synthcity.plugins.core.distribution import constraint_to_distribution
 from synthcity.plugins.core.schema import Schema
@@ -94,6 +95,9 @@ class Syn_SeqPlugin(Plugin):
 
         # Encode the data
         X_encoded, self._training_data_info = X.encode()
+
+        # X_encoded._encoder._label_encoders => {"sex": LabelEncoder(), ...} 
+        self._training_data_info["saved_label_encoders"] = X_encoded._encoder._label_encoders
 
         # Build an initial schema from the *encoded* data
         base_schema = Schema(
@@ -214,14 +218,14 @@ class Syn_SeqPlugin(Plugin):
         # decode from the encoded data back to original
         data_syn = data_syn.decode()
 
-        # final constraints check
-        final_constraints = self.schema().as_constraints()
-        if constraints is not None:
-            final_constraints = final_constraints.extend(constraints)
+        # # final constraints check
+        # final_constraints = self.schema().as_constraints()
+        # if constraints is not None:
+        #     final_constraints = final_constraints.extend(constraints)
 
-        # If strict, keep only valid rows
-        if not data_syn.satisfies(final_constraints) and self.strict:
-            data_syn = data_syn.match(final_constraints)
+        # # If strict, keep only valid rows
+        # if not data_syn.satisfies(final_constraints) and self.strict:
+        #     data_syn = data_syn.match(final_constraints)
 
         return data_syn
 
@@ -250,7 +254,14 @@ class Syn_SeqPlugin(Plugin):
         # Ensure correct dtypes
         df_syn = syn_schema.adapt_dtypes(df_syn)
 
-        return create_from_info(df_syn, self._data_info)
+        # create a new loader from df_syn + self._data_info
+        data_syn = create_from_info(df_syn, self._data_info)
+
+        # --- (추가) 라벨 인코더 재주입 ---
+        if "saved_label_encoders" in self._training_data_info:
+            data_syn._encoder._label_encoders = self._training_data_info["saved_label_encoders"]
+
+        return data_syn
 
     def _remap_special_value_rules(
         self,

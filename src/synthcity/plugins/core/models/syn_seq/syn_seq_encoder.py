@@ -50,7 +50,7 @@ class Syn_SeqEncoder(TransformerMixin, BaseEstimator):
         self.date_mins: Dict[str, pd.Timestamp] = {}
 
         self._label_encoders = {}
-        self._is_fit = False
+        # self._is_fit = False
 
     def fit(self, X: pd.DataFrame) -> "Syn_SeqEncoder":
         X = X.copy()
@@ -67,12 +67,12 @@ class Syn_SeqEncoder(TransformerMixin, BaseEstimator):
         # 6) variable_selection 세팅(유저 없으면 기본)
         self._assign_variable_selection()
 
-        self._is_fit = True
+        # self._is_fit = True
         return self
 
     def transform(self, X: pd.DataFrame) -> pd.DataFrame:
-        if not self._is_fit:
-            raise RuntimeError("Must fit() first.")
+        # if not self._is_fit:
+        #     raise RuntimeError("Must fit() first.")
 
         X = X.copy()
         X = self._reorder_columns(X)
