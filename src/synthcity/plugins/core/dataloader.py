@@ -1807,9 +1807,18 @@ class ImageDataLoader(DataLoader):
 class Syn_SeqDataLoader(DataLoader):
     """
     A DataLoader that uses Syn_SeqEncoder with dictionary-based variable_selection_.
-      - In __init__: just call encoder.fit(data)
-      - "encode()" method => encoder.transform(data)
-      - "decode()" still does inverse_transform if needed
+
+    - __init__:
+        1) user_custom 딕셔너리를 파싱해 syn_order, method, variable_selection 등을 가져옴
+        2) Syn_SeqEncoder를 생성 후, fit(data) -> 전반적인 정보(변수 순서, method 등) 세팅
+        3) verbose=True라면 fit결과 info를 _print_init_info()로 표시
+
+    * encode/decode 메서드는 명시적으로 정의하지 않음
+      => 부모 DataLoader의 encode()/decode()를 그대로 사용.
+    """
+
+    """
+    기존 Syn_SeqDataLoader에서, '_cat' 컬럼을 자동 반영하는 기능 추가
     """
 
     def __init__(
@@ -1820,7 +1829,6 @@ class Syn_SeqDataLoader(DataLoader):
         target_column: Optional[str] = None,
         random_state: int = 0,
         train_size: float = 0.8,
-        max_categories: int = 20,
         verbose: bool = True,
         **kwargs: Any,
     ):
@@ -1835,82 +1843,97 @@ class Syn_SeqDataLoader(DataLoader):
         self.user_custom = user_custom or {}
         self.sensitive_features = sensitive_features
         self.target_column = target_column
-        self.max_categories = max_categories
         self.verbose = verbose
 
-        # parse user custom
+        # 1) 기존 user_custom 파싱
         syn_order = self.user_custom.get("syn_order", list(self.data.columns))
         method = self.user_custom.get("method", {})
-        # 주의: 아래와 같이 키 이름을 "special_value"가 아닌 "special_value" 또는 "columns_special_values" 등
-        #       user가 원하는 대로 맞춰 줄 수도 있음.
-        special_value = self.user_custom.get("special_value", {})
-        col_type = self.user_custom.get("col_type", {})
         variable_selection = self.user_custom.get("variable_selection", {})
 
-        # create encoder
+        # 2) '_cat' 컬럼 자동 반영
+        syn_order, variable_selection = self._auto_inject_cat_columns(
+            df=self.data,
+            syn_order=syn_order,
+            variable_selection=variable_selection
+        )
+        # 업데이트한 것을 다시 user_custom에 저장
+        self.user_custom["syn_order"] = syn_order
+        self.user_custom["variable_selection"] = variable_selection
+
+        # 3) Syn_SeqEncoder 생성
         self._encoder = Syn_SeqEncoder(
-            special_value=special_value,
             syn_order=syn_order,
             method=method,
-            max_categories=self.max_categories,
-            col_type=col_type,
             variable_selection=variable_selection,
             default_method="cart",
         )
 
-        # if verbose => fit결과 info를 출력 (transform 전 상태)
         if self.verbose:
-            # 여기서는 fit만 (transform은 나중에 encode()에서)
-            self._encoder.fit(self.data)
+            # encoder.fit() + info출력
+            self._encoder.prepare(self.data)
             self._print_init_info()
-            
-    def _print_init_info(self):
-        """
-        fit 이후(변환 전 or 변환 후 등) encoder 정보를 콘솔에 보기 좋게 찍어준다.
-        variable_selection은 matrix 형태로 출력.
-        """
-        enc_info = self._encoder.get_info()
 
-        syn_order = enc_info["syn_order"]  # list
-        conv_type = enc_info["converted_type"]   # dict {col: str}
-        method_map = enc_info["method"]          # dict {col: str}
-        special_vals = enc_info["special_value"] # dict {col: list}
-        varsel = enc_info["variable_selection"]  # dict {col: [predictors...]}
+    def _auto_inject_cat_columns(
+        self,
+        df: pd.DataFrame,
+        syn_order: List[str],
+        variable_selection: Dict[str, List[str]],
+    ) -> Tuple[List[str], Dict[str, List[str]]]:
+        """
+        1) '_cat'으로 끝나는 컬럼 자동 탐색
+        2) 해당 base_col = col[:-4]가 syn_order에 있으면, cat_col을 base_col 뒤(또는 앞)에 삽입
+        3) variable_selection에서도 base_col이 predictor면 cat_col도 predictor로 추가
+        """
+        new_syn_order = list(syn_order)  # 사본
+        new_varsel = {k: list(v) for k, v in variable_selection.items()}  # 사본
+
+        cat_cols = [c for c in df.columns if c.endswith("_cat")]
+
+        for cat_col in cat_cols:
+            base_col = cat_col[:-4]  # 예) 'income_cat' -> 'income'
+            
+            if base_col in new_syn_order:
+                # base_col 위치를 찾아 cat_col을 끼워넣기
+                base_idx = new_syn_order.index(base_col)
+                # 예: base_col 뒤에 cat_col을 삽입
+                if cat_col not in new_syn_order:
+                    new_syn_order.insert(base_idx, cat_col)
+            else:
+                # base_col 자체가 syn_order에 없으면 맨 뒤에 넣거나 다른 규칙을 적용
+                if cat_col not in new_syn_order:
+                    new_syn_order.append(cat_col)
+
+            # variable_selection
+            # base_col이 predictor인 곳 => cat_col도 predictor
+            for tgt_col, preds in new_varsel.items():
+                if base_col in preds and cat_col not in preds:
+                    preds.append(cat_col)
+                    new_varsel[tgt_col] = preds
+
+        return new_syn_order, new_varsel
+
+    def _print_init_info(self):
+        enc_info = self._encoder.get_info()
+        syn_order = enc_info.get("syn_order", [])
+        method_map = enc_info.get("method", {})
+        varsel = enc_info.get("variable_selection", {})
 
         print("\n[INFO] Syn_SeqEncoder summary:")
-
-        # 1) 'col, converted_type, method' 를 화살표와 함께 세로 출력
-        print("  (column, converted_type, method)\n")
+        print("  (column, method)\n")
         for i, col in enumerate(syn_order):
-            ctype = conv_type.get(col, "(unknown)")
             m = method_map.get(col, "(unknown)")
-            line = f"{col}, {ctype}, {m}"
-            print(f"  ({line})")
-            # 마지막 컬럼이 아니면 아래에 화살표
+            print(f"  ({col}, {m})")
             if i < len(syn_order) - 1:
                 print("    --> ")
 
-        # 2) special_value
-        if special_vals:
-            print("\n  - special_value =>", special_vals)
-
-        # 3) variable_selection(matrix 형태)
+        # variable_selection matrix
         df_vs = self._varsel_dict_to_df(varsel, syn_order)
         print("\n  - variable_selection_:")
         print(df_vs)
         print("------------------------------------------------")
 
     def _varsel_dict_to_df(self, varsel: Dict[str, List[str]], syn_order: List[str]) -> pd.DataFrame:
-        """
-        variable_selection dict -> DataFrame 변환
-        행/열 모두 syn_order 순으로 배치
-        """
-        # syn_order 길이만큼의 0행렬 생성
-        df_vs = pd.DataFrame(
-            0, 
-            index=syn_order,   # row = target col
-            columns=syn_order  # col = predictor col
-        )
+        df_vs = pd.DataFrame(0, index=syn_order, columns=syn_order)
         for tgt, preds in varsel.items():
             if tgt not in df_vs.index:
                 continue
@@ -1919,9 +1942,9 @@ class Syn_SeqDataLoader(DataLoader):
                     df_vs.loc[tgt, p] = 1
         return df_vs
 
-
     # ----------------------------------------------------------------
-    # Required DataLoader methods
+    # DataLoader 필수 구현 메서드
+    # ----------------------------------------------------------------
     @property
     def shape(self) -> tuple:
         return self.data.shape
@@ -1962,15 +1985,13 @@ class Syn_SeqDataLoader(DataLoader):
         """
         Rebuild user_custom from info,
         Then create loader and do encoder.fit().
-        Notice that we won't auto transform => user can call .encode() if desired.
+        Notice that we won't auto transform => user must call parent's encode()
+        or do external preprocessing if needed.
         """
         user_custom = {
             "syn_order": info.get("syn_order", list(data.columns)),
-            "special_value": info.get("special_value", {}),
-            "col_type": info.get("col_type", {}),
-            "max_categories": info.get("max_categories", 20),
-            "variable_selection": info.get("variable_selection", {}),
             "method": info.get("method", {}),
+            "variable_selection": info.get("variable_selection", {}),
         }
         return Syn_SeqDataLoader(
             data=data,
@@ -2020,39 +2041,6 @@ class Syn_SeqDataLoader(DataLoader):
     def get_fairness_column(self) -> Union[str, Any]:
         return None
 
-    def encode(self) -> ("Syn_SeqDataLoader", dict):
-        """
-        Calls self._encoder.transform(...) => modifies self.data in place
-        Returns (self, self.info())
-        """
-        transformed = self._encoder.transform(self.data)
-
-        # 2) Build a new loader object that holds the transformed DataFrame
-        new_loader = Syn_SeqDataLoader(
-            data=transformed,
-            user_custom=self.user_custom,
-            sensitive_features=self.sensitive_features,
-            target_column=self.target_column,
-            random_state=self.random_state,
-            train_size=self.train_size,
-            max_categories=self.max_categories,
-            verbose=False
-        )
-        # 3) Share the same fitted encoder, so we don’t re-fit
-        new_loader._encoder = self._encoder
-
-        # 4) Return (new_loader, some_info)
-        return new_loader, new_loader.info()
-    
-    def decode(self) -> "Syn_SeqDataLoader":
-        """
-        Decode => inverse_transform
-        Make a new loader with the decoded df
-        """
-        decoded_df = self._encoder.inverse_transform(self.data)
-        new_loader = self.decorate(decoded_df)
-        return new_loader
-
     def decorate(self, data: pd.DataFrame) -> "Syn_SeqDataLoader":
         new_loader = Syn_SeqDataLoader(
             data=data,
@@ -2061,10 +2049,9 @@ class Syn_SeqDataLoader(DataLoader):
             target_column=self.target_column,
             random_state=self.random_state,
             train_size=self.train_size,
-            max_categories=self.max_categories,
             verbose=False
         )
-        # share the same encoder => so that no re-fit is triggered
+        # encoder 공유
         new_loader._encoder = self._encoder
         return new_loader
 
