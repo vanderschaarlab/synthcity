@@ -1,396 +1,286 @@
 src/synthcity/plugins/core/models/syn_seq/syn_seq_encoder.py
 from typing import Optional, Dict, List, Any
 import pandas as pd
-import numpy as np
-from sklearn.base import TransformerMixin, BaseEstimator
-from sklearn.preprocessing import LabelEncoder
+from sklearn.base import BaseEstimator, TransformerMixin
 
 
 class Syn_SeqEncoder(TransformerMixin, BaseEstimator):
     """
-    syn_seq용 column-by-column 인코더.
-      - fit: 전처리 준비 (col_map, variable_selection 설정 등)
-      - transform: 실제 변환 (date->offset, numeric->split, dtype 적용, etc.)
-      - get_info: 고정된 키 이름으로 딕트 반환
-        => "syn_order", "original_dtype", "converted_type", "method", 
-           "special_value"(dict형), "date_mins", "variable_selection"
+    syn_seq용 최소화된 인코더.
+      - 전처리(날짜 변환, special_value 등)는 이미 preprocess.py에서 처리했다고 가정.
+      - 여기서는 syn_order, method, variable_selection만 세팅.
     """
 
     def __init__(
         self,
-        special_value: Optional[Dict[str, List]] = None,  # 기존 columns_special_values => special_value 로 네이밍 변경
         syn_order: Optional[List[str]] = None,
         method: Optional[Dict[str, str]] = None,
-        max_categories: int = 20,
-        col_type: Optional[Dict[str, str]] = None,
-        variable_selection: Optional[Dict[str, List]] = None,
+        variable_selection: Optional[Dict[str, List[str]]] = None,
         default_method: str = "cart",
     ):
         """
         Args:
-            special_value: 예) {"bp":[-0.04, -0.01]} + auto로 감지된 freq>0.9 값도 합쳐 저장
-            syn_order: 순차적 모델링 순서
-            method: 유저 오버라이드 {"bp":"norm", ...}
-            max_categories: 범주 vs 수치 구분 임계값
-            col_type: {"age":"category","some_date":"date"} 등 명시
-            variable_selection: { col: [predictors...] }
-            default_method: 첫 컬럼 제외 기본값 "cart" (첫 컬럼은 없으면 "swr")
+            syn_order: 유저가 지정한 컬럼 순서. 비어있으면 prepare 단계에서 X.columns 사용
+            method: {col: "rf"/"norm"/...} 식으로 유저 지정. 
+            variable_selection: {col: [predictors...]}
+            default_method: 유저 지정 없을 때 쓸 기본값. (ex: "cart")
         """
         self.syn_order = syn_order or []
         self.method = method or {}
-        self.max_categories = max_categories
-        self.col_type = col_type or {}
         self.variable_selection_ = variable_selection or {}
         self.default_method = default_method
 
-        # special_value: col -> list of special vals
-        self.special_value: Dict[str, List] = special_value or {}
+        # 내부 관리용
+        self.col_map: Dict[str, Dict[str, Any]] = {}  # {col: {"method": "..."}}
 
-        # col_map: {col: {"original_dtype":"float64","converted_type":"numeric","method":"cart"}, ...}
-        self.col_map: Dict[str, Dict[str, Any]] = {}
-        self.date_mins: Dict[str, pd.Timestamp] = {}
-
-        self._label_encoders = {}
-        self._is_fit = False
-
-    def fit(self, X: pd.DataFrame) -> "Syn_SeqEncoder":
-        X = X.copy()
-        # 1) syn_order 정리
-        self._detect_syn_order(X)
-        # 2) col_map 초기화
-        self._init_col_map(X)
-        # 3) special value 감지(유저+freq>0.9) → self.special_value에 통합
-        self._detect_special_values(X)
-        # 4) date min 기록
-        self._store_date_min(X)
-        # 5) method 할당
+    def prepare(self, X: pd.DataFrame) -> "Syn_SeqEncoder":
+        """
+        1) syn_order 확정
+        2) assign_method_to_cols
+        3) variable_selection 설정
+        """
+        self._set_syn_order(X)
         self._assign_method_to_cols()
-        # 6) variable_selection 세팅(유저 없으면 기본)
         self._assign_variable_selection()
-
-        self._is_fit = True
         return self
 
-    def transform(self, X: pd.DataFrame) -> pd.DataFrame:
-        if not self._is_fit:
-            raise RuntimeError("Must fit() first.")
-
-        X = X.copy()
-        X = self._reorder_columns(X)
-        X = self._convert_date_to_offset(X)
-        X = self._split_numeric_cols_in_front(X)  # special_value에 맞춰 _cat 생성
-        X = self._apply_converted_dtype(X)
-        self._update_varsel_dict_after_split(X)
-        # 6) (중요) 'converted_type' == "category" 인 컬럼 전부 Label Encoding
-        for col in self.syn_order:
-            # col_map에 저장된 converted_type이 category인 컬럼만 대상
-            cinfo = self.col_map[col]
-            if col in X.columns and cinfo["converted_type"] == "category":
-                
-                # (a) 아직 해당 컬럼에 LabelEncoder가 없으면 여기서 fit
-                if col not in self._label_encoders:
-                    le = LabelEncoder()
-                    series_for_fit = X[col].astype(str).fillna("NAN")
-                    le.fit(series_for_fit)
-                    self._label_encoders[col] = le
-                
-                # (b) 실제 transform(문자열 -> 정수)  
-                le = self._label_encoders[col]
-                X[col] = X[col].astype(str).fillna("NAN")
-                X[col] = le.transform(X[col])
-        
-        return X
-
-    def inverse_transform(self, X: pd.DataFrame) -> pd.DataFrame:
+    def _set_syn_order(self, X: pd.DataFrame):
         """
-        1) 날짜 offset -> date 복원
-        2) 분할된 _cat 컬럼들 다시 base 컬럼과 merge하여 special values 복원
-        3) 원본 dtype으로 캐스팅
+        syn_order가 비어 있으면 X.columns를 사용,
+        유효하지 않은 컬럼(존재X)은 제외
         """
-        X = X.copy()
-        # 0) Label Decoding
-        #    self._label_encoders 딕셔너리에 등록된(=transform에서 인코딩했던) 컬럼만 복원
-        cat_cols = [col for col in X.columns if col in self._label_encoders]
-        for col in cat_cols:
-            le = self._label_encoders[col]
-            # transform()에서 int 코드로 바꿨으므로 astype(int) 후 decode
-            X[col] = X[col].astype(int)
-            X[col] = le.inverse_transform(X[col])
-            
-        # 1) date offset -> date
-        X = self._convert_offset_to_date(X)
-
-        # 2) split했던 numeric cols + _cat 을 재합치는 단계
-        X = self._merge_splitted_cols(X)
-
-        # 3) 원본 dtype 복원
-        for col in X.columns:
-            if col in self.col_map:
-                orig_dt = self.col_map[col].get("original_dtype")
-                if orig_dt:
-                    try:
-                        X[col] = X[col].astype(orig_dt)
-                    except:
-                        pass
-        return X
-
-    # ---------------------- (fit) helpers ----------------------
-    def _detect_syn_order(self, X: pd.DataFrame):
         if not self.syn_order:
             self.syn_order = list(X.columns)
         else:
             self.syn_order = [c for c in self.syn_order if c in X.columns]
 
-    def _init_col_map(self, X: pd.DataFrame):
-        self.col_map.clear()
-        for col in self.syn_order:
-            if col not in X.columns:
-                continue
-            orig_dt = str(X[col].dtype)
-
-            declared = self.col_type.get(col, "").lower()
-            if declared == "date":
-                conv_type = "numeric"
-            elif declared == "numeric":
-                conv_type = "numeric"
-            elif declared == "category":
-                conv_type = "category"
-            else:
-                # auto
-                if pd.api.types.is_datetime64_any_dtype(X[col]):
-                    conv_type = "numeric"
-                    self.col_type[col] = "date"
-                else:
-                    nuniq = X[col].nunique(dropna=False)
-                    if nuniq <= self.max_categories:
-                        conv_type = "category"
-                    else:
-                        conv_type = "numeric"
-
-            self.col_map[col] = {
-                "original_dtype": orig_dt,
-                "converted_type": conv_type,
-                "method": None
-            }
-
-    def _detect_special_values(self, X: pd.DataFrame):
-        """
-        fit 시점에서 user + auto(freq>0.9) special values 합치기
-        => self.special_value[col] = [... all special vals ...]
-        """
-        for col in self.syn_order:
-            if col not in X.columns:
-                continue
-            info = self.col_map[col]
-            if info["converted_type"] != "numeric":
-                continue
-
-            # 기존에 user가 준 값
-            user_vals = self.special_value.get(col, [])
-
-            # auto: freq>0.9
-            freq = X[col].value_counts(dropna=False, normalize=True)
-            big_ones = freq[freq > 0.9].index.tolist()
-
-            merged = sorted(set(user_vals).union(set(big_ones)))
-            if merged:
-                self.special_value[col] = merged
-            else:
-                # 만약 아무도 없으면 굳이 빈 list로 남김
-                if col in self.special_value:
-                    # user가 줬는데 empty? => 그대로 둘 수도
-                    pass
-
-    def _store_date_min(self, X: pd.DataFrame):
-        for col in self.syn_order:
-            if self.col_type.get(col) == "date":
-                arr = pd.to_datetime(X[col], errors="coerce")
-                self.date_mins[col] = arr.min()
-
     def _assign_method_to_cols(self):
+        """
+        1) 첫 컬럼은 user 지정 없으면 swr
+        2) 나머지 컬럼은 user 지정 없으면 default_method
+        """
+        self.col_map.clear()
         for i, col in enumerate(self.syn_order):
             user_m = self.method.get(col)
             if i == 0:
                 chosen = user_m if user_m else "swr"
             else:
                 chosen = user_m if user_m else self.default_method
-            self.col_map[col]["method"] = chosen
+
+            self.col_map[col] = {"method": chosen}
 
     def _assign_variable_selection(self):
+        """
+        유저가 variable_selection을 지정하지 않은 컬럼은,
+        (현재 컬럼 인덱스보다 앞선 컬럼들)을 predictor로 설정
+        """
         for i, col in enumerate(self.syn_order):
             if col not in self.variable_selection_:
                 self.variable_selection_[col] = self.syn_order[:i]
 
-    # ---------------------- (transform) helpers ----------------------
-    def _reorder_columns(self, X: pd.DataFrame) -> pd.DataFrame:
-        keep = [c for c in self.syn_order if c in X.columns]
-        return X[keep]
-
-    def _convert_date_to_offset(self, X: pd.DataFrame) -> pd.DataFrame:
-        for col in self.syn_order:
-            if self.col_type.get(col) == "date" and col in X.columns:
-                mindt = self.date_mins.get(col)
-                X[col] = pd.to_datetime(X[col], errors="coerce")
-                if mindt is None:
-                    mindt = X[col].min()
-                    self.date_mins[col] = mindt
-                X[col] = (X[col] - mindt).dt.days
-        return X
-
-    def _split_numeric_cols_in_front(self, X: pd.DataFrame) -> pd.DataFrame:
-        """
-        special_value[col] 에 값이 있으면 => col_cat 생성
-        """
-        original_order = list(self.syn_order)
-        for col in original_order:
-            if col not in X.columns:
-                continue
-            info = self.col_map.get(col, {})
-            if info["converted_type"] != "numeric":
-                continue
-            specials = self.special_value.get(col, [])
-            if not specials:
-                continue
-
-            cat_col = col + "_cat"
-
-            def cat_mapper(v):
-                if pd.isna(v):
-                    return -9999
-                if v in specials:
-                    return v
-                return -777
-
-            X[cat_col] = X[col].apply(cat_mapper).astype("category")
-
-            def numeric_mapper(v):
-                if pd.isna(v):
-                    return np.nan
-                if v in specials:
-                    return np.nan
-                return v
-
-            X[col] = X[col].apply(numeric_mapper)
-
-            if cat_col not in self.syn_order:
-                idx = self.syn_order.index(col)
-                self.syn_order.insert(idx, cat_col)
-
-            self.col_map[cat_col] = {
-                "original_dtype": "category",
-                "converted_type": "category",
-                "method": self.col_map[col]["method"]
-            }
-        return X
-
-    def _apply_converted_dtype(self, X: pd.DataFrame) -> pd.DataFrame:
-        for col in self.syn_order:
-            if col not in X.columns:
-                continue
-            cinfo = self.col_map[col]
-            ctype = cinfo["converted_type"]
-            if ctype == "numeric":
-                X[col] = pd.to_numeric(X[col], errors="coerce")
-            else:
-                X[col] = X[col].astype("category")
-        return X
-
-    def _convert_offset_to_date(self, X: pd.DataFrame) -> pd.DataFrame:
-        for col in self.syn_order:
-            if self.col_type.get(col) == "date" and col in X.columns:
-                offset = pd.to_numeric(X[col], errors="coerce")
-                mindt = self.date_mins.get(col, None)
-                if mindt is not None:
-                    X[col] = pd.to_timedelta(offset, unit="D") + mindt
-        return X
-
-    def _update_varsel_dict_after_split(self, X: pd.DataFrame) -> None:
-        new_splits = {}
-        for col in self.syn_order:
-            if col.endswith("_cat"):
-                base = col[:-4]
-                if base in self.col_map:
-                    new_splits[base] = col
-
-        # 새 col_cat이 아직 varsel에 없으면 기본 predictor
-        for col in X.columns:
-            if col not in self.variable_selection_ and col in self.syn_order:
-                idx = self.syn_order.index(col)
-                self.variable_selection_[col] = self.syn_order[:idx]
-
-        # base_col이 predictor인 곳 => cat_col도 추가
-        for tgt_col, preds in self.variable_selection_.items():
-            updated = set(preds)
-            for bcol, ccol in new_splits.items():
-                if bcol in updated:
-                    updated.add(ccol)
-            self.variable_selection_[tgt_col] = list(updated)
-
-    def _merge_splitted_cols(self, X: pd.DataFrame) -> pd.DataFrame:
-        splitted_cols = [c for c in self.syn_order if c.endswith("_cat")]
-        for cat_col in splitted_cols:
-            base_col = cat_col[:-4]  # 예: 'income_cat' -> 'income'
-            if base_col not in X.columns or cat_col not in X.columns:
-                continue
-
-            # 해당 base_col의 special_value 목록
-            specials = self.special_value.get(base_col, [])
-
-            for i in range(len(X)):
-                # base_col이 NaN인 경우만 복원 로직
-                if pd.isna(X.at[i, base_col]):
-                    cat_val = X.at[i, cat_col]
-
-                    # [수정 1] cat_val이 float/int인지, 문자열인지 구분
-                    #         만약 문자열이면 float 변환 시도
-                    parsed_val = None
-                    if isinstance(cat_val, (int, float)):
-                        # 이미 숫자
-                        parsed_val = float(cat_val)
-                    else:
-                        # 문자열일 경우
-                        try:
-                            parsed_val = float(cat_val)
-                        except:
-                            pass
-
-                    # [수정 2] parsed_val이 specials에 있는지 확인
-                    if parsed_val is not None and parsed_val in specials:
-                        X.at[i, base_col] = parsed_val
-                    else:
-                        # cat_val이 -9999 => NaN 유지
-                        # cat_val이 -777 => 일반 numeric
-                        pass
-
-            # cat_col은 이제 필요 없으므로 제거
-            X.drop(columns=[cat_col], inplace=True)
-
-        return X
-
-    # ----------------------
     def get_info(self) -> Dict[str, Any]:
         """
-        고정된 키 이름들로 반환
-        special_value => {col: [ ... ]}
+        Encoder가 관리 중인 syn_order, method, variable_selection 등 반환
         """
-        orig_dtype_map = {}
-        conv_type_map = {}
         method_map = {}
-        for c, info in self.col_map.items():
-            orig_dtype_map[c] = info.get("original_dtype")
-            conv_type_map[c] = info.get("converted_type")
-            method_map[c] = info.get("method")
+        for col in self.col_map:
+            method_map[col] = self.col_map[col]["method"]
 
         return {
             "syn_order": self.syn_order,
-            "original_dtype": orig_dtype_map,
-            "converted_type": conv_type_map,
             "method": method_map,
-            # 사용자 + auto합쳐진 special values
-            "special_value": self.special_value,  # {col: [ ... ]}
-            "date_mins": self.date_mins,
             "variable_selection": self.variable_selection_,
         }
+
+
+src/synthcity/plugins/core/models/syn_seq/syn_seq_preprocess.py
+# syn_seq_preprocess.py
+
+import pandas as pd
+import numpy as np
+from typing import Optional, Dict, List, Any
+
+
+class SynSeqPreprocessor:
+    """
+    전처리(preprocess) & 후처리(postprocess) 클래스를 함수화하여 단계별로 깔끔하게 정리.
+
+    - max_categories 로직을 넣어 user_dtypes에 없는 컬럼은 auto로 category/numeric 판단
+    - 날짜(col_type == "date")이면 to_datetime
+    - 범주형(col_type == "category")이면 astype('category')
+    - numeric + special value -> (base_col, base_col_cat) 분리
+    """
+
+    def __init__(
+        self,
+        user_dtypes: Optional[Dict[str, str]] = None,
+        user_special_values: Optional[Dict[str, List[Any]]] = None,
+        max_categories: int = 20,
+    ):
+        """
+        Args:
+            user_dtypes: {col: "date"/"category"/"numeric"} 등. (없으면 auto 결정)
+            user_special_values: {col: [특수값1, 특수값2, ...]}
+            max_categories: auto 판단 시, nunique <= max_categories 이면 category, else numeric
+        """
+        self.user_dtypes = user_dtypes or {}
+        self.user_special_values = user_special_values or {}
+        self.max_categories = max_categories
+
+        # 내부 저장용
+        self.original_dtypes: Dict[str, str] = {}  # {col: original_dtype}
+        self.split_map: Dict[str, str] = {}        # {base_col -> cat_col}
+        self.detected_specials: Dict[str, List[Any]] = {}  # user special values
+
+    # =========================================================================
+    # PREPROCESS
+    # =========================================================================
+    def preprocess(self, df: pd.DataFrame) -> pd.DataFrame:
+        """
+        1) 원본 dtype 기록
+        2) user_dtypes or auto 판단 -> date/category/numeric 세팅
+        3) numeric + special_value -> split
+        """
+        df = df.copy()
+
+        # (a) 원본 dtype 저장
+        self._record_original_dtypes(df)
+
+        # (b) user_dtypes 없는 컬럼은 auto -> category/numeric
+        self._auto_assign_dtypes(df)
+
+        # (c) user_dtypes 적용: date->datetime, category->astype('category'), numeric->그대로
+        self._apply_user_dtypes(df)
+
+        # (d) numeric + special_value split
+        self._split_numeric_columns(df)
+
+        return df
+
+    def _record_original_dtypes(self, df: pd.DataFrame):
+        for col in df.columns:
+            self.original_dtypes[col] = str(df[col].dtype)
+
+    def _auto_assign_dtypes(self, df: pd.DataFrame):
+        """
+        user_dtypes에 명시가 없으면,
+         - nuniq <= max_categories -> 'category'
+         - else 'numeric'
+         - 만약 datetime64 타입이면 'date'로 지정
+        """
+        for col in df.columns:
+            if col in self.user_dtypes:
+                continue
+
+            # datetime 타입?
+            if pd.api.types.is_datetime64_any_dtype(df[col]):
+                self.user_dtypes[col] = "date"
+                print(f"[auto_assign] {col} -> date")
+                continue
+
+            nuniq = df[col].nunique(dropna=False)
+            if nuniq <= self.max_categories:
+                self.user_dtypes[col] = "category"
+                print(f"[auto_assign] {col} -> category (nuniq={nuniq})")
+            else:
+                self.user_dtypes[col] = "numeric"
+                print(f"[auto_assign] {col} -> numeric (nuniq={nuniq})")
+
+    def _apply_user_dtypes(self, df: pd.DataFrame):
+        """
+        1) date -> pd.to_datetime
+        2) category -> astype('category')
+        3) numeric -> 그대로
+        """
+        for col, dtype_str in self.user_dtypes.items():
+            if col not in df.columns:
+                continue
+
+            if dtype_str == "date":
+                df[col] = pd.to_datetime(df[col], errors="coerce")
+            elif dtype_str == "category":
+                df[col] = df[col].astype("category")
+            else:
+                # 'numeric' 등은 그대로
+                pass
+
+    def _split_numeric_columns(self, df: pd.DataFrame):
+        """
+        user_special_values가 있는 numeric 컬럼만 분할:
+         - base_col -> special -> NaN
+         - cat_col -> special -> 문자열, 그 외 -> '-777'
+         -> cat_col을 base_col 직전에 insert
+        """
+        for col, specials in self.user_special_values.items():
+            # user_special_values에 있다면 numeric으로 가정
+            # (user_dtypes[col]=='numeric') 로 확인해도 됨
+            if col not in df.columns:
+                continue
+
+            cat_col = col + "_cat"
+            self.split_map[col] = cat_col
+            self.detected_specials[col] = specials
+
+            def cat_mapper(v):
+                if pd.isna(v):
+                    return "-9999"
+                return str(v) if v in specials else "-777"
+
+            df[cat_col] = df[col].apply(cat_mapper).astype("category")
+
+            def base_mapper(v):
+                if v in specials:
+                    return np.nan
+                return v
+            df[col] = df[col].apply(base_mapper)
+
+            if cat_col in df.columns:
+                df.drop(columns=[cat_col], inplace=True)
+            base_idx = df.columns.get_loc(col)
+            df.insert(base_idx, cat_col, None)
+            df[cat_col] = df[col].apply(cat_mapper).astype("category")
+
+    # =========================================================================
+    # POSTPROCESS
+    # =========================================================================
+    def postprocess(self, df: pd.DataFrame) -> pd.DataFrame:
+        """
+        split된 (base_col, cat_col)을 합쳐서 특수값 복원.
+        (date offset 변환은 없음)
+        """
+        df = df.copy()
+        df = self._merge_splitted_cols(df)
+        return df
+
+    def _merge_splitted_cols(self, df: pd.DataFrame) -> pd.DataFrame:
+        """
+        split_map: {base_col->cat_col}
+        -> base_col이 NaN이고, cat_col 값이 specials면 복원
+        -> cat_col drop
+        """
+        for base_col, cat_col in self.split_map.items():
+            if base_col not in df.columns or cat_col not in df.columns:
+                continue
+
+            specials = self.detected_specials.get(base_col, [])
+
+            for i in range(len(df)):
+                if pd.isna(df.at[i, base_col]):
+                    cat_val = df.at[i, cat_col]
+                    try:
+                        possible_val = float(cat_val)
+                    except:
+                        possible_val = cat_val
+
+                    if possible_val in specials:
+                        df.at[i, base_col] = possible_val
+                    else:
+                        # -9999 => NaN 유지, -777 => numeric
+                        pass
+
+            df.drop(columns=[cat_col], inplace=True)
+
+        return df
 
 
 src/synthcity/plugins/core/models/syn_seq/cart.py
@@ -418,16 +308,14 @@ src/synthcity/plugins/core/models/syn_seq/rf.py
 ** Not a valid file path or file does not exist. **
 
 src/synthcity/plugins/core/models/syn_seq/syn_seq.py
-# File: syn_seq.py
-
 from typing import Any, Dict, List, Optional, Tuple
 import numpy as np
 import pandas as pd
 
 from synthcity.logger import info, warning
 from synthcity.plugins.core.dataloader import DataLoader
+from synthcity.plugins.core.models.syn_seq.syn_seq_encoder import Syn_SeqEncoder
 
-# The column-fitting and column-generating methods from your submodule
 from synthcity.plugins.core.models.syn_seq.methods import (
     syn_cart, generate_cart,
     syn_ctree, generate_ctree,
@@ -441,71 +329,35 @@ from synthcity.plugins.core.models.syn_seq.methods import (
     syn_swr, generate_swr,
 )
 
-
-# ------------------------------------------------------------------
-# Utility function to check if rows violate user-defined rules
-# ------------------------------------------------------------------
 def check_rules_violation(
     df: pd.DataFrame,
     target_col: str,
     rules_dict: Dict[str, List[Tuple[str, str, Any]]]
 ) -> pd.Index:
-    """
-    For the current 'target_col', check if it has any rules from rules_dict.
-
-    Example of rules:
-        rules = {
-          "target": [
-              ("bmi", ">", 0.15),
-              ("target", "=", 0)
-          ]
-        }
-
-    Each tuple => (col_feat, operator, val).
-    All conditions must be satisfied for a row to be valid. If any condition fails,
-    that row is considered a violation.
-
-    Returns:
-        pd.Index of row indices that FAIL these conditions.
-    """
     if target_col not in rules_dict:
-        return pd.Index([])  # no rules => no violations for this column
-
+        return pd.Index([])
     sub_rules = rules_dict[target_col]
     mask_valid = pd.Series(True, index=df.index)
-
-    for (col_feat, operator, val) in sub_rules:
-        if col_feat not in df.columns:
-            # skip if that feature doesn't exist
+    for (feat, operator, thresh) in sub_rules:
+        if feat not in df.columns:
             continue
-
-        col_data = df[col_feat]
-
+        col_data = df[feat]
         if operator in ["=", "=="]:
-            cond = (col_data == val) | col_data.isna()
+            cond = (col_data == thresh) | col_data.isna()
         elif operator in [">"]:
-            cond = (col_data > val) | col_data.isna()
+            cond = (col_data > thresh) | col_data.isna()
         elif operator in [">="]:
-            cond = (col_data >= val) | col_data.isna()
+            cond = (col_data >= thresh) | col_data.isna()
         elif operator in ["<"]:
-            cond = (col_data < val) | col_data.isna()
+            cond = (col_data < thresh) | col_data.isna()
         elif operator in ["<="]:
-            cond = (col_data <= val) | col_data.isna()
+            cond = (col_data <= thresh) | col_data.isna()
         else:
-            # unrecognized operator => skip or treat as always true
             cond = pd.Series(True, index=df.index)
-
         mask_valid &= cond
-
-    # Return the rows that are NOT valid
     return df.index[~mask_valid]
 
-
-# ------------------------------------------------------------------
-# Map method_name => (syn_func, generate_func)
-# so we can dynamically select how each column is trained & generated.
-# ------------------------------------------------------------------
-METHOD_MAP = {
+METHOD_MAP: Dict[str, Tuple[Any, Any]] = {
     "cart": (syn_cart, generate_cart),
     "ctree": (syn_ctree, generate_ctree),
     "logreg": (syn_logreg, generate_logreg),
@@ -520,49 +372,26 @@ METHOD_MAP = {
 
 
 class Syn_Seq:
-    """
-    A column-by-column aggregator for sequential (imputation-like) synthesis.
-
-    Because all categorical/string columns are now label-encoded in your DataLoader/Encoder,
-    the aggregator sees them as numeric. This allows tree methods to handle them properly.
-    """
-
     def __init__(
         self,
         random_state: int = 0,
         strict: bool = True,
         sampling_patience: int = 100
     ):
-        """
-        Args:
-            random_state: random seed
-            strict: if True, re-check constraints (or user rules) during generation
-            sampling_patience: max attempts for re-generation if constraints fail
-        """
         self.random_state = random_state
         self.strict = strict
         self.sampling_patience = sampling_patience
-
-        # Internal state
         self._model_trained = False
         self._syn_order: List[str] = []
         self._method_map: Dict[str, str] = {}
         self._varsel: Dict[str, List[str]] = {}
         self._col_models: Dict[str, Dict[str, Any]] = {}
-
-        # Real distribution for the first column
         self._first_col_data: Optional[np.ndarray] = None
+        # Use a dedicated random generator:
+        self._rng = np.random.default_rng(self.random_state)
 
     def fit_col(self, loader: DataLoader, *args, **kwargs) -> "Syn_Seq":
-        """
-        Fit column-by-column from the "encoded" DataLoader.
-
-        Steps:
-        1) read info: syn_order, method, variable_selection
-        2) store real distribution for first column => for sampling
-        3) for each subsequent column, pick aggregator => train with that method
-        """
-        # 1) Gather the relevant metadata
+        info("[INFO] Syn_Seq aggregator: fitting columns...")
         info_dict = loader.info()
         training_data = loader.dataframe().copy()
         if training_data.empty:
@@ -571,67 +400,42 @@ class Syn_Seq:
         self._syn_order = info_dict.get("syn_order", list(training_data.columns))
         self._method_map = info_dict.get("method", {})
         self._varsel = info_dict.get("variable_selection", {})
-        conv_type_map = info_dict.get("converted_type", {})
 
-        # 2) Force columns ending with "_cat" => aggregator "cart" if not set
         for col in self._syn_order:
             if col.endswith("_cat"):
                 self._method_map[col] = "cart"
                 base_col = col[:-4]
                 if base_col in self._varsel:
-                    # replicate varsel
                     self._varsel[col] = self._varsel[base_col]
                 else:
                     idx = self._syn_order.index(col)
                     self._varsel[col] = self._syn_order[:idx]
 
-        info("[INFO] Syn_Seq aggregator: fitting columns...")
-
-        # 3) For the first column, store real distribution of values
+        # Store first column distribution:
         first_col = self._syn_order[0]
         self._first_col_data = training_data[first_col].dropna().values
         info(f"Fitting '{first_col}' => stored distribution from real data. Done.")
 
-        # 4) Train aggregator column-by-column
-        np.random.seed(self.random_state)
-        for i, col in enumerate(self._syn_order[1:], start=1):
+        # Use enumerate to avoid repeated index lookups:
+        for idx, col in enumerate(self._syn_order[1:], start=1):
             method_name = self._method_map.get(col, "cart")
-            preds_list = self._varsel.get(col, self._syn_order[:i])
-
-            # Y = the current column's data; X = preceding columns
+            predictors = self._varsel.get(col, self._syn_order[:idx])
             y = training_data[col].values
-            X = training_data[preds_list].values
+            X = training_data[predictors].values
+            valid_mask = (~np.isnan(X).any(axis=1)) & (~pd.isna(y))
+            X_train = X[valid_mask]
+            y_train = y[valid_mask]
 
-            # Regardless of category or numeric, everything is numeric-coded now.
-            # We simply drop any rows with np.nan in X or y.
-            mask_x = ~np.isnan(X).any(axis=1)
-            mask_y = ~pd.isna(y)
-            mask = mask_x & mask_y
-
-            X_ = X[mask]
-            y_ = y[mask]
-
-            print(f"Fitting '{col}' with '{method_name}' ... ", end="", flush=True)
-            self._col_models[col] = self._fit_single_col(method_name, X_, y_)
-            print("Done!")
-
+            info(f"Fitting '{col}' with '{method_name}' ...")
+            self._col_models[col] = self._fit_single_col(method_name, X_train, y_train)
+            info("Done!")
         self._model_trained = True
         return self
 
     def _fit_single_col(self, method_name: str, X: np.ndarray, y: np.ndarray) -> Dict[str, Any]:
-        """
-        Train the chosen method for one column; return a dict:
-            {
-              "name": <method_name>,
-              "fitted_model": <actual model object>
-            }
-        """
         fit_func, _ = METHOD_MAP[method_name]
         model = fit_func(y, X, random_state=self.random_state)
-        return {
-            "name": method_name,
-            "fitted_model": model,
-        }
+        return {"name": method_name, "fitted_model": model}
 
     def generate_col(
         self,
@@ -639,43 +443,26 @@ class Syn_Seq:
         rules: Optional[Dict[str, List[Tuple[str, str, Any]]]] = None,
         max_iter_rules: int = 10
     ) -> pd.DataFrame:
-        """
-        Generate `nrows` rows, column by column.
-
-        If `rules` is given, after generating each column, we check for any row that fails
-        => re-generate it up to `max_iter_rules` times or set it to NaN if impossible.
-        """
         if not self._model_trained:
             raise RuntimeError("Syn_Seq aggregator not yet fitted")
-
         if nrows <= 0:
             return pd.DataFrame(columns=self._syn_order)
 
-        np.random.seed(self.random_state)
         gen_df = pd.DataFrame(index=range(nrows))
-
-        # (1) Generate the first column from real distribution
         first_col = self._syn_order[0]
         if self._first_col_data is not None and len(self._first_col_data) > 0:
-            gen_df[first_col] = np.random.choice(
-                self._first_col_data, size=nrows, replace=True
-            )
+            gen_df[first_col] = self._rng.choice(self._first_col_data, size=nrows, replace=True)
         else:
             gen_df[first_col] = 0
         info(f"Generating '{first_col}' => done.")
 
-        # (2) For each subsequent column, generate using fitted model
-        for col in self._syn_order[1:]:
+        for idx, col in enumerate(self._syn_order[1:], start=1):
             method_name = self._method_map.get(col, "cart")
-            idx = self._syn_order.index(col)
-            preds_list = self._varsel.get(col, self._syn_order[:idx])
+            predictors = self._varsel.get(col, self._syn_order[:idx])
+            Xsyn = gen_df[predictors].values
+            y_syn = self._generate_single_col(method_name, Xsyn, col)
+            gen_df[col] = y_syn
 
-            # gather the already generated columns
-            Xsyn = gen_df[preds_list].values
-            ysyn = self._generate_single_col(method_name, Xsyn, col)
-            gen_df[col] = ysyn
-
-            # If user rules => check for violations => re-generate if needed
             if rules and col in rules:
                 tries = 0
                 while True:
@@ -683,34 +470,24 @@ class Syn_Seq:
                     if viol_idx.empty:
                         break
                     if tries >= max_iter_rules:
-                        warning(
-                            f"[WARN] {col}: cannot satisfy rules after {max_iter_rules} tries => set them to NaN"
-                        )
+                        warning(f"[WARN] {col}: cannot satisfy rules after {max_iter_rules} tries => set them to NaN")
                         gen_df.loc[viol_idx, col] = np.nan
                         break
-                    # re-generate only those violating rows
-                    Xsub = gen_df.loc[viol_idx, preds_list].values
-                    ysub = self._generate_single_col(method_name, Xsub, col)
-                    gen_df.loc[viol_idx, col] = ysub
+                    X_sub = gen_df.loc[viol_idx, predictors].values
+                    y_sub = self._generate_single_col(method_name, X_sub, col)
+                    gen_df.loc[viol_idx, col] = y_sub
                     tries += 1
 
-            print(f"Generating '{col}' => done.")
+            info(f"Generating '{col}' => done.")
 
         return gen_df
 
     def _generate_single_col(self, method_name: str, Xsyn: np.ndarray, col: str) -> np.ndarray:
-        """
-        Use the fitted model for 'col' if available, otherwise fallback
-        to sampling from the first column's distribution (less ideal).
-        """
         if col not in self._col_models:
-            # fallback => sample from the first col distribution
             if self._first_col_data is not None and len(self._first_col_data) > 0:
-                return np.random.choice(self._first_col_data, size=len(Xsyn), replace=True)
+                return self._rng.choice(self._first_col_data, size=len(Xsyn), replace=True)
             else:
                 return np.zeros(len(Xsyn))
-
-        # call the aggregator's 'generate' function
         fit_info = self._col_models[col]
         _, generate_func = METHOD_MAP[fit_info["name"]]
         return generate_func(fit_info["fitted_model"], Xsyn)
@@ -2529,9 +2306,18 @@ class ImageDataLoader(DataLoader):
 class Syn_SeqDataLoader(DataLoader):
     """
     A DataLoader that uses Syn_SeqEncoder with dictionary-based variable_selection_.
-      - In __init__: just call encoder.fit(data)
-      - "encode()" method => encoder.transform(data)
-      - "decode()" still does inverse_transform if needed
+
+    - __init__:
+        1) user_custom 딕셔너리를 파싱해 syn_order, method, variable_selection 등을 가져옴
+        2) Syn_SeqEncoder를 생성 후, fit(data) -> 전반적인 정보(변수 순서, method 등) 세팅
+        3) verbose=True라면 fit결과 info를 _print_init_info()로 표시
+
+    * encode/decode 메서드는 명시적으로 정의하지 않음
+      => 부모 DataLoader의 encode()/decode()를 그대로 사용.
+    """
+
+    """
+    기존 Syn_SeqDataLoader에서, '_cat' 컬럼을 자동 반영하는 기능 추가
     """
 
     def __init__(
@@ -2542,7 +2328,6 @@ class Syn_SeqDataLoader(DataLoader):
         target_column: Optional[str] = None,
         random_state: int = 0,
         train_size: float = 0.8,
-        max_categories: int = 20,
         verbose: bool = True,
         **kwargs: Any,
     ):
@@ -2557,82 +2342,97 @@ class Syn_SeqDataLoader(DataLoader):
         self.user_custom = user_custom or {}
         self.sensitive_features = sensitive_features
         self.target_column = target_column
-        self.max_categories = max_categories
         self.verbose = verbose
 
-        # parse user custom
+        # 1) 기존 user_custom 파싱
         syn_order = self.user_custom.get("syn_order", list(self.data.columns))
         method = self.user_custom.get("method", {})
-        # 주의: 아래와 같이 키 이름을 "special_value"가 아닌 "special_value" 또는 "columns_special_values" 등
-        #       user가 원하는 대로 맞춰 줄 수도 있음.
-        special_value = self.user_custom.get("special_value", {})
-        col_type = self.user_custom.get("col_type", {})
         variable_selection = self.user_custom.get("variable_selection", {})
 
-        # create encoder
+        # 2) '_cat' 컬럼 자동 반영
+        syn_order, variable_selection = self._auto_inject_cat_columns(
+            df=self.data,
+            syn_order=syn_order,
+            variable_selection=variable_selection
+        )
+        # 업데이트한 것을 다시 user_custom에 저장
+        self.user_custom["syn_order"] = syn_order
+        self.user_custom["variable_selection"] = variable_selection
+
+        # 3) Syn_SeqEncoder 생성
         self._encoder = Syn_SeqEncoder(
-            special_value=special_value,
             syn_order=syn_order,
             method=method,
-            max_categories=self.max_categories,
-            col_type=col_type,
             variable_selection=variable_selection,
             default_method="cart",
         )
 
-        # if verbose => fit결과 info를 출력 (transform 전 상태)
         if self.verbose:
-            # 여기서는 fit만 (transform은 나중에 encode()에서)
-            self._encoder.fit(self.data)
+            # encoder.fit() + info출력
+            self._encoder.prepare(self.data)
             self._print_init_info()
-            
-    def _print_init_info(self):
-        """
-        fit 이후(변환 전 or 변환 후 등) encoder 정보를 콘솔에 보기 좋게 찍어준다.
-        variable_selection은 matrix 형태로 출력.
-        """
-        enc_info = self._encoder.get_info()
 
-        syn_order = enc_info["syn_order"]  # list
-        conv_type = enc_info["converted_type"]   # dict {col: str}
-        method_map = enc_info["method"]          # dict {col: str}
-        special_vals = enc_info["special_value"] # dict {col: list}
-        varsel = enc_info["variable_selection"]  # dict {col: [predictors...]}
+    def _auto_inject_cat_columns(
+        self,
+        df: pd.DataFrame,
+        syn_order: List[str],
+        variable_selection: Dict[str, List[str]],
+    ) -> Tuple[List[str], Dict[str, List[str]]]:
+        """
+        1) '_cat'으로 끝나는 컬럼 자동 탐색
+        2) 해당 base_col = col[:-4]가 syn_order에 있으면, cat_col을 base_col 뒤(또는 앞)에 삽입
+        3) variable_selection에서도 base_col이 predictor면 cat_col도 predictor로 추가
+        """
+        new_syn_order = list(syn_order)  # 사본
+        new_varsel = {k: list(v) for k, v in variable_selection.items()}  # 사본
+
+        cat_cols = [c for c in df.columns if c.endswith("_cat")]
+
+        for cat_col in cat_cols:
+            base_col = cat_col[:-4]  # 예) 'income_cat' -> 'income'
+            
+            if base_col in new_syn_order:
+                # base_col 위치를 찾아 cat_col을 끼워넣기
+                base_idx = new_syn_order.index(base_col)
+                # 예: base_col 뒤에 cat_col을 삽입
+                if cat_col not in new_syn_order:
+                    new_syn_order.insert(base_idx, cat_col)
+            else:
+                # base_col 자체가 syn_order에 없으면 맨 뒤에 넣거나 다른 규칙을 적용
+                if cat_col not in new_syn_order:
+                    new_syn_order.append(cat_col)
+
+            # variable_selection
+            # base_col이 predictor인 곳 => cat_col도 predictor
+            for tgt_col, preds in new_varsel.items():
+                if base_col in preds and cat_col not in preds:
+                    preds.append(cat_col)
+                    new_varsel[tgt_col] = preds
+
+        return new_syn_order, new_varsel
+
+    def _print_init_info(self):
+        enc_info = self._encoder.get_info()
+        syn_order = enc_info.get("syn_order", [])
+        method_map = enc_info.get("method", {})
+        varsel = enc_info.get("variable_selection", {})
 
         print("\n[INFO] Syn_SeqEncoder summary:")
-
-        # 1) 'col, converted_type, method' 를 화살표와 함께 세로 출력
-        print("  (column, converted_type, method)\n")
+        print("  (column, method)\n")
         for i, col in enumerate(syn_order):
-            ctype = conv_type.get(col, "(unknown)")
             m = method_map.get(col, "(unknown)")
-            line = f"{col}, {ctype}, {m}"
-            print(f"  ({line})")
-            # 마지막 컬럼이 아니면 아래에 화살표
+            print(f"  ({col}, {m})")
             if i < len(syn_order) - 1:
                 print("    --> ")
 
-        # 2) special_value
-        if special_vals:
-            print("\n  - special_value =>", special_vals)
-
-        # 3) variable_selection(matrix 형태)
+        # variable_selection matrix
         df_vs = self._varsel_dict_to_df(varsel, syn_order)
         print("\n  - variable_selection_:")
         print(df_vs)
         print("------------------------------------------------")
 
     def _varsel_dict_to_df(self, varsel: Dict[str, List[str]], syn_order: List[str]) -> pd.DataFrame:
-        """
-        variable_selection dict -> DataFrame 변환
-        행/열 모두 syn_order 순으로 배치
-        """
-        # syn_order 길이만큼의 0행렬 생성
-        df_vs = pd.DataFrame(
-            0, 
-            index=syn_order,   # row = target col
-            columns=syn_order  # col = predictor col
-        )
+        df_vs = pd.DataFrame(0, index=syn_order, columns=syn_order)
         for tgt, preds in varsel.items():
             if tgt not in df_vs.index:
                 continue
@@ -2641,9 +2441,9 @@ class Syn_SeqDataLoader(DataLoader):
                     df_vs.loc[tgt, p] = 1
         return df_vs
 
-
     # ----------------------------------------------------------------
-    # Required DataLoader methods
+    # DataLoader 필수 구현 메서드
+    # ----------------------------------------------------------------
     @property
     def shape(self) -> tuple:
         return self.data.shape
@@ -2684,15 +2484,13 @@ class Syn_SeqDataLoader(DataLoader):
         """
         Rebuild user_custom from info,
         Then create loader and do encoder.fit().
-        Notice that we won't auto transform => user can call .encode() if desired.
+        Notice that we won't auto transform => user must call parent's encode()
+        or do external preprocessing if needed.
         """
         user_custom = {
             "syn_order": info.get("syn_order", list(data.columns)),
-            "special_value": info.get("special_value", {}),
-            "col_type": info.get("col_type", {}),
-            "max_categories": info.get("max_categories", 20),
-            "variable_selection": info.get("variable_selection", {}),
             "method": info.get("method", {}),
+            "variable_selection": info.get("variable_selection", {}),
         }
         return Syn_SeqDataLoader(
             data=data,
@@ -2742,39 +2540,6 @@ class Syn_SeqDataLoader(DataLoader):
     def get_fairness_column(self) -> Union[str, Any]:
         return None
 
-    def encode(self) -> ("Syn_SeqDataLoader", dict):
-        """
-        Calls self._encoder.transform(...) => modifies self.data in place
-        Returns (self, self.info())
-        """
-        transformed = self._encoder.transform(self.data)
-
-        # 2) Build a new loader object that holds the transformed DataFrame
-        new_loader = Syn_SeqDataLoader(
-            data=transformed,
-            user_custom=self.user_custom,
-            sensitive_features=self.sensitive_features,
-            target_column=self.target_column,
-            random_state=self.random_state,
-            train_size=self.train_size,
-            max_categories=self.max_categories,
-            verbose=False
-        )
-        # 3) Share the same fitted encoder, so we don’t re-fit
-        new_loader._encoder = self._encoder
-
-        # 4) Return (new_loader, some_info)
-        return new_loader, new_loader.info()
-    
-    def decode(self) -> "Syn_SeqDataLoader":
-        """
-        Decode => inverse_transform
-        Make a new loader with the decoded df
-        """
-        decoded_df = self._encoder.inverse_transform(self.data)
-        new_loader = self.decorate(decoded_df)
-        return new_loader
-
     def decorate(self, data: pd.DataFrame) -> "Syn_SeqDataLoader":
         new_loader = Syn_SeqDataLoader(
             data=data,
@@ -2783,10 +2548,9 @@ class Syn_SeqDataLoader(DataLoader):
             target_column=self.target_column,
             random_state=self.random_state,
             train_size=self.train_size,
-            max_categories=self.max_categories,
             verbose=False
         )
-        # share the same encoder => so that no re-fit is triggered
+        # encoder 공유
         new_loader._encoder = self._encoder
         return new_loader
 
@@ -2812,40 +2576,18 @@ def create_from_info(
         raise RuntimeError(f"invalid datatype {info}")
 
 src/synthcity/plugins/generic/plugin_syn_seq.py
-# File: plugin_syn_seq.py
-
-from typing import Any, Dict, List, Optional, Union, Tuple
+from typing import Any, Dict, List, Optional, Tuple
 import pandas as pd
 
 from pydantic import validate_arguments
 
 from synthcity.plugins.core.plugin import Plugin
-from synthcity.plugins.core.dataloader import (
-    DataLoader,
-    Syn_SeqDataLoader,
-    create_from_info,
-)
-from synthcity.plugins.core.constraints import Constraints
-from synthcity.plugins.core.distribution import constraint_to_distribution
-from synthcity.plugins.core.schema import Schema
-from synthcity.utils.reproducibility import enable_reproducible_results
-
-# aggregator from syn_seq.py
+from synthcity.plugins.core.dataloader import DataLoader, Syn_SeqDataLoader, create_from_info
 from synthcity.plugins.core.models.syn_seq.syn_seq import Syn_Seq
+from synthcity.plugins.core.schema import Schema
 
 
 class Syn_SeqPlugin(Plugin):
-    """
-    A plugin wrapping the 'Syn_Seq' aggregator in the synthcity Plugin interface.
-
-    Steps:
-      1) In .fit(), if the user passes a DataFrame, we wrap it in Syn_SeqDataLoader, then call .encode().
-      2) We build or refine the domain in `_domain_rebuild`, using the original vs. converted dtype info,
-         turning them into constraints, then into distributions.
-      3) The aggregator trains column-by-column on the encoded data.
-      4) For .generate(), we re-check constraints (including user constraints) and decode back to the original format.
-    """
-
     @staticmethod
     def name() -> str:
         return "syn_seq"
@@ -2856,7 +2598,7 @@ class Syn_SeqPlugin(Plugin):
 
     @staticmethod
     def hyperparameter_space(**kwargs: Any) -> List:
-        # No tunable hyperparameters for demonstration
+        # No tunable hyperparameters for syn_seq
         return []
 
     @validate_arguments(config=dict(arbitrary_types_allowed=True))
@@ -2876,58 +2618,13 @@ class Syn_SeqPlugin(Plugin):
             compress_dataset=compress_dataset,
             sampling_strategy=sampling_strategy,
         )
-
-        self._schema: Optional[Schema] = None
-        self._training_schema: Optional[Schema] = None
-        self._data_info: Optional[Dict] = None
-        self._training_data_info: Optional[Dict] = None
         self.model: Optional[Syn_Seq] = None
 
-    @validate_arguments(config=dict(arbitrary_types_allowed=True))
-    def fit(self, X: Union[DataLoader, pd.DataFrame], *args: Any, **kwargs: Any) -> Any:
-        """
-        Wrap a plain DataFrame into Syn_SeqDataLoader if needed, then encode the data.
-        Build up the schema from original data vs. encoded data, and train the aggregator.
-        """
-        # If plain DataFrame, wrap in Syn_SeqDataLoader
+    def _fit(self, X: DataLoader, *args: Any, **kwargs: Any) -> "Syn_SeqPlugin":
+        # If a plain DataFrame is provided, wrap it in a Syn_SeqDataLoader
         if isinstance(X, pd.DataFrame):
             X = Syn_SeqDataLoader(X)
-
-        if "cond" in kwargs and kwargs["cond"] is not None:
-            self.expecting_conditional = True
-
-        enable_reproducible_results(self.random_state)
-        self._data_info = X.info()
-
-        # Build schema for the *original* data
-        self._schema = Schema(
-            data=X,
-            sampling_strategy=self.sampling_strategy,
-            random_state=self.random_state,
-        )
-
-        # Encode the data
-        X_encoded, self._training_data_info = X.encode()
-
-        # Build an initial schema from the *encoded* data
-        base_schema = Schema(
-            data=X_encoded,
-            sampling_strategy=self.sampling_strategy,
-            random_state=self.random_state,
-        )
-
-        # Rebuild domain from original vs. converted dtype logic
-        self._training_schema = self._domain_rebuild(X_encoded, base_schema)
-
-        # aggregator training
-        output = self._fit(X_encoded, *args, **kwargs)
-        self.fitted = True
-        return output
-
-    def _fit(self, X: DataLoader, *args: Any, **kwargs: Any) -> "Syn_SeqPlugin":
-        """
-        Train the aggregator column-by-column using the encoded DataLoader.
-        """
+        # Initialize and train the Syn_Seq aggregator
         self.model = Syn_Seq(
             random_state=self.random_state,
             strict=self.strict,
@@ -2936,181 +2633,18 @@ class Syn_SeqPlugin(Plugin):
         self.model.fit_col(X, *args, **kwargs)
         return self
 
-    def _domain_rebuild(self, X_encoded: DataLoader, base_schema: Schema) -> Schema:
-        """
-        Build new domain using feature_params & constraint_to_distribution.
-
-        For each column in the encoded data, gather basic "dtype" constraints,
-        transform them into Distribution objects, and create a new schema.
-        """
-        enc_info = X_encoded.info()
-
-        syn_order = enc_info.get("syn_order", [])
-        orig_map = enc_info.get("original_dtype", {})
-        conv_map = enc_info.get("converted_type", {})
-
-        domain: Dict[str, Any] = {}
-
-        # For each column in syn_order, figure out the dtype constraints
-        for col in syn_order:
-            col_rules = []
-
-            original_dt = orig_map.get(col, "").lower()
-            converted_dt = conv_map.get(col, "").lower()
-
-            # Example logic (you can adapt):
-            if col.endswith("_cat"):
-                # definitely treat as category
-                col_rules.append((col, "dtype", "category"))
-            elif ("int" in original_dt or "float" in original_dt) and ("category" in converted_dt):
-                col_rules.append((col, "dtype", "category"))
-            elif ("object" in original_dt or "category" in original_dt) and ("numeric" in converted_dt):
-                col_rules.append((col, "dtype", "float"))
-            elif "date" in original_dt:
-                col_rules.append((col, "dtype", "int"))
-            else:
-                col_rules.append((col, "dtype", "float"))
-
-            # Build a local Constraints for this single column
-            single_constraints = Constraints(rules=col_rules)
-            # Then transform into a Distribution
-            dist = constraint_to_distribution(single_constraints, col)
-            domain[col] = dist
-
-        # Now build new Schema with that domain
-        new_schema = Schema(domain=domain)
-        new_schema.sampling_strategy = base_schema.sampling_strategy
-        new_schema.random_state = base_schema.random_state
-
-        return new_schema
-
-    @validate_arguments(config=dict(arbitrary_types_allowed=True))
-    def generate(
-        self,
-        count: Optional[int] = None,
-        constraints: Optional[Constraints] = None,
-        rules: Optional[Dict[str, List[Tuple[str, str, Any]]]] = None,
-        random_state: Optional[int] = None,
-        **kwargs: Any,
-    ) -> DataLoader:
-        """
-        Generate synthetic data by sampling from the aggregator, applying constraints,
-        and decoding back to the original schema.
-        """
-        if not self.fitted:
-            raise RuntimeError("Must .fit() plugin before calling .generate()")
-        if self._schema is None:
-            raise RuntimeError("No schema found. Fit the model first.")
-
-        if random_state is not None:
-            enable_reproducible_results(random_state)
-
-        if count is None:
-            count = self._data_info["len"]
-
-        has_gen_cond = ("cond" in kwargs) and (kwargs["cond"] is not None)
-        if has_gen_cond and not self.expecting_conditional:
-            raise RuntimeError(
-                "Got inference conditional, but aggregator wasn't trained with a conditional"
-            )
-
-        # Combine constraints from training schema with user constraints
-        gen_constraints = self.training_schema().as_constraints()
-        if constraints is not None:
-            gen_constraints = gen_constraints.extend(constraints)
-
-        # Build a schema from these constraints
-        syn_schema = Schema.from_constraints(gen_constraints)
-
-        # aggregator call
-        data_syn = self._generate(count, syn_schema, rules=rules, **kwargs)
-
-        # decode from the encoded data back to original
-        data_syn = data_syn.decode()
-
-        # final constraints check
-        final_constraints = self.schema().as_constraints()
-        if constraints is not None:
-            final_constraints = final_constraints.extend(constraints)
-
-        # If strict, keep only valid rows
-        if not data_syn.satisfies(final_constraints) and self.strict:
-            data_syn = data_syn.match(final_constraints)
-
+    def _generate(self, count: int, syn_schema: Schema, **kwargs: Any) -> DataLoader:
+        if self.model is None:
+            raise RuntimeError("The model must be fitted before generating data.")
+        # Generate synthetic data column-by-column
+        df_syn = self.model.generate_col(count, **kwargs)
+        # Adapt the data types according to the provided schema
+        df_syn = syn_schema.adapt_dtypes(df_syn)
+        # Create a DataLoader from the generated DataFrame using the original data info
+        data_syn = create_from_info(df_syn, self.data_info)
         return data_syn
 
-    def _generate(
-        self,
-        count: int,
-        syn_schema: Schema,
-        rules: Optional[Dict[str, List[Tuple[str, str, Any]]]] = None,
-        **kwargs: Any,
-    ) -> DataLoader:
-        """
-        Internal aggregator generation logic:
-        - Possibly remap rules to reference _cat columns if they specify special values
-        - Let aggregator do column-by-column generation
-        - Force the columns' dtypes according to syn_schema
-        """
-        if not self.model:
-            raise RuntimeError("Aggregator not found for syn_seq plugin")
 
-        # Remap user rules to handle special values in _cat columns
-        if rules is not None:
-            rules = self._remap_special_value_rules(rules, syn_schema)
-
-        # Generate the data
-        df_syn = self.model.generate_col(count, rules=rules, max_iter_rules=10)
-        # Ensure correct dtypes
-        df_syn = syn_schema.adapt_dtypes(df_syn)
-
-        return create_from_info(df_syn, self._data_info)
-
-    def _remap_special_value_rules(
-        self,
-        rules_dict: Dict[str, List[Tuple[str, str, Any]]],
-        syn_schema: Schema
-    ) -> Dict[str, List[Tuple[str, str, Any]]]:
-        """
-        If user wrote rules referencing special values (like -0.04) on numeric columns,
-        we switch them to the corresponding _cat column. This is a simple version:
-        If 'val' is in 'special_value[feat_col]', rename feat_col -> feat_col_cat.
-        """
-        if not rules_dict:
-            return rules_dict
-
-        special_map = self._training_data_info.get("special_value", {})
-
-        # build a base->cat map
-        # e.g. if 'bp' => 'bp_cat' is in your domain
-        base_to_cat = {}
-        for col in syn_schema.domain:
-            if col.endswith("_cat"):
-                base_col = col[:-4]
-                base_to_cat[base_col] = col
-
-        new_rules = {}
-        for target_col, cond_list in rules_dict.items():
-            actual_target_col = target_col
-            # If target_col is known to have special values => rename
-            if target_col in special_map and target_col in base_to_cat:
-                actual_target_col = base_to_cat[target_col]
-
-            new_cond_list = []
-            for (feat_col, op, val) in cond_list:
-                new_feat = feat_col
-                # If feat_col references special values => rename
-                if feat_col in special_map and feat_col in base_to_cat:
-                    if val in special_map[feat_col]:
-                        new_feat = base_to_cat[feat_col]
-                new_cond_list.append((new_feat, op, val))
-
-            new_rules[actual_target_col] = new_cond_list
-
-        return new_rules
-
-
-# Register plugin for the library
 plugin = Syn_SeqPlugin
 
 
