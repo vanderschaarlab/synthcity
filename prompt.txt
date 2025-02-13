@@ -315,7 +315,6 @@ import pandas as pd
 from synthcity.logger import info, warning
 from synthcity.plugins.core.dataloader import DataLoader
 from synthcity.plugins.core.models.syn_seq.syn_seq_encoder import Syn_SeqEncoder
-
 from synthcity.plugins.core.models.syn_seq.methods import (
     syn_cart, generate_cart,
     syn_ctree, generate_ctree,
@@ -357,6 +356,7 @@ def check_rules_violation(
         mask_valid &= cond
     return df.index[~mask_valid]
 
+
 METHOD_MAP: Dict[str, Tuple[Any, Any]] = {
     "cart": (syn_cart, generate_cart),
     "ctree": (syn_ctree, generate_ctree),
@@ -382,21 +382,21 @@ class Syn_Seq:
         self.strict = strict
         self.sampling_patience = sampling_patience
         self._model_trained = False
+        # The syn_order will be provided by the loader's info—which now includes the auto‑injected “_cat” columns.
         self._syn_order: List[str] = []
         self._method_map: Dict[str, str] = {}
         self._varsel: Dict[str, List[str]] = {}
         self._col_models: Dict[str, Dict[str, Any]] = {}
         self._first_col_data: Optional[np.ndarray] = None
-        # Use a dedicated random generator:
         self._rng = np.random.default_rng(self.random_state)
 
-    def fit_col(self, loader: DataLoader, *args, **kwargs) -> "Syn_Seq":
+    def fit_col(self, loader: DataLoader, *args: Any, **kwargs: Any) -> "Syn_Seq":
         info("[INFO] Syn_Seq aggregator: fitting columns...")
         info_dict = loader.info()
         training_data = loader.dataframe().copy()
         if training_data.empty:
             raise ValueError("No data => cannot fit Syn_Seq aggregator")
-
+        # Get the updated syn_order, method, and variable_selection from the loader's info
         self._syn_order = info_dict.get("syn_order", list(training_data.columns))
         self._method_map = info_dict.get("method", {})
         self._varsel = info_dict.get("variable_selection", {})
@@ -411,12 +411,10 @@ class Syn_Seq:
                     idx = self._syn_order.index(col)
                     self._varsel[col] = self._syn_order[:idx]
 
-        # Store first column distribution:
         first_col = self._syn_order[0]
         self._first_col_data = training_data[first_col].dropna().values
         info(f"Fitting '{first_col}' => stored distribution from real data. Done.")
 
-        # Use enumerate to avoid repeated index lookups:
         for idx, col in enumerate(self._syn_order[1:], start=1):
             method_name = self._method_map.get(col, "cart")
             predictors = self._varsel.get(col, self._syn_order[:idx])
@@ -425,7 +423,6 @@ class Syn_Seq:
             valid_mask = (~np.isnan(X).any(axis=1)) & (~pd.isna(y))
             X_train = X[valid_mask]
             y_train = y[valid_mask]
-
             info(f"Fitting '{col}' with '{method_name}' ...")
             self._col_models[col] = self._fit_single_col(method_name, X_train, y_train)
             info("Done!")
@@ -491,6 +488,9 @@ class Syn_Seq:
         fit_info = self._col_models[col]
         _, generate_func = METHOD_MAP[fit_info["name"]]
         return generate_func(fit_info["fitted_model"], Xsyn)
+
+
+plugin = Syn_Seq
 
 
 src/synthcity/plugins/core/models/syn_seq/syn_seq_rules.py
@@ -2631,6 +2631,9 @@ class Syn_SeqPlugin(Plugin):
             sampling_patience=self.sampling_patience,
         )
         self.model.fit_col(X, *args, **kwargs)
+        # IMPORTANT: update the plugin's data_info using the loader’s updated info 
+        # (which now includes the auto-injected “_cat” columns)
+        self.data_info = X.info()
         return self
 
     def _generate(self, count: int, syn_schema: Schema, **kwargs: Any) -> DataLoader:
@@ -2640,7 +2643,7 @@ class Syn_SeqPlugin(Plugin):
         df_syn = self.model.generate_col(count, **kwargs)
         # Adapt the data types according to the provided schema
         df_syn = syn_schema.adapt_dtypes(df_syn)
-        # Create a DataLoader from the generated DataFrame using the original data info
+        # Create a DataLoader from the generated DataFrame using the updated data_info
         data_syn = create_from_info(df_syn, self.data_info)
         return data_syn
 

@@ -1,3 +1,4 @@
+# File: plugin_syn_seq.py
 from typing import Any, Dict, List, Optional, Tuple
 import pandas as pd
 
@@ -20,7 +21,7 @@ class Syn_SeqPlugin(Plugin):
 
     @staticmethod
     def hyperparameter_space(**kwargs: Any) -> List:
-        # No tunable hyperparameters for syn_seq
+        # There are no tunable hyperparameters for Syn_Seq.
         return []
 
     @validate_arguments(config=dict(arbitrary_types_allowed=True))
@@ -43,29 +44,29 @@ class Syn_SeqPlugin(Plugin):
         self.model: Optional[Syn_Seq] = None
 
     def _fit(self, X: DataLoader, *args: Any, **kwargs: Any) -> "Syn_SeqPlugin":
-        # If a plain DataFrame is provided, wrap it in a Syn_SeqDataLoader
+        # If X is a plain DataFrame, wrap it in our Syn_SeqDataLoader.
         if isinstance(X, pd.DataFrame):
             X = Syn_SeqDataLoader(X)
-        # Initialize and train the Syn_Seq aggregator
+        # Initialize the Syn_Seq aggregator and train it column‐by‐column.
         self.model = Syn_Seq(
             random_state=self.random_state,
             strict=self.strict,
             sampling_patience=self.sampling_patience,
         )
         self.model.fit_col(X, *args, **kwargs)
-        # IMPORTANT: update the plugin's data_info using the loader’s updated info 
-        # (which now includes the auto-injected “_cat” columns)
+        # Update our plugin’s data_info with the loader’s info (which now reflects the updated syn_order,
+        # including auto‑injected “_cat” columns).
         self.data_info = X.info()
         return self
 
     def _generate(self, count: int, syn_schema: Schema, **kwargs: Any) -> DataLoader:
         if self.model is None:
             raise RuntimeError("The model must be fitted before generating data.")
-        # Generate synthetic data column-by-column
+        # Generate synthetic data using the Syn_Seq aggregator.
         df_syn = self.model.generate_col(count, **kwargs)
-        # Adapt the data types according to the provided schema
+        # Adapt the generated DataFrame to the schema (i.e. ensure data types match).
         df_syn = syn_schema.adapt_dtypes(df_syn)
-        # Create a DataLoader from the generated DataFrame using the updated data_info
+        # Create a DataLoader from the synthetic DataFrame using the updated data_info.
         data_syn = create_from_info(df_syn, self.data_info)
         return data_syn
 
