@@ -1849,8 +1849,6 @@ class Syn_SeqDataLoader(DataLoader):
         syn_order = self.user_custom.get("syn_order", list(self.data.columns))
         method = self.user_custom.get("method", {})
         variable_selection = self.user_custom.get("variable_selection", {})
-        # NEW: also extract special_values mapping
-        special_values = self.user_custom.get("special_values", {})
 
         # 2) '_cat' 컬럼 자동 반영
         syn_order, variable_selection = self._auto_inject_cat_columns(
@@ -1861,8 +1859,6 @@ class Syn_SeqDataLoader(DataLoader):
         # 업데이트한 것을 다시 user_custom에 저장
         self.user_custom["syn_order"] = syn_order
         self.user_custom["variable_selection"] = variable_selection
-        # NEW: save the special values mapping back into user_custom
-        self.user_custom["special_values"] = special_values
 
         # 3) Syn_SeqEncoder 생성
         self._encoder = Syn_SeqEncoder(
@@ -1972,8 +1968,6 @@ class Syn_SeqDataLoader(DataLoader):
         }
         enc_info = self._encoder.get_info()
         base_info.update(enc_info)
-        # Propagate the special_values mapping into the info dict.
-        base_info["special_values"] = self.user_custom.get("special_values", {})
         return base_info
 
     def __len__(self) -> int:
@@ -1998,7 +1992,6 @@ class Syn_SeqDataLoader(DataLoader):
             "syn_order": info.get("syn_order", list(data.columns)),
             "method": info.get("method", {}),
             "variable_selection": info.get("variable_selection", {}),
-            "special_values": info.get("special_values", {})  # recover special mapping
         }
         return Syn_SeqDataLoader(
             data=data,

@@ -63,7 +63,7 @@ class Syn_SeqPlugin(Plugin):
         df_syn = self.model.generate_col(count, **kwargs)
         # Adapt the generated DataFrame to the schema (i.e. ensure data types match).
         df_syn = syn_schema.adapt_dtypes(df_syn)
-        # Create a DataLoader from the synthetic DataFrame using the updated data_info.
+        # Create a DataLoader from the synthetic DataFrame using the stored data_info.
         data_syn = create_from_info(df_syn, self.data_info)
         return data_syn
 
