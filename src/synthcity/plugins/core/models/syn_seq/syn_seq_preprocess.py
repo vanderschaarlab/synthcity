@@ -2,7 +2,7 @@
 
 import pandas as pd
 import numpy as np
-from typing import Optional, Dict, List, Any
+from typing import Optional, Dict, List, Any, Tuple
 
 
 class SynSeqPreprocessor:
@@ -76,7 +76,6 @@ class SynSeqPreprocessor:
             if col in self.user_dtypes:
                 continue
 
-            # datetime 타입?
             if pd.api.types.is_datetime64_any_dtype(df[col]):
                 self.user_dtypes[col] = "date"
                 print(f"[auto_assign] {col} -> date")
@@ -105,7 +104,6 @@ class SynSeqPreprocessor:
             elif dtype_str == "category":
                 df[col] = df[col].astype("category")
             else:
-                # 'numeric' 등은 그대로
                 pass
 
     def _split_numeric_columns(self, df: pd.DataFrame):
@@ -116,8 +114,6 @@ class SynSeqPreprocessor:
          -> cat_col을 base_col 직전에 insert
         """
         for col, specials in self.user_special_values.items():
-            # user_special_values에 있다면 numeric으로 가정
-            # (user_dtypes[col]=='numeric') 로 확인해도 됨
             if col not in df.columns:
                 continue
 
@@ -147,20 +143,27 @@ class SynSeqPreprocessor:
     # =========================================================================
     # POSTPROCESS
     # =========================================================================
-    def postprocess(self, df: pd.DataFrame) -> pd.DataFrame:
+    def postprocess(self, df: pd.DataFrame, rules: Optional[Dict[str, List[Tuple[str, str, Any]]]] = None) -> pd.DataFrame:
         """
-        split된 (base_col, cat_col)을 합쳐서 특수값 복원.
-        (date offset 변환은 없음)
+        합성 결과 후처리:
+         1) split된 (base_col, cat_col) 복원
+         2) (Enhanced) rules를 순서대로 적용하여, 규칙에 맞지 않는 행들을 제거한다.
+            - 만약 if-then 조건이 있다면 그 순서대로 평가한다.
+        (날짜 offset 복원은 없음)
         """
         df = df.copy()
+        # Merge split columns
         df = self._merge_splitted_cols(df)
+        # If rules are provided, apply them in the given order.
+        if rules is not None:
+            df = self.apply_rules(df, rules)
         return df
 
     def _merge_splitted_cols(self, df: pd.DataFrame) -> pd.DataFrame:
         """
-        split_map: {base_col->cat_col}
-        -> base_col이 NaN이고, cat_col 값이 specials면 복원
-        -> cat_col drop
+        split_map: {base_col -> cat_col}
+        -> base_col이 NaN이고, cat_col의 값이 specials에 있으면 복원
+        -> 복원 후 cat_col은 drop
         """
         for base_col, cat_col in self.split_map.items():
             if base_col not in df.columns or cat_col not in df.columns:
@@ -175,13 +178,47 @@ class SynSeqPreprocessor:
                         possible_val = float(cat_val)
                     except:
                         possible_val = cat_val
-
                     if possible_val in specials:
                         df.at[i, base_col] = possible_val
                     else:
-                        # -9999 => NaN 유지, -777 => numeric
+                        # -9999는 그대로 NaN, -777는 numeric
                         pass
-
             df.drop(columns=[cat_col], inplace=True)
+        return df
 
+    def apply_rules(self, df: pd.DataFrame, rules: Dict[str, List[Tuple[str, str, Any]]]) -> pd.DataFrame:
+        """
+        Apply rules at postprocessing by iteratively dropping rows that do not satisfy each rule,
+        in the order provided by the user's input.
+
+        Args:
+            df: The synthetic DataFrame.
+            rules: A dictionary where each key is a target column and the value is a list of rules
+                   in the form (col_feat, operator, value).
+
+        Returns:
+            A new DataFrame with rows not satisfying the rules dropped.
+        """
+        # Process each target column in the order of insertion (Python 3.7+ preserves insertion order)
+        for target_col, rule_list in rules.items():
+            # For each rule in the list, filter out rows that do not satisfy the rule.
+            for (col_feat, operator, rule_val) in rule_list:
+                # If the target column is not in df, skip.
+                if col_feat not in df.columns:
+                    continue
+                # Build a condition based on the operator.
+                if operator in ["=", "=="]:
+                    cond = (df[col_feat] == rule_val) | df[col_feat].isna()
+                elif operator == ">":
+                    cond = (df[col_feat] > rule_val) | df[col_feat].isna()
+                elif operator == ">=":
+                    cond = (df[col_feat] >= rule_val) | df[col_feat].isna()
+                elif operator == "<":
+                    cond = (df[col_feat] < rule_val) | df[col_feat].isna()
+                elif operator == "<=":
+                    cond = (df[col_feat] <= rule_val) | df[col_feat].isna()
+                else:
+                    cond = pd.Series(True, index=df.index)
+                # Drop rows that do not satisfy the condition.
+                df = df.loc[cond].copy()
         return df

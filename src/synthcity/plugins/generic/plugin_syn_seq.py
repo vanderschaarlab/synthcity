@@ -1,7 +1,5 @@
-# File: plugin_syn_seq.py
 from typing import Any, Dict, List, Optional, Tuple
 import pandas as pd
-
 from pydantic import validate_arguments
 
 from synthcity.plugins.core.plugin import Plugin
@@ -53,9 +51,8 @@ class Syn_SeqPlugin(Plugin):
             strict=self.strict,
             sampling_patience=self.sampling_patience,
         )
+        # No extra call to X.encode() is needed here because we want to keep the original data form.
         self.model.fit_col(X, *args, **kwargs)
-        # Update our plugin’s data_info with the loader’s info (which now reflects the updated syn_order,
-        # including auto‑injected “_cat” columns).
         self.data_info = X.info()
         return self
 
