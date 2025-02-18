@@ -7,12 +7,22 @@ from typing import Optional, Dict, List, Any, Tuple
 
 class SynSeqPreprocessor:
     """
-    전처리(preprocess) & 후처리(postprocess) 클래스를 함수화하여 단계별로 깔끔하게 정리.
+    A class to perform preprocessing and postprocessing for syn_seq.
 
-    - max_categories 로직을 넣어 user_dtypes에 없는 컬럼은 auto로 category/numeric 판단
-    - 날짜(col_type == "date")이면 to_datetime
-    - 범주형(col_type == "category")이면 astype('category')
-    - numeric + special value -> (base_col, base_col_cat) 분리
+    Preprocessing:
+      - Records the original dtypes.
+      - Automatically assigns dtypes (date/category/numeric) when not provided.
+      - Converts date columns to datetime and category columns to 'category' dtype.
+      - For numeric columns with special values (user_special_values), creates a new 
+        categorical column (named base_col_cat) that marks special values:
+           * If the value is in the special list, the cell is mapped to the special value.
+           * Otherwise, a numeric marker (set to len(specials)) is used.
+      
+    Postprocessing:
+      - Merges back the split (base_col, base_col_cat) columns:
+            If the base column is NaN and the corresponding _cat value is one of the special values,
+            then the base column is replaced with that special value.
+      - Optionally applies user-provided rules sequentially to filter rows.
     """
 
     def __init__(
@@ -23,15 +33,15 @@ class SynSeqPreprocessor:
     ):
         """
         Args:
-            user_dtypes: {col: "date"/"category"/"numeric"} 등. (없으면 auto 결정)
-            user_special_values: {col: [특수값1, 특수값2, ...]}
-            max_categories: auto 판단 시, nunique <= max_categories 이면 category, else numeric
+            user_dtypes: {col: "date"/"category"/"numeric"}, if not provided, auto-detected.
+            user_special_values: {col: [special_value1, special_value2, ...]}
+            max_categories: When auto-detecting dtypes, if nunique <= max_categories, assign 'category', else 'numeric'.
         """
         self.user_dtypes = user_dtypes or {}
         self.user_special_values = user_special_values or {}
         self.max_categories = max_categories
 
-        # 내부 저장용
+        # Internal storage
         self.original_dtypes: Dict[str, str] = {}  # {col: original_dtype}
         self.split_map: Dict[str, str] = {}        # {base_col -> cat_col}
         self.detected_specials: Dict[str, List[Any]] = {}  # user special values
@@ -41,22 +51,24 @@ class SynSeqPreprocessor:
     # =========================================================================
     def preprocess(self, df: pd.DataFrame) -> pd.DataFrame:
         """
-        1) 원본 dtype 기록
-        2) user_dtypes or auto 판단 -> date/category/numeric 세팅
-        3) numeric + special_value -> split
+        Preprocesses the DataFrame.
+          1) Record original dtypes.
+          2) Auto-assign or apply user-specified dtypes.
+          3) Convert date and category columns appropriately.
+          4) For numeric columns with special values, create a _cat column.
         """
         df = df.copy()
 
-        # (a) 원본 dtype 저장
+        # (a) Record original dtypes.
         self._record_original_dtypes(df)
 
-        # (b) user_dtypes 없는 컬럼은 auto -> category/numeric
+        # (b) Auto-assign dtypes for columns not specified in user_dtypes.
         self._auto_assign_dtypes(df)
 
-        # (c) user_dtypes 적용: date->datetime, category->astype('category'), numeric->그대로
+        # (c) Apply the specified dtypes.
         self._apply_user_dtypes(df)
 
-        # (d) numeric + special_value split
+        # (d) Split numeric columns that have special values into (base_col, base_col_cat).
         self._split_numeric_columns(df)
 
         return df
@@ -67,10 +79,10 @@ class SynSeqPreprocessor:
 
     def _auto_assign_dtypes(self, df: pd.DataFrame):
         """
-        user_dtypes에 명시가 없으면,
-         - nuniq <= max_categories -> 'category'
-         - else 'numeric'
-         - 만약 datetime64 타입이면 'date'로 지정
+        For columns not specified in user_dtypes, assign:
+          - 'date' if the column is a datetime type.
+          - 'category' if nunique <= max_categories.
+          - Otherwise, 'numeric'.
         """
         for col in df.columns:
             if col in self.user_dtypes:
@@ -91,9 +103,10 @@ class SynSeqPreprocessor:
 
     def _apply_user_dtypes(self, df: pd.DataFrame):
         """
-        1) date -> pd.to_datetime
-        2) category -> astype('category')
-        3) numeric -> 그대로
+        Apply the user-specified or auto-assigned dtypes:
+          - Convert 'date' columns with pd.to_datetime.
+          - Convert 'category' columns with astype('category').
+          - Leave 'numeric' columns unchanged.
         """
         for col, dtype_str in self.user_dtypes.items():
             if col not in df.columns:
@@ -103,10 +116,17 @@ class SynSeqPreprocessor:
                 df[col] = pd.to_datetime(df[col], errors="coerce")
             elif dtype_str == "category":
                 df[col] = df[col].astype("category")
-            else:
-                pass
+            # numeric: no conversion
 
     def _split_numeric_columns(self, df: pd.DataFrame):
+        """
+        For each column in user_special_values:
+          - Create a new categorical column (base_col_cat) that reflects special values.
+          - For each value in the base column:
+                If NaN -> return NaN.
+                If in specials -> return the special value.
+                Otherwise -> return len(specials) (a marker indicating "normal").
+        """
         for col, specials in self.user_special_values.items():
             if col not in df.columns:
                 continue
@@ -115,53 +135,54 @@ class SynSeqPreprocessor:
             self.split_map[col] = cat_col
             self.detected_specials[col] = specials
 
-            # Need to use user-defined mapping to create _cat columns and assign categories.
-            # Base column stays intact, only _cat columns created in front of base columns
-
+            # Remove existing cat_col if exists.
             if cat_col in df.columns:
                 df.drop(columns=[cat_col], inplace=True)
             base_idx = df.columns.get_loc(col)
             df.insert(base_idx, cat_col, None)
-            df[cat_col] = df[col].apply(cat_mapper).astype("category")
+
+            def cat_mapper(x, specials, normal_marker=None, missing_marker="NAN"):
+                if normal_marker is None:
+                    normal_marker = "NUMERIC"
+                if pd.isna(x):
+                    return missing_marker
+                elif x in specials:
+                    return str(x)
+                else:
+                    return normal_marker
+
+
+            df[cat_col] = df[col].apply(lambda x: cat_mapper(x, specials)).astype("category")
 
     # =========================================================================
     # POSTPROCESS
     # =========================================================================
     def postprocess(self, df: pd.DataFrame, rules: Optional[Dict[str, List[Tuple[str, str, Any]]]] = None) -> pd.DataFrame:
         """
-        합성 결과 후처리:
-         1) split된 (base_col, cat_col) 복원
-         2) (Enhanced) rules를 순서대로 적용하여, 규칙에 맞지 않는 행들을 제거한다.
-            - 만약 if-then 조건이 있다면 그 순서대로 평가한다.
-        (날짜 offset 복원은 없음)
+        Postprocesses the synthetic DataFrame:
+         1) Merge back split columns (base_col, base_col_cat) by replacing NaNs in the base column
+            with the corresponding special value from the _cat column.
+         2) Apply user-provided rules sequentially to filter rows.
+        (Note: Date offset restoration is not performed.)
         """
         df = df.copy()
-        # Merge split columns
+        # Merge split columns.
         df = self._merge_splitted_cols(df)
-        # If rules are provided, apply them in the given order.
+        # Apply rules if provided.
         if rules is not None:
             df = self.apply_rules(df, rules)
         return df
 
     def _merge_splitted_cols(self, df: pd.DataFrame) -> pd.DataFrame:
-        for base_col, cat_col in self.split_map.items():
-            if base_col not in df.columns or cat_col not in df.columns:
-                continue
+        """
+        For each (base_col, cat_col) pair in split_map, if a base column cell is special values,
+        check the corresponding cell in the cat_col.
+        If cat_col has "NUMERIC", leave the base_col as it is. If cat_col has "NAN", 
+        Then drop the cat_col.
+        """
 
-            specials = self.detected_specials.get(base_col, [])
+        # Need a logic here
 
-            for i in range(len(df)):
-                if pd.isna(df.at[i, base_col]):
-                    cat_val = df.at[i, cat_col]
-                    try:
-                        possible_val = float(cat_val)
-                    except:
-                        possible_val = cat_val
-                    if possible_val in specials:
-                        df.at[i, base_col] = possible_val
-                    else:
-                        pass
-            df.drop(columns=[cat_col], inplace=True)
         return df
 
     def apply_rules(self, df: pd.DataFrame, rules: Dict[str, List[Tuple[str, str, Any]]]) -> pd.DataFrame:
@@ -177,14 +198,10 @@ class SynSeqPreprocessor:
         Returns:
             A new DataFrame with rows not satisfying the rules dropped.
         """
-        # Process each target column in the order of insertion (Python 3.7+ preserves insertion order)
         for target_col, rule_list in rules.items():
-            # For each rule in the list, filter out rows that do not satisfy the rule.
             for (col_feat, operator, rule_val) in rule_list:
-                # If the target column is not in df, skip.
                 if col_feat not in df.columns:
                     continue
-                # Build a condition based on the operator.
                 if operator in ["=", "=="]:
                     cond = (df[col_feat] == rule_val) | df[col_feat].isna()
                 elif operator == ">":
@@ -197,6 +214,5 @@ class SynSeqPreprocessor:
                     cond = (df[col_feat] <= rule_val) | df[col_feat].isna()
                 else:
                     cond = pd.Series(True, index=df.index)
-                # Drop rows that do not satisfy the condition.
                 df = df.loc[cond].copy()
         return df
