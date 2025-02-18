@@ -203,12 +203,6 @@ class SynSeqPreprocessor:
                 pass
 
     def _split_numeric_columns(self, df: pd.DataFrame):
-        """
-        user_special_values가 있는 numeric 컬럼만 분할:
-         - base_col -> special -> NaN
-         - cat_col -> special -> 문자열, 그 외 -> '-777'
-         -> cat_col을 base_col 직전에 insert
-        """
         for col, specials in self.user_special_values.items():
             if col not in df.columns:
                 continue
@@ -217,18 +211,8 @@ class SynSeqPreprocessor:
             self.split_map[col] = cat_col
             self.detected_specials[col] = specials
 
-            def cat_mapper(v):
-                if pd.isna(v):
-                    return "-9999"
-                return str(v) if v in specials else "-777"
-
-            df[cat_col] = df[col].apply(cat_mapper).astype("category")
-
-            def base_mapper(v):
-                if v in specials:
-                    return np.nan
-                return v
-            df[col] = df[col].apply(base_mapper)
+            # Need to use user-defined mapping to create _cat columns and assign categories.
+            # Base column stays intact, only _cat columns created in front of base columns
 
             if cat_col in df.columns:
                 df.drop(columns=[cat_col], inplace=True)
@@ -256,11 +240,6 @@ class SynSeqPreprocessor:
         return df
 
     def _merge_splitted_cols(self, df: pd.DataFrame) -> pd.DataFrame:
-        """
-        split_map: {base_col -> cat_col}
-        -> base_col이 NaN이고, cat_col의 값이 specials에 있으면 복원
-        -> 복원 후 cat_col은 drop
-        """
         for base_col, cat_col in self.split_map.items():
             if base_col not in df.columns or cat_col not in df.columns:
                 continue
@@ -277,7 +256,6 @@ class SynSeqPreprocessor:
                     if possible_val in specials:
                         df.at[i, base_col] = possible_val
                     else:
-                        # -9999는 그대로 NaN, -777는 numeric
                         pass
             df.drop(columns=[cat_col], inplace=True)
         return df
@@ -402,15 +380,15 @@ class Syn_Seq:
         self.random_state = random_state
         self.strict = strict
         self.sampling_patience = sampling_patience
-
+        self.special_values = Dict[str, List[Any]] = {}
         self._model_trained = False
         self._syn_order: List[str] = []
         self._method_map: Dict[str, str] = {}
         self._varsel: Dict[str, List[str]] = {}
         self._col_models: Dict[str, Dict[str, Any]] = {}
 
-        # Store the real distribution for the first column.
-        self._first_col_data: Optional[np.ndarray] = None
+        # Store the real distribution for the first column and columns with special values.
+        self._stored_col_data:  = None
 
     def fit_col(self, loader: DataLoader, *args: Any, **kwargs: Any) -> "Syn_Seq":
         """
@@ -427,6 +405,7 @@ class Syn_Seq:
 
         self._syn_order = info_dict.get("syn_order", list(training_data.columns))
         self._method_map = info_dict.get("method", {})
+        self.special_values = info_dict.get("special_vales", {})
         self._varsel = info_dict.get("variable_selection", {})
 
         # For auto-injected _cat columns, force method "cart" and mirror variable selection.
@@ -440,12 +419,12 @@ class Syn_Seq:
                     idx = self._syn_order.index(col)
                     self._varsel[col] = self._syn_order[:idx]
 
-        info("[INFO] Syn_Seq aggregator: fitting columns...")
+        print("[INFO] Syn_Seq aggregator: fitting columns...")
 
         # (3) Store the real distribution from the first column.
         first_col = self._syn_order[0]
-        self._first_col_data = training_data[first_col].dropna().values
-        info(f"Fitting '{first_col}' => stored distribution from real data. Done.")
+        self._stored_col_data = training_data[first_col].dropna().values
+        print(f"Fitting '{first_col}' => stored distribution from real data. Done.")
 
         # (4) For each subsequent column, train its aggregator.
         np.random.seed(self.random_state)
@@ -455,7 +434,7 @@ class Syn_Seq:
             y = training_data[col].values
             X = training_data[preds_list].values
 
-            mask = (~np.isnan(X).any(axis=1)) & (~pd.isna(y))
+            mask = (~pd.isna(y))
             X_ = X[mask]
             y_ = y[mask]
 
@@ -484,11 +463,11 @@ class Syn_Seq:
         
         # (1) Generate the first column.
         first_col = self._syn_order[0]
-        if self._first_col_data is not None and len(self._first_col_data) > 0:
-            gen_df[first_col] = np.random.choice(self._first_col_data, size=nrows, replace=True)
+        if self._stored_col_data is not None and len(self._stored_col_data[first_col]) > 0:
+            gen_df[first_col] = np.random.choice(self._stored_col_data[first_col], size=nrows, replace=True)
         else:
             gen_df[first_col] = 0
-        info(f"Generating '{first_col}' => done.")
+        print(f"Generating '{first_col}' => done.")
 
         # (2) Generate subsequent columns.
         for col in self._syn_order[1:]:
@@ -504,11 +483,17 @@ class Syn_Seq:
         return gen_df
 
     def _generate_single_col(self, method_name: str, Xsyn: np.ndarray, col: str) -> np.ndarray:
-        if col not in self._col_models:
-            if self._first_col_data is not None and len(self._first_col_data) > 0:
-                return np.random.choice(self._first_col_data, size=len(Xsyn), replace=True)
-            else:
-                return np.zeros(len(Xsyn))
+
+        # Need the logic here which if generating the data throws an error due to issues like highly imbalanced data so previous variable has only one value, etc, we need to use the stored data to sample the values of that variable.
+        # This only occurrs for columns with special values so I tried to store the data of columns of special values.
+
+        # Following code existed before but I don't understand the usage.
+        # if col not in self._col_models:
+        #     if self._stored_col_data is not None and len(self._stored_col_data) > 0:
+        #         return np.random.choice(self._stored_col_data, size=len(Xsyn), replace=True)
+        #     else:
+        #         return np.zeros(len(Xsyn))
+        
         fit_info = self._col_models[col]
         _, generate_func = METHOD_MAP[fit_info["name"]]
         return generate_func(fit_info["fitted_model"], Xsyn)
@@ -2369,6 +2354,8 @@ class Syn_SeqDataLoader(DataLoader):
         syn_order = self.user_custom.get("syn_order", list(self.data.columns))
         method = self.user_custom.get("method", {})
         variable_selection = self.user_custom.get("variable_selection", {})
+        # NEW: also extract special_values mapping
+        special_values = self.user_custom.get("special_values", {})
 
         # 2) '_cat' 컬럼 자동 반영
         syn_order, variable_selection = self._auto_inject_cat_columns(
@@ -2379,6 +2366,8 @@ class Syn_SeqDataLoader(DataLoader):
         # 업데이트한 것을 다시 user_custom에 저장
         self.user_custom["syn_order"] = syn_order
         self.user_custom["variable_selection"] = variable_selection
+        # NEW: save the special values mapping back into user_custom
+        self.user_custom["special_values"] = special_values
 
         # 3) Syn_SeqEncoder 생성
         self._encoder = Syn_SeqEncoder(
@@ -2488,6 +2477,8 @@ class Syn_SeqDataLoader(DataLoader):
         }
         enc_info = self._encoder.get_info()
         base_info.update(enc_info)
+        # Propagate the special_values mapping into the info dict.
+        base_info["special_values"] = self.user_custom.get("special_values", {})
         return base_info
 
     def __len__(self) -> int:
@@ -2512,6 +2503,7 @@ class Syn_SeqDataLoader(DataLoader):
             "syn_order": info.get("syn_order", list(data.columns)),
             "method": info.get("method", {}),
             "variable_selection": info.get("variable_selection", {}),
+            "special_values": info.get("special_values", {})  # recover special mapping
         }
         return Syn_SeqDataLoader(
             data=data,
@@ -2595,6 +2587,7 @@ def create_from_info(
         return Syn_SeqDataLoader.from_info(data, info)
     else:
         raise RuntimeError(f"invalid datatype {info}")
+
 
 src/synthcity/plugins/generic/plugin_syn_seq.py
 from typing import Any, Dict, List, Optional, Tuple

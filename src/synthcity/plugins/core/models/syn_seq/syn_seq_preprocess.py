@@ -107,12 +107,6 @@ class SynSeqPreprocessor:
                 pass
 
     def _split_numeric_columns(self, df: pd.DataFrame):
-        """
-        user_special_values가 있는 numeric 컬럼만 분할:
-         - base_col -> special -> NaN
-         - cat_col -> special -> 문자열, 그 외 -> '-777'
-         -> cat_col을 base_col 직전에 insert
-        """
         for col, specials in self.user_special_values.items():
             if col not in df.columns:
                 continue
@@ -121,18 +115,8 @@ class SynSeqPreprocessor:
             self.split_map[col] = cat_col
             self.detected_specials[col] = specials
 
-            def cat_mapper(v):
-                if pd.isna(v):
-                    return "-9999"
-                return str(v) if v in specials else "-777"
-
-            df[cat_col] = df[col].apply(cat_mapper).astype("category")
-
-            def base_mapper(v):
-                if v in specials:
-                    return np.nan
-                return v
-            df[col] = df[col].apply(base_mapper)
+            # Need to use user-defined mapping to create _cat columns and assign categories.
+            # Base column stays intact, only _cat columns created in front of base columns
 
             if cat_col in df.columns:
                 df.drop(columns=[cat_col], inplace=True)
@@ -160,11 +144,6 @@ class SynSeqPreprocessor:
         return df
 
     def _merge_splitted_cols(self, df: pd.DataFrame) -> pd.DataFrame:
-        """
-        split_map: {base_col -> cat_col}
-        -> base_col이 NaN이고, cat_col의 값이 specials에 있으면 복원
-        -> 복원 후 cat_col은 drop
-        """
         for base_col, cat_col in self.split_map.items():
             if base_col not in df.columns or cat_col not in df.columns:
                 continue
@@ -181,7 +160,6 @@ class SynSeqPreprocessor:
                     if possible_val in specials:
                         df.at[i, base_col] = possible_val
                     else:
-                        # -9999는 그대로 NaN, -777는 numeric
                         pass
             df.drop(columns=[cat_col], inplace=True)
         return df
