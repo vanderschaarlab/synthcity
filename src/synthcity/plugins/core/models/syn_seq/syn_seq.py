@@ -207,7 +207,7 @@ class Syn_Seq:
                 # For rows where _cat indicates a special value, assign that value directly.
                 for special in self.special_values[col]:
                     is_special = gen_df[cat_col] == str(special)
-                    gen_df.loc[is_special, col] = special
+                    gen_df.loc[is_special, col] = float(special)
             else:
                 Xsyn = gen_df[preds_list].values
                 ysyn = self._generate_single_col(method_name, Xsyn, col)

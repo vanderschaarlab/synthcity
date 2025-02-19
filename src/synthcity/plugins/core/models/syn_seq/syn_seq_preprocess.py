@@ -181,8 +181,8 @@ class SynSeqPreprocessor:
                     return str(x)
                 else:
                     return normal_marker
-
-            df[cat_col] = df[col].apply(lambda x: cat_mapper(x, specials)).astype("category")
+            df[cat_col] = df[col].apply(lambda x: cat_mapper(x, specials)).astype(str)
+            df[cat_col] = df[cat_col].astype("category")
 
     # =========================================================================
     # POSTPROCESSING
