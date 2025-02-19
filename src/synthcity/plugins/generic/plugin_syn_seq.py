@@ -26,7 +26,6 @@ class Syn_SeqPlugin(Plugin):
     def __init__(
         self,
         sampling_patience: int = 100,
-        strict: bool = True,
         random_state: int = 0,
         compress_dataset: bool = False,
         sampling_strategy: str = "marginal",
@@ -35,7 +34,6 @@ class Syn_SeqPlugin(Plugin):
         super().__init__(
             random_state=random_state,
             sampling_patience=sampling_patience,
-            strict=strict,
             compress_dataset=compress_dataset,
             sampling_strategy=sampling_strategy,
         )
@@ -48,7 +46,6 @@ class Syn_SeqPlugin(Plugin):
         # Initialize the Syn_Seq aggregator and train it column‐by‐column.
         self.model = Syn_Seq(
             random_state=self.random_state,
-            strict=self.strict,
             sampling_patience=self.sampling_patience,
         )
         # No extra call to X.encode() is needed here because we want to keep the original data form.

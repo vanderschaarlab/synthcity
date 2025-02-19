@@ -13,6 +13,7 @@ and which rows should directly receive the special value.
 from typing import Any, Dict, List, Optional, Tuple
 import numpy as np
 import pandas as pd
+import warnings
 
 # Import column-fitting and generation functions for various methods.
 from synthcity.plugins.core.models.syn_seq.methods import (
@@ -47,21 +48,22 @@ class Syn_Seq:
     def __init__(
         self,
         random_state: int = 0,
-        strict: bool = True,
         sampling_patience: int = 100
     ):
         """
         Args:
             random_state: Random seed.
-            strict: (Unused now; rule‐checking is handled later.)
-            sampling_patience: (Unused now.)
+            sampling_patience: Maximum number of attempts in generation.
         """
         self.random_state = random_state
-        self.strict = strict
         self.sampling_patience = sampling_patience
 
         # special_values: mapping base column name -> list of special values (e.g. {"capital-gain": [0]})
         self.special_values: Dict[str, List[Any]] = {}
+        # cat_distributions: mapping base column name -> distribution of the _cat column,
+        # for example: {"capital-gain": {"NUMERIC": 0.7, "0": 0.3}}
+        self.cat_distributions: Dict[str, Dict[str, float]] = {}
+        
         self._model_trained = False
 
         self._syn_order: List[str] = []       # synthesis order of columns
@@ -69,18 +71,15 @@ class Syn_Seq:
         self._varsel: Dict[str, List[str]] = {} # predictors for synthesizing each column
         self._col_models: Dict[str, Dict[str, Any]] = {}  # fitted model for each column
 
-        # For the first column—and for each numeric column with special values—
+        # For the first column—and for each numeric column (or numeric part of a column with special values)—
         # store the observed (real) distribution (filtered to numeric values only)
-        self._stored_col_data: Dict[str, np.ndarray] = {}
+        self._first_col_distribution: Dict[str, np.ndarray] = {}
 
     def fit_col(self, loader: Any, *args: Any, **kwargs: Any) -> "Syn_Seq":
         """
         Fit each column sequentially using metadata from the loader.
-        
-        In addition to reading user-defined (or pre-set) synthesis order, method mapping,
-        and variable selection, this routine now scans the training data for any columns
-        ending with "_cat" (which were injected by the preprocessor) and extracts the special
-        values for their corresponding base columns.
+        Also extracts special values from any _cat columns and computes the distribution
+        (i.e. relative frequencies) from those columns.
         """
         info_dict = loader.info()
         training_data = loader.dataframe().copy()
@@ -92,17 +91,19 @@ class Syn_Seq:
         self._method_map = info_dict.get("method", {})
         self._varsel = info_dict.get("variable_selection", {})
 
-        # --- Extract special values from any _cat columns in the training data ---
+        # --- Extract _cat column info from the training data ---
         for col in training_data.columns:
             if col.endswith("_cat"):
                 base_col = col[:-4]
-                # Extract unique values from the _cat column, excluding only "NUMERIC"
-                specials = training_data[col].unique()
-                specials = [v for v in specials if v not in ["NUMERIC"]]
+                # Compute the distribution from the _cat column.
+                dist = training_data[col].value_counts(normalize=True).to_dict()
+                self.cat_distributions[base_col] = dist
+                # Special values are those different from "NUMERIC"
+                specials = [k for k in dist.keys() if k != "NUMERIC"]
                 if specials:
                     self.special_values[base_col] = specials
 
-        # For auto-injected _cat columns, force aggregator "cart" and mirror variable selection.
+        # For auto-injected _cat columns, force method "cart" and mirror variable selection.
         for col in self._syn_order:
             if col.endswith("_cat"):
                 self._method_map[col] = "cart"
@@ -117,14 +118,14 @@ class Syn_Seq:
 
         # (1) For the first column, store its real (non-null) distribution.
         first_col = self._syn_order[0]
-        self._stored_col_data[first_col] = training_data[first_col].dropna().values
+        self._first_col_distribution[first_col] = training_data[first_col].dropna().values
 
         # (2) For columns with special values, store only rows that are NOT special.
         for col, specials in self.special_values.items():
             if col not in training_data.columns:
                 continue
             filtered = training_data[~training_data[col].isin(specials)]
-            self._stored_col_data[col] = filtered[col].dropna().values
+            self._first_col_distribution[col] = filtered[col].dropna().values
 
         print(f"Fitting '{first_col}' => stored distribution from real data. Done.")
 
@@ -135,7 +136,7 @@ class Syn_Seq:
             preds_list = self._varsel.get(col, self._syn_order[:i])
             y = training_data[col].values
             X = training_data[preds_list].values
-            mask = (~pd.isna(y))
+            mask = ~pd.isna(y)
             # For numeric columns with special values, drop rows whose value is special.
             if col in self.special_values:
                 specials = self.special_values[col]
@@ -168,9 +169,11 @@ class Syn_Seq:
         """
         Generate `count` rows sequentially.
         
-        For columns with special values, the pre-generated _cat column (e.g. "capital-gain_cat")
+        For columns with special values, the pre‐generated categorical (“_cat”) column (e.g. "capital-gain_cat")
         is used to decide which rows should have their value generated using the fitted model 
         (if the _cat cell equals "NUMERIC") and which rows should directly receive the special value.
+        If the generated _cat column contains no "NUMERIC" flag, it is re‐sampled (using the stored distribution)
+        to preserve the training proportions.
         """
         if not self._model_trained:
             raise RuntimeError("Syn_Seq aggregator not yet fitted")
@@ -182,8 +185,10 @@ class Syn_Seq:
         
         # (1) Generate the first column using its stored real distribution.
         first_col = self._syn_order[0]
-        if self._stored_col_data.get(first_col) is not None and len(self._stored_col_data[first_col]) > 0:
-            gen_df[first_col] = np.random.choice(self._stored_col_data[first_col], size=count, replace=True)
+        if first_col in self._first_col_distribution and len(self._first_col_distribution[first_col]) > 0:
+            gen_df[first_col] = np.random.choice(
+                self._first_col_distribution[first_col], size=count, replace=True
+            )
         else:
             gen_df[first_col] = 0
         print(f"Generating '{first_col}' => done.")
@@ -193,22 +198,46 @@ class Syn_Seq:
             method_name = self._method_map.get(col, "cart")
             idx = self._syn_order.index(col)
             preds_list = self._varsel.get(col, self._syn_order[:idx])
-            if col in self.special_values:
-                # For columns with special values, rely on the pre-generated _cat column.
-                cat_col = col + "_cat"
-                if cat_col not in gen_df.columns:
-                    raise RuntimeError(f"Expected categorical column {cat_col} not found in generated data.")
-                # Rows with _cat == "NUMERIC" should be synthesized.
+            
+            # If the column has special values then it has an associated _cat indicator.
+            cat_col = col + "_cat"
+            if col in self.special_values and cat_col in gen_df.columns:
+                # Check if the generated _cat column has any "NUMERIC" flag.
+                numeric_count = (gen_df[cat_col] == "NUMERIC").sum()
+                if numeric_count == 0:
+                    warnings.warn(
+                        f"Degenerate _cat column for {col}: no rows marked as 'NUMERIC'. "
+                        "Re-sampling _cat column to preserve training distribution."
+                    )
+                    # Use the stored distribution from training.
+                    cat_dist = self.cat_distributions.get(col, {"NUMERIC": 1.0})
+                    total = sum(cat_dist.values())
+                    # Normalize probabilities
+                    cat_probs = {k: v / total for k, v in cat_dist.items()}
+                    # Re-sample _cat column:
+                    new_cat = np.where(
+                        np.random.rand(count) < cat_probs.get("NUMERIC", 1.0),
+                        "NUMERIC",
+                        np.random.choice(
+                            [k for k in cat_probs.keys() if k != "NUMERIC"],
+                            size=count,
+                            p=[cat_probs[k] for k in cat_probs if k != "NUMERIC"]
+                        )
+                    )
+                    gen_df[cat_col] = new_cat
+
+                # For rows with _cat equal to "NUMERIC", generate synthetic values.
                 is_numeric = gen_df[cat_col] == "NUMERIC"
                 if is_numeric.sum() > 0:
                     Xsyn_numeric = gen_df.loc[is_numeric, preds_list].values
                     ysyn_numeric = self._generate_single_col(method_name, Xsyn_numeric, col)
                     gen_df.loc[is_numeric, col] = ysyn_numeric
-                # For rows where _cat indicates a special value, assign that value directly.
+                # For rows where _cat indicates a special value, assign that special value directly.
                 for special in self.special_values[col]:
                     is_special = gen_df[cat_col] == str(special)
                     gen_df.loc[is_special, col] = float(special)
             else:
+                # Otherwise, generate the column normally.
                 Xsyn = gen_df[preds_list].values
                 ysyn = self._generate_single_col(method_name, Xsyn, col)
                 gen_df[col] = ysyn
@@ -218,11 +247,12 @@ class Syn_Seq:
     def _generate_single_col(self, method_name: str, Xsyn: np.ndarray, col: str) -> np.ndarray:
         """
         Generate synthetic values for a single column using the fitted model.
-        If no model is available, falls back to sampling from the stored real distribution.
         """
         if col not in self._col_models or self._col_models[col] is None:
-            if col in self._stored_col_data and len(self._stored_col_data[col]) > 0:
-                return np.random.choice(self._stored_col_data[col], size=len(Xsyn), replace=True)
+            if col in self._first_col_distribution and len(self._first_col_distribution[col]) > 0:
+                return np.random.choice(
+                    self._first_col_distribution[col], size=len(Xsyn), replace=True
+                )
             else:
                 return np.zeros(len(Xsyn))
         

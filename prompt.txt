@@ -405,6 +405,7 @@ and which rows should directly receive the special value.
 from typing import Any, Dict, List, Optional, Tuple
 import numpy as np
 import pandas as pd
+import warnings
 
 # Import column-fitting and generation functions for various methods.
 from synthcity.plugins.core.models.syn_seq.methods import (
@@ -439,17 +440,14 @@ class Syn_Seq:
     def __init__(
         self,
         random_state: int = 0,
-        strict: bool = True,
         sampling_patience: int = 100
     ):
         """
         Args:
             random_state: Random seed.
-            strict: (Unused now; rule‐checking is handled later.)
-            sampling_patience: (Unused now.)
+            sampling_patience: Maximum number of attempts in generation.
         """
         self.random_state = random_state
-        self.strict = strict
         self.sampling_patience = sampling_patience
 
         # special_values: mapping base column name -> list of special values (e.g. {"capital-gain": [0]})
@@ -468,11 +466,7 @@ class Syn_Seq:
     def fit_col(self, loader: Any, *args: Any, **kwargs: Any) -> "Syn_Seq":
         """
         Fit each column sequentially using metadata from the loader.
-        
-        In addition to reading user-defined (or pre-set) synthesis order, method mapping,
-        and variable selection, this routine now scans the training data for any columns
-        ending with "_cat" (which were injected by the preprocessor) and extracts the special
-        values for their corresponding base columns.
+        Also extracts special values from any _cat columns.
         """
         info_dict = loader.info()
         training_data = loader.dataframe().copy()
@@ -488,13 +482,12 @@ class Syn_Seq:
         for col in training_data.columns:
             if col.endswith("_cat"):
                 base_col = col[:-4]
-                # Extract unique values from the _cat column, excluding only "NUMERIC"
                 specials = training_data[col].unique()
                 specials = [v for v in specials if v not in ["NUMERIC"]]
                 if specials:
                     self.special_values[base_col] = specials
 
-        # For auto-injected _cat columns, force aggregator "cart" and mirror variable selection.
+        # For auto-injected _cat columns, force method "cart" and mirror variable selection.
         for col in self._syn_order:
             if col.endswith("_cat"):
                 self._method_map[col] = "cart"
@@ -527,7 +520,7 @@ class Syn_Seq:
             preds_list = self._varsel.get(col, self._syn_order[:i])
             y = training_data[col].values
             X = training_data[preds_list].values
-            mask = (~pd.isna(y))
+            mask = ~pd.isna(y)
             # For numeric columns with special values, drop rows whose value is special.
             if col in self.special_values:
                 specials = self.special_values[col]
@@ -585,21 +578,38 @@ class Syn_Seq:
             method_name = self._method_map.get(col, "cart")
             idx = self._syn_order.index(col)
             preds_list = self._varsel.get(col, self._syn_order[:idx])
+            
             if col in self.special_values:
                 # For columns with special values, rely on the pre-generated _cat column.
                 cat_col = col + "_cat"
                 if cat_col not in gen_df.columns:
                     raise RuntimeError(f"Expected categorical column {cat_col} not found in generated data.")
-                # Rows with _cat == "NUMERIC" should be synthesized.
-                is_numeric = gen_df[cat_col] == "NUMERIC"
-                if is_numeric.sum() > 0:
-                    Xsyn_numeric = gen_df.loc[is_numeric, preds_list].values
-                    ysyn_numeric = self._generate_single_col(method_name, Xsyn_numeric, col)
-                    gen_df.loc[is_numeric, col] = ysyn_numeric
-                # For rows where _cat indicates a special value, assign that value directly.
-                for special in self.special_values[col]:
-                    is_special = gen_df[cat_col] == str(special)
-                    gen_df.loc[is_special, col] = float(special)
+                
+                # Check the distribution of the categorical column.
+                numeric_count = (gen_df[cat_col] == "NUMERIC").sum()
+                if numeric_count == 0:
+                    warnings.warn(
+                        f"Degenerate _cat column generated for {col}: no rows marked as 'NUMERIC'. "
+                        "Falling back to random sampling from stored non-special values."
+                    )
+                    if col in self._stored_col_data and len(self._stored_col_data[col]) > 0:
+                        fallback_values = np.random.choice(
+                            self._stored_col_data[col], size=count, replace=True
+                        )
+                        gen_df[col] = fallback_values
+                    else:
+                        gen_df[col] = 0.0
+                else:
+                    # For rows with _cat equal to "NUMERIC", generate synthetic values.
+                    is_numeric = gen_df[cat_col] == "NUMERIC"
+                    if is_numeric.sum() > 0:
+                        Xsyn_numeric = gen_df.loc[is_numeric, preds_list].values
+                        ysyn_numeric = self._generate_single_col(method_name, Xsyn_numeric, col)
+                        gen_df.loc[is_numeric, col] = ysyn_numeric
+                    # For rows where _cat indicates a special value, assign that value directly.
+                    for special in self.special_values[col]:
+                        is_special = gen_df[cat_col] == str(special)
+                        gen_df.loc[is_special, col] = float(special)
             else:
                 Xsyn = gen_df[preds_list].values
                 ysyn = self._generate_single_col(method_name, Xsyn, col)
@@ -2734,7 +2744,6 @@ class Syn_SeqPlugin(Plugin):
     def __init__(
         self,
         sampling_patience: int = 100,
-        strict: bool = True,
         random_state: int = 0,
         compress_dataset: bool = False,
         sampling_strategy: str = "marginal",
@@ -2743,7 +2752,6 @@ class Syn_SeqPlugin(Plugin):
         super().__init__(
             random_state=random_state,
             sampling_patience=sampling_patience,
-            strict=strict,
             compress_dataset=compress_dataset,
             sampling_strategy=sampling_strategy,
         )
@@ -2756,7 +2764,6 @@ class Syn_SeqPlugin(Plugin):
         # Initialize the Syn_Seq aggregator and train it column‐by‐column.
         self.model = Syn_Seq(
             random_state=self.random_state,
-            strict=self.strict,
             sampling_patience=self.sampling_patience,
         )
         # No extra call to X.encode() is needed here because we want to keep the original data form.
