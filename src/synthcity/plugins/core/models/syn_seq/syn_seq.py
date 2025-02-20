@@ -12,7 +12,7 @@ the numeric marker and any special values) so that:
   - Otherwise, the generated base column value is overridden by the special value.
 """
 
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any, Dict, List, Tuple
 import numpy as np
 import pandas as pd
 import warnings
@@ -45,6 +45,7 @@ METHOD_MAP: Dict[str, Tuple[Any, Any]] = {
     "swr": (syn_swr, generate_swr),
 }
 
+# Special markers for numeric and missing values.
 NUMERIC_MARKER = -777777777
 MISSING_MARKER = -999999999
 
@@ -72,24 +73,27 @@ class Syn_Seq:
     def fit_col(self, loader: Any, label_encoder: Any, *args: Any, **kwargs: Any) -> "Syn_Seq":
         """
         Fit each column sequentially using metadata from the loader.
-        For each _cat column in the training data, record its full distribution (casting values to int)
-        and record the list of special values. Then, for base columns with special values,
-        filter out rows whose value is special (so that the model sees only numeric values).
+        For each _cat column in the training data, record its full distribution 
+        (casting values to int) and record the list of special values. Then, for base 
+        columns with special values, filter out rows whose value is special so that the 
+        model sees only numeric values.
         """
         info_dict = loader.info()
         training_data = loader.dataframe().copy()
         if training_data.empty:
             raise ValueError("No data => cannot fit Syn_Seq aggregator")
+        
         # Set synthesis order, method mapping, and variable selection from loader info.
         self._syn_order = info_dict.get("syn_order", list(training_data.columns))
         self._method_map = info_dict.get("method", {})
         self._varsel = info_dict.get("variable_selection", {})
+
         # --- Build the _cat column distributions ---
         for col in training_data.columns:
             if col.endswith("_cat"):
-                base_col = col[:-4]
-                unique_vals = training_data[col].dropna().unique().tolist()
-                self.cat_distributions[col] = # calculate the proportion of each unique value
+                # Compute the normalized frequency (distribution) for each unique value.
+                value_counts = training_data[col].astype(int).value_counts(normalize=True)
+                self.cat_distributions[col] = value_counts.to_dict()
 
         # For auto-injected _cat columns, force method "cart" and mirror variable selection.
         for col in self._syn_order:
@@ -107,7 +111,6 @@ class Syn_Seq:
         # For the first column, store its observed (non-null) distribution.
         first_col = self._syn_order[0]
         self._first_col_values[first_col] = training_data[first_col].dropna().values
-
         print(f"Fitting '{first_col}' => stored values from real data. Done.")
 
         # Fit a model for each subsequent column.
@@ -119,7 +122,11 @@ class Syn_Seq:
             X = training_data[preds_list].values
             cat_col = col + "_cat"
             if cat_col in preds_list:
-                numeric_label = index(label_encoder[cat_col].classes_ == NUMERIC_MARKER)
+                # Get the numeric label for the NUMERIC_MARKER.
+                numeric_indices = np.where(label_encoder[cat_col].classes_ == NUMERIC_MARKER)[0]
+                if len(numeric_indices) == 0:
+                    raise ValueError(f"Numeric marker {NUMERIC_MARKER} not found in {cat_col} classes")
+                numeric_label = numeric_indices[0]
                 mask = (y == numeric_label)
                 y = y[mask]
                 X = X[mask]
@@ -143,7 +150,7 @@ class Syn_Seq:
         model = fit_func(y, X, random_state=self.random_state)
         return {"name": method_name, "fitted_model": model}
 
-    def generate_col(self, label_encoder, count: int) -> pd.DataFrame:
+    def generate_col(self, count: int, label_encoder: Any) -> pd.DataFrame:
         """
         Generate `count` rows sequentially.
         
@@ -177,29 +184,47 @@ class Syn_Seq:
             preds_list = self._varsel.get(col, self._syn_order[:self._syn_order.index(col)])
             cat_col = col + "_cat"
             if cat_col in preds_list:
-                Xsyn_numeric = Xsyn[Xsyn[cat_col] == index(label_encoder[cat_col].classes_ == NUMERIC_MARKER)].values
-                Xsyn_categorical = Xsyn[~(Xsyn[cat_col] == index(label_encoder[cat_col].classes_ == NUMERIC_MARKER))]
-
-                ysyn_numeric = self._generate_single_col(method_name, Xsyn_numeric, col)
-                ysyn_categorical = Xsyn_categorical[cat_col]
-
-                # Need the logic to concatenate them and finalize the gen_df
-
-            # If _cat column is not in pred list, do the normal generation
-            Xsyn = gen_df[preds_list].values
-            ysyn = self._generate_single_col(method_name, Xsyn, col)
-            gen_df[col] = ysyn
+                # For columns with a _cat indicator, split into numeric and special value groups.
+                numeric_indices = np.where(label_encoder[cat_col].classes_ == NUMERIC_MARKER)[0]
+                if len(numeric_indices) == 0:
+                    raise ValueError(f"Numeric marker {NUMERIC_MARKER} not found in {cat_col} classes")
+                numeric_label = numeric_indices[0]
+                # Determine which rows should be generated numerically.
+                mask = (gen_df[cat_col] == numeric_label)
+                if mask.sum() > 0:
+                    Xsyn_numeric = gen_df.loc[mask, preds_list].values
+                    ysyn_numeric = self._generate_single_col(method_name, Xsyn_numeric, col)
+                    gen_df.loc[mask, col] = ysyn_numeric
+                # For rows with special (non-numeric) indicators, revert to the special value.
+                if (~mask).sum() > 0:
+                    special_values = gen_df.loc[~mask, cat_col].map(
+                        lambda x: label_encoder[cat_col].classes_[x]
+                    )
+                    gen_df.loc[~mask, col] = special_values
+            else:
+                # Normal generation for columns without an associated _cat column.
+                Xsyn = gen_df[preds_list].values
+                ysyn = self._generate_single_col(method_name, Xsyn, col)
+                gen_df[col] = ysyn
             print(f"Generating '{col}' => done.")
             
+            # Fallback: if the generated column does not contain any numeric marker,
+            # use the empirical distribution from training.
             if col in self.cat_distributions:
-                # This is to check if _cat column doesn't have any 'numeric' flag. If that happens, it means model failed to fit the imbalanced data so we fallback.
-                numeric_label = idx(label_encoder[col].classes_ == NUMERIC_MARKER)
-                if numeric_label not in gen_df[col]:
-                    print(f"{col} does not contain indicator for numeric values for its base column. model might have failed to fit the data due to highly skewed distribution. Using empirical distribution for generation.")
-                    gen_df[col] = np.nan
-                    cat_dist = self.cat_distributions[col]
-                    #Here, generate the gen_df[col] according to its empirical distribution.
-        
+                numeric_indices = np.where(label_encoder[col].classes_ == NUMERIC_MARKER)[0]
+                if len(numeric_indices) > 0:
+                    numeric_label = numeric_indices[0].astype(int)
+                    if numeric_label not in gen_df[col].unique():
+                        print(f"{col} does not contain indicator for numeric values. \n - Model might have failed to fit the data due to highly skewed distribution. \n - Using empirical distribution for generation...")
+                        cat_dist = {
+                            int(k):v
+                            for k, v in self.cat_distributions[col].items()
+                        }
+                        gen_df[col] = np.random.choice(
+                            list(cat_dist.keys()),
+                            size=count,
+                            p=list(cat_dist.values())
+                        )
         return gen_df
 
     def _generate_single_col(self, method_name: str, Xsyn: np.ndarray, col: str) -> np.ndarray:

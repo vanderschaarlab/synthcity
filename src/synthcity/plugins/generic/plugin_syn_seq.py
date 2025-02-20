@@ -61,7 +61,11 @@ class Syn_SeqPlugin(Plugin):
         df_syn = syn_schema.adapt_dtypes(df_syn)
         # Create a DataLoader from the synthetic DataFrame using the stored data_info.
         data_syn = create_from_info(df_syn, self.data_info)
-        return data_syn
+        return Syn_SeqDataLoader(
+            df_syn,
+            user_custom = self.data_info.get("user_custom", {}),
+            verbose = False
+        )
 
 
 plugin = Syn_SeqPlugin

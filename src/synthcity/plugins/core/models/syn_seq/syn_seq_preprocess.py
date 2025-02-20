@@ -27,6 +27,7 @@ class SynSeqPreprocessor:
             with that special value. In particular, if _cat equals the missing marker,
             the base column is set to np.nan.
       - Optionally applies user‐provided rules sequentially to filter rows.
+      - Restores the original column order and dtypes.
     """
 
     # Define marker constants (choose values unlikely to appear in your data)
@@ -162,9 +163,9 @@ class SynSeqPreprocessor:
         For each numeric column in user_special_values:
           - Create a new numeric column (named base_col_cat) that marks special values using integer markers.
           - For each cell in the base column:
-                If NaN -> returns the missing marker (-99999999).
+                If NaN -> returns the missing marker (-999999999).
                 If the value is in the list of special values -> returns that special value.
-                Otherwise -> returns the numeric marker (-999999999).
+                Otherwise -> returns the numeric marker (-777777777).
         """
         for col, specials in self.user_special_values.items():
             if col not in df.columns:
@@ -195,49 +196,51 @@ class SynSeqPreprocessor:
     def postprocess(self, df: pd.DataFrame, rules: Optional[Dict[str, List[Tuple[str, str, Any]]]] = None) -> pd.DataFrame:
         """
         Postprocesses the synthetic DataFrame:
-         1) Merges back split columns (base_col, base_col_cat) by replacing NaNs in the base column
-            with the corresponding special value (if _cat indicates a special value).
-            In particular, if _cat equals the missing marker, the base column is set to np.nan.
-         2) Optionally applies user-provided rules sequentially to filter rows.
-        (Note: Date offset restoration is not performed.)
+          1) Merges back split columns (base_col, base_col_cat). For rows where the _cat column 
+             indicates a missing value, the base column is set to NaN; if it indicates a special value,
+             that special value is restored in the base column.
+          2) Optionally applies user-provided rules sequentially to filter rows.
+          3) Restores the original column order and dtypes.
         """
         df = df.copy()
-        # Merge split columns.
+        
+        # (1) Merge split columns
         df = self._merge_splitted_cols(df)
-        # Apply rules if provided.
+        
+        # (2) Apply business rules if provided
         if rules is not None:
             df = self.apply_rules(df, rules)
+            
+        # (3) Restore original column order and dtypes
+        df = df[list(self.original_dtypes.keys())].astype(self.original_dtypes)
+        
         return df
 
     def _merge_splitted_cols(self, df: pd.DataFrame) -> pd.DataFrame:
-        """
-        For each (base_col, cat_col) pair in split_map:
-          - If a base column cell is NaN and the corresponding _cat cell is not equal to the numeric marker,
-            then replace the base column cell.
-              * If the _cat cell equals the missing marker, set the base column cell to np.nan.
-              * Otherwise, set the base column cell to the value in the _cat cell.
-          - Finally, drop the auxiliary _cat column.
-        """
+        """Merge back the split columns (base_col and _cat) into original format."""
         for base_col, cat_col in self.split_map.items():
-            if base_col in df.columns and cat_col in df.columns:
-                specials = self.detected_specials.get(base_col, [])
-                condition = df[base_col].isna() & (df[cat_col] != self.NUMERIC_MARKER)
-                if condition.any():
-                    df.loc[condition, base_col] = df.loc[condition, cat_col].apply(
-                        lambda v: self._convert_special_value(v, specials)
-                    )
-                df.drop(columns=[cat_col], inplace=True)
+            if cat_col not in df.columns:
+                continue
+
+            # Get original dtype before modification
+            original_dtype = self.original_dtypes.get(base_col, np.float64)
+            
+            # (1) Handle missing values: if _cat equals the missing marker, set base_col to NaN.
+            missing_mask = df[cat_col] == self.MISSING_MARKER
+            df.loc[missing_mask, base_col] = np.nan
+            
+            # (2) Apply special values: if _cat is not the numeric marker or missing marker, restore special value.
+            special_mask = ~df[cat_col].isin([self.NUMERIC_MARKER, self.MISSING_MARKER])
+            df.loc[special_mask, base_col] = df.loc[special_mask, cat_col]
+            
+            # (3) Remove auxiliary column and restore dtype
+            df.drop(columns=cat_col, inplace=True)
+            df[base_col] = df[base_col].astype(original_dtype)
+            
         return df
 
     def _convert_special_value(self, val: Any, specials: List[Any]) -> Any:
-        """
-        Given the numeric marker from a _cat column and the list of original special values,
-        returns the original special value. In particular, if val equals the missing marker,
-        returns np.nan.
-        """
-        if val == self.MISSING_MARKER:
-            return np.nan
-        # If the value is one of the special values, return it; otherwise, return the value as-is.
+        # Placeholder for additional logic if needed.
         return val
 
     def apply_rules(self, df: pd.DataFrame, rules: Dict[str, List[Tuple[str, str, Any]]]) -> pd.DataFrame:
