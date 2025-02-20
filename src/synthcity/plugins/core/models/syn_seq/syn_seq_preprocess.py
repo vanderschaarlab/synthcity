@@ -30,8 +30,8 @@ class SynSeqPreprocessor:
     """
 
     # Define marker constants (choose values unlikely to appear in your data)
-    NUMERIC_MARKER = -777777777.0   # Indicates a normal (non‐special) value
-    MISSING_MARKER = -999999999.0    # Indicates a missing value
+    NUMERIC_MARKER = -777777777   # Indicates a normal (non‐special) value
+    MISSING_MARKER = -999999999    # Indicates a missing value
 
     def __init__(
         self,

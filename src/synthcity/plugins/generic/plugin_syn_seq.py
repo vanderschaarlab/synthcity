@@ -48,8 +48,7 @@ class Syn_SeqPlugin(Plugin):
             random_state=self.random_state,
             sampling_patience=self.sampling_patience,
         )
-        # No extra call to X.encode() is needed here because we want to keep the original data form.
-        self.model.fit_col(X, *args, **kwargs)
+        self.model.fit_col(X, self._data_encoders, *args, **kwargs)
         self.data_info = X.info()
         return self
 
@@ -57,7 +56,7 @@ class Syn_SeqPlugin(Plugin):
         if self.model is None:
             raise RuntimeError("The model must be fitted before generating data.")
         # Generate synthetic data using the Syn_Seq aggregator.
-        df_syn = self.model.generate_col(count, **kwargs)
+        df_syn = self.model.generate_col(count, self._data_encoders, **kwargs)
         # Adapt the generated DataFrame to the schema (i.e. ensure data types match).
         df_syn = syn_schema.adapt_dtypes(df_syn)
         # Create a DataLoader from the synthetic DataFrame using the stored data_info.
