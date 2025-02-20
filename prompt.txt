@@ -110,10 +110,10 @@ class SynSeqPreprocessor:
       - For numeric columns, if one value accounts for ≥90% of non‐null rows, that value is
         automatically marked as a special value. For each such column, a new categorical column
         (named base_col_cat) is created:
-           * If the cell value is missing, it is mapped to the missing marker (here, -99999999).
+           * If the cell value is missing, it is mapped to the missing marker (here, -999999999).
            * If the cell value equals a detected (or user‐specified) special value, it is left as its
              original numeric value.
-           * Otherwise, it is marked with the “numeric” marker (here, -999999999) indicating that the
+           * Otherwise, it is marked with the “numeric” marker (here, -777777777) indicating that the
              value is not special.
       
     Postprocessing:
@@ -148,9 +148,10 @@ class SynSeqPreprocessor:
         self.max_categories = max_categories
 
         # Internal storage
-        self.original_dtypes: Dict[str, str] = {}      # {col: original_dtype}
-        self.split_map: Dict[str, str] = {}            # {base_col -> cat_col}
-        self.detected_specials: Dict[str, List[Any]] = {}  # stores the special values (detected or user-provided)
+        self.original_dtypes: Dict[str, str] = {}       # {col: original_dtype}
+        self.split_map: Dict[str, str] = {}             # {base_col -> cat_col}
+        self.detected_specials: Dict[str, List[Any]] = {} # stores the special values (detected or user-provided)
+        self.dominant_values: Dict[str, Any]
 
     # =========================================================================
     # PREPROCESSING
@@ -180,6 +181,9 @@ class SynSeqPreprocessor:
 
         # (e) Split numeric columns that have special values.
         self._split_numeric_columns(df)
+
+        # (f) Oversampling the minority
+        self._oversample_minority(df)
 
         return df
 
@@ -225,8 +229,12 @@ class SynSeqPreprocessor:
             if dtype_str == "date":
                 df[col] = pd.to_datetime(df[col], errors="coerce")
             elif dtype_str == "category":
-                df[col] = df[col].astype("category")
-            # numeric: unchanged
+                df[col] = df[col].astype(
+                    pd.CategoricalDtype(
+                        categories=df[col].unique().tolist(),
+                        ordered=True
+                    )
+                )
 
     def _detect_special_values(self, df: pd.DataFrame):
         """
@@ -234,6 +242,15 @@ class SynSeqPreprocessor:
         automatically add that value as a special value.
         """
         for col in df.columns:
+            if self.user_dtypes.get(col, None) == "category":
+                series = df[col].dropna()
+                freq = series.value_counts(normalize=True)
+                max_prop = freq.iloc[0]
+                dominant_val = freq.index[0]
+                if max_prop >= 0.8:
+                    print(f"Categorical Column '{col} is highly imbalanced: {dominant_val} occurs in {max_prop*100:.1f}% of non-null rows.")
+                    self.dominant_values[col] = dominant_val
+
             if self.user_dtypes.get(col, None) != "numeric":
                 continue
 
@@ -245,8 +262,9 @@ class SynSeqPreprocessor:
             if not freq.empty:
                 max_prop = freq.iloc[0]
                 dominant_val = freq.index[0]
-                if max_prop >= 0.9:
+                if max_prop >= 0.8:
                     print(f"[detect_special] Column '{col}' is highly imbalanced: {dominant_val} occurs in {max_prop*100:.1f}% of non-null rows.")
+                    self.dominant_values[col] = dominant_val
                     # Merge with any existing user-specified special values.
                     if col in self.user_special_values:
                         if dominant_val not in self.user_special_values[col]:
@@ -262,6 +280,7 @@ class SynSeqPreprocessor:
                 If NaN -> returns the missing marker (-999999999).
                 If the value is in the list of special values -> returns that special value.
                 Otherwise -> returns the numeric marker (-777777777).
+          - The resulting _cat column is then cast to the same dtype as the original column.
         """
         for col, specials in self.user_special_values.items():
             if col not in df.columns:
@@ -276,7 +295,7 @@ class SynSeqPreprocessor:
             base_idx = df.columns.get_loc(col)
             df.insert(base_idx, cat_col, None)
 
-            def cat_mapper(x, specials, normal_marker=self.NUMERIC_MARKER, missing_marker=self.MISSING_MARKER):
+            def cat_mapper(x, specials, normal_marker, missing_marker):
                 if pd.isna(x):
                     return float(missing_marker)
                 elif x in specials:
@@ -284,7 +303,17 @@ class SynSeqPreprocessor:
                 else:
                     return float(normal_marker)
 
-            df[cat_col] = df[col].apply(lambda x: cat_mapper(x, specials))
+            normal_marker = self.NUMERIC_MARKER
+            missing_marker = self.MISSING_MARKER
+
+            df[cat_col] = df[col].apply(
+                lambda x: cat_mapper(x, specials, normal_marker, missing_marker)
+            ).astype(df[col].dtype)  # Preserve original dtype
+    
+    def _oversample_minority(self, df: pd.DataFrame):
+        for col in self.dominant_values.keys():
+            oversample = df[df[col] != self.dominant_values[col]].sample()
+            df = concat(df, oversample)
 
     # =========================================================================
     # POSTPROCESSING
@@ -300,14 +329,14 @@ class SynSeqPreprocessor:
         """
         df = df.copy()
         
-        # (1) Merge split columns
+        # (1) Merge split columns.
         df = self._merge_splitted_cols(df)
         
-        # (2) Apply business rules if provided
+        # (2) Apply business rules if provided.
         if rules is not None:
             df = self.apply_rules(df, rules)
             
-        # (3) Restore original column order and dtypes
+        # (3) Restore original column order and dtypes.
         df = df[list(self.original_dtypes.keys())].astype(self.original_dtypes)
         
         return df
@@ -318,20 +347,20 @@ class SynSeqPreprocessor:
             if cat_col not in df.columns:
                 continue
 
-            # Get original dtype before modification
+            # Get original dtype before modification.
             original_dtype = self.original_dtypes.get(base_col, np.float64)
             
             # (1) Handle missing values: if _cat equals the missing marker, set base_col to NaN.
             missing_mask = df[cat_col] == self.MISSING_MARKER
             df.loc[missing_mask, base_col] = np.nan
             
-            # (2) Apply special values: if _cat is not the numeric marker or missing marker, restore special value.
+            # (2) Apply special values:
+            # If _cat is not equal to the numeric or missing marker, restore special value.
             special_mask = ~df[cat_col].isin([self.NUMERIC_MARKER, self.MISSING_MARKER])
-            df.loc[special_mask, base_col] = df.loc[special_mask, cat_col]
+            df.loc[special_mask, base_col] = df.loc[special_mask, cat_col].astype(original_dtype)
             
-            # (3) Remove auxiliary column and restore dtype
+            # (3) Remove auxiliary column.
             df.drop(columns=cat_col, inplace=True)
-            df[base_col] = df[base_col].astype(original_dtype)
             
         return df
 
@@ -522,12 +551,20 @@ class Syn_Seq:
             if cat_col in preds_list:
                 # Get the numeric label for the NUMERIC_MARKER.
                 numeric_indices = np.where(label_encoder[cat_col].classes_ == NUMERIC_MARKER)[0]
+
+                missing_indices = []
+                if MISSING_MARKER in label_encoder[cat_col].classes_:
+                    missing_indices = np.where(label_encoder[cat_col].classes_ == MISSING_MARKER)[0]
                 if len(numeric_indices) == 0:
                     raise ValueError(f"Numeric marker {NUMERIC_MARKER} not found in {cat_col} classes")
                 numeric_label = numeric_indices[0]
-                mask = (y == numeric_label)
-                y = y[mask]
-                X = X[mask]
+                missing_label = missing_indices[0] if len(missing_indices) > 0 else None
+                # Fixed implementation of mask:
+                mask = (training_data[cat_col] == numeric_label)
+                if missing_label is not None:
+                    mask &= (training_data[cat_col] != missing_label)
+                y = training_data.loc[mask, col].values
+                X = training_data.loc[mask, preds_list].values
 
             print(f"Fitting '{col}' with '{method_name}' ... ", end="", flush=True)
             try:
@@ -544,9 +581,17 @@ class Syn_Seq:
         """
         Fit a single column using the specified method.
         """
+        if len(y) == 0:
+            warnings.warn("No training data available for this column! Model will be None")
+            return None
+        
         fit_func, _ = METHOD_MAP[method_name]
-        model = fit_func(y, X, random_state=self.random_state)
-        return {"name": method_name, "fitted_model": model}
+        try:
+            model = fit_func(y, X, random_state=self.random_state)
+            return {"name": method_name, "fitted_model": model}
+        except Exception as e:
+            warnings.warn(f"Failed to fit column with method {method_name}: {str(e)}")
+            return None
 
     def generate_col(self, count: int, label_encoder: Any) -> pd.DataFrame:
         """
@@ -582,7 +627,7 @@ class Syn_Seq:
             preds_list = self._varsel.get(col, self._syn_order[:self._syn_order.index(col)])
             cat_col = col + "_cat"
             if cat_col in preds_list:
-                # For columns with a _cat indicator, split into numeric and special value groups.
+                print("Encoded labels for {}:".format(cat_col), label_encoder[cat_col].classes_)
                 numeric_indices = np.where(label_encoder[cat_col].classes_ == NUMERIC_MARKER)[0]
                 if len(numeric_indices) == 0:
                     raise ValueError(f"Numeric marker {NUMERIC_MARKER} not found in {cat_col} classes")
@@ -593,7 +638,6 @@ class Syn_Seq:
                     Xsyn_numeric = gen_df.loc[mask, preds_list].values
                     ysyn_numeric = self._generate_single_col(method_name, Xsyn_numeric, col)
                     gen_df.loc[mask, col] = ysyn_numeric
-                # For rows with special (non-numeric) indicators, revert to the special value.
                 if (~mask).sum() > 0:
                     special_values = gen_df.loc[~mask, cat_col].map(
                         lambda x: label_encoder[cat_col].classes_[x]

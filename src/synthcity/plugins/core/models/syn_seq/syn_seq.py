@@ -128,23 +128,16 @@ class Syn_Seq:
                 missing_indices = []
                 if MISSING_MARKER in label_encoder[cat_col].classes_:
                     missing_indices = np.where(label_encoder[cat_col].classes_ == MISSING_MARKER)[0]
-
-                print("labels:", label_encoder[cat_col].classes_)
-                print("numeric indices:", numeric_indices)
                 if len(numeric_indices) == 0:
                     raise ValueError(f"Numeric marker {NUMERIC_MARKER} not found in {cat_col} classes")
                 numeric_label = numeric_indices[0]
                 missing_label = missing_indices[0] if len(missing_indices) > 0 else None
-                print("numeric label:", numeric_label)
                 # Fixed implementation of mask:
                 mask = (training_data[cat_col] == numeric_label)
                 if missing_label is not None:
                     mask &= (training_data[cat_col] != missing_label)
-                print("mask:", mask)
                 y = training_data.loc[mask, col].values
                 X = training_data.loc[mask, preds_list].values
-                print("Filtered y:", y)
-                print("Filtered X:", X)
 
             print(f"Fitting '{col}' with '{method_name}' ... ", end="", flush=True)
             try:
@@ -212,15 +205,12 @@ class Syn_Seq:
                 if len(numeric_indices) == 0:
                     raise ValueError(f"Numeric marker {NUMERIC_MARKER} not found in {cat_col} classes")
                 numeric_label = numeric_indices[0]
-                print("Numeric label:", numeric_label)
                 # Determine which rows should be generated numerically.
                 mask = (gen_df[cat_col] == numeric_label)
-                print("Mask for numeric generation:", mask)
                 if mask.sum() > 0:
                     Xsyn_numeric = gen_df.loc[mask, preds_list].values
                     ysyn_numeric = self._generate_single_col(method_name, Xsyn_numeric, col)
                     gen_df.loc[mask, col] = ysyn_numeric
-                # For rows with special (non-numeric) indicators, revert to the special value's label.
                 if (~mask).sum() > 0:
                     special_values = gen_df.loc[~mask, cat_col].map(
                         lambda x: label_encoder[cat_col].classes_[x]

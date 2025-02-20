@@ -55,11 +55,12 @@ class SynSeqPreprocessor:
         self.original_dtypes: Dict[str, str] = {}       # {col: original_dtype}
         self.split_map: Dict[str, str] = {}             # {base_col -> cat_col}
         self.detected_specials: Dict[str, List[Any]] = {} # stores the special values (detected or user-provided)
+        self.dominant_values: Dict[str, Any]
 
     # =========================================================================
     # PREPROCESSING
     # =========================================================================
-    def preprocess(self, df: pd.DataFrame) -> pd.DataFrame:
+    def preprocess(self, df: pd.DataFrame, oversample = False) -> pd.DataFrame:
         """
         Preprocesses the DataFrame:
           1) Records original dtypes.
@@ -84,6 +85,10 @@ class SynSeqPreprocessor:
 
         # (e) Split numeric columns that have special values.
         self._split_numeric_columns(df)
+
+        # (f) Oversampling the minority
+        if oversample == True:
+            self._oversample_minority(df)
 
         return df
 
@@ -129,8 +134,12 @@ class SynSeqPreprocessor:
             if dtype_str == "date":
                 df[col] = pd.to_datetime(df[col], errors="coerce")
             elif dtype_str == "category":
-                df[col] = df[col].astype("category")
-            # numeric: unchanged
+                df[col] = df[col].astype(
+                    pd.CategoricalDtype(
+                        categories=df[col].unique().tolist(),
+                        ordered=True
+                    )
+                )
 
     def _detect_special_values(self, df: pd.DataFrame):
         """
@@ -138,6 +147,15 @@ class SynSeqPreprocessor:
         automatically add that value as a special value.
         """
         for col in df.columns:
+            if self.user_dtypes.get(col, None) == "category":
+                series = df[col].dropna()
+                freq = series.value_counts(normalize=True)
+                max_prop = freq.iloc[0]
+                dominant_val = freq.index[0]
+                if max_prop >= 0.8:
+                    print(f"Categorical Column '{col} is highly imbalanced: {dominant_val} occurs in {max_prop*100:.1f}% of non-null rows.")
+                    self.dominant_values[col] = dominant_val
+
             if self.user_dtypes.get(col, None) != "numeric":
                 continue
 
@@ -149,8 +167,9 @@ class SynSeqPreprocessor:
             if not freq.empty:
                 max_prop = freq.iloc[0]
                 dominant_val = freq.index[0]
-                if max_prop >= 0.9:
+                if max_prop >= 0.8:
                     print(f"[detect_special] Column '{col}' is highly imbalanced: {dominant_val} occurs in {max_prop*100:.1f}% of non-null rows.")
+                    self.dominant_values[col] = dominant_val
                     # Merge with any existing user-specified special values.
                     if col in self.user_special_values:
                         if dominant_val not in self.user_special_values[col]:
@@ -195,6 +214,11 @@ class SynSeqPreprocessor:
             df[cat_col] = df[col].apply(
                 lambda x: cat_mapper(x, specials, normal_marker, missing_marker)
             ).astype(df[col].dtype)  # Preserve original dtype
+    
+    def _oversample_minority(self, df: pd.DataFrame):
+        for col in self.dominant_values.keys():
+            oversample = df[df[col] != self.dominant_values[col]].sample()
+            df = concat(df, oversample)
 
     # =========================================================================
     # POSTPROCESSING
