@@ -14,10 +14,10 @@ class SynSeqPreprocessor:
       - For numeric columns, if one value accounts for ≥90% of non‐null rows, that value is
         automatically marked as a special value. For each such column, a new categorical column
         (named base_col_cat) is created:
-           * If the cell value is missing, it is mapped to the missing marker (here, -99999999).
+           * If the cell value is missing, it is mapped to the missing marker (here, -999999999).
            * If the cell value equals a detected (or user‐specified) special value, it is left as its
              original numeric value.
-           * Otherwise, it is marked with the “numeric” marker (here, -999999999) indicating that the
+           * Otherwise, it is marked with the “numeric” marker (here, -777777777) indicating that the
              value is not special.
       
     Postprocessing:
@@ -52,9 +52,9 @@ class SynSeqPreprocessor:
         self.max_categories = max_categories
 
         # Internal storage
-        self.original_dtypes: Dict[str, str] = {}      # {col: original_dtype}
-        self.split_map: Dict[str, str] = {}            # {base_col -> cat_col}
-        self.detected_specials: Dict[str, List[Any]] = {}  # stores the special values (detected or user-provided)
+        self.original_dtypes: Dict[str, str] = {}       # {col: original_dtype}
+        self.split_map: Dict[str, str] = {}             # {base_col -> cat_col}
+        self.detected_specials: Dict[str, List[Any]] = {} # stores the special values (detected or user-provided)
 
     # =========================================================================
     # PREPROCESSING
@@ -166,6 +166,7 @@ class SynSeqPreprocessor:
                 If NaN -> returns the missing marker (-999999999).
                 If the value is in the list of special values -> returns that special value.
                 Otherwise -> returns the numeric marker (-777777777).
+          - The resulting _cat column is then cast to the same dtype as the original column.
         """
         for col, specials in self.user_special_values.items():
             if col not in df.columns:
@@ -180,7 +181,7 @@ class SynSeqPreprocessor:
             base_idx = df.columns.get_loc(col)
             df.insert(base_idx, cat_col, None)
 
-            def cat_mapper(x, specials, normal_marker=self.NUMERIC_MARKER, missing_marker=self.MISSING_MARKER):
+            def cat_mapper(x, specials, normal_marker, missing_marker):
                 if pd.isna(x):
                     return float(missing_marker)
                 elif x in specials:
@@ -188,7 +189,12 @@ class SynSeqPreprocessor:
                 else:
                     return float(normal_marker)
 
-            df[cat_col] = df[col].apply(lambda x: cat_mapper(x, specials))
+            normal_marker = self.NUMERIC_MARKER
+            missing_marker = self.MISSING_MARKER
+
+            df[cat_col] = df[col].apply(
+                lambda x: cat_mapper(x, specials, normal_marker, missing_marker)
+            ).astype(df[col].dtype)  # Preserve original dtype
 
     # =========================================================================
     # POSTPROCESSING
@@ -204,14 +210,14 @@ class SynSeqPreprocessor:
         """
         df = df.copy()
         
-        # (1) Merge split columns
+        # (1) Merge split columns.
         df = self._merge_splitted_cols(df)
         
-        # (2) Apply business rules if provided
+        # (2) Apply business rules if provided.
         if rules is not None:
             df = self.apply_rules(df, rules)
             
-        # (3) Restore original column order and dtypes
+        # (3) Restore original column order and dtypes.
         df = df[list(self.original_dtypes.keys())].astype(self.original_dtypes)
         
         return df
@@ -222,20 +228,20 @@ class SynSeqPreprocessor:
             if cat_col not in df.columns:
                 continue
 
-            # Get original dtype before modification
+            # Get original dtype before modification.
             original_dtype = self.original_dtypes.get(base_col, np.float64)
             
             # (1) Handle missing values: if _cat equals the missing marker, set base_col to NaN.
             missing_mask = df[cat_col] == self.MISSING_MARKER
             df.loc[missing_mask, base_col] = np.nan
             
-            # (2) Apply special values: if _cat is not the numeric marker or missing marker, restore special value.
+            # (2) Apply special values:
+            # If _cat is not equal to the numeric or missing marker, restore special value.
             special_mask = ~df[cat_col].isin([self.NUMERIC_MARKER, self.MISSING_MARKER])
-            df.loc[special_mask, base_col] = df.loc[special_mask, cat_col]
+            df.loc[special_mask, base_col] = df.loc[special_mask, cat_col].astype(original_dtype)
             
-            # (3) Remove auxiliary column and restore dtype
+            # (3) Remove auxiliary column.
             df.drop(columns=cat_col, inplace=True)
-            df[base_col] = df[base_col].astype(original_dtype)
             
         return df
 

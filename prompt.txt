@@ -490,7 +490,7 @@ class Syn_Seq:
         for col in training_data.columns:
             if col.endswith("_cat"):
                 # Compute the normalized frequency (distribution) for each unique value.
-                value_counts = training_data[col].value_counts(normalize=True)
+                value_counts = training_data[col].astype(int).value_counts(normalize=True)
                 self.cat_distributions[col] = value_counts.to_dict()
 
         # For auto-injected _cat columns, force method "cart" and mirror variable selection.
@@ -611,10 +611,13 @@ class Syn_Seq:
             if col in self.cat_distributions:
                 numeric_indices = np.where(label_encoder[col].classes_ == NUMERIC_MARKER)[0]
                 if len(numeric_indices) > 0:
-                    numeric_label = numeric_indices[0]
+                    numeric_label = numeric_indices[0].astype(int)
                     if numeric_label not in gen_df[col].unique():
                         print(f"{col} does not contain indicator for numeric values. \n - Model might have failed to fit the data due to highly skewed distribution. \n - Using empirical distribution for generation...")
-                        cat_dist = self.cat_distributions[col]
+                        cat_dist = {
+                            int(k):v
+                            for k, v in self.cat_distributions[col].items()
+                        }
                         gen_df[col] = np.random.choice(
                             list(cat_dist.keys()),
                             size=count,
@@ -2780,7 +2783,11 @@ class Syn_SeqPlugin(Plugin):
         df_syn = syn_schema.adapt_dtypes(df_syn)
         # Create a DataLoader from the synthetic DataFrame using the stored data_info.
         data_syn = create_from_info(df_syn, self.data_info)
-        return data_syn
+        return Syn_SeqDataLoader(
+            df_syn,
+            user_custom = self.data_info.get("user_custom", {}),
+            verbose = False
+        )
 
 
 plugin = Syn_SeqPlugin
