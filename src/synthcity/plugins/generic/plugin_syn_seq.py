@@ -48,8 +48,7 @@ class Syn_SeqPlugin(Plugin):
             random_state=self.random_state,
             sampling_patience=self.sampling_patience,
         )
-        self.model.fit_col(X, self._data_encoders, *args, **kwargs)
-        self.data_info = X.info()
+        self.model.fit_col(X, self._data_encoders, loader_info=self.data_info, *args, **kwargs)
         return self
 
     def _generate(self, count: int, syn_schema: Schema, **kwargs: Any) -> DataLoader:

@@ -30,6 +30,8 @@ FILE_PATHS = [
     "src/synthcity/logger.py",
     "src/synthcity/benchmark/__init__.py",
     "src/synthcity/metrics/eval.py",
+    "src/synthcity/metrics/eval_statistical.py",
+    "src/synthcity/metrics/plots.py",
     "src/synthcity/plugins/__init__.py",
     "src/synthcity/plugins/generic/__init__.py"
 ]

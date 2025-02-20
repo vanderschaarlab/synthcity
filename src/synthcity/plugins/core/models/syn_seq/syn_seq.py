@@ -70,7 +70,7 @@ class Syn_Seq:
         self._col_models: Dict[str, Dict[str, Any]] = {}  
         self._first_col_values: Dict[str, np.ndarray] = {}
 
-    def fit_col(self, loader: Any, label_encoder: Any, *args: Any, **kwargs: Any) -> "Syn_Seq":
+    def fit_col(self, loader: Any, label_encoder: Any, loader_info: Any, *args: Any, **kwargs: Any) -> "Syn_Seq":
         """
         Fit each column sequentially using metadata from the loader.
         For each _cat column in the training data, record its full distribution 
@@ -78,11 +78,12 @@ class Syn_Seq:
         columns with special values, filter out rows whose value is special so that the 
         model sees only numeric values.
         """
-        info_dict = loader.info()
+        info_dict = loader_info
         training_data = loader.dataframe().copy()
         if training_data.empty:
             raise ValueError("No data => cannot fit Syn_Seq aggregator")
         
+        print(info_dict)
         # Set synthesis order, method mapping, and variable selection from loader info.
         self._syn_order = info_dict.get("syn_order", list(training_data.columns))
         self._method_map = info_dict.get("method", {})
