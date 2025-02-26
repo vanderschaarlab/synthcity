@@ -19,7 +19,6 @@ class Syn_SeqPlugin(Plugin):
 
     @staticmethod
     def hyperparameter_space(**kwargs: Any) -> List:
-        # There are no tunable hyperparameters for Syn_Seq.
         return []
 
     @validate_arguments(config=dict(arbitrary_types_allowed=True))
@@ -40,10 +39,8 @@ class Syn_SeqPlugin(Plugin):
         self.model: Optional[Syn_Seq] = None
 
     def _fit(self, X: DataLoader, *args: Any, **kwargs: Any) -> "Syn_SeqPlugin":
-        # If X is a plain DataFrame, wrap it in our Syn_SeqDataLoader.
         if isinstance(X, pd.DataFrame):
             X = Syn_SeqDataLoader(X)
-        # Initialize the Syn_Seq aggregator and train it column‐by‐column.
         self.model = Syn_Seq(
             random_state=self.random_state,
             sampling_patience=self.sampling_patience,
@@ -54,11 +51,8 @@ class Syn_SeqPlugin(Plugin):
     def _generate(self, count: int, syn_schema: Schema, **kwargs: Any) -> DataLoader:
         if self.model is None:
             raise RuntimeError("The model must be fitted before generating data.")
-        # Generate synthetic data using the Syn_Seq aggregator.
         df_syn = self.model.generate_col(count, self._data_encoders, **kwargs)
-        # Adapt the generated DataFrame to the schema (i.e. ensure data types match).
         df_syn = syn_schema.adapt_dtypes(df_syn)
-        # Create a DataLoader from the synthetic DataFrame using the stored data_info.
         data_syn = create_from_info(df_syn, self.data_info)
         return Syn_SeqDataLoader(
             df_syn,

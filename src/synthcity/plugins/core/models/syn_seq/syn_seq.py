@@ -17,7 +17,6 @@ import numpy as np
 import pandas as pd
 import warnings
 
-# Import column-fitting and generation functions for various methods.
 from synthcity.plugins.core.models.syn_seq.methods import (
     syn_cart, generate_cart,
     syn_ctree, generate_ctree,
@@ -31,7 +30,6 @@ from synthcity.plugins.core.models.syn_seq.methods import (
     syn_swr, generate_swr,
 )
 
-# Map method names to (fitting function, generation function)
 METHOD_MAP: Dict[str, Tuple[Any, Any]] = {
     "cart": (syn_cart, generate_cart),
     "ctree": (syn_ctree, generate_ctree),
@@ -45,7 +43,6 @@ METHOD_MAP: Dict[str, Tuple[Any, Any]] = {
     "swr": (syn_swr, generate_swr),
 }
 
-# Special markers for numeric and missing values.
 NUMERIC_MARKER = -777777777
 MISSING_MARKER = -999999999
 
@@ -84,19 +81,15 @@ class Syn_Seq:
             raise ValueError("No data => cannot fit Syn_Seq aggregator")
         
         print(info_dict)
-        # Set synthesis order, method mapping, and variable selection from loader info.
         self._syn_order = info_dict.get("syn_order", list(training_data.columns))
         self._method_map = info_dict.get("method", {})
         self._varsel = info_dict.get("variable_selection", {})
 
-        # --- Build the _cat column distributions ---
         for col in training_data.columns:
             if col.endswith("_cat"):
-                # Compute the normalized frequency (distribution) for each unique value.
                 value_counts = training_data[col].astype(int).value_counts(normalize=True)
                 self.cat_distributions[col] = value_counts.to_dict()
 
-        # For auto-injected _cat columns, force method "cart" and mirror variable selection.
         for col in self._syn_order:
             if col.endswith("_cat"):
                 self._method_map[col] = "cart"
@@ -109,12 +102,10 @@ class Syn_Seq:
 
         print("[INFO] Syn_Seq aggregator: fitting columns...")
 
-        # For the first column, store its observed (non-null) distribution.
         first_col = self._syn_order[0]
         self._first_col_values[first_col] = training_data[first_col].dropna().values
         print(f"Fitting '{first_col}' => stored values from real data. Done.")
 
-        # Fit a model for each subsequent column.
         np.random.seed(self.random_state)
         for i, col in enumerate(self._syn_order[1:], start=1):
             method_name = self._method_map.get(col, "cart")
@@ -123,7 +114,6 @@ class Syn_Seq:
             X = training_data[preds_list].values
             cat_col = col + "_cat"
             if cat_col in preds_list:
-                # Get the numeric label for the NUMERIC_MARKER.
                 numeric_indices = np.where(label_encoder[cat_col].classes_ == NUMERIC_MARKER)[0]
 
                 missing_indices = []
@@ -133,7 +123,6 @@ class Syn_Seq:
                     raise ValueError(f"Numeric marker {NUMERIC_MARKER} not found in {cat_col} classes")
                 numeric_label = numeric_indices[0]
                 missing_label = missing_indices[0] if len(missing_indices) > 0 else None
-                # Fixed implementation of mask:
                 mask = (training_data[cat_col] == numeric_label)
                 if missing_label is not None:
                     mask &= (training_data[cat_col] != missing_label)
@@ -181,10 +170,8 @@ class Syn_Seq:
         if count <= 0:
             return pd.DataFrame(columns=self._syn_order)
         
-        # Initialize a DataFrame with NaN values for all columns.
         gen_df = pd.DataFrame({col: [np.nan] * count for col in self._syn_order})
         
-        # (1) Generate the first column using its stored distribution.
         first_col = self._syn_order[0]
         if first_col in self._first_col_values and len(self._first_col_values[first_col]) > 0:
             gen_df[first_col] = np.random.choice(
@@ -195,7 +182,6 @@ class Syn_Seq:
             gen_df[first_col] = 0
         print(f"Generating '{first_col}' => done.")
         
-        # (2) For each subsequent column, generate synthetic values.
         for col in self._syn_order[1:]:
             method_name = self._method_map.get(col, "cart")
             preds_list = self._varsel.get(col, self._syn_order[:self._syn_order.index(col)])
@@ -206,7 +192,6 @@ class Syn_Seq:
                 if len(numeric_indices) == 0:
                     raise ValueError(f"Numeric marker {NUMERIC_MARKER} not found in {cat_col} classes")
                 numeric_label = numeric_indices[0]
-                # Determine which rows should be generated numerically.
                 mask = (gen_df[cat_col] == numeric_label)
                 if mask.sum() > 0:
                     Xsyn_numeric = gen_df.loc[mask, preds_list].values
@@ -218,14 +203,11 @@ class Syn_Seq:
                     )
                     gen_df.loc[~mask, col] = special_values
             else:
-                # Normal generation for columns without an associated _cat column.
                 Xsyn = gen_df[preds_list].values
                 ysyn = self._generate_single_col(method_name, Xsyn, col)
                 gen_df[col] = ysyn
             print(f"Generating '{col}' => done.")
             
-            # Fallback: if the generated column does not contain any numeric marker,
-            # use the empirical distribution from training.
             if col in self.cat_distributions:
                 numeric_indices = np.where(label_encoder[col].classes_ == NUMERIC_MARKER)[0]
                 if len(numeric_indices) > 0:

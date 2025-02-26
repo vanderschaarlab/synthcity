@@ -29,9 +29,8 @@ class SynSeqPreprocessor:
       - Restores the original column order and dtypes.
     """
 
-    # Define marker constants (choose values unlikely to appear in your data)
-    NUMERIC_MARKER = -777777777   # Indicates a normal (non‐special) value
-    MISSING_MARKER = -999999999    # Indicates a missing value
+    NUMERIC_MARKER = -777777777   
+    MISSING_MARKER = -999999999   
 
     def __init__(
         self,
@@ -53,15 +52,11 @@ class SynSeqPreprocessor:
         self.max_categories = max_categories
         self.random_state = random_state
 
-        # Internal storage
-        self.original_dtypes: Dict[str, str] = {}       # {col: original_dtype}
-        self.split_map: Dict[str, str] = {}             # {base_col -> cat_col}
-        self.detected_specials: Dict[str, List[Any]] = {} # stores the special values (detected or user-provided)
-        self.dominant_values: Dict[str, Any] = {}         # {col: dominant_value}
+        self.original_dtypes: Dict[str, str] = {}       
+        self.split_map: Dict[str, str] = {}             
+        self.detected_specials: Dict[str, List[Any]] = {} 
+        self.dominant_values: Dict[str, Any] = {}         
 
-    # =========================================================================
-    # PREPROCESSING
-    # =========================================================================
     def preprocess(self, df: pd.DataFrame, oversample: bool = False) -> pd.DataFrame:
         """
         Preprocesses the DataFrame:
@@ -74,22 +69,16 @@ class SynSeqPreprocessor:
         """
         df = df.copy()
 
-        # (a) Record original dtypes.
         self._record_original_dtypes(df)
 
-        # (b) Auto-assign dtypes for columns not specified.
         self._auto_assign_dtypes(df)
 
-        # (c) Apply the specified dtypes.
         self._apply_user_dtypes(df)
 
-        # (d) Automatically detect special values in numeric columns.
         self._detect_special_values(df)
 
-        # (e) Split numeric columns that have special values.
         self._split_numeric_columns(df)
 
-        # (f) Oversampling the minority if requested.
         if oversample:
             df = self._oversample_minority(df)
 
@@ -175,7 +164,6 @@ class SynSeqPreprocessor:
                 if max_prop >= 0.8:
                     print(f"[detect_special] Numeric column '{col}' is highly imbalanced: {dominant_val} occurs in {max_prop*100:.1f}% of non-null rows.")
                     self.dominant_values[col] = dominant_val
-                    # Merge with any existing user-specified special values.
                     if col in self.user_special_values:
                         if dominant_val not in self.user_special_values[col]:
                             self.user_special_values[col].append(dominant_val)
@@ -208,7 +196,7 @@ class SynSeqPreprocessor:
                 if pd.isna(x):
                     return float(missing_marker)
                 elif x in specials:
-                    return float(x)  # retain the special value as-is
+                    return float(x)
                 else:
                     return float(normal_marker)
 
@@ -217,7 +205,7 @@ class SynSeqPreprocessor:
 
             df[cat_col] = df[col].apply(
                 lambda x: cat_mapper(x, specials, normal_marker, missing_marker)
-            ).astype(df[col].dtype)  # Preserve original dtype
+            ).astype(df[col].dtype)
 
     def _oversample_minority(self, df: pd.DataFrame) -> pd.DataFrame:
         """
@@ -227,9 +215,8 @@ class SynSeqPreprocessor:
         to a capped multiplier (default factor=3).
         Verbose logging is provided.
         """
-        max_oversample_factor = 1.2  # maximum allowed multiplier for the minority group
+        max_oversample_factor = 1.2
         for col, dominant_val in self.dominant_values.items():
-            # Identify minority rows (those not equal to the dominant value)
             minority_df = df[df[col] != dominant_val]
             count_min = len(minority_df)
             count_dom = (df[col] == dominant_val).sum()
@@ -240,7 +227,6 @@ class SynSeqPreprocessor:
             ratio = count_dom / count_min
             print(f"[oversample] Column '{col}': dominant count = {count_dom}, minority count = {count_min}, ratio = {ratio:.2f}")
 
-            # Set a target for the minority count but do not exceed max_oversample_factor * current minority
             target_minority = min(count_dom, int(max_oversample_factor * count_min))
             n_to_sample = target_minority - count_min
 
@@ -252,9 +238,6 @@ class SynSeqPreprocessor:
                 print(f"[oversample] Column '{col}': no oversampling needed (minority count already near target).")
         return df
 
-    # =========================================================================
-    # POSTPROCESSING
-    # =========================================================================
     def postprocess(self, df: pd.DataFrame, rules: Optional[Dict[str, List[Tuple[str, str, Any]]]] = None) -> pd.DataFrame:
         """
         Postprocesses the synthetic DataFrame:
@@ -266,14 +249,11 @@ class SynSeqPreprocessor:
         """
         df = df.copy()
         
-        # (1) Merge split columns.
         df = self._merge_splitted_cols(df)
         
-        # (2) Apply business rules if provided.
         if rules is not None:
             df = self.apply_rules(df, rules)
             
-        # (3) Restore original column order and dtypes.
         df = df[list(self.original_dtypes.keys())].astype(self.original_dtypes)
         
         return df
@@ -284,25 +264,19 @@ class SynSeqPreprocessor:
             if cat_col not in df.columns:
                 continue
 
-            # Get original dtype before modification.
             original_dtype = self.original_dtypes.get(base_col, np.float64)
             
-            # (1) Handle missing values: if _cat equals the missing marker, set base_col to NaN.
             missing_mask = df[cat_col] == self.MISSING_MARKER
             df.loc[missing_mask, base_col] = np.nan
             
-            # (2) Apply special values:
-            # If _cat is not equal to the numeric or missing marker, restore special value.
             special_mask = ~df[cat_col].isin([self.NUMERIC_MARKER, self.MISSING_MARKER])
             df.loc[special_mask, base_col] = df.loc[special_mask, cat_col].astype(original_dtype)
             
-            # (3) Remove auxiliary column.
             df.drop(columns=cat_col, inplace=True)
             
         return df
 
     def _convert_special_value(self, val: Any, specials: List[Any]) -> Any:
-        # Placeholder for additional logic if needed.
         return val
 
     def apply_rules(self, df: pd.DataFrame, rules: Dict[str, List[Tuple[str, str, Any]]]) -> pd.DataFrame:

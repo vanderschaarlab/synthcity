@@ -29,8 +29,7 @@ class Syn_SeqEncoder(TransformerMixin, BaseEstimator):
         self.variable_selection_ = variable_selection or {}
         self.default_method = default_method
 
-        # 내부 관리용
-        self.col_map: Dict[str, Dict[str, Any]] = {}  # {col: {"method": "..."}}
+        self.col_map: Dict[str, Dict[str, Any]] = {}
 
     def prepare(self, X: pd.DataFrame) -> "Syn_SeqEncoder":
         """
