@@ -1,42 +1,33 @@
-# File: polyreg.py
-
 import numpy as np
+import pandas as pd
 from sklearn.linear_model import LogisticRegression
 
 def syn_polyreg(y, X, random_state=0, solver="lbfgs", max_iter=200, **kwargs):
     """
-    Fit polynomial (polytomous) regression or polynomial expansions.
+    Fit a multinomial logistic regression model for a “polyreg” synthesis.
 
-    In the context of the R package 'synthpop', "polyreg" typically
-    refers to polytomous (multinomial) logistic regression for
-    categorical outcomes. This function sets up a multinomial logistic
-    regression model in scikit-learn to mimic that functionality.
-
-    Parameters
-    ----------
-    y : np.ndarray
-        The target array (categorical or numeric-encoded).
-    X : np.ndarray
-        The predictor array of shape (n_samples, n_features).
-    random_state : int, optional
-        Random seed for reproducibility.
-    solver : str, optional
-        Solver to use in the LogisticRegression. Typically 'lbfgs' is
-        suitable for multi_class='multinomial'.
-    max_iter : int, optional
-        Maximum number of iterations for solver convergence.
-    **kwargs
-        Additional keyword arguments passed to the LogisticRegression.
-
-    Returns
-    -------
-    fitted_polyreg : dict
-        A dictionary containing:
-        - "name": fixed string "polyreg".
-        - "model": the fitted LogisticRegression object.
-        - "random_state": the random seed used.
-        - any other configuration parameters you want to store.
+    For a floating‐point target y:
+      - If it has more than 10 unique values, we bin it into 10 discrete bins.
+      - Otherwise, we factorize y into discrete labels.
+    The bin edges are saved in case you wish to map the predicted bin back.
     """
+    y = np.asarray(y)
+    X = np.asarray(X)
+    
+    if np.issubdtype(y.dtype, np.floating):
+        unique_values = np.unique(y)
+        if len(unique_values) > 10:
+            # Bin into 10 bins and save bin edges.
+            y_binned, bin_edges = pd.cut(y, bins=10, retbins=True, labels=False)
+            y_fit = y_binned.astype(int)
+        else:
+            # For fewer unique values, factorize to get categorical codes.
+            y_fit, _ = pd.factorize(y)
+            bin_edges = None
+    else:
+        y_fit = y
+        bin_edges = None
+        
     model = LogisticRegression(
         multi_class="multinomial",
         solver=solver,
@@ -44,55 +35,36 @@ def syn_polyreg(y, X, random_state=0, solver="lbfgs", max_iter=200, **kwargs):
         random_state=random_state,
         **kwargs
     )
-    model.fit(X, y)
+    model.fit(X, y_fit)
+    return {"name": "polyreg", "model": model, "bin_edges": bin_edges, "random_state": random_state}
 
-    # Wrap up the fitted model and meta info in a dictionary
-    return {
-        "name": "polyreg",
-        "model": model,
-        "random_state": random_state,
-        "solver": solver,
-        "max_iter": max_iter
-    }
-
-
-def generate_polyreg(fitted_polyreg, X_new, random_state=None, **kwargs):
+def generate_polyreg(fitted_model, X_new, random_state=None, **kwargs):
     """
-    Generate synthetic values from the fitted polynomial (polytomous) regression model.
+    Generate synthetic values using the fitted polyreg model.
 
-    Parameters
-    ----------
-    fitted_polyreg : dict
-        Dictionary as returned by syn_polyreg().
-        Must contain:
-          - "name": "polyreg"
-          - "model": the trained LogisticRegression object
-          - "random_state": int
-    X_new : np.ndarray
-        The predictor array used to generate synthetic outcomes.
-    random_state : int, optional
-        If provided, overrides the random seed from fitted_polyreg["random_state"].
-    **kwargs
-        Additional keyword arguments for flexibility (e.g., temperature scaling).
-
-    Returns
-    -------
-    y_syn : np.ndarray
-        An array of synthetic draws from the fitted distribution.
+    The fitted model predicts class probabilities for each bin.
+    For each sample, a bin is chosen by sampling from the predicted probabilities.
+    If binning was used during training, the bin index is mapped back
+    to a numeric value by computing the bin centers.
     """
-    model = fitted_polyreg["model"]
-    rs = random_state if random_state is not None else fitted_polyreg["random_state"]
-
-    # Predicted probabilities for each row in X_new
+    model = fitted_model["model"]
+    bin_edges = fitted_model.get("bin_edges")
+    if random_state is None:
+        random_state = fitted_model.get("random_state", 0)
+    rng = np.random.default_rng(random_state)
+    
+    # Predict class probabilities
     probs = model.predict_proba(X_new)
     classes = model.classes_
-
-    rng = np.random.default_rng(rs)
     n_samples = X_new.shape[0]
-    y_syn = []
-
+    y_binned = np.empty(n_samples, dtype=int)
     for i in range(n_samples):
-        draw = rng.choice(classes, p=probs[i])
-        y_syn.append(draw)
-
-    return np.array(y_syn)
+        y_binned[i] = rng.choice(classes, p=probs[i])
+        
+    if bin_edges is not None:
+        # Map the bin index to the bin center.
+        bin_centers = (bin_edges[:-1] + bin_edges[1:]) / 2
+        y_generated = bin_centers[y_binned]
+    else:
+        y_generated = y_binned
+    return y_generated

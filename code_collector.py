@@ -33,8 +33,23 @@ FILE_PATHS = [
     "src/synthcity/metrics/eval_statistical.py",
     "src/synthcity/metrics/plots.py",
     "src/synthcity/plugins/__init__.py",
-    "src/synthcity/plugins/generic/__init__.py"
+    "src/synthcity/plugins/generic/__init__.py",
+    "src/synthcity/tests/plugins/core/models/test_gan.py",
+    "src/synthcity/tests/plugins/core/models/helpers.py",
+    "src/synthcity/tests/plugins/core/test_dataloader.py",
+    "src/synthcity/tests/plugins/core/test_plugin.py",
+    "src/synthcity/tests/plugins/generic/test_tvae.py"
 ]
+
+"""
+Test Code directories:
+methods test: src/synthcity/tests/plugins/core/models/syn_seq/test_methods.py
+syn_seq.py test: src/synthcity/tests/plugins/core/models/syn_seq/test_sequential_synthesis.py
+syn_seq_encoder.py test: src/synthcity/tests/plugins/core/models/syn_seq/test_syn_seq_encoder.py
+syn_seq_preprocess.py test: src/synthcity/tests/plugins/core/models/syn_seq/test_syn_seq_preprocess.py
+plugin_syn_seq.py test: src/synthcity/tests/plugins/generic/test_syn_seq.py
+
+"""
 
 # 2) Specify the output file name here.
 OUTPUT_FILE = "prompt.txt"

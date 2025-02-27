@@ -168,7 +168,7 @@ class Syn_Seq:
         if not self._model_trained:
             raise RuntimeError("Syn_Seq aggregator not yet fitted")
         if count <= 0:
-            return pd.DataFrame(columns=self._syn_order)
+            return pd.DataFrame({col: [] for col in self._syn_order})
         
         gen_df = pd.DataFrame({col: [np.nan] * count for col in self._syn_order})
         

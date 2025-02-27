@@ -30,8 +30,7 @@ class Syn_SeqEncoder(TransformerMixin, BaseEstimator):
         self.variable_selection_ = variable_selection or {}
         self.default_method = default_method
 
-        # 내부 관리용
-        self.col_map: Dict[str, Dict[str, Any]] = {}  # {col: {"method": "..."}}
+        self.col_map: Dict[str, Dict[str, Any]] = {}
 
     def prepare(self, X: pd.DataFrame) -> "Syn_SeqEncoder":
         """
@@ -125,9 +124,8 @@ class SynSeqPreprocessor:
       - Restores the original column order and dtypes.
     """
 
-    # Define marker constants (choose values unlikely to appear in your data)
-    NUMERIC_MARKER = -777777777   # Indicates a normal (non‐special) value
-    MISSING_MARKER = -999999999    # Indicates a missing value
+    NUMERIC_MARKER = -777777777   
+    MISSING_MARKER = -999999999   
 
     def __init__(
         self,
@@ -149,15 +147,11 @@ class SynSeqPreprocessor:
         self.max_categories = max_categories
         self.random_state = random_state
 
-        # Internal storage
-        self.original_dtypes: Dict[str, str] = {}       # {col: original_dtype}
-        self.split_map: Dict[str, str] = {}             # {base_col -> cat_col}
-        self.detected_specials: Dict[str, List[Any]] = {} # stores the special values (detected or user-provided)
-        self.dominant_values: Dict[str, Any] = {}         # {col: dominant_value}
+        self.original_dtypes: Dict[str, str] = {}       
+        self.split_map: Dict[str, str] = {}             
+        self.detected_specials: Dict[str, List[Any]] = {} 
+        self.dominant_values: Dict[str, Any] = {}         
 
-    # =========================================================================
-    # PREPROCESSING
-    # =========================================================================
     def preprocess(self, df: pd.DataFrame, oversample: bool = False) -> pd.DataFrame:
         """
         Preprocesses the DataFrame:
@@ -170,22 +164,16 @@ class SynSeqPreprocessor:
         """
         df = df.copy()
 
-        # (a) Record original dtypes.
         self._record_original_dtypes(df)
 
-        # (b) Auto-assign dtypes for columns not specified.
         self._auto_assign_dtypes(df)
 
-        # (c) Apply the specified dtypes.
         self._apply_user_dtypes(df)
 
-        # (d) Automatically detect special values in numeric columns.
         self._detect_special_values(df)
 
-        # (e) Split numeric columns that have special values.
         self._split_numeric_columns(df)
 
-        # (f) Oversampling the minority if requested.
         if oversample:
             df = self._oversample_minority(df)
 
@@ -271,7 +259,6 @@ class SynSeqPreprocessor:
                 if max_prop >= 0.8:
                     print(f"[detect_special] Numeric column '{col}' is highly imbalanced: {dominant_val} occurs in {max_prop*100:.1f}% of non-null rows.")
                     self.dominant_values[col] = dominant_val
-                    # Merge with any existing user-specified special values.
                     if col in self.user_special_values:
                         if dominant_val not in self.user_special_values[col]:
                             self.user_special_values[col].append(dominant_val)
@@ -304,7 +291,7 @@ class SynSeqPreprocessor:
                 if pd.isna(x):
                     return float(missing_marker)
                 elif x in specials:
-                    return float(x)  # retain the special value as-is
+                    return float(x)
                 else:
                     return float(normal_marker)
 
@@ -313,7 +300,7 @@ class SynSeqPreprocessor:
 
             df[cat_col] = df[col].apply(
                 lambda x: cat_mapper(x, specials, normal_marker, missing_marker)
-            ).astype(df[col].dtype)  # Preserve original dtype
+            ).astype(df[col].dtype)
 
     def _oversample_minority(self, df: pd.DataFrame) -> pd.DataFrame:
         """
@@ -323,9 +310,8 @@ class SynSeqPreprocessor:
         to a capped multiplier (default factor=3).
         Verbose logging is provided.
         """
-        max_oversample_factor = 1.2  # maximum allowed multiplier for the minority group
+        max_oversample_factor = 1.2
         for col, dominant_val in self.dominant_values.items():
-            # Identify minority rows (those not equal to the dominant value)
             minority_df = df[df[col] != dominant_val]
             count_min = len(minority_df)
             count_dom = (df[col] == dominant_val).sum()
@@ -336,7 +322,6 @@ class SynSeqPreprocessor:
             ratio = count_dom / count_min
             print(f"[oversample] Column '{col}': dominant count = {count_dom}, minority count = {count_min}, ratio = {ratio:.2f}")
 
-            # Set a target for the minority count but do not exceed max_oversample_factor * current minority
             target_minority = min(count_dom, int(max_oversample_factor * count_min))
             n_to_sample = target_minority - count_min
 
@@ -348,9 +333,6 @@ class SynSeqPreprocessor:
                 print(f"[oversample] Column '{col}': no oversampling needed (minority count already near target).")
         return df
 
-    # =========================================================================
-    # POSTPROCESSING
-    # =========================================================================
     def postprocess(self, df: pd.DataFrame, rules: Optional[Dict[str, List[Tuple[str, str, Any]]]] = None) -> pd.DataFrame:
         """
         Postprocesses the synthetic DataFrame:
@@ -362,14 +344,11 @@ class SynSeqPreprocessor:
         """
         df = df.copy()
         
-        # (1) Merge split columns.
         df = self._merge_splitted_cols(df)
         
-        # (2) Apply business rules if provided.
         if rules is not None:
             df = self.apply_rules(df, rules)
             
-        # (3) Restore original column order and dtypes.
         df = df[list(self.original_dtypes.keys())].astype(self.original_dtypes)
         
         return df
@@ -380,25 +359,19 @@ class SynSeqPreprocessor:
             if cat_col not in df.columns:
                 continue
 
-            # Get original dtype before modification.
             original_dtype = self.original_dtypes.get(base_col, np.float64)
             
-            # (1) Handle missing values: if _cat equals the missing marker, set base_col to NaN.
             missing_mask = df[cat_col] == self.MISSING_MARKER
             df.loc[missing_mask, base_col] = np.nan
             
-            # (2) Apply special values:
-            # If _cat is not equal to the numeric or missing marker, restore special value.
             special_mask = ~df[cat_col].isin([self.NUMERIC_MARKER, self.MISSING_MARKER])
             df.loc[special_mask, base_col] = df.loc[special_mask, cat_col].astype(original_dtype)
             
-            # (3) Remove auxiliary column.
             df.drop(columns=cat_col, inplace=True)
             
         return df
 
     def _convert_special_value(self, val: Any, specials: List[Any]) -> Any:
-        # Placeholder for additional logic if needed.
         return val
 
     def apply_rules(self, df: pd.DataFrame, rules: Dict[str, List[Tuple[str, str, Any]]]) -> pd.DataFrame:
@@ -477,7 +450,6 @@ import numpy as np
 import pandas as pd
 import warnings
 
-# Import column-fitting and generation functions for various methods.
 from synthcity.plugins.core.models.syn_seq.methods import (
     syn_cart, generate_cart,
     syn_ctree, generate_ctree,
@@ -491,7 +463,6 @@ from synthcity.plugins.core.models.syn_seq.methods import (
     syn_swr, generate_swr,
 )
 
-# Map method names to (fitting function, generation function)
 METHOD_MAP: Dict[str, Tuple[Any, Any]] = {
     "cart": (syn_cart, generate_cart),
     "ctree": (syn_ctree, generate_ctree),
@@ -505,7 +476,6 @@ METHOD_MAP: Dict[str, Tuple[Any, Any]] = {
     "swr": (syn_swr, generate_swr),
 }
 
-# Special markers for numeric and missing values.
 NUMERIC_MARKER = -777777777
 MISSING_MARKER = -999999999
 
@@ -530,7 +500,7 @@ class Syn_Seq:
         self._col_models: Dict[str, Dict[str, Any]] = {}  
         self._first_col_values: Dict[str, np.ndarray] = {}
 
-    def fit_col(self, loader: Any, label_encoder: Any, *args: Any, **kwargs: Any) -> "Syn_Seq":
+    def fit_col(self, loader: Any, label_encoder: Any, loader_info: Any, *args: Any, **kwargs: Any) -> "Syn_Seq":
         """
         Fit each column sequentially using metadata from the loader.
         For each _cat column in the training data, record its full distribution 
@@ -538,24 +508,21 @@ class Syn_Seq:
         columns with special values, filter out rows whose value is special so that the 
         model sees only numeric values.
         """
-        info_dict = loader.info()
+        info_dict = loader_info
         training_data = loader.dataframe().copy()
         if training_data.empty:
             raise ValueError("No data => cannot fit Syn_Seq aggregator")
         
-        # Set synthesis order, method mapping, and variable selection from loader info.
+        print(info_dict)
         self._syn_order = info_dict.get("syn_order", list(training_data.columns))
         self._method_map = info_dict.get("method", {})
         self._varsel = info_dict.get("variable_selection", {})
 
-        # --- Build the _cat column distributions ---
         for col in training_data.columns:
             if col.endswith("_cat"):
-                # Compute the normalized frequency (distribution) for each unique value.
                 value_counts = training_data[col].astype(int).value_counts(normalize=True)
                 self.cat_distributions[col] = value_counts.to_dict()
 
-        # For auto-injected _cat columns, force method "cart" and mirror variable selection.
         for col in self._syn_order:
             if col.endswith("_cat"):
                 self._method_map[col] = "cart"
@@ -568,12 +535,10 @@ class Syn_Seq:
 
         print("[INFO] Syn_Seq aggregator: fitting columns...")
 
-        # For the first column, store its observed (non-null) distribution.
         first_col = self._syn_order[0]
         self._first_col_values[first_col] = training_data[first_col].dropna().values
         print(f"Fitting '{first_col}' => stored values from real data. Done.")
 
-        # Fit a model for each subsequent column.
         np.random.seed(self.random_state)
         for i, col in enumerate(self._syn_order[1:], start=1):
             method_name = self._method_map.get(col, "cart")
@@ -582,7 +547,6 @@ class Syn_Seq:
             X = training_data[preds_list].values
             cat_col = col + "_cat"
             if cat_col in preds_list:
-                # Get the numeric label for the NUMERIC_MARKER.
                 numeric_indices = np.where(label_encoder[cat_col].classes_ == NUMERIC_MARKER)[0]
 
                 missing_indices = []
@@ -592,7 +556,6 @@ class Syn_Seq:
                     raise ValueError(f"Numeric marker {NUMERIC_MARKER} not found in {cat_col} classes")
                 numeric_label = numeric_indices[0]
                 missing_label = missing_indices[0] if len(missing_indices) > 0 else None
-                # Fixed implementation of mask:
                 mask = (training_data[cat_col] == numeric_label)
                 if missing_label is not None:
                     mask &= (training_data[cat_col] != missing_label)
@@ -640,10 +603,8 @@ class Syn_Seq:
         if count <= 0:
             return pd.DataFrame(columns=self._syn_order)
         
-        # Initialize a DataFrame with NaN values for all columns.
         gen_df = pd.DataFrame({col: [np.nan] * count for col in self._syn_order})
         
-        # (1) Generate the first column using its stored distribution.
         first_col = self._syn_order[0]
         if first_col in self._first_col_values and len(self._first_col_values[first_col]) > 0:
             gen_df[first_col] = np.random.choice(
@@ -654,7 +615,6 @@ class Syn_Seq:
             gen_df[first_col] = 0
         print(f"Generating '{first_col}' => done.")
         
-        # (2) For each subsequent column, generate synthetic values.
         for col in self._syn_order[1:]:
             method_name = self._method_map.get(col, "cart")
             preds_list = self._varsel.get(col, self._syn_order[:self._syn_order.index(col)])
@@ -665,7 +625,6 @@ class Syn_Seq:
                 if len(numeric_indices) == 0:
                     raise ValueError(f"Numeric marker {NUMERIC_MARKER} not found in {cat_col} classes")
                 numeric_label = numeric_indices[0]
-                # Determine which rows should be generated numerically.
                 mask = (gen_df[cat_col] == numeric_label)
                 if mask.sum() > 0:
                     Xsyn_numeric = gen_df.loc[mask, preds_list].values
@@ -677,14 +636,11 @@ class Syn_Seq:
                     )
                     gen_df.loc[~mask, col] = special_values
             else:
-                # Normal generation for columns without an associated _cat column.
                 Xsyn = gen_df[preds_list].values
                 ysyn = self._generate_single_col(method_name, Xsyn, col)
                 gen_df[col] = ysyn
             print(f"Generating '{col}' => done.")
             
-            # Fallback: if the generated column does not contain any numeric marker,
-            # use the empirical distribution from training.
             if col in self.cat_distributions:
                 numeric_indices = np.where(label_encoder[col].classes_ == NUMERIC_MARKER)[0]
                 if len(numeric_indices) > 0:
@@ -2525,22 +2481,6 @@ class ImageDataLoader(DataLoader):
 
 
 class Syn_SeqDataLoader(DataLoader):
-    """
-    A DataLoader that uses Syn_SeqEncoder with dictionary-based variable_selection_.
-
-    - __init__:
-        1) user_custom 딕셔너리를 파싱해 syn_order, method, variable_selection 등을 가져옴
-        2) Syn_SeqEncoder를 생성 후, fit(data) -> 전반적인 정보(변수 순서, method 등) 세팅
-        3) verbose=True라면 fit결과 info를 _print_init_info()로 표시
-
-    * encode/decode 메서드는 명시적으로 정의하지 않음
-      => 부모 DataLoader의 encode()/decode()를 그대로 사용.
-    """
-
-    """
-    기존 Syn_SeqDataLoader에서, '_cat' 컬럼을 자동 반영하는 기능 추가
-    """
-
     def __init__(
         self,
         data: pd.DataFrame,
@@ -2565,22 +2505,18 @@ class Syn_SeqDataLoader(DataLoader):
         self.target_column = target_column
         self.verbose = verbose
 
-        # 1) 기존 user_custom 파싱
         syn_order = self.user_custom.get("syn_order", list(self.data.columns))
         method = self.user_custom.get("method", {})
         variable_selection = self.user_custom.get("variable_selection", {})
 
-        # 2) '_cat' 컬럼 자동 반영
         syn_order, variable_selection = self._auto_inject_cat_columns(
             df=self.data,
             syn_order=syn_order,
             variable_selection=variable_selection
         )
-        # 업데이트한 것을 다시 user_custom에 저장
         self.user_custom["syn_order"] = syn_order
         self.user_custom["variable_selection"] = variable_selection
 
-        # 3) Syn_SeqEncoder 생성
         self._encoder = Syn_SeqEncoder(
             syn_order=syn_order,
             method=method,
@@ -2589,7 +2525,6 @@ class Syn_SeqDataLoader(DataLoader):
         )
 
         if self.verbose:
-            # encoder.fit() + info출력
             self._encoder.prepare(self.data)
             self._print_init_info()
 
@@ -2599,32 +2534,22 @@ class Syn_SeqDataLoader(DataLoader):
         syn_order: List[str],
         variable_selection: Dict[str, List[str]],
     ) -> Tuple[List[str], Dict[str, List[str]]]:
-        """
-        1) '_cat'으로 끝나는 컬럼 자동 탐색
-        2) 해당 base_col = col[:-4]가 syn_order에 있으면, cat_col을 base_col 뒤(또는 앞)에 삽입
-        3) variable_selection에서도 base_col이 predictor면 cat_col도 predictor로 추가
-        """
-        new_syn_order = list(syn_order)  # 사본
-        new_varsel = {k: list(v) for k, v in variable_selection.items()}  # 사본
+        new_syn_order = list(syn_order) 
+        new_varsel = {k: list(v) for k, v in variable_selection.items()} 
 
         cat_cols = [c for c in df.columns if c.endswith("_cat")]
 
         for cat_col in cat_cols:
-            base_col = cat_col[:-4]  # 예) 'income_cat' -> 'income'
+            base_col = cat_col[:-4] 
             
             if base_col in new_syn_order:
-                # base_col 위치를 찾아 cat_col을 끼워넣기
                 base_idx = new_syn_order.index(base_col)
-                # 예: base_col 뒤에 cat_col을 삽입
                 if cat_col not in new_syn_order:
                     new_syn_order.insert(base_idx, cat_col)
             else:
-                # base_col 자체가 syn_order에 없으면 맨 뒤에 넣거나 다른 규칙을 적용
                 if cat_col not in new_syn_order:
                     new_syn_order.append(cat_col)
 
-            # variable_selection
-            # base_col이 predictor인 곳 => cat_col도 predictor
             for tgt_col, preds in new_varsel.items():
                 if base_col in preds and cat_col not in preds:
                     preds.append(cat_col)
@@ -2646,7 +2571,6 @@ class Syn_SeqDataLoader(DataLoader):
             if i < len(syn_order) - 1:
                 print("    --> ")
 
-        # variable_selection matrix
         df_vs = self._varsel_dict_to_df(varsel, syn_order)
         print("\n  - variable_selection_:")
         print(df_vs)
@@ -2662,9 +2586,6 @@ class Syn_SeqDataLoader(DataLoader):
                     df_vs.loc[tgt, p] = 1
         return df_vs
 
-    # ----------------------------------------------------------------
-    # DataLoader 필수 구현 메서드
-    # ----------------------------------------------------------------
     @property
     def shape(self) -> tuple:
         return self.data.shape
@@ -2702,12 +2623,6 @@ class Syn_SeqDataLoader(DataLoader):
 
     @staticmethod
     def from_info(data: pd.DataFrame, info: dict) -> "Syn_SeqDataLoader":
-        """
-        Rebuild user_custom from info,
-        Then create loader and do encoder.fit().
-        Notice that we won't auto transform => user must call parent's encode()
-        or do external preprocessing if needed.
-        """
         user_custom = {
             "syn_order": info.get("syn_order", list(data.columns)),
             "method": info.get("method", {}),
@@ -2818,7 +2733,6 @@ class Syn_SeqPlugin(Plugin):
 
     @staticmethod
     def hyperparameter_space(**kwargs: Any) -> List:
-        # There are no tunable hyperparameters for Syn_Seq.
         return []
 
     @validate_arguments(config=dict(arbitrary_types_allowed=True))
@@ -2839,26 +2753,20 @@ class Syn_SeqPlugin(Plugin):
         self.model: Optional[Syn_Seq] = None
 
     def _fit(self, X: DataLoader, *args: Any, **kwargs: Any) -> "Syn_SeqPlugin":
-        # If X is a plain DataFrame, wrap it in our Syn_SeqDataLoader.
         if isinstance(X, pd.DataFrame):
             X = Syn_SeqDataLoader(X)
-        # Initialize the Syn_Seq aggregator and train it column‐by‐column.
         self.model = Syn_Seq(
             random_state=self.random_state,
             sampling_patience=self.sampling_patience,
         )
-        self.model.fit_col(X, self._data_encoders, *args, **kwargs)
-        self.data_info = X.info()
+        self.model.fit_col(X, self._data_encoders, loader_info=self.data_info, *args, **kwargs)
         return self
 
     def _generate(self, count: int, syn_schema: Schema, **kwargs: Any) -> DataLoader:
         if self.model is None:
             raise RuntimeError("The model must be fitted before generating data.")
-        # Generate synthetic data using the Syn_Seq aggregator.
         df_syn = self.model.generate_col(count, self._data_encoders, **kwargs)
-        # Adapt the generated DataFrame to the schema (i.e. ensure data types match).
         df_syn = syn_schema.adapt_dtypes(df_syn)
-        # Create a DataLoader from the synthetic DataFrame using the stored data_info.
         data_syn = create_from_info(df_syn, self.data_info)
         return Syn_SeqDataLoader(
             df_syn,
@@ -9553,4 +9461,19 @@ __all__ = [basename(f)[:-3] for f in plugins if isfile(f)] + [
     "GenericPlugins",
 ]
 
+
+src/synthcity/tests/plugins/core/models/test_gan.py
+** Not a valid file path or file does not exist. **
+
+src/synthcity/tests/plugins/core/models/helpers.py
+** Not a valid file path or file does not exist. **
+
+src/synthcity/tests/plugins/core/test_dataloader.py
+** Not a valid file path or file does not exist. **
+
+src/synthcity/tests/plugins/core/test_plugin.py
+** Not a valid file path or file does not exist. **
+
+src/synthcity/tests/plugins/generic/test_tvae.py
+** Not a valid file path or file does not exist. **
 
