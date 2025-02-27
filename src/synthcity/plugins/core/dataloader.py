@@ -1805,6 +1805,21 @@ class ImageDataLoader(DataLoader):
 
 
 class Syn_SeqDataLoader(DataLoader):
+    """
+    Syn_SeqDataLoader is a specialized data loader designed for the syn_seq synthesis process.
+    
+    It manages the input DataFrame along with user-custom settings such as synthesis order,
+    synthesis methods, and variable selection. The loader automatically injects categorical 
+    marker columns into the synthesis order and variable selection settings if present.
+    
+    It initializes and prepares a Syn_SeqEncoder to handle feature encoding for synthesis.
+    
+    Key functionalities include:
+      - Providing access to data in various formats (DataFrame, NumPy array, training/test splits).
+      - Sampling, dropping columns, and filling missing values.
+      - Reconstructing a loader from saved configuration using from_info.
+      - Delegating fairness and constraint checks to external classes.
+    """
     def __init__(
         self,
         data: pd.DataFrame,
@@ -2009,7 +2024,6 @@ class Syn_SeqDataLoader(DataLoader):
             train_size=self.train_size,
             verbose=False
         )
-        # encoder 공유
         new_loader._encoder = self._encoder
         return new_loader
 

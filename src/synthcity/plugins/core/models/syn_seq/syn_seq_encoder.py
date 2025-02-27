@@ -5,9 +5,9 @@ from sklearn.base import BaseEstimator, TransformerMixin
 
 class Syn_SeqEncoder(TransformerMixin, BaseEstimator):
     """
-    syn_seq용 최소화된 인코더.
-      - 전처리(날짜 변환, special_value 등)는 이미 preprocess.py에서 처리했다고 가정.
-      - 여기서는 syn_order, method, variable_selection만 세팅.
+    A minimal encoder for syn_seq.
+      - It assumes that preprocessing (date conversion, special value handling, etc.) has already been done in preprocess.py.
+      - This encoder only sets up syn_order, method, and variable_selection.
     """
 
     def __init__(
@@ -19,10 +19,10 @@ class Syn_SeqEncoder(TransformerMixin, BaseEstimator):
     ):
         """
         Args:
-            syn_order: 유저가 지정한 컬럼 순서. 비어있으면 prepare 단계에서 X.columns 사용
-            method: {col: "rf"/"norm"/...} 식으로 유저 지정. 
-            variable_selection: {col: [predictors...]}
-            default_method: 유저 지정 없을 때 쓸 기본값. (ex: "cart")
+            syn_order: User-specified column order. If empty, X.columns will be used in the prepare step.
+            method: A dictionary mapping columns to methods (e.g., {"col": "rf", ...}).
+            variable_selection: A dictionary mapping each target column to a list of predictors.
+            default_method: The default method to use when none is specified (e.g., "cart").
         """
         self.syn_order = syn_order or []
         self.method = method or {}
@@ -33,9 +33,12 @@ class Syn_SeqEncoder(TransformerMixin, BaseEstimator):
 
     def prepare(self, X: pd.DataFrame) -> "Syn_SeqEncoder":
         """
-        1) syn_order 확정
-        2) assign_method_to_cols
-        3) variable_selection 설정
+        Prepares the encoder using the reference DataFrame X:
+          1) Determines the syn_order.
+          2) Assigns a method to each column.
+          3) Sets up variable selection.
+        Returns:
+            The encoder instance.
         """
         self._set_syn_order(X)
         self._assign_method_to_cols()
@@ -44,8 +47,8 @@ class Syn_SeqEncoder(TransformerMixin, BaseEstimator):
 
     def _set_syn_order(self, X: pd.DataFrame):
         """
-        syn_order가 비어 있으면 X.columns를 사용,
-        유효하지 않은 컬럼(존재X)은 제외
+        If syn_order is empty, use X.columns;
+        Otherwise, filter out columns not present in X.
         """
         if not self.syn_order:
             self.syn_order = list(X.columns)
@@ -54,8 +57,9 @@ class Syn_SeqEncoder(TransformerMixin, BaseEstimator):
 
     def _assign_method_to_cols(self):
         """
-        1) 첫 컬럼은 user 지정 없으면 swr
-        2) 나머지 컬럼은 user 지정 없으면 default_method
+        For the first column, if the user has not specified a method, use "swr".
+        For the remaining columns, use the user-specified method if provided, otherwise use default_method.
+        The chosen method is stored in col_map.
         """
         self.col_map.clear()
         for i, col in enumerate(self.syn_order):
@@ -69,8 +73,8 @@ class Syn_SeqEncoder(TransformerMixin, BaseEstimator):
 
     def _assign_variable_selection(self):
         """
-        유저가 variable_selection을 지정하지 않은 컬럼은,
-        (현재 컬럼 인덱스보다 앞선 컬럼들)을 predictor로 설정
+        For columns where the user did not specify variable_selection,
+        assign all columns preceding the current column as predictors.
         """
         for i, col in enumerate(self.syn_order):
             if col not in self.variable_selection_:
@@ -78,7 +82,7 @@ class Syn_SeqEncoder(TransformerMixin, BaseEstimator):
 
     def get_info(self) -> Dict[str, Any]:
         """
-        Encoder가 관리 중인 syn_order, method, variable_selection 등 반환
+        Returns the encoder's information including syn_order, method, and variable_selection.
         """
         method_map = {}
         for col in self.col_map:

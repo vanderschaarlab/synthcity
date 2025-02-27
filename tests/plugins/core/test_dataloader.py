@@ -794,6 +794,7 @@ def test_syn_seq_dataloader_sanity():
     te_loader = loader.test()
     assert len(tr_loader) + len(te_loader) == 4
 
+
 def test_syn_seq_dataloader_sample_and_drop():
     """
     Test sample() and drop() with the Syn_SeqDataLoader
@@ -810,6 +811,7 @@ def test_syn_seq_dataloader_sample_and_drop():
     dropped = loader.drop(columns=["colC"])
     assert "colC" not in dropped.columns
     assert dropped.shape == (5, 2)
+
 
 def test_syn_seq_dataloader_encode_decode():
     """
@@ -834,6 +836,7 @@ def test_syn_seq_dataloader_encode_decode():
     assert (df_dec["col1"].values == df["col1"].values).all()
     assert (df_dec["col2"].values == df["col2"].values).all()
 
+
 def test_syn_seq_dataloader_info():
     """
     Check that loader.info() merges base_info and encoder info correctly
@@ -851,10 +854,9 @@ def test_syn_seq_dataloader_info():
     loader = Syn_SeqDataLoader(data=df, user_custom=user_custom, verbose=False)
     info = loader.info()
 
-    # 🔍 디버깅을 위해 출력
-    print("info['method']:", info["method"])  # <-- method 출력
-    print("info['syn_order']:", info["syn_order"])  # <-- syn_order 출력
-    sys.stdout.flush()  # 🔹 강제적으로 즉시 출력
+    print("info['method']:", info["method"])  
+    print("info['syn_order']:", info["syn_order"])
+    sys.stdout.flush()
     
     assert info["data_type"] == "syn_seq"
     assert info["len"] == 3
@@ -864,4 +866,4 @@ def test_syn_seq_dataloader_info():
 
     assert "colY_cat" in info["syn_order"]
 
-    assert info["method"].get("colY") == "rf"  # <-- 여기서 오류 발생 가능
+    assert info["method"].get("colY") == "rf" 

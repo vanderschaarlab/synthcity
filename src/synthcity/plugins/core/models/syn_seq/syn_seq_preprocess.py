@@ -179,9 +179,7 @@ class SynSeqPreprocessor:
         - Otherwise, it is marked with the numeric marker.
         - The _cat column is cast to the same dtype as the original.
         """
-        # 특별값 처리는 numeric 컬럼에 대해서만 적용
         for col, specials in self.user_special_values.items():
-            # 만약 해당 컬럼이 numeric으로 지정되지 않았다면 (예: "category") special value 처리를 무시함
             if self.user_dtypes.get(col, None) != "numeric":
                 continue
 
@@ -253,20 +251,16 @@ class SynSeqPreprocessor:
           3) Restores the original column order and dtypes.
         """
         df = df.copy()
-        
         df = self._merge_splitted_cols(df)
-        
         if rules is not None:
-            df = self.apply_rules(df, rules)
-            
+            df = self.apply_rules(df, rules) 
         new_types = {}
         for col, dtype_str in self.original_dtypes.items():
             if "int" in dtype_str:
-                new_types[col] = "Int64"  # nullable integer
+                new_types[col] = "Int64" 
             else:
                 new_types[col] = dtype_str
-        df = df[list(self.original_dtypes.keys())].astype(new_types)
-        
+        df = df[list(self.original_dtypes.keys())].astype(new_types)     
         return df
 
     def _merge_splitted_cols(self, df: pd.DataFrame) -> pd.DataFrame:
@@ -276,17 +270,11 @@ class SynSeqPreprocessor:
                 continue
 
             original_dtype = self.original_dtypes.get(base_col, np.float64)
-            
-            # MISSING_MARKER인 경우 np.nan으로 변환 (원본 데이터에 결측치가 있었던 경우)
             missing_mask = df[cat_col] == self.MISSING_MARKER
-            df.loc[missing_mask, base_col] = np.nan
-            
-            # _cat 컬럼 값이 특별값(즉, NUMERIC_MARKER나 MISSING_MARKER가 아닌 경우)인 경우 복원
+            df.loc[missing_mask, base_col] = np.nan        
             special_mask = ~df[cat_col].isin([self.NUMERIC_MARKER, self.MISSING_MARKER])
-            df.loc[special_mask, base_col] = df.loc[special_mask, cat_col].astype(original_dtype)
-            
-            df.drop(columns=cat_col, inplace=True)
-            
+            df.loc[special_mask, base_col] = df.loc[special_mask, cat_col].astype(original_dtype)        
+            df.drop(columns=cat_col, inplace=True)       
         return df
 
     def _convert_special_value(self, val: Any, specials: List[Any]) -> Any:
@@ -295,7 +283,6 @@ class SynSeqPreprocessor:
     def apply_rules(self, df: pd.DataFrame, rules: Dict[str, List[Tuple[str, str, Any]]]) -> pd.DataFrame:
         """
         Applies a set of rules to the DataFrame by iteratively dropping rows that do not satisfy each rule.
-        
         Args:
             df: The synthetic DataFrame.
             rules: A dictionary where each key is a target column and the value is a list of rules
