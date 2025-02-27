@@ -1847,9 +1847,8 @@ class Syn_SeqDataLoader(DataLoader):
             variable_selection=variable_selection,
             default_method="cart",
         )
-
+        self._encoder.prepare(self.data)
         if self.verbose:
-            self._encoder.prepare(self.data)
             self._print_init_info()
 
     def _auto_inject_cat_columns(

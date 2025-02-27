@@ -19,6 +19,7 @@ from synthcity.plugins.core.dataloader import (
     SurvivalAnalysisDataLoader,
     TimeSeriesDataLoader,
     TimeSeriesSurvivalDataLoader,
+    Syn_SeqDataLoader,
     create_from_info,
 )
 from synthcity.plugins.core.dataset import FlexibleDataset, TensorDataset
@@ -753,3 +754,114 @@ def test_image_datasets() -> None:
     transform_dataset = transform_dataset.filter_indices([0])
     assert len(transform_dataset) == 1
     assert (transform_dataset.indices == [1]).all()
+
+
+def test_syn_seq_dataloader_sanity():
+    """
+    Test basic creation of Syn_SeqDataLoader, verifying:
+      - shape
+      - cat columns are auto-injected
+      - train/test split
+      - info() returns correct encoder details
+    """
+    df = pd.DataFrame({
+        "income": [100, 200, -8, 400],
+        "income_cat": ["-777", "-777", "-8", "-777"],
+        "colX": [1,2,3,4]
+    })
+    user_custom = {
+        "syn_order": ["income", "colX"],  
+        "method": {"colX":"rf"},
+        "variable_selection": {
+            "colX": ["income"]
+        }
+    }
+    loader = Syn_SeqDataLoader(
+        data=df,
+        user_custom=user_custom,
+        target_column="income",
+        random_state=42,
+        train_size=0.5,
+        verbose=False
+    )
+
+    assert loader.shape == (4, 3)
+    info = loader.info()
+    syn_order = info.get("syn_order", [])
+    assert "income_cat" in syn_order, "Should auto-inject 'income_cat' into syn_order"
+
+    tr_loader = loader.train()
+    te_loader = loader.test()
+    assert len(tr_loader) + len(te_loader) == 4
+
+def test_syn_seq_dataloader_sample_and_drop():
+    """
+    Test sample() and drop() with the Syn_SeqDataLoader
+    """
+    df = pd.DataFrame({
+        "colA": [1,2,3,4,5],
+        "colB_cat": ["-777","-777","-8","-777","-8"],
+        "colC": [10,20,30,40,50]
+    })
+    loader = Syn_SeqDataLoader(df)
+    samp = loader.sample(2)
+    assert len(samp) == 2
+
+    dropped = loader.drop(columns=["colC"])
+    assert "colC" not in dropped.columns
+    assert dropped.shape == (5, 2)
+
+def test_syn_seq_dataloader_encode_decode():
+    """
+    Check that parent's encode()/decode() (label encoding logic) works
+    with Syn_SeqDataLoader
+    """
+    df = pd.DataFrame({
+        "col1": ["A","B","A","C"],
+        "col2": [10,20,30,40]
+    })
+    loader = Syn_SeqDataLoader(
+        data=df,
+        user_custom={}
+    )
+
+    encoded_loader, encoders = loader.encode()
+    assert encoded_loader.shape == df.shape
+
+    decoded_loader = encoded_loader.decode(encoders)
+
+    df_dec = decoded_loader.dataframe()
+    assert (df_dec["col1"].values == df["col1"].values).all()
+    assert (df_dec["col2"].values == df["col2"].values).all()
+
+def test_syn_seq_dataloader_info():
+    """
+    Check that loader.info() merges base_info and encoder info correctly
+    """
+    df = pd.DataFrame({
+        "colX": ["x","y","z"],
+        "colY": [1,2,3],
+        "colY_cat": ["-777","-777","-8"] 
+    })
+    user_custom = {
+        "syn_order": ["colX","colY"],
+        "method": {"colY":"rf"},
+        "variable_selection": {}
+    }
+    loader = Syn_SeqDataLoader(data=df, user_custom=user_custom, verbose=False)
+    info = loader.info()
+
+    # 🔍 디버깅을 위해 출력
+    print("info['method']:", info["method"])  # <-- method 출력
+    print("info['syn_order']:", info["syn_order"])  # <-- syn_order 출력
+    sys.stdout.flush()  # 🔹 강제적으로 즉시 출력
+    
+    assert info["data_type"] == "syn_seq"
+    assert info["len"] == 3
+
+    assert "syn_order" in info, "encoder's syn_order should be in info"
+    assert "variable_selection" in info, "encoder's varsel should be in info"
+
+    assert "colY_cat" in info["syn_order"]
+
+    assert info["method"].get("colY") == "rf"  # <-- 여기서 오류 발생 가능

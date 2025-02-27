@@ -173,13 +173,18 @@ class SynSeqPreprocessor:
     def _split_numeric_columns(self, df: pd.DataFrame):
         """
         For each numeric column in user_special_values:
-          - Create a new column (named base_col_cat) that marks special values using markers.
-          - If a cell is NaN, it is mapped to the missing marker.
-          - If the cell equals a special value, it is kept as that value.
-          - Otherwise, it is marked with the numeric marker.
-          - The _cat column is cast to the same dtype as the original.
+        - Create a new column (named base_col_cat) that marks special values using markers.
+        - If a cell is NaN, it is mapped to the missing marker.
+        - If the cell equals a special value, it is kept as that value.
+        - Otherwise, it is marked with the numeric marker.
+        - The _cat column is cast to the same dtype as the original.
         """
+        # 특별값 처리는 numeric 컬럼에 대해서만 적용
         for col, specials in self.user_special_values.items():
+            # 만약 해당 컬럼이 numeric으로 지정되지 않았다면 (예: "category") special value 처리를 무시함
+            if self.user_dtypes.get(col, None) != "numeric":
+                continue
+
             if col not in df.columns:
                 continue
 
@@ -254,7 +259,13 @@ class SynSeqPreprocessor:
         if rules is not None:
             df = self.apply_rules(df, rules)
             
-        df = df[list(self.original_dtypes.keys())].astype(self.original_dtypes)
+        new_types = {}
+        for col, dtype_str in self.original_dtypes.items():
+            if "int" in dtype_str:
+                new_types[col] = "Int64"  # nullable integer
+            else:
+                new_types[col] = dtype_str
+        df = df[list(self.original_dtypes.keys())].astype(new_types)
         
         return df
 
@@ -266,9 +277,11 @@ class SynSeqPreprocessor:
 
             original_dtype = self.original_dtypes.get(base_col, np.float64)
             
+            # MISSING_MARKER인 경우 np.nan으로 변환 (원본 데이터에 결측치가 있었던 경우)
             missing_mask = df[cat_col] == self.MISSING_MARKER
             df.loc[missing_mask, base_col] = np.nan
             
+            # _cat 컬럼 값이 특별값(즉, NUMERIC_MARKER나 MISSING_MARKER가 아닌 경우)인 경우 복원
             special_mask = ~df[cat_col].isin([self.NUMERIC_MARKER, self.MISSING_MARKER])
             df.loc[special_mask, base_col] = df.loc[special_mask, cat_col].astype(original_dtype)
             
