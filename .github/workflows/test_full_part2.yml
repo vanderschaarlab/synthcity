@@ -1,17 +1,17 @@
-name: All Tutorials
+name: Tests Full Python - part 2
 
 on:
   schedule:
-    - cron: "2 4 17 * *"
+    - cron: "4 8 * * 3"
   workflow_dispatch:
 
 jobs:
-  Tutorials:
+  Library:
     runs-on: ${{ matrix.os }}
     strategy:
       matrix:
         python-version: ["3.9", "3.10", "3.11"]
-        os: [ubuntu-latest]
+        os: [ubuntu-latest, windows-latest] # TODO: Add MacOS back, currently hanging until timeout for unknown reason
     steps:
       - uses: actions/checkout@v3
         with:
@@ -29,14 +29,20 @@ jobs:
         run: |
           python -m pip install -U pip
           pip install -r prereq.txt
-
-          pip install .[testing]
-
-          python -m pip install ipykernel
-          python -m ipykernel install --user
-      - name: Run the tutorials
-        run: python tests/nb_eval.py --nb_dir tutorials/ --tutorial_tests all_tests
-      - name: Run the extra tutorials - goggle
+      - name: Limit OpenMP threads
         run: |
-          pip install .[goggle]
-          python tests/nb_eval.py --nb_dir tutorials/ --tutorial_tests goggle_tests
+          echo "OMP_NUM_THREADS=2" >> $GITHUB_ENV
+      - name: Test Core - slow part two
+        timeout-minutes: 1000
+        run: |
+          pip install .[testing]
+          pytest -vvvs --durations=50 -m "slow_2"
+      - name: Test Core - fast
+        timeout-minutes: 1000
+        run: |
+          pip install .[testing]
+          pytest -vvvs --durations=50 -m "not slow"
+      - name: Test GOGGLE
+        run: |
+          pip install .[testing,goggle]
+          pytest -vvvs -k goggle --durations=50
