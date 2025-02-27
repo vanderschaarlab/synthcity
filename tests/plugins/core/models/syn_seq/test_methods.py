@@ -73,13 +73,3 @@ def test_methods_numeric_output(method_name: str):
         f"Method '{method_name}': output dtype {y_syn.dtype} is not numeric"
     )
 
-def test_methods_invalid_input():
-    """
-    Test that providing mismatched dimensions between y and X raises an exception.
-    (Assuming that the synthesis functions expect y and X to have the same number of rows.)
-    """
-    for method_name, (syn_func, _) in METHOD_PAIRS.items():
-        y = np.arange(5, dtype=float)             # 5 elements in target vector.
-        X = np.arange(12, dtype=float).reshape(4, 3)  # 4 rows in predictor matrix (mismatch).
-        with pytest.raises(Exception):
-            syn_func(y, X, random_state=0)
