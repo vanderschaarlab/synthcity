@@ -1,8 +1,20 @@
+# stdlib
+from typing import Any, Dict, Optional
+
+# third party
 import numpy as np
 import pandas as pd
 from sklearn.linear_model import LogisticRegression
 
-def syn_polyreg(y, X, random_state=0, solver="lbfgs", max_iter=200, **kwargs):
+
+def syn_polyreg(
+    y: np.ndarray,
+    X: np.ndarray,
+    random_state: int = 0,
+    solver: str = "lbfgs",
+    max_iter: int = 200,
+    **kwargs: Any
+) -> Dict[str, Any]:
     """
     Fit a multinomial logistic regression model for a “polyreg” synthesis.
 
@@ -13,7 +25,7 @@ def syn_polyreg(y, X, random_state=0, solver="lbfgs", max_iter=200, **kwargs):
     """
     y = np.asarray(y)
     X = np.asarray(X)
-    
+
     if np.issubdtype(y.dtype, np.floating):
         unique_values = np.unique(y)
         if len(unique_values) > 10:
@@ -27,7 +39,7 @@ def syn_polyreg(y, X, random_state=0, solver="lbfgs", max_iter=200, **kwargs):
     else:
         y_fit = y
         bin_edges = None
-        
+
     model = LogisticRegression(
         multi_class="multinomial",
         solver=solver,
@@ -36,9 +48,20 @@ def syn_polyreg(y, X, random_state=0, solver="lbfgs", max_iter=200, **kwargs):
         **kwargs
     )
     model.fit(X, y_fit)
-    return {"name": "polyreg", "model": model, "bin_edges": bin_edges, "random_state": random_state}
+    return {
+        "name": "polyreg",
+        "model": model,
+        "bin_edges": bin_edges,
+        "random_state": random_state,
+    }
 
-def generate_polyreg(fitted_model, X_new, random_state=None, **kwargs):
+
+def generate_polyreg(
+    fitted_model: Dict[str, Any],
+    X_new: np.ndarray,
+    random_state: Optional[int] = None,
+    **kwargs: Any
+) -> np.ndarray:
     """
     Generate synthetic values using the fitted polyreg model.
 
@@ -52,7 +75,7 @@ def generate_polyreg(fitted_model, X_new, random_state=None, **kwargs):
     if random_state is None:
         random_state = fitted_model.get("random_state", 0)
     rng = np.random.default_rng(random_state)
-    
+
     # Predict class probabilities
     probs = model.predict_proba(X_new)
     classes = model.classes_
@@ -60,7 +83,7 @@ def generate_polyreg(fitted_model, X_new, random_state=None, **kwargs):
     y_binned = np.empty(n_samples, dtype=int)
     for i in range(n_samples):
         y_binned[i] = rng.choice(classes, p=probs[i])
-        
+
     if bin_edges is not None:
         # Map the bin index to the bin center.
         bin_centers = (bin_edges[:-1] + bin_edges[1:]) / 2

@@ -1,10 +1,14 @@
 # cart.py
+# stdlib
+from typing import Any, Dict
+
+# third party
 import numpy as np
 import pandas as pd
-from sklearn.tree import DecisionTreeRegressor, DecisionTreeClassifier
+from sklearn.tree import DecisionTreeClassifier, DecisionTreeRegressor
 
 
-def syn_cart(y, X, random_state=0, **kwargs):
+def syn_cart(y: Any, X: Any, random_state: int = 0, **kwargs: Any) -> Dict[str, Any]:
     """
     Fit a CART model for the target `y` given predictors `X`.
     Return a dictionary containing the fitted regressor/classifier or relevant info.
@@ -29,19 +33,15 @@ def syn_cart(y, X, random_state=0, **kwargs):
 
     # Build the tree
     if is_classification:
-        estimator = DecisionTreeClassifier(
-            random_state=random_state, **kwargs
-        )
+        estimator = DecisionTreeClassifier(random_state=random_state, **kwargs)
     else:
-        estimator = DecisionTreeRegressor(
-            random_state=random_state, **kwargs
-        )
+        estimator = DecisionTreeRegressor(random_state=random_state, **kwargs)
     estimator.fit(X, y)
 
     # Map each training row to its leaf index
     leaf_ids = estimator.apply(X)
     # Collect y-values in each leaf
-    leaf_indexed_y = {}
+    leaf_indexed_y: Dict[Any, Any] = {}
     for lid, val in zip(leaf_ids, y):
         if lid not in leaf_indexed_y:
             leaf_indexed_y[lid] = []
@@ -59,7 +59,9 @@ def syn_cart(y, X, random_state=0, **kwargs):
     return model
 
 
-def generate_cart(fitted_cart, X_new, random_state=0, **kwargs):
+def generate_cart(
+    fitted_cart: Dict[str, Any], X_new: Any, random_state: int = 0, **kwargs: Any
+) -> np.ndarray:
     """
     Use the fitted cart model to generate predicted y's or do custom sequential sampling.
     Return an array-like of predictions.

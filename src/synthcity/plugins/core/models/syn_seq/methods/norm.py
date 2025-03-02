@@ -1,18 +1,22 @@
-# File: norm.py
+# stdlib
+from typing import Any, Dict
 
+# third party
 import numpy as np
 import pandas as pd
 from sklearn.linear_model import LinearRegression
 
 
-def syn_norm(y, X, random_state=0, **kwargs):
+def syn_norm(
+    y: np.ndarray, X: pd.DataFrame, random_state: int = 0, **kwargs: Any
+) -> Dict[str, Any]:
     """
     Fit a simple linear model (y ~ X) and estimate residual standard deviation.
     The fitted model is stored in a dictionary that can be used later for generation.
 
     Parameters
     ----------
-    y : array-like of shape (n_samples,)
+    y : np.ndarray
         Target values, must be numeric.
     X : pd.DataFrame
         Predictor matrix.
@@ -55,7 +59,7 @@ def syn_norm(y, X, random_state=0, **kwargs):
     else:
         resid_std_ = 0.0
 
-    model = {
+    model: Dict[str, Any] = {
         "name": "norm",
         "coef_": reg.coef_,
         "intercept_": reg.intercept_,
@@ -67,7 +71,9 @@ def syn_norm(y, X, random_state=0, **kwargs):
     return model
 
 
-def generate_norm(fitted_norm, X_new, **kwargs):
+def generate_norm(
+    fitted_norm: Dict[str, Any], X_new: pd.DataFrame, **kwargs: Any
+) -> np.ndarray:
     """
     Generate synthetic predictions using the fitted 'norm' model.
 

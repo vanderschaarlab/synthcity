@@ -18,11 +18,11 @@ from torchvision import transforms
 from synthcity.plugins.core.constraints import Constraints
 from synthcity.plugins.core.dataset import FlexibleDataset, TensorDataset
 from synthcity.plugins.core.models.feature_encoder import DatetimeEncoder
-from synthcity.utils.compression import compress_dataset, decompress_dataset
-from synthcity.utils.serialization import dataframe_hash
 
 # Syn_Seq
 from synthcity.plugins.core.models.syn_seq.syn_seq_encoder import Syn_SeqEncoder
+from synthcity.utils.compression import compress_dataset, decompress_dataset
+from synthcity.utils.serialization import dataframe_hash
 
 
 class DataLoader(metaclass=ABCMeta):
@@ -1807,19 +1807,20 @@ class ImageDataLoader(DataLoader):
 class Syn_SeqDataLoader(DataLoader):
     """
     Syn_SeqDataLoader is a specialized data loader designed for the syn_seq synthesis process.
-    
+
     It manages the input DataFrame along with user-custom settings such as synthesis order,
-    synthesis methods, and variable selection. The loader automatically injects categorical 
+    synthesis methods, and variable selection. The loader automatically injects categorical
     marker columns into the synthesis order and variable selection settings if present.
-    
+
     It initializes and prepares a Syn_SeqEncoder to handle feature encoding for synthesis.
-    
+
     Key functionalities include:
       - Providing access to data in various formats (DataFrame, NumPy array, training/test splits).
       - Sampling, dropping columns, and filling missing values.
       - Reconstructing a loader from saved configuration using from_info.
       - Delegating fairness and constraint checks to external classes.
     """
+
     def __init__(
         self,
         data: pd.DataFrame,
@@ -1836,7 +1837,7 @@ class Syn_SeqDataLoader(DataLoader):
             data=data,
             random_state=random_state,
             train_size=train_size,
-            **kwargs
+            **kwargs,
         )
 
         self.user_custom = user_custom or {}
@@ -1849,9 +1850,7 @@ class Syn_SeqDataLoader(DataLoader):
         variable_selection = self.user_custom.get("variable_selection", {})
 
         syn_order, variable_selection = self._auto_inject_cat_columns(
-            df=self.data,
-            syn_order=syn_order,
-            variable_selection=variable_selection
+            df=self.data, syn_order=syn_order, variable_selection=variable_selection
         )
         self.user_custom["syn_order"] = syn_order
         self.user_custom["variable_selection"] = variable_selection
@@ -1872,14 +1871,14 @@ class Syn_SeqDataLoader(DataLoader):
         syn_order: List[str],
         variable_selection: Dict[str, List[str]],
     ) -> Tuple[List[str], Dict[str, List[str]]]:
-        new_syn_order = list(syn_order) 
-        new_varsel = {k: list(v) for k, v in variable_selection.items()} 
+        new_syn_order = list(syn_order)
+        new_varsel = {k: list(v) for k, v in variable_selection.items()}
 
         cat_cols = [c for c in df.columns if c.endswith("_cat")]
 
         for cat_col in cat_cols:
-            base_col = cat_col[:-4] 
-            
+            base_col = cat_col[:-4]
+
             if base_col in new_syn_order:
                 base_idx = new_syn_order.index(base_col)
                 if cat_col not in new_syn_order:
@@ -1895,7 +1894,7 @@ class Syn_SeqDataLoader(DataLoader):
 
         return new_syn_order, new_varsel
 
-    def _print_init_info(self):
+    def _print_init_info(self) -> None:
         enc_info = self._encoder.get_info()
         syn_order = enc_info.get("syn_order", [])
         method_map = enc_info.get("method", {})
@@ -1914,7 +1913,9 @@ class Syn_SeqDataLoader(DataLoader):
         print(df_vs)
         print("------------------------------------------------")
 
-    def _varsel_dict_to_df(self, varsel: Dict[str, List[str]], syn_order: List[str]) -> pd.DataFrame:
+    def _varsel_dict_to_df(
+        self, varsel: Dict[str, List[str]], syn_order: List[str]
+    ) -> pd.DataFrame:
         df_vs = pd.DataFrame(0, index=syn_order, columns=syn_order)
         for tgt, preds in varsel.items():
             if tgt not in df_vs.index:
@@ -1971,7 +1972,7 @@ class Syn_SeqDataLoader(DataLoader):
             user_custom=user_custom,
             random_state=info.get("random_state", 0),
             train_size=info.get("train_size", 0.8),
-            verbose=False
+            verbose=False,
         )
 
     def sample(self, count: int, random_state: int = 0) -> "Syn_SeqDataLoader":
@@ -2022,7 +2023,7 @@ class Syn_SeqDataLoader(DataLoader):
             target_column=self.target_column,
             random_state=self.random_state,
             train_size=self.train_size,
-            verbose=False
+            verbose=False,
         )
         new_loader._encoder = self._encoder
         return new_loader

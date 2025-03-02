@@ -1,12 +1,16 @@
-# File: rf.py
-
+# stdlib
 import warnings
+from typing import Any, Dict
+
+# third party
 import numpy as np
 import pandas as pd
+from sklearn.ensemble import RandomForestClassifier, RandomForestRegressor
 
-from sklearn.ensemble import RandomForestRegressor, RandomForestClassifier
 
-def syn_rf(y, X, random_state=0, **kwargs):
+def syn_rf(
+    y: np.ndarray, X: np.ndarray, random_state: int = 0, **kwargs: Any
+) -> Dict[str, Any]:
     """
     Fit a RandomForest model in either regression or classification mode,
     depending on whether 'y' is numeric or categorical.
@@ -60,7 +64,7 @@ def syn_rf(y, X, random_state=0, **kwargs):
         rf_model.fit(X, y)
 
     # Prepare the output dictionary
-    model = {
+    model: Dict[str, Any] = {
         "name": "rf",
         "is_classifier": is_classifier,
         "rf": rf_model,
@@ -73,7 +77,9 @@ def syn_rf(y, X, random_state=0, **kwargs):
     return model
 
 
-def generate_rf(fitted_rf, X_new, **kwargs):
+def generate_rf(
+    fitted_rf: Dict[str, Any], X_new: np.ndarray, **kwargs: Any
+) -> np.ndarray:
     """
     Generate synthetic target values using a previously fitted RF model.
 
@@ -93,8 +99,7 @@ def generate_rf(fitted_rf, X_new, **kwargs):
         probas = rf_model.predict_proba(X_new)
         classes = fitted_rf["classes_"]
         sampled_indices = [
-            np.random.choice(len(classes), p=probas[i])
-            for i in range(len(X_new))
+            np.random.choice(len(classes), p=probas[i]) for i in range(len(X_new))
         ]
         y_syn = np.array([classes[idx] for idx in sampled_indices])
     else:

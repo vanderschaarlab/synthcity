@@ -1,4 +1,7 @@
-from typing import Optional, Dict, List, Any
+# stdlib
+from typing import Any, Dict, List, Optional
+
+# third party
 import pandas as pd
 from sklearn.base import BaseEstimator, TransformerMixin
 
@@ -16,7 +19,7 @@ class Syn_SeqEncoder(TransformerMixin, BaseEstimator):
         method: Optional[Dict[str, str]] = None,
         variable_selection: Optional[Dict[str, List[str]]] = None,
         default_method: str = "cart",
-    ):
+    ) -> None:
         """
         Args:
             syn_order: User-specified column order. If empty, X.columns will be used in the prepare step.
@@ -45,7 +48,7 @@ class Syn_SeqEncoder(TransformerMixin, BaseEstimator):
         self._assign_variable_selection()
         return self
 
-    def _set_syn_order(self, X: pd.DataFrame):
+    def _set_syn_order(self, X: pd.DataFrame) -> None:
         """
         If syn_order is empty, use X.columns;
         Otherwise, filter out columns not present in X.
@@ -55,7 +58,7 @@ class Syn_SeqEncoder(TransformerMixin, BaseEstimator):
         else:
             self.syn_order = [c for c in self.syn_order if c in X.columns]
 
-    def _assign_method_to_cols(self):
+    def _assign_method_to_cols(self) -> None:
         """
         For the first column, if the user has not specified a method, use "swr".
         For the remaining columns, use the user-specified method if provided, otherwise use default_method.
@@ -71,7 +74,7 @@ class Syn_SeqEncoder(TransformerMixin, BaseEstimator):
 
             self.col_map[col] = {"method": chosen}
 
-    def _assign_variable_selection(self):
+    def _assign_variable_selection(self) -> None:
         """
         For columns where the user did not specify variable_selection,
         assign all columns preceding the current column as predictors.

@@ -1,9 +1,19 @@
-# File: pmm.py
+# stdlib
+from typing import Any, Dict, Optional
 
+# third party
 import numpy as np
 from sklearn.linear_model import LinearRegression
 
-def syn_pmm(y, X, random_state=0, k=5, use_intercept=True, **kwargs):
+
+def syn_pmm(
+    y: np.ndarray,
+    X: np.ndarray,
+    random_state: int = 0,
+    k: int = 5,
+    use_intercept: bool = True,
+    **kwargs: Any
+) -> Dict[str, Any]:
     """
     Fit a PMM (Predictive Mean Matching) model.
 
@@ -25,7 +35,6 @@ def syn_pmm(y, X, random_state=0, k=5, use_intercept=True, **kwargs):
             - "k": number of neighbors
             - "random_state": the random seed used
     """
-    rng = np.random.default_rng(random_state)
 
     # For demonstration, use a linear regressor. Modify or replace as needed.
     regressor = LinearRegression(fit_intercept=use_intercept, **kwargs)
@@ -39,12 +48,17 @@ def syn_pmm(y, X, random_state=0, k=5, use_intercept=True, **kwargs):
         "y": y,
         "y_hat": y_hat,
         "k": k,
-        "random_state": random_state
+        "random_state": random_state,
     }
     return model
 
 
-def generate_pmm(fitted_pmm, X_new, random_state=None, **kwargs):
+def generate_pmm(
+    fitted_pmm: Dict[str, Any],
+    X_new: np.ndarray,
+    random_state: Optional[int] = None,
+    **kwargs: Any
+) -> np.ndarray:
     """
     Generate new synthetic values using the fitted PMM model.
 
@@ -68,7 +82,6 @@ def generate_pmm(fitted_pmm, X_new, random_state=None, **kwargs):
     rng = np.random.default_rng(random_state)
 
     regressor = fitted_pmm["model"]
-    X_train = fitted_pmm["X"]
     y_train = fitted_pmm["y"]
     y_hat_train = fitted_pmm["y_hat"]
     k = fitted_pmm["k"]

@@ -16,7 +16,7 @@ def_categories = [
     "domain_adaptation",
     "images",
     "debug",
-    "syn_seq"
+    "syn_seq",
 ]
 plugins = {}
 

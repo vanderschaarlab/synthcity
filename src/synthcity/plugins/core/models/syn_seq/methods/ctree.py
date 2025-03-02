@@ -1,21 +1,26 @@
 # ctree.py
+# stdlib
+from typing import Any, Dict, List, Union
+
+# third party
 import numpy as np
 import pandas as pd
 from sklearn.tree import DecisionTreeClassifier, DecisionTreeRegressor
 
+
 def syn_ctree(
-    y, 
-    X, 
-    random_state=0, 
-    is_classification=False,
-    max_depth=None,
-    min_samples_leaf=1,
-    **kwargs
-):
+    y: Any,
+    X: Any,
+    random_state: int = 0,
+    is_classification: bool = False,
+    max_depth: Union[int, None] = None,
+    min_samples_leaf: int = 1,
+    **kwargs: Any
+) -> Dict[str, Any]:
     """
     Fit a conditional inference tree model for `y` given `X`, in a style akin to
     'conditional inference trees' via scikit-learn's DecisionTreeClassifier/Regressor.
-    
+
     Args:
         y: 1D array-like for the target variable (numeric or categorical).
         X: 2D array-like for predictor features of shape (n_samples, n_features).
@@ -67,12 +72,12 @@ def syn_ctree(
     unique_leaf_ids = np.unique(leaf_ids)
 
     # Build an index map: for each leaf id, which training indices are in that leaf?
-    leaf_index_map = []
+    leaf_index_map: List[np.ndarray] = []
     for leaf_id in unique_leaf_ids:
         idxs = np.where(leaf_ids == leaf_id)[0]
         leaf_index_map.append(idxs)
 
-    model = {
+    model: Dict[str, Any] = {
         "name": "ctree",
         "model": tree,
         "is_classification": is_classification,
@@ -84,14 +89,11 @@ def syn_ctree(
 
 
 def generate_ctree(
-    fitted_ctree,
-    X_new,
-    random_state=0,
-    **kwargs
-):
+    fitted_ctree: Dict[str, Any], X_new: Any, random_state: int = 0, **kwargs: Any
+) -> np.ndarray:
     """
     Generate y values from the fitted ctree model by sampling from leaf-level distributions.
-    
+
     Args:
         fitted_ctree: a dict returned by syn_ctree(...).
         X_new: 2D array-like (n_samples, n_features) to generate new y's for.
@@ -99,7 +101,7 @@ def generate_ctree(
         **kwargs: unused here, but kept for interface consistency.
 
     Returns:
-        A 1D numpy array of generated y values. Classification => random draws 
+        A 1D numpy array of generated y values. Classification => random draws
         from the leaf's classes, Regression => random draws from the leaf's numeric distribution.
     """
     rng = np.random.default_rng(random_state)
@@ -119,7 +121,7 @@ def generate_ctree(
     unique_leaf_ids = np.unique(train_leaf_ids)
     leafid_to_pos = {leaf_id: i for i, leaf_id in enumerate(unique_leaf_ids)}
 
-    y_syn = []
+    y_syn: List[Any] = []
     for leaf_id in new_leaf_ids:
         if leaf_id not in leafid_to_pos:
             # fallback if leaf_id wasn't seen during training

@@ -1,10 +1,14 @@
-from typing import Any, Dict, List, Optional, Tuple
+# stdlib
+from typing import Any, List, Optional
+
+# third party
 import pandas as pd
 from pydantic import validate_arguments
 
-from synthcity.plugins.core.plugin import Plugin
-from synthcity.plugins.core.dataloader import DataLoader, Syn_SeqDataLoader, create_from_info
+# synthcity absolute
+from synthcity.plugins.core.dataloader import DataLoader, Syn_SeqDataLoader
 from synthcity.plugins.core.models.syn_seq.syn_seq import Syn_Seq
+from synthcity.plugins.core.plugin import Plugin
 from synthcity.plugins.core.schema import Schema
 
 
@@ -45,7 +49,7 @@ class Syn_SeqPlugin(Plugin):
             random_state=self.random_state,
             sampling_patience=self.sampling_patience,
         )
-        self.model.fit_col(X, self._data_encoders, loader_info=self.data_info, *args, **kwargs)
+        self.model.fit_col(X, self._data_encoders, self.data_info, *args, **kwargs)
         return self
 
     def _generate(self, count: int, syn_schema: Schema, **kwargs: Any) -> DataLoader:
@@ -53,11 +57,8 @@ class Syn_SeqPlugin(Plugin):
             raise RuntimeError("The model must be fitted before generating data.")
         df_syn = self.model.generate_col(count, self._data_encoders, **kwargs)
         df_syn = syn_schema.adapt_dtypes(df_syn)
-        data_syn = create_from_info(df_syn, self.data_info)
         return Syn_SeqDataLoader(
-            df_syn,
-            user_custom = self.data_info.get("user_custom", {}),
-            verbose = False
+            df_syn, user_custom=self.data_info.get("user_custom", {}), verbose=False
         )
 
 
