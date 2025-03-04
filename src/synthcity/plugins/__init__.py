@@ -15,8 +15,7 @@ def_categories = [
     "time_series",
     "domain_adaptation",
     "images",
-    "debug",
-    "syn_seq",
+    "debug"
 ]
 plugins = {}
 
