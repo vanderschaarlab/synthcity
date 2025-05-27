@@ -8,10 +8,25 @@ from typing import Any, Dict, List, Optional, Tuple
 
 # third party
 import pandas as pd
+
+# score‐class compatibility across pgmpy versions:
 import pgmpy.estimators as estimators
 import pytorch_lightning as pl
 import torch
 from decaf import DECAF, DataModule
+
+try:
+    # pgmpy < 1.0.0
+    K2Score = estimators.K2Score
+    BDeuScore = estimators.BDeuScore
+    BicScore = estimators.BicScore
+    BDsScore = estimators.BDsScore
+except AttributeError:
+    # pgmpy ≥ 1.0.0
+    K2Score = estimators.K2
+    BDeuScore = estimators.BDeu
+    BicScore = estimators.BIC
+    BDsScore = estimators.BDs
 
 # synthcity absolute
 import synthcity.logger as log
@@ -229,10 +244,10 @@ class DECAFPlugin(Plugin):
 
     def _get_structure_scorer(self) -> Any:
         return {
-            "k2": estimators.K2Score,
-            "bdeu": estimators.BDeuScore,
-            "bic": estimators.BicScore,
-            "bds": estimators.BDsScore,
+            "k2": K2Score,
+            "bdeu": BDeuScore,
+            "bic": BicScore,
+            "bds": BDsScore,
         }[self.struct_learning_score]
 
     def get_dag(
