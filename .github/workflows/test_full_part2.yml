@@ -5,6 +5,9 @@ on:
     - cron: "4 8 * * 3"
   workflow_dispatch:
 
+permissions:
+  contents: read
+
 jobs:
   Library:
     runs-on: ${{ matrix.os }}
