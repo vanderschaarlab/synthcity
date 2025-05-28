@@ -12,7 +12,6 @@ from typing import Any, List, Optional, Tuple
 import numpy as np
 import pandas as pd
 from pgmpy.factors.discrete.CPD import TabularCPD
-from pgmpy.models import BayesianNetwork
 from pgmpy.sampling import BayesianModelSampling
 from pydantic import validate_arguments
 from scipy.optimize import fsolve
@@ -20,6 +19,12 @@ from sklearn.cluster import KMeans
 from sklearn.metrics import normalized_mutual_info_score
 from sklearn.preprocessing import LabelEncoder
 from tqdm import tqdm
+
+try:
+    # third party
+    from pgmpy.models import DiscreteBayesianNetwork as BayesianNetwork
+except ImportError:
+    from pgmpy.models import BayesianNetwork
 
 # synthcity absolute
 import synthcity.logger as log
