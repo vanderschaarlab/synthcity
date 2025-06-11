@@ -10,9 +10,33 @@ from typing import Any, List
 # third party
 import numpy as np
 import pandas as pd
-import pgmpy.estimators as estimators
-from pgmpy.models import BayesianNetwork
 from pgmpy.sampling import BayesianModelSampling
+
+# try block to maintain support for both pgmpy < 1.0.0 and >= 1.0.0
+try:
+    # pgmpy >= 1.0.0
+    # third party
+    from pgmpy.models import DiscreteBayesianNetwork as BayesianNetwork
+except ImportError:
+    from pgmpy.models import BayesianNetwork
+
+# third party
+import pgmpy.estimators as estimators
+
+# score‐class compatibility across pgmpy versions:
+try:
+    # pgmpy < 1.0.0
+    K2Score = estimators.K2Score
+    BDeuScore = estimators.BDeuScore
+    BicScore = estimators.BicScore
+    BDsScore = estimators.BDsScore
+except AttributeError:
+    # pgmpy ≥ 1.0.0
+    K2Score = estimators.K2
+    BDeuScore = estimators.BDeu
+    BicScore = estimators.BIC
+    BDsScore = estimators.BDs
+
 
 # synthcity absolute
 from synthcity.plugins.core.dataloader import DataLoader
@@ -133,10 +157,10 @@ class BayesianNetworkPlugin(Plugin):
 
     def _get_structure_scorer(self) -> Any:
         return {
-            "k2": estimators.K2Score,
-            "bdeu": estimators.BDeuScore,
-            "bic": estimators.BicScore,
-            "bds": estimators.BDsScore,
+            "k2": K2Score,
+            "bdeu": BDeuScore,
+            "bic": BicScore,
+            "bds": BDsScore,
         }[self.struct_learning_score]
 
     def _get_dag(self, X: pd.DataFrame) -> Any:
