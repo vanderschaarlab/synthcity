@@ -31,10 +31,16 @@ def print_score(mean: pd.Series, std: pd.Series) -> pd.Series:
     mean.loc[(mean < 1e-3) & (mean != 0)] = 1e-3
     std.loc[(std < 1e-3) & (std != 0)] = 1e-3
 
-    mean = mean.round(3).astype(str)
-    std = std.round(3).astype(str)
+    # coerce to numeric (empty or object dtypes become float64/NaN)
+    mean_num = pd.to_numeric(mean, errors="coerce")
+    std_num = pd.to_numeric(std, errors="coerce")
 
-    return mean + " +/- " + std
+    # round & stringify
+    mean_str = mean_num.round(3).astype(str)
+    stddev_str = std_num.round(3).astype(str)
+
+    # if both were empty, this will just return an empty Series
+    return mean_str + " ± " + stddev_str
 
 
 class Benchmarks:
@@ -363,7 +369,7 @@ class Benchmarks:
             means.append(data)
 
         out = pd.concat(means, axis=1)
-        out.set_axis(results.keys(), axis=1, inplace=True)
+        out = out.set_axis(list(results.keys()), axis=1, copy=False)
 
         bad_highlight = "background-color: lightcoral;"
         ok_highlight = "background-color: green;"

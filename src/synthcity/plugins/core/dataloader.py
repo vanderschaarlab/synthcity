@@ -18,6 +18,7 @@ from torchvision import transforms
 from synthcity.plugins.core.constraints import Constraints
 from synthcity.plugins.core.dataset import FlexibleDataset, TensorDataset
 from synthcity.plugins.core.models.feature_encoder import DatetimeEncoder
+from synthcity.plugins.core.models.syn_seq.syn_seq_encoder import Syn_SeqEncoder
 from synthcity.utils.compression import compress_dataset, decompress_dataset
 from synthcity.utils.serialization import dataframe_hash
 
@@ -1801,6 +1802,237 @@ class ImageDataLoader(DataLoader):
         raise NotImplementedError()
 
 
+class Syn_SeqDataLoader(DataLoader):
+    """
+    Syn_SeqDataLoader is a specialized data loader designed for the syn_seq synthesis process.
+
+    It manages the input DataFrame along with user-custom settings such as synthesis order,
+    synthesis methods, and variable selection. The loader automatically injects categorical
+    marker columns into the synthesis order and variable selection settings if present.
+
+    It initializes and prepares a Syn_SeqEncoder to handle feature encoding for synthesis.
+
+    Key functionalities include:
+      - Providing access to data in various formats (DataFrame, NumPy array, training/test splits).
+      - Sampling, dropping columns, and filling missing values.
+      - Reconstructing a loader from saved configuration using from_info.
+      - Delegating fairness and constraint checks to external classes.
+    """
+
+    @validate_arguments(config=dict(arbitrary_types_allowed=True))
+    def __init__(
+        self,
+        data: pd.DataFrame,
+        user_custom: Optional[Dict[str, Any]] = None,
+        sensitive_features: List[str] = [],
+        target_column: Optional[str] = None,
+        random_state: int = 0,
+        train_size: float = 0.8,
+        verbose: bool = True,
+        **kwargs: Any,
+    ):
+        super().__init__(
+            data_type="syn_seq",
+            data=data,
+            random_state=random_state,
+            train_size=train_size,
+            **kwargs,
+        )
+
+        self.user_custom = user_custom or {}
+        self.sensitive_features = sensitive_features
+        self.target_column = target_column
+        self.verbose = verbose
+
+        syn_order = self.user_custom.get("syn_order", list(self.data.columns))
+        method = self.user_custom.get("method", {})
+        variable_selection = self.user_custom.get("variable_selection", {})
+
+        syn_order, variable_selection = self._auto_inject_cat_columns(
+            df=self.data, syn_order=syn_order, variable_selection=variable_selection
+        )
+        self.user_custom["syn_order"] = syn_order
+        self.user_custom["variable_selection"] = variable_selection
+
+        self._encoder = Syn_SeqEncoder(
+            syn_order=syn_order,
+            method=method,
+            variable_selection=variable_selection,
+            default_method="cart",
+        )
+        self._encoder.prepare(self.data)
+        if self.verbose:
+            self._print_init_info()
+
+    def _auto_inject_cat_columns(
+        self,
+        df: pd.DataFrame,
+        syn_order: List[str],
+        variable_selection: Dict[str, List[str]],
+    ) -> Tuple[List[str], Dict[str, List[str]]]:
+        new_syn_order = list(syn_order)
+        new_varsel = {k: list(v) for k, v in variable_selection.items()}
+
+        cat_cols = [c for c in df.columns if c.endswith("_cat")]
+
+        for cat_col in cat_cols:
+            base_col = cat_col[:-4]
+
+            if base_col in new_syn_order:
+                base_idx = new_syn_order.index(base_col)
+                if cat_col not in new_syn_order:
+                    new_syn_order.insert(base_idx, cat_col)
+            else:
+                if cat_col not in new_syn_order:
+                    new_syn_order.append(cat_col)
+
+            for tgt_col, preds in new_varsel.items():
+                if base_col in preds and cat_col not in preds:
+                    preds.append(cat_col)
+                    new_varsel[tgt_col] = preds
+
+        return new_syn_order, new_varsel
+
+    def _print_init_info(self) -> None:
+        enc_info = self._encoder.get_info()
+        syn_order = enc_info.get("syn_order", [])
+        method_map = enc_info.get("method", {})
+        varsel = enc_info.get("variable_selection", {})
+
+        print("\n[INFO] Syn_SeqEncoder summary:")
+        print("  (column, method)\n")
+        for i, col in enumerate(syn_order):
+            m = method_map.get(col, "(unknown)")
+            print(f"  ({col}, {m})")
+            if i < len(syn_order) - 1:
+                print("    --> ")
+
+        df_vs = self._varsel_dict_to_df(varsel, syn_order)
+        print("\n  - variable_selection_:")
+        print(df_vs)
+        print("------------------------------------------------")
+
+    def _varsel_dict_to_df(
+        self, varsel: Dict[str, List[str]], syn_order: List[str]
+    ) -> pd.DataFrame:
+        df_vs = pd.DataFrame(0, index=syn_order, columns=syn_order)
+        for tgt, preds in varsel.items():
+            if tgt not in df_vs.index:
+                continue
+            for p in preds:
+                if p in df_vs.columns:
+                    df_vs.loc[tgt, p] = 1
+        return df_vs
+
+    @property
+    def shape(self) -> tuple:
+        return self.data.shape
+
+    @property
+    def columns(self) -> list:
+        return list(self.data.columns)
+
+    def dataframe(self) -> pd.DataFrame:
+        return self.data
+
+    def numpy(self) -> np.ndarray:
+        return self.data.values
+
+    def info(self) -> dict:
+        base_info = {
+            "data_type": self.data_type,
+            "len": len(self),
+            "train_size": self.train_size,
+            "random_state": self.random_state,
+        }
+        enc_info = self._encoder.get_info()
+        base_info.update(enc_info)
+        return base_info
+
+    def __len__(self) -> int:
+        return len(self.data)
+
+    def satisfies(self, constraints: Constraints) -> bool:
+        return constraints.is_valid(self.data)
+
+    def match(self, constraints: Constraints) -> "Syn_SeqDataLoader":
+        matched_df = constraints.match(self.data)
+        return self.decorate(matched_df)
+
+    @staticmethod
+    def from_info(data: pd.DataFrame, info: dict) -> "Syn_SeqDataLoader":
+        user_custom = {
+            "syn_order": info.get("syn_order", list(data.columns)),
+            "method": info.get("method", {}),
+            "variable_selection": info.get("variable_selection", {}),
+        }
+        return Syn_SeqDataLoader(
+            data=data,
+            user_custom=user_custom,
+            random_state=info.get("random_state", 0),
+            train_size=info.get("train_size", 0.8),
+            verbose=False,
+        )
+
+    def sample(self, count: int, random_state: int = 0) -> "Syn_SeqDataLoader":
+        sampled_df = self.data.sample(count, random_state=random_state)
+        return self.decorate(sampled_df)
+
+    def drop(self, columns: list = []) -> "Syn_SeqDataLoader":
+        dropped_df = self.data.drop(columns=columns, errors="ignore")
+        return self.decorate(dropped_df)
+
+    def __getitem__(self, feature: Union[str, list, int]) -> Any:
+        return self.data[feature]
+
+    def __setitem__(self, feature: str, val: Any) -> None:
+        self.data[feature] = val
+
+    def train(self) -> "Syn_SeqDataLoader":
+        ntrain = int(len(self.data) * self.train_size)
+        train_df = self.data.iloc[:ntrain].copy()
+        return self.decorate(train_df)
+
+    def test(self) -> "Syn_SeqDataLoader":
+        ntrain = int(len(self.data) * self.train_size)
+        test_df = self.data.iloc[ntrain:].copy()
+        return self.decorate(test_df)
+
+    def fillna(self, value: Any) -> "Syn_SeqDataLoader":
+        filled_df = self.data.fillna(value)
+        return self.decorate(filled_df)
+
+    def compression_protected_features(self) -> list:
+        return []
+
+    def is_tabular(self) -> bool:
+        return True
+
+    def unpack(self, as_numpy: bool = False, pad: bool = False) -> Any:
+        X = self.data.drop(columns=[self.target_column])
+        y = self.data[self.target_column]
+
+        if as_numpy:
+            return np.asarray(X), np.asarray(y)
+        return X, y
+
+    def get_fairness_column(self) -> Union[str, Any]:
+        return None
+
+    def decorate(self, data: pd.DataFrame) -> "Syn_SeqDataLoader":
+        new_loader = Syn_SeqDataLoader(
+            data=data,
+            user_custom=self.user_custom,
+            sensitive_features=self.sensitive_features,
+            target_column=self.target_column,
+            random_state=self.random_state,
+            train_size=self.train_size,
+            verbose=False,
+        )
+        new_loader._encoder = self._encoder
+        return new_loader
+
+
 @validate_arguments(config=dict(arbitrary_types_allowed=True))
 def create_from_info(
     data: Union[pd.DataFrame, torch.utils.data.Dataset], info: dict
@@ -1816,5 +2048,7 @@ def create_from_info(
         return TimeSeriesSurvivalDataLoader.from_info(data, info)
     elif info["data_type"] == "images":
         return ImageDataLoader.from_info(data, info)
+    elif info["data_type"] == "syn_seq":
+        return Syn_SeqDataLoader.from_info(data, info)
     else:
         raise RuntimeError(f"invalid datatype {info}")

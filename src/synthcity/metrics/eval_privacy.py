@@ -231,7 +231,7 @@ class DeltaPresence(PrivacyEvaluator):
 
     @staticmethod
     def direction() -> str:
-        return "maximize"
+        return "minimize"
 
     @validate_arguments(config=dict(arbitrary_types_allowed=True))
     def _evaluate(self, X_gt: DataLoader, X_syn: DataLoader) -> Dict:

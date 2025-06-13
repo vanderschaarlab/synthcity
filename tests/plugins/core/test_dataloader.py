@@ -17,6 +17,7 @@ from synthcity.plugins.core.dataloader import (
     GenericDataLoader,
     ImageDataLoader,
     SurvivalAnalysisDataLoader,
+    Syn_SeqDataLoader,
     TimeSeriesDataLoader,
     TimeSeriesSurvivalDataLoader,
     create_from_info,
@@ -753,3 +754,149 @@ def test_image_datasets() -> None:
     transform_dataset = transform_dataset.filter_indices([0])
     assert len(transform_dataset) == 1
     assert (transform_dataset.indices == [1]).all()
+
+
+def test_syn_seq_dataloader_sanity() -> None:
+    """
+    Test basic creation of Syn_SeqDataLoader, verifying:
+      - shape
+      - cat columns are auto-injected
+      - train/test split
+      - info() returns correct encoder details
+    """
+    df = pd.DataFrame(
+        {
+            "income": [100, 200, -8, 400],
+            "income_cat": ["-777", "-777", "-8", "-777"],
+            "colX": [1, 2, 3, 4],
+        }
+    )
+    user_custom = {
+        "syn_order": ["income", "colX"],
+        "method": {"colX": "rf"},
+        "variable_selection": {"colX": ["income"]},
+    }
+    loader = Syn_SeqDataLoader(
+        data=df,
+        user_custom=user_custom,
+        target_column="income",
+        random_state=42,
+        train_size=0.5,
+        verbose=False,
+    )
+
+    assert loader.shape == (4, 3)
+    info = loader.info()
+    syn_order = info.get("syn_order", [])
+    assert "income_cat" in syn_order, "Should auto-inject 'income_cat' into syn_order"
+
+    tr_loader = loader.train()
+    te_loader = loader.test()
+    assert len(tr_loader) + len(te_loader) == 4
+
+
+def test_syn_seq_dataloader_sample_and_drop() -> None:
+    """
+    Test sample() and drop() with the Syn_SeqDataLoader.
+    """
+    df = pd.DataFrame(
+        {
+            "colA": [1, 2, 3, 4, 5],
+            "colB_cat": ["-777", "-777", "-8", "-777", "-8"],
+            "colC": [10, 20, 30, 40, 50],
+        }
+    )
+    loader = Syn_SeqDataLoader(df)
+    samp = loader.sample(2)
+    assert len(samp) == 2
+
+    dropped = loader.drop(columns=["colC"])
+    assert "colC" not in dropped.columns
+    assert dropped.shape == (5, 2)
+
+
+def test_syn_seq_dataloader_encode_decode() -> None:
+    """
+    Check that parent's encode()/decode() (label encoding logic) works
+    with Syn_SeqDataLoader.
+    """
+    df = pd.DataFrame({"col1": ["A", "B", "A", "C"], "col2": [10, 20, 30, 40]})
+    loader = Syn_SeqDataLoader(data=df, user_custom={})
+
+    encoded_loader, encoders = loader.encode()
+    assert encoded_loader.shape == df.shape
+
+    decoded_loader = encoded_loader.decode(encoders)
+    df_dec = decoded_loader.dataframe()
+    assert (df_dec["col1"].values == df["col1"].values).all()
+    assert (df_dec["col2"].values == df["col2"].values).all()
+
+
+def test_syn_seq_dataloader_info() -> None:
+    """
+    Check that loader.info() merges base_info and encoder info correctly.
+    """
+    df = pd.DataFrame(
+        {"colX": ["x", "y", "z"], "colY": [1, 2, 3], "colY_cat": ["-777", "-777", "-8"]}
+    )
+    user_custom = {
+        "syn_order": ["colX", "colY"],
+        "method": {"colY": "rf"},
+        "variable_selection": {},
+    }
+    loader = Syn_SeqDataLoader(data=df, user_custom=user_custom, verbose=False)
+    info = loader.info()
+
+    print("info['method']:", info["method"])
+    print("info['syn_order']:", info["syn_order"])
+    sys.stdout.flush()
+
+    assert info["data_type"] == "syn_seq"
+    assert info["len"] == 3
+
+    assert "syn_order" in info, "encoder's syn_order should be in info"
+    assert "variable_selection" in info, "encoder's varsel should be in info"
+    assert "colY_cat" in info["syn_order"]
+    assert info["method"].get("colY") == "rf"
+
+
+def test_syn_seq_dataloader_pack_unpack() -> None:
+    X = pd.DataFrame({"colX": ["x", "y", "z"], "colY_cat": ["-777", "-777", "-8"]})
+    y = pd.Series([1, 2, 3], name="colY")
+    X["colY"] = y
+
+    user_custom = {
+        "syn_order": ["colX", "colY"],
+        "method": {"colY": "rf"},
+        "variable_selection": {},
+    }
+    loader = Syn_SeqDataLoader(
+        data=X, user_custom=user_custom, target_column="colY", verbose=False
+    )
+
+    Xu, yu = loader.unpack()
+    assert Xu.shape == (len(X), X.shape[1] - 1)
+    assert yu.shape == y.shape
+
+
+def test_syn_seq_dataloader_compression() -> None:
+    X, y = load_breast_cancer(return_X_y=True, as_frame=True)
+    X["domain"] = y
+
+    user_custom = {
+        "syn_order": ["colX", "colY"],
+        "method": {"colY": "rf"},
+        "variable_selection": {},
+    }
+    loader = Syn_SeqDataLoader(X, user_custom=user_custom)
+
+    compressed, context = loader.compress()
+
+    assert len(compressed) == len(loader)
+    assert compressed.shape[1] <= loader.shape[1]
+    assert "domain" in compressed.columns
+
+    decompressed = compressed.decompress(context)
+
+    assert len(decompressed) == len(loader)
+    assert decompressed.shape[1] == loader.shape[1]
