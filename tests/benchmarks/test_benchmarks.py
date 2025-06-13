@@ -50,7 +50,7 @@ def test_benchmark_augmentation() -> None:
             ("test1", "marginal_distributions", {}),
             ("test2", "dummy_sampler", {}),
         ],
-        GenericDataLoader(X, fairness_column=["sex"]),
+        GenericDataLoader(X, fairness_column="sex"),
         metrics={
             "performance": [
                 "linear_model_augmentation",
