@@ -18,8 +18,6 @@ from torchvision import transforms
 from synthcity.plugins.core.constraints import Constraints
 from synthcity.plugins.core.dataset import FlexibleDataset, TensorDataset
 from synthcity.plugins.core.models.feature_encoder import DatetimeEncoder
-
-# Syn_Seq
 from synthcity.plugins.core.models.syn_seq.syn_seq_encoder import Syn_SeqEncoder
 from synthcity.utils.compression import compress_dataset, decompress_dataset
 from synthcity.utils.serialization import dataframe_hash
@@ -1821,6 +1819,7 @@ class Syn_SeqDataLoader(DataLoader):
       - Delegating fairness and constraint checks to external classes.
     """
 
+    @validate_arguments(config=dict(arbitrary_types_allowed=True))
     def __init__(
         self,
         data: pd.DataFrame,
@@ -2010,7 +2009,12 @@ class Syn_SeqDataLoader(DataLoader):
         return True
 
     def unpack(self, as_numpy: bool = False, pad: bool = False) -> Any:
-        return self.numpy() if as_numpy else self.data
+        X = self.data.drop(columns=[self.target_column])
+        y = self.data[self.target_column]
+
+        if as_numpy:
+            return np.asarray(X), np.asarray(y)
+        return X, y
 
     def get_fairness_column(self) -> Union[str, Any]:
         return None

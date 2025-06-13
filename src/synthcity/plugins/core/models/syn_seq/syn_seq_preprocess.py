@@ -4,6 +4,7 @@ from typing import Any, Dict, List, Optional, Tuple
 # third party
 import numpy as np
 import pandas as pd
+from pydantic import validate_arguments
 
 
 class SynSeqPreprocessor:
@@ -35,6 +36,7 @@ class SynSeqPreprocessor:
     NUMERIC_MARKER = -777777777
     MISSING_MARKER = -999999999
 
+    @validate_arguments(config=dict(arbitrary_types_allowed=True))
     def __init__(
         self,
         user_dtypes: Optional[Dict[str, str]] = None,

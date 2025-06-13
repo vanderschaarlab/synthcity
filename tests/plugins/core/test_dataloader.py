@@ -858,3 +858,45 @@ def test_syn_seq_dataloader_info() -> None:
     assert "variable_selection" in info, "encoder's varsel should be in info"
     assert "colY_cat" in info["syn_order"]
     assert info["method"].get("colY") == "rf"
+
+
+def test_syn_seq_dataloader_pack_unpack() -> None:
+    X = pd.DataFrame({"colX": ["x", "y", "z"], "colY_cat": ["-777", "-777", "-8"]})
+    y = pd.Series([1, 2, 3], name="colY")
+    X["colY"] = y
+
+    user_custom = {
+        "syn_order": ["colX", "colY"],
+        "method": {"colY": "rf"},
+        "variable_selection": {},
+    }
+    loader = Syn_SeqDataLoader(
+        data=X, user_custom=user_custom, target_column="colY", verbose=False
+    )
+
+    Xu, yu = loader.unpack()
+    assert Xu.shape == (len(X), X.shape[1] - 1)
+    assert yu.shape == y.shape
+
+
+def test_syn_seq_dataloader_compression() -> None:
+    X, y = load_breast_cancer(return_X_y=True, as_frame=True)
+    X["domain"] = y
+
+    user_custom = {
+        "syn_order": ["colX", "colY"],
+        "method": {"colY": "rf"},
+        "variable_selection": {},
+    }
+    loader = Syn_SeqDataLoader(X, user_custom=user_custom)
+
+    compressed, context = loader.compress()
+
+    assert len(compressed) == len(loader)
+    assert compressed.shape[1] <= loader.shape[1]
+    assert "domain" in compressed.columns
+
+    decompressed = compressed.decompress(context)
+
+    assert len(decompressed) == len(loader)
+    assert decompressed.shape[1] == loader.shape[1]

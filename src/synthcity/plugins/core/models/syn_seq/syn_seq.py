@@ -5,6 +5,7 @@ from typing import Any, Dict, List, Optional, Tuple
 # third party
 import numpy as np
 import pandas as pd
+from pydantic import validate_arguments
 
 # synthcity absolute
 from synthcity.plugins.core.models.syn_seq.methods import (
@@ -48,6 +49,17 @@ MISSING_MARKER = -999999999
 
 
 class Syn_Seq:
+
+    """Synthetic Sequence Generator model.
+
+    This model generates synthetic data sequentially, column by column, using various methods.
+    It supports categorical columns with special values and numeric columns, and it can handle
+    missing values by using a numeric marker.
+    It fits each column based on the metadata provided by the loader and generates synthetic data
+    by sampling from the fitted models.
+    """
+
+    @validate_arguments(config=dict(arbitrary_types_allowed=True))
     def __init__(self, random_state: int = 0, sampling_patience: int = 100) -> None:
         """
         Args:

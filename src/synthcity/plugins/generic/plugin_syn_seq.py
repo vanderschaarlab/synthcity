@@ -1,5 +1,5 @@
 # stdlib
-from typing import Any, List, Optional
+from typing import Any, List, Optional, cast
 
 # third party
 import pandas as pd
@@ -13,6 +13,40 @@ from synthcity.plugins.core.schema import Schema
 
 
 class Syn_SeqPlugin(Plugin):
+    """
+    .. inheritance-diagram:: synthcity.plugins.generic.plugin_syn_seq.Syn_SeqPlugin
+        :parts: 1
+
+    Synthetic Sequence Generation Plugin.
+
+    Args:
+        workspace: Path.
+            Optional Path for caching intermediary results.
+        compress_dataset: bool. Default = False.
+            Drop redundant features before training the generator.
+        sampling_patience: int.
+            Max inference iterations to wait for the generated data to match the training schema.
+        random_state: int.
+            random_state used
+        sampling_strategy: str.
+            Sampling strategy to use for generating synthetic data. Options are 'marginal' or 'joint'.
+            Default is 'marginal'.
+
+
+    Example:
+        >>> from sklearn.datasets import load_iris
+        >>> from synthcity.plugins import Plugins
+        >>>
+        >>> X, y = load_iris(as_frame = True, return_X_y = True)
+        >>> X["target"] = y
+        >>>
+        >>> plugin = Plugins().get("syn_seq")
+        >>> plugin.fit(X)
+        >>>
+        >>> plugin.generate(50)
+
+    """
+
     @staticmethod
     def name() -> str:
         return "syn_seq"
@@ -49,7 +83,11 @@ class Syn_SeqPlugin(Plugin):
             random_state=self.random_state,
             sampling_patience=self.sampling_patience,
         )
-        self.model.fit_col(X, self._data_encoders, self.data_info, *args, **kwargs)
+
+        # cast explicitly to Syn_Seq to make sure mypy doesn't think it can be None
+        cast(Syn_Seq, self.model).fit_col(
+            X, self._data_encoders, self.data_info, *args, **kwargs
+        )
         return self
 
     def _generate(self, count: int, syn_schema: Schema, **kwargs: Any) -> DataLoader:
