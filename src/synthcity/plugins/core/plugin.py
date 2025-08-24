@@ -17,6 +17,7 @@ from synthcity.metrics.plots import plot_marginal_comparison, plot_tsne
 from synthcity.plugins.core.constraints import Constraints
 from synthcity.plugins.core.dataloader import (
     DataLoader,
+    GeneExpressionDataLoader,
     GenericDataLoader,
     TimeSeriesDataLoader,
     TimeSeriesSurvivalDataLoader,

@@ -30,14 +30,17 @@ from .eval_performance import (
     PerformanceEvaluatorXGB,
 )
 from .eval_privacy import (
+    AdversarialAccuracy,
     DeltaPresence,
     DomiasMIABNAF,
     DomiasMIAKDE,
     DomiasMIAPrior,
+    EpsilonIdentifiability,
     IdentifiabilityScore,
     kAnonymization,
     kMap,
     lDiversityDistinct,
+    tCloseness,
 )
 from .eval_sanity import (
     CloseValuesProbability,
@@ -49,13 +52,17 @@ from .eval_sanity import (
 from .eval_statistical import (
     AlphaPrecision,
     ChiSquaredTest,
+    DendrogramDistance,
     FrechetInceptionDistance,
     InverseKLDivergence,
     JensenShannonDistance,
     KolmogorovSmirnovTest,
+    MatrixDistance,
     MaximumMeanDiscrepancy,
     PRDCScore,
     SurvivalKMDistance,
+    TFTGSimilarity,
+    TGTGSimilarity,
     WassersteinDistance,
 )
 from .scores import ScoreEvaluator
@@ -78,6 +85,10 @@ standard_metrics = [
     AlphaPrecision,
     SurvivalKMDistance,
     FrechetInceptionDistance,
+    MatrixDistance,
+    DendrogramDistance,
+    TFTGSimilarity,
+    TGTGSimilarity,
     # performance tests
     PerformanceEvaluatorLinear,
     PerformanceEvaluatorMLP,
@@ -92,7 +103,9 @@ standard_metrics = [
     SyntheticDetectionGMM,
     SyntheticDetectionLinear,
     # privacy tests
+    AdversarialAccuracy,
     DeltaPresence,
+    EpsilonIdentifiability,
     kAnonymization,
     kMap,
     lDiversityDistinct,
@@ -100,6 +113,7 @@ standard_metrics = [
     DomiasMIABNAF,  # TODO: This takes too long to include as default
     DomiasMIAKDE,
     DomiasMIAPrior,
+    tCloseness,
 ]
 
 

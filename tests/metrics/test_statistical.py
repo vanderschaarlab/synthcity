@@ -1,31 +1,36 @@
 # stdlib
 import sys
-from typing import Any, Tuple, Type
+from typing import Any, Dict, List, Tuple, Type
 
 # third party
 import numpy as np
 import pandas as pd
 import pytest
 from lifelines.datasets import load_rossi
-from sklearn.datasets import load_iris
+from sklearn.datasets import load_diabetes, load_iris
 from torchvision import datasets
 
 # synthcity absolute
 from synthcity.metrics.eval_statistical import (
     AlphaPrecision,
     ChiSquaredTest,
+    DendrogramDistance,
     FrechetInceptionDistance,
     InverseKLDivergence,
     JensenShannonDistance,
     KolmogorovSmirnovTest,
+    MatrixDistance,
     MaximumMeanDiscrepancy,
     PRDCScore,
     SurvivalKMDistance,
+    TFTGSimilarity,
+    TGTGSimilarity,
     WassersteinDistance,
 )
 from synthcity.plugins import Plugin, Plugins
 from synthcity.plugins.core.dataloader import (
     DataLoader,
+    GeneExpressionDataLoader,
     GenericDataLoader,
     ImageDataLoader,
     SurvivalAnalysisDataLoader,
@@ -319,3 +324,101 @@ def test_image_support() -> None:
         for k in score:
             assert score[k] >= 0, evaluator
             assert not np.isnan(score[k]), evaluator
+
+
+@pytest.mark.parametrize("test_plugin", [Plugins().get("dummy_sampler")])
+def test_evaluate_matrix_distance(test_plugin: Plugin) -> None:
+    X, y = load_diabetes(return_X_y=True, as_frame=True)
+    X["target"] = y
+    Xloader = GenericDataLoader(X)
+
+    test_plugin.fit(Xloader)
+    X_gen = test_plugin.generate(1000)
+
+    syn_score, rnd_score = _eval_plugin(MatrixDistance, Xloader, X_gen)
+    for key in syn_score:
+        assert -1 <= syn_score[key] <= 1
+        assert -1 <= rnd_score[key] <= 1
+        assert syn_score[key] >= rnd_score[key]
+
+    assert MatrixDistance.name() == "distance_matrix"
+    assert MatrixDistance.type() == "stats"
+    assert MatrixDistance.direction() == "maximize"
+
+
+@pytest.mark.parametrize("test_plugin", [Plugins().get("dummy_sampler")])
+def test_evaluate_dendrogram_distance(test_plugin: Plugin) -> None:
+    X, y = load_diabetes(return_X_y=True, as_frame=True)
+    X["target"] = y
+    Xloader = GenericDataLoader(X)
+
+    test_plugin.fit(Xloader)
+    X_gen = test_plugin.generate(1000)
+
+    syn_score, rnd_score = _eval_plugin(DendrogramDistance, Xloader, X_gen)
+    for key in syn_score:
+        assert -1 <= syn_score[key] <= 1
+        assert -1 <= rnd_score[key] <= 1
+        assert syn_score[key] >= rnd_score[key]
+
+    assert DendrogramDistance.name() == "dendrogram_distance"
+    assert DendrogramDistance.type() == "stats"
+    assert DendrogramDistance.direction() == "maximize"
+
+
+def test_evaluate_tf_tg_similarity() -> None:
+    np.random.seed(0)
+    genes = ["TF1", "TF2", "G1", "G2", "G3", "G4"]
+    real_df = pd.DataFrame(np.random.randn(80, len(genes)), columns=genes)
+
+    # simple GRN
+    grn = {"TF1": ["G1", "G2", "G3"], "TF2": ["G2", "G4"]}
+
+    X_gt = GeneExpressionDataLoader(real_df, grn=grn)
+    # "good" synthetic：small random noise
+    X_good = GeneExpressionDataLoader(
+        real_df + 0.05 * np.random.randn(*real_df.shape), grn=grn
+    )
+    # "bad" synthetic：completely random noise
+    X_bad = GeneExpressionDataLoader(
+        pd.DataFrame(np.random.randn(*real_df.shape), columns=genes), grn=grn
+    )
+
+    ev = TFTGSimilarity(grn=grn, use_cache=False)
+    good_score = ev.evaluate(X_gt, X_good)["score"]
+    bad_score = ev.evaluate(X_gt, X_bad)["score"]
+
+    assert -1 <= good_score <= 1
+    assert -1 <= bad_score <= 1
+    assert good_score >= bad_score
+
+    assert TFTGSimilarity.name() == "tf_tg_similarity"
+    assert TFTGSimilarity.type() == "stats"
+    assert TFTGSimilarity.direction() == "maximize"
+
+
+def test_evaluate_tg_tg_similarity() -> None:
+    np.random.seed(0)
+    genes = ["TF1", "TF2", "G1", "G2", "G3", "G4"]
+    real_df = pd.DataFrame(np.random.randn(80, len(genes)), columns=genes)
+
+    # simple GRN
+    grn = {"TF1": ["G1", "G2", "G3"], "TF2": ["G2", "G4"]}
+
+    X_gt = GeneExpressionDataLoader(real_df, grn=grn)
+    X_good = GeneExpressionDataLoader(
+        real_df + 0.05 * np.random.randn(*real_df.shape), grn=grn
+    )
+    X_bad = GeneExpressionDataLoader(np.random.randn(*real_df.shape), grn=grn)
+
+    ev = TGTGSimilarity(grn=grn, use_cache=False)
+    good = ev.evaluate(X_gt, X_good)["score"]
+    bad = ev.evaluate(X_gt, X_bad)["score"]
+
+    assert -1 <= good <= 1
+    assert -1 <= bad <= 1
+    assert good >= bad
+
+    assert TGTGSimilarity.name() == "tg_tg_similarity"
+    assert TGTGSimilarity.type() == "stats"
+    assert TGTGSimilarity.direction() == "maximize"

@@ -360,41 +360,41 @@ class Benchmarks:
     @validate_arguments(config=dict(arbitrary_types_allowed=True))
     def highlight(
         results: Dict,
-    ) -> None:
+    ) -> Any:
         pd.set_option("display.max_rows", None, "display.max_columns", None)
         means = []
-        for plugin in results:
-            data = results[plugin]["mean"]
-            directions = results[plugin]["direction"].to_dict()
-            means.append(data)
+        directions = {}
+        for plugin, df in results.items():
+            means.append(df["mean"])
+            directions.update(df["direction"].to_dict())
 
         out = pd.concat(means, axis=1)
+        out.columns = list(results.keys())
+
         out = out.set_axis(list(results.keys()), axis=1, copy=False)
 
         bad_highlight = "background-color: lightcoral;"
         ok_highlight = "background-color: green;"
         default = ""
 
-        def highlights(row: pd.Series) -> Any:
+        def _highlight_row(row: pd.Series) -> List[str]:
             metric = row.name
+            vals = row.values
             if directions[metric] == "minimize":
-                best_val = np.min(row.values)
-                worst_val = np.max(row)
+                best, worst = vals.min(), vals.max()
             else:
-                best_val = np.max(row.values)
-                worst_val = np.min(row)
+                best, worst = vals.max(), vals.min()
 
             styles = []
-            for val in row.values:
-                if val == best_val:
+            for v in vals:
+                if v == best:
                     styles.append(ok_highlight)
-                elif val == worst_val:
+                elif v == worst:
                     styles.append(bad_highlight)
                 else:
                     styles.append(default)
-
             return styles
 
-        out.style.apply(highlights, axis=1)
+        out.style.apply(_highlight_row, axis=1)
 
         return out

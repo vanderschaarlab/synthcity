@@ -2040,6 +2040,8 @@ def create_from_info(
     """Helper for creating a DataLoader from existing information."""
     if info["data_type"] == "generic":
         return GenericDataLoader.from_info(data, info)
+    elif info["data_type"] == "gene_expression":
+        return GeneExpressionDataLoader.from_info(data, info)
     elif info["data_type"] == "survival_analysis":
         return SurvivalAnalysisDataLoader.from_info(data, info)
     elif info["data_type"] == "time_series":
@@ -2052,3 +2054,61 @@ def create_from_info(
         return Syn_SeqDataLoader.from_info(data, info)
     else:
         raise RuntimeError(f"invalid datatype {info}")
+
+
+class GeneExpressionDataLoader(GenericDataLoader):
+    """
+    Generic tabular loader with an attached GRN.
+    Compatible with all tabular metrics and GRN‑specific metrics.
+    """
+
+    _DATA_TYPE = "gene_expression"
+
+    @validate_arguments(config=dict(arbitrary_types_allowed=True))
+    def __init__(
+        self,
+        data: Union[pd.DataFrame, list, np.ndarray],
+        grn: Dict[str, List[str]],
+        **gd_kwargs: Any,  # the rest is same as GenericDataLoader
+    ) -> None:
+        super().__init__(data, **gd_kwargs)
+        self._grn = grn
+        self.data_type = self._DATA_TYPE  # overlap "generic" of GenericDataLoader
+
+    # ---------- public accessor ----------
+    def grn(self) -> Dict[str, List[str]]:
+        return self._grn
+
+    # ---------- decorate / cloning ----------
+    def decorate(self, data: Any) -> "GeneExpressionDataLoader":
+        return GeneExpressionDataLoader(
+            data,
+            grn=self._grn,
+            sensitive_features=self.sensitive_features,
+            important_features=self.important_features,
+            target_column=self.target_column,
+            fairness_column=self.fairness_column,
+            domain_column=self.domain_column,
+            random_state=self.random_state,
+            train_size=self.train_size,
+        )
+
+    # ---------- info / from_info ----------
+    def info(self) -> dict:
+        info = super().info()
+        info["data_type"] = self._DATA_TYPE  # ensure the round‑trip is correct
+        info["grn"] = self._grn
+        return info
+
+    @staticmethod
+    def from_info(data: pd.DataFrame, info: dict) -> "GeneExpressionDataLoader":
+        return GeneExpressionDataLoader(
+            data,
+            grn=info["grn"],
+            sensitive_features=info["sensitive_features"],
+            important_features=info["important_features"],
+            target_column=info["target_column"],
+            fairness_column=info["fairness_column"],
+            domain_column=info["domain_column"],
+            train_size=info["train_size"],
+        )

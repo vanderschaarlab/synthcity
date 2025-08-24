@@ -10,14 +10,17 @@ from torchvision import datasets
 
 # synthcity absolute
 from synthcity.metrics.eval_privacy import (
+    AdversarialAccuracy,
     DeltaPresence,
     DomiasMIABNAF,
     DomiasMIAKDE,
     DomiasMIAPrior,
+    EpsilonIdentifiability,
     IdentifiabilityScore,
     kAnonymization,
     kMap,
     lDiversityDistinct,
+    tCloseness,
 )
 from synthcity.plugins import Plugin, Plugins
 from synthcity.plugins.core.dataloader import GenericDataLoader, ImageDataLoader
@@ -34,6 +37,9 @@ from synthcity.plugins.core.dataloader import GenericDataLoader, ImageDataLoader
         DomiasMIABNAF,
         DomiasMIAKDE,
         DomiasMIAPrior,
+        AdversarialAccuracy,
+        EpsilonIdentifiability,
+        tCloseness,
     ],
 )
 @pytest.mark.parametrize("test_plugin", [Plugins().get("dummy_sampler")])
