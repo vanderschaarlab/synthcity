@@ -68,3 +68,7 @@ generated
 MNIST
 cifar-10*
 local_test*.py
+
+# PR files
+*.md
+!README.md
