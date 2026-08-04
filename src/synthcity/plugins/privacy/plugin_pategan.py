@@ -242,6 +242,10 @@ class PATEGAN(Serializable):
             encoder=self.encoder,
             n_iter_print=self.generator_n_iter - 1,
             device=self.device,
+            # PATE-GAN's post-processing DP guarantee (Jordon et al., ICLR 2019, Eq. 7 /
+            # Fig. 4) requires the discriminator/student to be a function only of
+            # privacy-protected teacher labels. Real data must never reach it directly.
+            discriminator_use_real_data=False,
         )
         X_train_enc = self.model.encode(X_train)
         self.samples_per_teacher = int(len(X_train_enc) / self.n_teachers)
