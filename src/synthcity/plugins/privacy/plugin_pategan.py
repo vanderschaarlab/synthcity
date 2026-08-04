@@ -131,7 +131,11 @@ class Teachers(Serializable):
         n0 = np.sum(y_hat == 0, axis=0)  # (batch_size, )
         n1 = np.sum(y_hat == 1, axis=0)  # (batch_size, )
 
-        lap_noise = np.random.laplace(loc=0.0, scale=1 / self.lamda, size=n0.shape)
+        # Eq. 4 (Jordon et al., ICLR 2019) defines Y_j ~ iid Lap(lambda), i.e. noise scale
+        # lambda directly; self.lamda is used as this same lambda everywhere in the moments
+        # accountant below (_update_moments_accountant, _update_alpha), so it must mean the
+        # same thing here too.
+        lap_noise = np.random.laplace(loc=0.0, scale=self.lamda, size=n0.shape)
 
         out = (n1 + lap_noise) / (n0 + n1 + 1e-8)  # (batch_size, )
         out = (out > 0.5).astype(int)
@@ -280,10 +284,10 @@ class PATEGAN(Serializable):
                 X_batch = pd.DataFrame(X.detach().cpu().numpy())
 
                 n0_mb, n1_mb, Y_mb = teachers.pate_lamda(np.asarray(X_batch))
-                if np.sum(Y_mb) >= len(X) / 2:
-                    return torch.zeros((len(X),))
 
-                # Compute alpha
+                # Every query to the teachers must be charged to the accountant
+                # unconditionally (Algorithm 1, lines 14-19); there is no branch in the
+                # paper that skips this once the teachers have been queried.
                 self._update_alpha(n0_mb, n1_mb)
 
                 # PATE labels for X
@@ -323,9 +327,10 @@ class PATEGAN(Serializable):
         q = self._update_moments_accountant(n0, n1)
         # Compute alpha
         for lidx in range(self.alpha):
+            # l = lidx + 1 throughout, matching Eq. 13 (Jordon et al., ICLR 2019).
             upper = 2 * self.lamda**2 * (lidx + 1) * (lidx + 2)
             t = (1 - q) * np.power((1 - q) / (1 - np.exp(2 * self.lamda) * q), lidx + 1)
-            t = np.log(t + q * np.exp(2 * self.lamda * lidx + 1))
+            t = np.log(t + q * np.exp(2 * self.lamda * (lidx + 1)))
             self.alpha_dict[lidx] += np.clip(t, a_min=0, a_max=upper).sum()
         return self.alpha_dict
 
