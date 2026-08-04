@@ -113,6 +113,12 @@ class GAN(nn.Module):
             max grad norm used for gradient clipping
         dp_secure_mode: bool = False,
              if True uses noise generation approach robust to floating point arithmetic attacks.
+        discriminator_use_real_data: bool = True
+            If False, the discriminator is trained using only generator output, split by
+            fake_labels_generator's labels; real data never reaches the discriminator, and the
+            gradient penalty (which needs a real sample to interpolate against) is skipped. Needed by
+            mechanisms such as PATE-GAN, where the discriminator/student must be a function only of
+            privacy-protected labels for the post-processing DP guarantee to hold.
     """
 
     @validate_arguments(config=dict(arbitrary_types_allowed=True))
@@ -163,6 +169,7 @@ class GAN(nn.Module):
         dp_epsilon: float = 3,
         dp_max_grad_norm: float = 2,
         dp_secure_mode: bool = False,
+        discriminator_use_real_data: bool = True,
     ) -> None:
         super(GAN, self).__init__()
 
@@ -176,6 +183,7 @@ class GAN(nn.Module):
         self.generator_extra_penalties = generator_extra_penalties
         self.generator_extra_penalty_cbks = generator_extra_penalty_cbks
         self.generator_nonlin_out = generator_nonlin_out
+        self.discriminator_use_real_data = discriminator_use_real_data
 
         self.n_features = n_features
         self.n_units_latent = n_units_latent
@@ -401,12 +409,13 @@ class GAN(nn.Module):
         batch_size = min(self.batch_size, len(X))
 
         for epoch in range(self.discriminator_n_iter):
-            # Train with all-real batch
-            real_X = X.to(self.device)
-            real_X = self._append_optional_cond(real_X, cond)
+            if self.discriminator_use_real_data:
+                # Train with all-real batch
+                real_X = X.to(self.device)
+                real_X = self._append_optional_cond(real_X, cond)
 
-            real_labels = true_labels_generator(X).to(self.device).squeeze()
-            real_output = self.discriminator(real_X).squeeze().float()
+                real_labels = true_labels_generator(X).to(self.device).squeeze()
+                real_output = self.discriminator(real_X).squeeze().float()
 
             # Train with all-fake batch
             noise = torch.randn(batch_size, self.n_units_latent, device=self.device)
@@ -420,21 +429,43 @@ class GAN(nn.Module):
             )
             fake_output = self.discriminator(fake.detach()).squeeze()
 
-            # Compute errors. Some fake inputs might be marked as real for privacy guarantees.
+            if self.discriminator_use_real_data:
+                # Compute errors. Some fake inputs might be marked as real for privacy guarantees.
 
-            real_real_output = real_output[(real_labels * real_output) != 0]
-            real_fake_output = fake_output[(fake_labels * fake_output) != 0]
-            errD_real = torch.mean(torch.concat((real_real_output, real_fake_output)))
+                real_real_output = real_output[(real_labels * real_output) != 0]
+                real_fake_output = fake_output[(fake_labels * fake_output) != 0]
+                errD_real = torch.mean(torch.concat((real_real_output, real_fake_output)))
 
-            fake_real_output = real_output[((1 - real_labels) * real_output) != 0]
-            fake_fake_output = fake_output[((1 - fake_labels) * fake_output) != 0]
-            errD_fake = torch.mean(torch.concat((fake_real_output, fake_fake_output)))
+                fake_real_output = real_output[((1 - real_labels) * real_output) != 0]
+                fake_fake_output = fake_output[((1 - fake_labels) * fake_output) != 0]
+                errD_fake = torch.mean(torch.concat((fake_real_output, fake_fake_output)))
 
-            penalty = self._loss_gradient_penalty(
-                real_samples=real_X,
-                fake_samples=fake,
-                batch_size=batch_size,
-            )
+                penalty = self._loss_gradient_penalty(
+                    real_samples=real_X,
+                    fake_samples=fake,
+                    batch_size=batch_size,
+                )
+            else:
+                # Real data must never reach the discriminator here: mechanisms such as
+                # PATE-GAN require the discriminator/student to be a function only of
+                # privacy-protected labels for the post-processing DP guarantee to hold
+                # (Jordon et al., ICLR 2019, Eq. 7 / Fig. 4). Split generator output only,
+                # by its (privacy-noised) label. The gradient penalty is skipped since it
+                # would otherwise reintroduce real data via the real/fake interpolation.
+                real_mask = fake_labels != 0
+                fake_mask = fake_labels == 0
+                errD_real = (
+                    torch.mean(fake_output[real_mask])
+                    if real_mask.any()
+                    else torch.zeros((), device=self.device)
+                )
+                errD_fake = (
+                    torch.mean(fake_output[fake_mask])
+                    if fake_mask.any()
+                    else torch.zeros((), device=self.device)
+                )
+                penalty = torch.zeros((), device=self.device)
+
             errD = -errD_real + errD_fake
 
             self.discriminator.optimizer.zero_grad()
@@ -445,13 +476,15 @@ class GAN(nn.Module):
                 # 3. re-enable hooks to obtain per_sample_gardients for real data.
                 # fake fwd-bkwd
                 self.discriminator.disable_hooks()
-                penalty.backward(retain_graph=True)
+                if self.discriminator_use_real_data:
+                    penalty.backward(retain_graph=True)
                 errD_fake.backward(retain_graph=True)
 
                 self.discriminator.enable_hooks()
                 errD_real.backward()  # HACK: calling bkwd without zero_grad() accumulates param gradients
             else:
-                penalty.backward(retain_graph=True)
+                if self.discriminator_use_real_data:
+                    penalty.backward(retain_graph=True)
                 errD.backward()
 
             # Update D
