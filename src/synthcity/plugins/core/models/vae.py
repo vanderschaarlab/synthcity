@@ -258,6 +258,7 @@ class VAE(nn.Module):
             batch_norm=encoder_batch_norm,
             dropout=encoder_dropout,
             device=device,
+            random_state=random_state,
         )
         self.decoder = Decoder(
             n_units_embedding + n_units_conditional,
@@ -270,6 +271,7 @@ class VAE(nn.Module):
             dropout=decoder_dropout,
             residual=decoder_residual,
             device=device,
+            random_state=random_state,
         )
 
         if decoder_nonlin_out is None:

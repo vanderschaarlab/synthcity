@@ -404,6 +404,7 @@ class DECAFPlugin(Plugin):
             lambda_gradient_penalty=self.lambda_gradient_penalty,
             encoder_max_clusters=self.encoder_max_clusters,
             device=self.device,
+            random_state=self.random_state,
         )
         self.baseline_generator.fit(X.dataframe())
 

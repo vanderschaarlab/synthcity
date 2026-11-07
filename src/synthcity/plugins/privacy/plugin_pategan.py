@@ -242,6 +242,7 @@ class PATEGAN(Serializable):
             encoder=self.encoder,
             n_iter_print=self.generator_n_iter - 1,
             device=self.device,
+            random_state=self.random_state,
         )
         X_train_enc = self.model.encode(X_train)
         self.samples_per_teacher = int(len(X_train_enc) / self.n_teachers)
