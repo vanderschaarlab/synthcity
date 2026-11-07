@@ -283,6 +283,7 @@ class DPGANPlugin(Plugin):
             patience_metric=self.patience_metric,
             n_iter_min=self.n_iter_min,
             n_iter_print=self.n_iter_print,
+            random_state=self.random_state,
         )
         self.model.fit(X.dataframe(), cond=cond)
 

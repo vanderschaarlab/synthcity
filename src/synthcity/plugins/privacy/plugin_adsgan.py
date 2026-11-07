@@ -271,6 +271,7 @@ class AdsGANPlugin(Plugin):
             n_iter_min=self.n_iter_min,
             n_iter_print=self.n_iter_print,
             adjust_inference_sampling=self.adjust_inference_sampling,
+            random_state=self.random_state,
         )
         self.model.fit(X.dataframe(), cond=cond)
 

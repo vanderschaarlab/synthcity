@@ -219,6 +219,7 @@ class RTVAEPlugin(Plugin):
             n_iter_print=self.n_iter_print,
             patience=self.patience,
             device=self.device,
+            random_state=self.random_state,
         )
         self.model.fit(X.dataframe(), **kwargs)
 
